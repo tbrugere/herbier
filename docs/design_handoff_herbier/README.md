@@ -1,0 +1,290 @@
+# Handoff : Herbier — herbier de terrain personnel (Android)
+
+## Vue d'ensemble
+
+Herbier est une application Android mono-utilisateur pour tenir un herbier de terrain : les plantes rencontrées, où, quand, avec ses propres photos, notes et tags. Ce n'est ni une app sociale ni un outil d'identification. Le cœur est la **fiche espèce**, qui fusionne *mes données* et des *données de référence* récupérées de sources externes (GBIF, Pl@ntNet, Wikipédia, POWO, INPN, Tela Botanica). Les plantes entrent dans la collection surtout par **interception de liens** partagés depuis Pl@ntNet (vers GBIF, etc.) et par la **prise de note rapide sur le terrain**.
+
+## À propos des fichiers de design
+
+`Herbier v2.dc.html` est une **référence de design en HTML** : des maquettes statiques montrant l'aspect et le comportement voulus. Ce n'est pas du code à réutiliser. La tâche est de **recréer ces écrans dans l'environnement Android cible** (Jetpack Compose recommandé, Material 3 comme base, thématisé avec les jetons ci-dessous). `Herbier.dc.html` contient l'historique des explorations (tours 1–3) ; seul **v2** fait foi, et à l'intérieur de v2, le **tour 5** (5a–5f) et le jeu consolidé (4a–4n) — les tours antérieurs sont conservés pour contexte.
+
+Les photos des maquettes sont chargées à la volée depuis Wikimedia pour illustrer ; dans l'app, elles viennent de l'appareil, de Google Photos/Drive, ou des sources de référence.
+
+## Fidélité
+
+**Haute fidélité** pour la mise en page, la hiérarchie, les couleurs, la typographie, les espacements et les états. Les icônes des maquettes sont des glyphes Unicode de substitution (▦ ◎ ≡ ⚙ ⌕ ✎) — remplacer par Material Symbols (outlined) : `grid_view`, `map`, `list`, `settings`, `search`, `edit`, `close`, `arrow_back`, `more_horiz`, `my_location`, `add`, `check`, `refresh`.
+
+---
+
+## Architecture de l'information
+
+```
+Entrées                          Cœur                         Lentilles
+─────────                        ────                         ─────────
++ Noter (terrain)      ──►   Fiche espèce (Plante)   ◄──   Collection (par nom, filtres tags)
+Lien intercepté        ──►     ├─ Mes photos                Carte (par lieu)
+Recherche / coller     ──►     ├─ Mes observations          Journal (par date)
+                               ├─ Mes notes, tags
+                               └─ Référence (externe)
+```
+
+**Navigation** : barre inférieure à 5 emplacements — `Collection · Carte · [+ Noter] · Journal · Réglages`. Le bouton central Noter (60 px, vert mousse, débordant de 28 px vers le haut) ouvre l'appareil photo en modal plein écran. Les tags **ne sont pas** une destination : ce sont des filtres persistants partagés par Collection, Carte et Journal. « À identifier » est aussi un filtre (ocre) qui fait office de file.
+
+**Écrans modaux** (sans barre) : Chercher, Lien intercepté, À identifier → lier, Tags, Fiche espèce, Observation, Modifier la fiche, Déplacer le point, Changer d'espèce, Gérer les tags, Visionneuse photo, Noter, Enregistré.
+
+---
+
+## Modèle de données
+
+```kotlin
+data class Plant(
+  val id: Id,
+  val displayName: String,              // nom affiché, choisi par l'utilisateur (fr)
+  val aliases: List<String>,            // autres noms, pour la recherche
+  val scientificName: String?,          // null si « nom libre » non lié
+  val authorship: String?,              // "L."
+  val refs: Map<RefSource, String>,     // GBIF taxonKey, PLANTNET slug, WIKIPEDIA fr title, POWO ipni, INPN cd_nom, TELABOTANICA num, EPPO code
+  val notes: String,                    // markdown léger, éditable
+  val notesUpdatedAt: Instant,
+  val tagIds: Set<Id>,
+  val coverPhotoId: Id?,
+  val reference: ReferenceSnapshot?,    // cache des données externes
+  val createdAt: Instant
+)
+
+data class Observation(
+  val id: Id, val plantId: Id?,         // null ⇒ « À identifier »
+  val at: Instant,
+  val point: GeoPoint?,                 // lat, lon, accuracyM (jamais affichée en texte)
+  val placeLabel: String?,              // nom donné par l'utilisateur au lieu/grappe
+  val placeDerived: String?,            // géocodage inverse « Près de Colmar » (cache)
+  val note: String?,
+  val photoIds: List<Id>
+)
+
+data class Photo(
+  val id: Id, val observationId: Id,
+  val source: PhotoSource,              // DEVICE, GOOGLE_PHOTOS, GOOGLE_DRIVE
+  val remoteId: String?,                // mediaItemId / fileId une fois envoyé
+  val localPreviewPath: String,         // copie compressée ≤1600 px, toujours présente
+  val uploadState: UploadState,         // PENDING, UPLOADED, FAILED, ORIGINAL_MISSING
+  val takenAt: Instant
+)
+
+data class Tag(val id: Id, val name: String)
+
+data class ReferenceSnapshot(
+  val fetchedAt: Instant,
+  val vernacular: Map<Lang, List<String>>,   // fr, de, en, it…
+  val family: String?,
+  val lifeForm: String?,                     // « Herbacée bisannuelle, 50–150 cm »
+  val nativeRange: String?, val introducedRange: String?,   // POWO
+  val frStatus: FrStatus?,                   // INDIGENE / INTRODUITE / INVASIVE (INPN)
+  val frProtection: String?,                 // « Non protégée » / « Protégée (Alsace) »
+  val redList: String?,                      // « LC · préoccupation mineure »
+  val floweringMonths: Set<Int>?,            // 1..12 (Tela Botanica)
+  val habitat: String?, val ecology: List<String>?,   // chips : mi-ombre, sol acide…
+  val altitudeRange: String?,
+  val toxicity: String?,                     // Wikipédia
+  val organPhotos: List<OrganPhoto>?,        // Pl@ntNet : url, organ, localThumbPath
+  val links: Map<RefSource, Url>
+)
+```
+
+Règles :
+- Une **Plante** peut avoir 0 observation (ajoutée par lien, position retirée).
+- Une **Observation** avec `plantId == null` est « À identifier » ; elle apparaît dans Journal et Carte (point ocre), jamais dans Collection.
+- Supprimer une photo dans Herbier **délie** ; l'original Google n'est jamais touché. Original supprimé côté Google ⇒ `ORIGINAL_MISSING`, l'aperçu local reste affiché avec la mention « original introuvable ».
+- Les **noms libres** (`scientificName == null`) sont des fiches valides ; lier plus tard remplit `refs` et déclenche la récupération de référence ; le nom libre devient un alias.
+
+---
+
+## Jetons de design
+
+### Couleurs
+| Jeton | Hex | Usage |
+|---|---|---|
+| `paper` | `#f6f1e7` | fond des écrans, cartes « moi » |
+| `sand` | `#ece5d6` | champs, cartes secondaires, **bloc Référence** |
+| `sandDeep` | `#e2dbcb` | fond des vignettes en chargement (rayures 135° avec `sand`, pas 8 px) |
+| `line` | `#cfc6b3` | séparateurs de listes (après passage plein soleil) |
+| `lineSoft` | `#d9d1c0` | filets faibles (poignée de tiroir, bordure barre d'onglets) |
+| `ink` | `#1d1a14` | texte principal, bordures des pastilles de tags, onglet actif |
+| `inkSoft` | `#3d3830` | texte courant secondaire (descriptions) |
+| `muted` | `#5a5449` | dates, lieux, sources, libellés (≥ 6,3:1 sur `paper`) |
+| `hint` | `#9a9385` | bordures pointillées « + tag », cases à cocher vides |
+| `moss` | `#4f6b3a` | action principale, liens, pastille « Référence », points carte |
+| `mossDark` | `#3a5029` | hover/pressed de `moss` |
+| `mossLight` | `#8fbf6a` | point « position acquise » sur fond sombre |
+| `ochre` | `#b8781a` | « À identifier », « ↑ en attente » |
+| `danger` | `#a3402f` | supprimer, toxicité |
+| `dark` | `#1d1a14` | fond Noter / visionneuse ; voiles `rgba(29,26,20,.6)` |
+| `canvasBg` | `#e9e2d4` | fond hors app (maquette seulement) |
+
+Ombres : cartes/tiroirs `0 14px 44px rgba(40,30,10,.18)` ; bouton Noter `0 8px 20px rgba(79,107,58,.4)` ; barre de recherche flottante sur carte `0 6px 18px rgba(0,0,0,.14)` ; tiroir bas `0 -10px 30px rgba(0,0,0,.14)`.
+
+Dégradés sur photo (légendes) : `linear-gradient(to top, rgba(29,26,20,.92), rgba(29,26,20,.35) 45%, transparent 65%)`. Héros de fiche : `to bottom, rgba(29,26,20,.4), transparent 28%, transparent 50%, rgba(29,26,20,.82)`.
+
+### Typographie
+- **Manrope** (Google Fonts, 400–800) : toute l'interface, noms vernaculaires.
+- **Newsreader** italique (400–500, optical size auto) : noms scientifiques, mes notes, citations de notes d'observation.
+
+| Rôle | Police | Taille / graisse | Divers |
+|---|---|---|---|
+| Titre d'écran | Manrope | 34 / 800 | letter-spacing −0,03em, line-height 1 |
+| Nom d'espèce héros | Manrope | 36 / 800 | −0,03em, sur photo, crème |
+| Nom scientifique héros | Newsreader ital | 24 | auteur en romain 15 / opacité .85 |
+| Titre de feuille / section | Manrope | 22–26 / 800 | −0,02em |
+| Nom dans liste | Manrope | 16–17 / 800 | |
+| Nom scientifique liste | Newsreader ital | 14–15 | couleur `inkSoft` |
+| Corps | Manrope | 15 / 400 | line-height 1,45 |
+| Mes notes | Newsreader | 20 | line-height 1,35 |
+| Métadonnées | Manrope | 12–13 / 400–600 | `muted` |
+| Libellé de section | Manrope | 11 / 700 | majuscules, letter-spacing .18em, `muted` (ou `moss` pour « Référence ») |
+| Barre d'onglets | Manrope | 12 / 700 | icône 20 px au-dessus |
+| Bouton principal | Manrope | 17 / 800 | |
+| Bouton secondaire | Manrope | 15 / 700 | |
+
+### Espacements & rayons
+- Marge latérale d'écran : **20 px**. Barre d'état 16 px du haut (sur Android : `WindowInsets`).
+- Rayons : phone 30 (maquette) ; cartes/champs **14 px** ; vignettes de grille **16 px** ; vignettes petites **10–12 px** ; tiroir bas **26 px** haut ; pastilles et boutons **999 (pill)**.
+- Hauteurs : bouton principal **60 px** ; secondaire **52 px** ; ligne de liste ≈ 72 px (vignette 52–64) ; champ de recherche 44–48 ; bouton Noter 60 ; cible tactile minimale 44.
+- Grille Collection : 2 colonnes, gap 10, ratio 3:4.
+
+---
+
+## Écrans
+
+Numérotation = identifiants dans `Herbier v2.dc.html`.
+
+### 4a Collection (onglet)
+Titre 34 + compteur « 47 plantes · 112 observations ». Barre de recherche `sand` (placeholder « Nom, tag, lieu… », lien « Coller un lien » à droite en `moss` 12/700). Rangée de filtres défilante : pastille pleine `ink` « Toutes », pastilles bordées 1 px `ink` par tag, dernier élément « Tags › » (`moss`) ouvre 4l. Grille 2 colonnes de cartes 3:4 : photo de couverture, dégradé, nom 16/800 crème + latin Newsreader 14 ital. États : **chargement** = fond rayé `sandDeep`/`sand` + libellé monospace 10 « Google Photos… » ; **sans photo** = fond `sand`, texte `ink`, mention « sans photo · 4 obs. ».
+Tri par défaut : dernière observation. Recherche : nom affiché, alias, latin, noms vernaculaires de référence, tags, lieux.
+
+### 4b Carte (onglet)
+Carte plein écran (tuiles OSM désaturées : `saturate(.55) sepia(.25)` — en prod, style de carte clair et peu saturé, p. ex. MapLibre + style « paper »). Barre de recherche flottante `paper` avec ombre, bouton `my_location` à droite. Filtres actifs sous la barre. Points : observation = 18 px `ink` bordure 3 px `paper` ; grappe sélectionnée = point `moss` 20 px + halo `rgba(79,107,58,.25)` 56 px ; à identifier = `ochre`. **Tiroir bas** (`paper`, rayon 26) : nom du lieu 22/800 + « rayon 500 m · 6 observations · 4 plantes », « Renommer » ; liste des observations du lieu (vignette 48, nom, date · photos, chevron). Replié sur une ligne si rien n'est sélectionné. La barre d'onglets est *dans* le tiroir.
+Grappes : regroupement des observations à < 500 m ; un nom donné (« Renommer ») est stocké sur chaque observation de la grappe (`placeLabel`).
+
+### 4c Journal (onglet)
+Titre + « 112 observations ». Filtres : année (pastille pleine = active), « À identifier · 3 » bordé 1,5 px `ochre`, tags. Liste groupée **par jour** : en-tête 18/800 « Ven. 12 juin » + lieu du jour à droite en `moss` 13/700 « Col de la Schlucht ◎ » (bordure basse 1 px `ink`). Lieu du jour = `placeLabel` majoritaire, sinon `placeDerived` (« Près de Colmar »), sinon coordonnées. Le ◎ ouvre la Carte centrée. Lignes = observations : vignette 52, nom 800 (ou « À identifier » en `ochre`), méta 12 `muted` « 14:32 · 2 photos · note », chevron. Ligne → 4h ; ligne « À identifier » → 4k.
+
+### 4d Noter (modal plein écran, fond sombre)
+Viseur caméra plein écran. Haut : ✕ dans voile rond 40 px ; pastille « hors-ligne · 2 en attente » si besoin ; pastille « Position acquise » avec point `mossLight` (pas de valeur de précision). Bas, sur dégradé sombre : rangée de vignettes 56 px (prises, dernière bordée crème 2 px ; case pointillée « galerie / G Photos » ouvre le sélecteur système + Google Photos Picker) ; champ « Nom de la plante — *facultatif* » (voile `rgba(246,241,231,.12)`, bordure `.25`) ; suggestions en pastilles : d'abord ma collection (« Arnica montana · déjà en collection »), puis plantes vues à < 500 m (« Vues ici ↓ ») ; rangée `[↻ 56] [Enregistrer (2 photos) 64 crème] [● 56 moss]`. Le déclencheur est le rond `moss`.
+Comportement : la position GPS est demandée à l'ouverture, jamais bloquante ; enregistrer sans nom crée une observation « À identifier » ; **jamais** d'attente réseau.
+
+### 4e Enregistré
+Confirmation `paper` : rond `moss` 64 ✓, « Enregistré » 30/800, « Observation ajoutée à **Arnica** / Le Hohneck · 48.0331, 7.0028 · 14:07 ». Deux vignettes 1:1 avec badge `ochre` « ↑ en attente ». Carte `sand` avec « G » : « 2 photos → Google Photos, album Herbier / Envoi dès le retour du réseau. Copies compressées gardées sur le téléphone. » Deux lignes d'action `sand` : « Ajouter une note à cette observation », « Corriger la position sur la carte » (→ 5b). Bas : « Noter une autre plante » (60, moss) ; « Voir la fiche Arnica » (52, bordé).
+
+### 4f Fiche espèce (modal, défilement)
+1. **Héros** ratio 3:4, photo de couverture, dégradé, boutons ← et ✎ (40 px, `rgba(246,241,231,.9)`), indicateurs de pagination (points 8 px à droite : balayage entre mes photos), badge de provenance (« Google Photos » / « local ») + « Col de la Schlucht · 12 juin » 11 majuscules, nom 36/800, latin 24 ital + auteur.
+2. **Tags** : pastilles bordées 1,5 px `ink` 13/600, « + tag » pointillé `hint`.
+3. **Mes photos · 5** + « + Depuis Google Photos » : grille 4 colonnes, vignettes 1:1 rayon 10 ; badge rond 14 px « G » en bas-gauche (Google Photos), étiquette « local », badge `ochre` « ↑ » en haut-droite si envoi en attente ; état chargement = anneau 18 px.
+4. **Mes observations · 3** + « + Revue ailleurs » : lignes bordées (`line`) « 12 juin 2026 · 14:32 / Col de la Schlucht · 2 photos · note » → 4h.
+5. **Mes notes** + « modifié le 13 juin » : Newsreader 20, tap = édition en place.
+6. **Bloc Référence** (`sand`, plein largeur, padding 20, marge haute 26) : en-tête « RÉFÉRENCE » (`moss`) + « mis à jour il y a 3 sem. · ↻ ». Lignes clé/valeur en grille `104px 1fr`, gap 12, padding 10 vertical, séparées par 1 px `#ddd5c4`, ordre **botanique d'abord** :
+   - **Noms** — vernaculaires par langue (`fr` en premier, gras sur le code langue) ; sous-ligne source 12 `muted` « Plantaginaceae · GBIF, Pl@ntNet »
+   - **Type** — « Herbacée bisannuelle, 50–150 cm » · Tela Botanica
+   - **Origine** — aire native / introduite · POWO
+   - **En France** — pastilles `paper` rayon 6, 13/700 : statut (Indigène/Introduite/Invasive), protection, liste rouge · INPN
+   - **Floraison** — 12 cases mois (lettre 10/700 ; actif `moss` texte crème, inactif `sandDeep` texte `muted`, rayon 4, gap 3) + « juin – août · Tela Botanica »
+   - **Habitat** — phrase + chips bordées 1 px `hint` 12 (mi-ombre, sol acide, frais, 300–1 500 m) · Tela Botanica
+   - **Toxicité** — titre en gras `danger` + phrase · Wikipédia
+   - **Photos par organe** — grille 4, vignettes 1:1 rayon 10, bandeau bas `rgba(29,26,20,.7)` 10/700 « fleur / feuille / fruit / port » · Pl@ntNet · disponibles hors-ligne
+   - Rangée de liens `paper` rayon 10 13/700 : GBIF ↗, Pl@ntNet ↗, Wikipédia ↗, POWO ↗, INPN ↗, Tela Botanica ↗
+   **Une ligne sans donnée disparaît.** Toute donnée cite sa source.
+
+### 4g Fiche sans référence (nom libre, hors-ligne)
+Comme 4f, mais : badge « local », latin remplacé par « nom libre — espèce non liée » (Newsreader ital 19, opacité .8), bloc Référence réduit à un texte « Aucune espèce de référence liée. Hors-ligne : la recherche de noms reviendra avec le réseau. » + bouton bordé 52 « Lier à une espèce de référence » (opacité .5 tant que hors-ligne).
+
+### 4h Observation (modal)
+En-tête : ←, centre « OBSERVATION / Digitale pourpre › » (lien vers la fiche), « Terminé ». Mosaïque photos : grande 4:3 (2/3) + colonne (1/3) avec petite photo et case « + » pointillée. Carte `sand` **Date** « Ven. 12 juin 2026 · 14:32 » + « Modifier ». Carte lieu : mini-carte 130 px avec point `moss` et **cercle de précision** (44 px, `rgba(79,107,58,.18)`, bordure `.6`) — seule représentation de la précision GPS ; sous la carte, nom du lieu + coordonnées + libellé, « Déplacer » → 5b. Carte « Note de cette rencontre » Newsreader 18. Bas : liste d'actions bordées « Changer d'espèce › » (5c), « Voir dans le journal › », « Supprimer l'observation › » en `danger`.
+
+### 4i Chercher / résoudre (modal)
+Champ actif 17 avec curseur. Section « DANS MA COLLECTION · 1 » (ligne vignette 56, « Ouvrir › »). Section « RÉFÉRENCE · GBIF » + « Europe · Plantae » : lignes latin Newsreader ital 18 + auteur 13 `muted`, vernaculaires 14 `inkSoft`, bouton rond 36 `sand` « + ». Pied : carte pointillée « Coller un lien / GBIF, Pl@ntNet, Wikipédia, POWO… / Coller ». « + » → 4j pré-remplie.
+Recherche référence : GBIF `species/suggest` (rank=SPECIES, kingdom Plantae) + noms vernaculaires ; débounce 300 ms ; hors-ligne → « recherche indisponible » + bouton « Créer avec un nom libre ».
+
+### 4j Lien intercepté (feuille basse sur l'app d'origine)
+Feuille `paper` rayon 26, poignée 40×4 `lineSoft`. En-tête « HERBIER · LIEN GBIF RECONNU » (`moss`) + ✕. Carte espèce : vignette 84 rayon 16, nom 26/800, latin 19 ital, « Gentianaceae · GBIF · Pl@ntNet · Wikipédia fr ». Carte `sand` **« Première observation ici »** point `moss` 10, « Le Hohneck · 48.0331, 7.0028 · maintenant », **« Enlever »** (retire la position ⇒ plante sans observation). Carte tags pré-remplis (tags récents). Bouton 60 « Ajouter à ma collection ». Ligne basse : « Pas la bonne espèce ? **Chercher** » / « **Ouvrir la fiche après** ».
+Variante : espèce déjà en collection ⇒ titre « Déjà dans ma collection », bouton « Ajouter cette observation ».
+Android : `intent-filter` `VIEW` + `BROWSABLE` sur `gbif.org/species/*`, `identify.plantnet.org/*/species/*`, `*.wikipedia.org/wiki/*`, `powo.science.kew.org/taxon/*`, `inpn.mnhn.fr/espece/cd_nom/*` ; plus `SEND text/plain` pour la feuille de partage. Résolution : URL → identifiant → GBIF `species/match` ou `species/{key}` → `ReferenceSnapshot` partiel immédiat (nom, famille), complet en arrière-plan.
+
+### 4k À identifier → lier (modal)
+En-tête ← / « À IDENTIFIER · 1 / 3 » (`ochre`) / « Suivante › ». Carte `sand` de l'observation (vignette 96, date, lieu, note en Newsreader 16 entre guillemets). Champ de recherche. « Dans ma collection » → bouton « Lier › » (rattache l'observation à la plante existante). « Référence · GBIF » → « + » (crée la plante puis rattache). Pied : deux boutons bordés 52 « Coller un lien » / « Nom libre » (crée une fiche 4g).
+
+### 4l Tags (modal)
+←, « Gérer » (→ 5d). Titre « Tags » + « 12 tags · touchez pour filtrer la collection ». Grille 2 colonnes de cartes 1:1 rayon 18 (photo de couverture de la plante la plus récente du tag, nom 20/800, « 18 plantes ») pour les 4 tags les plus utilisés ; puis pastilles bordées 1,5 px 14/600 avec compteur `muted` pour le reste. Tap = applique le filtre et revient à Collection.
+
+### 4m Réglages (onglet)
+Titre. Carte compte : avatar rond `moss` 44 initiale, « Compte Google connecté / n…@gmail.com · Photos, Drive », « Changer ». Section **Où vont mes photos** (radio, 3 options dans une carte `sand` rayon 16, lignes séparées 1 px `line`) : « Google Photos · album “Herbier” — Originaux dans ma bibliothèque, aperçus gardés sur le téléphone. » / « Google Drive · dossier “Herbier” — Un sous-dossier par espèce. » / « Dans Herbier seulement — Compressées à 1600 px · limité à 200 Mo. ». Section **Sur le téléphone** : interrupteur « Copie compressée hors-ligne » (on), « Envoyer seulement en Wi-Fi » (off), « Données hors-ligne — Aperçus photos 48 Mo · Fiches de référence 12 Mo / **Libérer** ». Section **File d'envoi** : « 3 photos en attente / Dernier envoi : hier, 19:42 / **Envoyer maintenant** ».
+Vocabulaire : jamais « cache », « vignettes », « sync » face à l'utilisateur.
+
+### 4n Premier lancement (Collection vide)
+Titre « Collection / 0 plante ». Centre : emplacement d'illustration 4:3 rayon 20 (à fournir), « La première plante s'ajoute dehors ou depuis un lien. » 26/800, texte explicatif 15, boutons « + Noter ma première plante » (60 moss) et « Coller un lien Pl@ntNet / GBIF » (52 bordé), note « Google Photos se connecte plus tard, à la première photo. » Pas de tunnel d'onboarding ; la connexion Google est demandée à la première photo à sauver.
+
+### 5a Modifier la fiche (modal)
+En-tête « Annuler / Modifier / Enregistrer ». Cartes `sand` : **Nom affiché** (18/800 éditable) + alias en pastilles `paper` avec ✕ et « + alias » ; **Espèce de référence** (latin) + « Changer › » (→ recherche, relie à un autre taxon, rafraîchit la référence, ne touche pas mes données) ; **Liens de référence** liste « GBIF · 2927899 ✕ … » + « + Coller un lien (POWO, EPPO…) » ; **Tags** avec ✕ ; **Photo de couverture** rangée de vignettes 56, sélection bordée 2,5 px `moss`. Pied : « Supprimer la plante et ses 3 observations › » `danger` (confirmation ; les photos Google restent).
+
+### 5b Déplacer le point (modal carte)
+Carte plein écran, **point fixe au centre** (24 px `moss` + tige 2×16 + cercle de précision), la carte glisse dessous. Haut : ✕, pastille « Glissez la carte sous le point », bouton `my_location`. Point gris 18 px opacité .7 = position d'origine. Tiroir bas : nom du lieu 20/800 + « 48.0633, 7.0081 · déplacé de 96 m », « Chercher un lieu » (géocodage) ; boutons « Point d'origine » (bordé) / « Valider » (moss).
+
+### 5c Changer d'espèce (modal)
+En-tête ← / « CHANGER D'ESPÈCE / Observation du 12 juin ». Carte `sand` « Actuellement **Digitale pourpre** / Les 2 photos et la note suivent l'observation. » Recherche ; « Dans ma collection » (ligne « Choisir › » ; l'espèce actuelle grisée .5) ; « Référence · GBIF » (« + » crée puis déplace). Pied : bouton bordé `ochre` « Remettre “À identifier” ». Si la plante d'origine n'a plus d'observation : dialogue « Garder la fiche / Supprimer la fiche ».
+
+### 5d Gérer les tags (modal)
+En-tête « Annuler / Gérer les tags / Terminé ». Lignes : case 22 rayon 6 (vide bordure `hint` ; cochée `moss` avec ✓), nom 700, compteur 13 `muted`, ✎ (renomme en place : le nom devient un champ `sand` rayon 10 avec « OK »). Barre basse `sand` quand ≥ 1 coché : « 2 sélectionnés », « Supprimer » (bordé `danger`), « Fusionner en “tourbière” » (moss ; le nom le plus fréquent gagne ; visible si ≥ 2 cochés).
+
+### 5e Visionneuse photo (modal sombre)
+Photo en `contain` sur `dark`. Haut : ✕, « 2 / 5 », ⋯ (voiles ronds 40). Bas sur dégradé : badge provenance + « COUVERTURE » si c'est la couverture ; nom 22/800 ; « Ven. 12 juin 2026 · 14:32 · Col de la Schlucht » ; pastilles `rgba(246,241,231,.14)` 13/700 : « Voir l'observation », « Ouvrir dans Google Photos ↗ », « Retirer d'Herbier ». ⋯ : « Définir comme couverture », « Déplacer vers une autre observation ». Balayage horizontal entre toutes les photos de la plante ; pincer pour zoomer.
+
+### 5f Lisibilité plein soleil (règles globales, déjà appliquées aux jetons)
+Texte secondaire `#5a5449` (≥ 6,3:1) ; séparateurs `#cfc6b3` ; libellés d'onglets 12 px ; dégradés sous les noms sur photo à .92. Pas de « mode extérieur », pas de mode sombre (Noter et la visionneuse sont sombres par nature).
+
+---
+
+## Interactions & comportements
+
+- **Transitions** : modaux depuis le bas (300 ms, decelerate) ; feuilles basses avec poignée, glisser pour fermer ; fiche espèce = héros partagé depuis la carte de Collection (shared element, 350 ms). Onglets sans animation.
+- **Pressed** : boutons pleins → `mossDark` ; pastilles bordées → fond `sand` ; lignes de liste → fond `sand`.
+- **Chargement des photos** : toujours le fond rayé `sandDeep`/`sand` (jamais une case vide ni un spinner seul) ; libellé monospace 10 `muted` de la source si > 600 ms ; anneau 18 px sur les petites vignettes.
+- **Hors-ligne** : bandeau discret dans la barre d'état « hors-ligne · N en attente ». Noter, Enregistré, Fiche (mes données + référence en cache), Journal, Carte (tuiles en cache) fonctionnent. Recherche référence et « Lier » sont désactivés (.5) avec texte explicite.
+- **File d'envoi** : WorkManager, contrainte réseau (Wi-Fi si réglage), réessais exponentiels ; badge `ochre` « ↑ » par photo tant que `PENDING`.
+- **Référence** : récupération à la liaison, puis rafraîchie sur demande (↻) ou si > 90 jours à l'ouverture avec réseau. Vignettes des photos de référence (≈ 300 px) et textes conservés en local ; « Libérer » les efface.
+- **Google** : sign-in unique différé à la première photo à sauver ; Photos Library API (album « Herbier ») ou Drive API (dossier « Herbier »/espèce) selon le réglage ; le sélecteur « Depuis Google Photos » utilise Google Photos Picker API.
+- **Interception** : voir 4j. Si l'utilisateur n'a pas défini Herbier comme gestionnaire par défaut, la feuille de partage mène au même écran.
+- **Suppression** : plante ⇒ dialogue listant N observations et M photos ; les photos Google ne sont jamais supprimées, seulement déliées.
+
+## État (par écran, indicatif)
+
+- Global : `filters { tagIds, year, unidentifiedOnly }` partagé Collection/Carte/Journal ; `network { online, pendingUploads }` ; `account { googleSignedIn, storageTarget }`.
+- Collection : `query`, `plants` (triées), `loadingCovers`.
+- Carte : `viewport`, `selectedCluster`, `clusters`.
+- Journal : `groupsByDay`, `expandedYear`.
+- Noter : `photos[]`, `gps { point?, acquired }`, `query`, `suggestions`, `saving`.
+- Fiche : `plant`, `reference?`, `refreshing`, `photoIndex`.
+- Résolveur (4i/4j/4k/5c) : `input`, `collectionMatches`, `referenceMatches`, `resolving`, `prefill { point?, tags }`.
+
+## Sources externes (à confirmer côté ingénierie)
+
+| Source | Usage | API |
+|---|---|---|
+| GBIF | recherche/suggestion d'espèces, noms vernaculaires, résolution des liens | `api.gbif.org/v1/species/suggest`, `/species/{key}`, `/species/{key}/vernacularNames`, `/species/match` |
+| Pl@ntNet | photos par organe, résolution des liens species | API publique limitée ; à vérifier (scraping exclu) |
+| Wikipédia | toxicité / résumé, image | REST `page/summary/{title}` (fr puis en) |
+| POWO (Kew) | aire native / introduite | `powo.science.kew.org/api/2/taxon/{ipni}` (non officielle) |
+| INPN / TaxRef | statut FR, protection, liste rouge | `taxref.mnhn.fr/api` (OpenAPI) |
+| Tela Botanica | floraison, type biologique, écologie | eFlore API / Baseflor (stabilité à vérifier) |
+| OSM / MapLibre | fond de carte, tuiles hors-ligne | style clair peu saturé ; respecter la politique de tuiles |
+| Géocodage inverse | « Près de Colmar » | Nominatim (usage léger) ou Android Geocoder |
+
+## Assets
+
+- Polices : Manrope, Newsreader (Google Fonts, licence OFL).
+- Icônes : Material Symbols Outlined (voir liste plus haut).
+- Illustration « planche d'herbier vide » (4n) : à créer.
+- Photos des maquettes : Wikimedia Commons, à titre illustratif uniquement — ne pas embarquer.
+
+## Fichiers
+
+- `Herbier v2.dc.html` — **référence** : jeu consolidé 4a–4n + tour 5 (5a–5f). Ancre `#4f` etc. pour chaque écran.
+- `Herbier.dc.html` — historique des explorations (tours 1–3, alternatives de navigation 1a/1b/1c). Contexte uniquement.
+- `support.js` — runtime des maquettes, sans intérêt pour l'implémentation.
