@@ -85,8 +85,13 @@ blocked: nothing.
   pg_trgm, unaccent and pg_cron are available on Free.
 - **Pausing**: inactive after 7 days without user DB activity; one-click
   restore with data intact for up to a year. A **GitHub Actions cron running
-  `supabase db dump` twice a week** into a private repo is both the backup
-  and the keep-alive (pg_cron alone is reported not to count, unverified).
+  `supabase db dump` twice a week** is both the backup and the keep-alive
+  (pg_cron alone is reported not to count, unverified). GitHub Free includes
+  2,000 Actions minutes/month for private repos; the job needs a minute or
+  two. The dump (`roles.sql`, `schema.sql`, `data.sql`) is committed to a
+  **separate private repository** (it contains coordinates and notes), so
+  the app repo can be public. The dump does not cover Storage bucket files;
+  previews stay on device and originals on Drive, so nothing is lost.
 - **Auth**: one Google sign-in on the device through Credential Manager,
   passed to Supabase with `signInWithIdToken`; the same plugin's
   `AuthorizationClient` grants the `drive.file` scope and hands out 1-hour

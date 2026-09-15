@@ -27,7 +27,8 @@ fit and what the data looks like end to end.
    optional Storage        originals                  OpenFreeMap tiles
    bucket for previews)                               Photon / Géoplateforme
         ▲
-        │ supabase db dump, twice a week (GitHub Actions) = backup + keep-alive
+        │ supabase db dump, twice a week (GitHub Actions, committed to a
+        │ separate private backups repo) = backup + keep-alive
 ```
 
 Principles:
@@ -277,8 +278,10 @@ herbier/
   web/            static shell: index.html, css, fonts, map.js, built app.js
   android/        Capacitor project (generated), manifest intent-filters
   supabase/       migrations, RLS, RPC functions, config
-  .github/workflows/backup.yml   supabase db dump cron (keep-alive + backup)
   docs/
+herbier-backups/  (separate private repo)
+  .github/workflows/backup.yml   supabase db dump cron (keep-alive + backup)
+  roles.sql schema.sql data.sql  committed by the workflow
 ```
 
 ## 10. Spikes before committing to the stack
