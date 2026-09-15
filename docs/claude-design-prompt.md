@@ -98,6 +98,11 @@ wants the localized common name (French first) shown prominently too.
 - No plant identification from photos.
 - Free-tier backend: keep data and images light; no expectation of unlimited
   storage or heavy media.
+- Photos may live in my own Google Photos or Google Drive account rather than
+  in the app's backend. The design should accommodate photos being linked from
+  there (a one-time Google sign-in, photos picked from or saved to my library,
+  possibly slower to load than local ones), and should not assume the app
+  owns the images.
 - Must degrade gracefully offline: recording (photos, location, notes) should
   never be blocked by connectivity; reference data can arrive later.
 - Interface language: French UI with Latin names; design copy can be in French
