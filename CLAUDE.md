@@ -11,6 +11,7 @@ Personal Android app to record plants (single user).
 - `docs/design_handoff_herbier/README.md` — Claude Design handoff (screens,
   tokens). Concrete places/species in it are placeholders, not requirements.
 - `docs/exploratory_research/` — dated research reports the decisions rest on.
+- `docs/notes/` — primers and working notes (e.g. ocaml-react).
 - `docs/claude-design-prompt.md` — the prompt given to Claude Design.
 
 ## Workflow

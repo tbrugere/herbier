@@ -79,18 +79,20 @@ Why not the two runners-up (see `ocaml-android-stacks.md`):
 - Three pieces are imperative and hold JS-library state: the MapLibre map,
   the camera `<video>`, the pinch-zoom viewer. With signals they need no
   special "island" machinery: the widget subscribes to a signal
-  (`S.map (fun pts -> Map.set_data map pts) observations |> S.keep`) like
-  any DOM node. Per-frame work such as the bottom-sheet drag is a `float`
+  (`S.map (fun pts -> Map.set_data map pts) observations`, kept in the
+  screen's binding list) like any DOM node. Per-frame work such as the bottom-sheet drag is a `float`
   signal bound to a `style` attribute.
 - **The glue module** (`app/ui/rb.ml`, our own): `text`, `attr`, `class_`,
   `style` bind one DOM property to a signal; `children` replaces a child
   list from a signal; `rlist` applies ReactiveData patches (insert, remove,
   update, move) with `El.insert_siblings`/`El.remove`; `ev` turns a Brr DOM
-  event into a `react` event; `keep` ties a signal's lifetime to an element.
-  Every binding is registered on its element and released when the screen
-  root is removed. This is the one rule that prevents both the classic
-  ocaml-react bug (a binding silently garbage-collected because nothing
-  held it) and leaks across screen changes.
+  event into a `react` event; `release` strongly stops a screen's bindings.
+  Every binding is collected by its screen and released with
+  `S.stop ~strong:true` / `E.stop ~strong:true` when the screen is torn
+  down. On js_of_ocaml weak arrays are strong, so react never collects a
+  binding by accident (the classic native pitfall); the risk is the
+  opposite, leaks, and the release rule is what prevents them. See
+  `notes/ocaml-react-primer.md`.
 - Known costs, accepted: state is spread across signals rather than one
   value (snapshotting for debugging is manual); setters must not be called
   during a propagation step; no compile-time HTML structure checks (TyXML
