@@ -11,7 +11,7 @@ fit and what the data looks like end to end.
 ┌──────────────────────────── Android device ─────────────────────────────┐
 │  Capacitor shell (Kotlin: manifest intent-filters, plugins)              │
 │  ┌───────────────────────── WebView ─────────────────────────────────┐  │
-│  │  OCaml app (js_of_ocaml + Brr + vdom)                             │  │
+│  │  OCaml app (js_of_ocaml + Brr + react/ReactiveData)               │  │
 │  │   ├─ UI (screens 4a–5f)            ├─ Reference pipeline (§6)     │  │
 │  │   ├─ Store (local SQLite, §3)      ├─ Photo pipeline (§5)         │  │
 │  │   ├─ Outbox / sync (§4)            ├─ Link resolver (§7)          │  │
@@ -267,7 +267,7 @@ the classifier must accept both a bare URL and text containing one.
 herbier/
   dune-project
   app/            OCaml sources (js_of_ocaml)
-    ui/           screens, vdom views, tokens.ml (design tokens)
+    ui/           rb.ml (react↔Brr glue), screens, tokens.ml (design tokens)
     store/        sqlite bindings, schema migrations, outbox
     sync/         PostgREST client, pull/push
     photos/       exif, compress, drive client, uploader binding
@@ -304,8 +304,12 @@ Each is one or two days and answers a question the reports left open.
    "In production" with no verification prompt.
 5. **Reference spike**: run the §6 pipeline for two species from OCaml and
    render the projection; measure how many fields come back empty.
-6. **UI spike**: one screen (4f species page) in vdom with the tokens, plus
-   a bottom sheet and a swipe gesture, to decide vdom vs hand-rolled.
+6. **UI spike**: write the `rb.ml` glue (react + ReactiveData over Brr),
+   then screen 4a (Collection: tag chips, search, grid) and the bottom sheet
+   drag as a signal-bound transform. Check that leaving and re-entering the
+   screen releases every binding (no stale updates, no growth in
+   `performance.memory`). If it disappoints, redo 4a in ocaml-vdom and
+   compare.
 
 ## 11. Non-goals restated
 

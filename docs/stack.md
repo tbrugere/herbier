@@ -24,10 +24,16 @@ evidence. Open decisions are listed at the end.
 - **Brr** for browser APIs (DOM, fetch, canvas, geolocation, media) and the
   `Jv` FFI for the handful of JS libraries we bind by hand (MapLibre, the
   Capacitor plugins).
-- **UI layer**: Elm-style virtual DOM with **ocaml-vdom** (LexiFi) as the
-  default choice; hand-rolled Brr views are the fallback if vdom gets in the
-  way of gestures/transitions. Bonsai is too heavy; Melange + reason-react is
-  the alternative if we want the React widget ecosystem.
+- **UI layer: fine-grained reactivity with ocaml-react + ReactiveData over
+  Brr** (decided 2026-09-16). State lives in `react` signals; DOM attributes,
+  text and child lists are bound to signals through a small glue module we
+  write ourselves (~150 lines, see "UI components" below). ReactiveData
+  provides incremental list patches. No virtual DOM. Fallback if the
+  reactive approach disappoints in the UI spike: ocaml-vdom (Elm
+  architecture, one state value, diffing). Rejected: Note + `note.brr`
+  (self-described experimental, "will break"), Bonsai (too heavy),
+  Tyxml_js.R (ready-made glue but a second DOM binding next to Brr),
+  Melange + reason-react (second toolchain, only worth it for npm widgets).
 - **Capacitor 8** as the Android shell. Plugins we depend on (all with 2026
   releases): `@capacitor/app` (deep links), `@capgo/capacitor-share-target`
   (SEND share sheet), `@capgo/capacitor-social-login` or
@@ -57,6 +63,38 @@ Why not the two runners-up (see `ocaml-android-stacks.md`):
   Worth a two-day spike for fun, not the main line.
 - **Qt via lablqml**: lablqml 0.7 (2021) needs OCaml < 5 and Qt 5; its Android
   branch is from 2017. Reviving three layers before writing any UI. No.
+
+### UI components
+
+- **Pure HTML5 and CSS with the design tokens, no component library.** The
+  design is fully custom (paper/moss palette, Manrope and Newsreader, custom
+  tab bar), so Ionic, Material Web (maintenance mode since 2024) or Shoelace
+  would be fought rather than used. The widget inventory is small: buttons,
+  chips, cards, list rows, tab bar, radios/switches, text fields, month
+  grid, photo grid, bottom sheet, slide-up modal, photo viewer.
+- Several interactions are CSS only on a modern WebView: swipe between
+  photos and pager-style grids via `scroll-snap`, sheets and tab bar via
+  `position: sticky` and `<dialog>`, shared-element transitions via the View
+  Transitions API (Chrome 111+, plain fade as fallback).
+- Three pieces are imperative and hold JS-library state: the MapLibre map,
+  the camera `<video>`, the pinch-zoom viewer. With signals they need no
+  special "island" machinery: the widget subscribes to a signal
+  (`S.map (fun pts -> Map.set_data map pts) observations |> S.keep`) like
+  any DOM node. Per-frame work such as the bottom-sheet drag is a `float`
+  signal bound to a `style` attribute.
+- **The glue module** (`app/ui/rb.ml`, our own): `text`, `attr`, `class_`,
+  `style` bind one DOM property to a signal; `children` replaces a child
+  list from a signal; `rlist` applies ReactiveData patches (insert, remove,
+  update, move) with `El.insert_siblings`/`El.remove`; `ev` turns a Brr DOM
+  event into a `react` event; `keep` ties a signal's lifetime to an element.
+  Every binding is registered on its element and released when the screen
+  root is removed. This is the one rule that prevents both the classic
+  ocaml-react bug (a binding silently garbage-collected because nothing
+  held it) and leaks across screen changes.
+- Known costs, accepted: state is spread across signals rather than one
+  value (snapshotting for debugging is manual); setters must not be called
+  during a propagation step; no compile-time HTML structure checks (TyXML
+  would give those).
 
 ### Capability ratings for the chosen stack
 
@@ -182,7 +220,5 @@ are Cloudflare R2 beyond 10 GB of originals and Supabase Pro, both optional.
    unnecessary with `drive.file` only.
 3. **Keep the Google Photos option in the settings screen** as "coming later",
    or remove it from the design.
-4. **UI library**: ocaml-vdom (proposed) vs hand-rolled Brr vs Melange/React.
-   To be settled by the first spike.
-5. **Two devices later?** The outbox design tolerates it (LWW), but conflict
+4. **Two devices later?** The outbox design tolerates it (LWW), but conflict
    handling stays naive on purpose.
