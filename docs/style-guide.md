@@ -34,6 +34,13 @@ after all three and need a reason.
 inside a loop: build reversed and `List.rev` once, or `List.concat_map`.
 Annotate types at module boundaries (the `.mli`); let inference work inside.
 
+2.4 **`Seq` for lazy or potentially large sequences**: paging through pull
+results, iterating a database cursor, streaming a file list. Compose with
+`Seq.map` / `filter` / `take` / `fold_left` without building intermediate
+lists; `List.to_seq` and `Seq.to_list` at the boundaries only. Do not
+convert back and forth, and do not use `Seq` where a plain list is small and
+already materialised.
+
 ## 3. Pattern matching
 
 3.1 **Prefer `match` over `if`.** `if` is for a genuine two-way boolean test
@@ -108,8 +115,8 @@ val route : [ `Collection | `Species of Plant_id.t | `Note ] -> string
 Not as a way to skip declaring a type, and never an inferred row type in an
 `.mli`: write the closed list.
 
-5.4 **GADTs** when they buy real safety. Expected here: typed settings keys,
-and later a typed query builder.
+5.4 **GADTs** when they buy real safety. Expected here: typed settings keys
+and the column types of `dbq` (`Ty.t`, `('table, 'a) col`).
 
 ```ocaml
 type _ key =
@@ -139,6 +146,7 @@ let header =
 
 6.3 The same operators exist for `Option`, `Result` and `Fut`/`Lwt` where we
 use them, with the usual meaning (`let*` = bind, `let+` = map).
+`Dbq.Row.Syntax` is applicative only: `let+` / `and+`, no `let*`.
 
 6.4 **Disambiguate by opening `Syntax` locally**, inside the function that
 needs it. Never open one at module top level, never two in the same scope;
@@ -214,7 +222,7 @@ comparing ids and `updated_at`, not whole records.
 ## 10. FFI
 
 10.1 All `Jv` and raw interop lives in dedicated binding modules
-(`app/ffi/maplibre.ml`, `app/ffi/capacitor_*.ml`), one per JS library or
+(`app/bindings/maplibre.ml`, `app/bindings/cap_*.ml`), one per JS library or
 plugin, each with an `.mli` even when the implementation is three lines.
 
 10.2 The binding converts at the boundary: plain OCaml types and `result`
@@ -226,7 +234,7 @@ in and out. **`Jv.t` never appears in a domain module's signature.**
 `ocamlformat` decides layout. `.ocamlformat` is checked in:
 
 ```
-version = 0.27.0
+version = 0.29.0
 profile = default
 margin = 80
 ```
@@ -236,8 +244,9 @@ without a comment saying why. CI runs `dune build @fmt`.
 
 ## 12. Tests
 
-12.1 `dune test` with **alcotest**, one test executable per library under
-`test/`.
+12.1 `dune test` with **alcotest** (decided), one test executable per
+library that has no Brr dependency (`domain`, `dbq`, `refs`) under `test/`.
+Browser-side tests only if the UI spike's leak check fails.
 
 12.2 Worth testing: pure domain logic (distances, filters, dates/seasons);
 **sync merge rules** — outbox ordering, last-write-wins, soft delete, clock

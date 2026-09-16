@@ -214,13 +214,14 @@ are Cloudflare R2 beyond 10 GB of originals and Supabase Pro, both optional.
 
 ## Open decisions (for Tristan)
 
-1. **Region** for the offline PMTiles extract and whether the France-only
-   sources (INPN, Tela, IGN) are worth wiring at all. The handoff's
-   Alsace/Vosges examples are placeholders.
+1. **Region**. Still open. Decided 2026-09-16 that the offline PMTiles
+   extract is v2 and the France-only sources (INPN, Tela, IGN) stay unwired
+   until a region is named. The handoff's Alsace/Vosges examples are
+   placeholders.
 2. **Google account**: a personal Gmail is assumed. A Workspace account would
    make the OAuth app "internal" and lift all verification questions, but is
    unnecessary with `drive.file` only.
-3. **Keep the Google Photos option in the settings screen** as "coming later",
-   or remove it from the design.
+3. ~~Keep the Google Photos option in the settings screen~~ Decided
+   2026-09-16: the row is removed from the settings screen.
 4. **Two devices later?** The outbox design tolerates it (LWW), but conflict
    handling stays naive on purpose.

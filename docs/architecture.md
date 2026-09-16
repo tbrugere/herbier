@@ -167,8 +167,8 @@ capture / pick
 - App-only storage target (no Google): originals are simply not kept, only
   the preview. Settings explains the ~570-photo budget if the Storage mirror
   is on.
-- Google Photos: not implemented; the settings radio shows it as
-  "bientôt" or is removed (open decision).
+- Google Photos: not implemented; the settings radio offers Drive and
+  app-only, no Google Photos row.
 
 ## 6. Reference pipeline
 
@@ -217,12 +217,15 @@ gbif_key
 Manifest `intent-filter`s (`VIEW` + `BROWSABLE`, `https`):
 `www.gbif.org/species/*` and `/{lang}/species/*`,
 `identify.plantnet.org/*/species/*` and `/*/observations/*`,
+`plantuse.plantnet.org/*` (the Pl@ntUse wiki, linked from Pl@ntNet species
+pages; host to verify, it may be `uses.plantnet.org`),
 `*.wikipedia.org/wiki/*`, `powo.science.kew.org/taxon/*`,
 `inpn.mnhn.fr/espece/cd_nom/*` and `/explorer/especes/*`,
 `www.tela-botanica.org/bdtfx-nn-*`, `www.inaturalist.org/taxa/*`.
 Plus `SEND text/plain` via the share-target plugin. On Android 12+ the user
 enables these once under "Ouvrir par défaut" (no Digital Asset Links since we
-do not own these domains); the share sheet path needs nothing.
+do not own these domains); the share sheet path needs nothing. Both paths
+ship in v1.
 
 Resolver (OCaml, shared by screens 4i/4j/4k/5c):
 
@@ -231,6 +234,7 @@ input (URL or text)
   → classify by host/pattern
      gbif       → key from path
      plantnet   → decode "Genus species Author" from path → GBIF species/match
+     plantuse   → "Genus_species" wiki page name → GBIF species/match (host to verify)
      wikipedia  → REST summary → wikibase_item → Wikidata P846
      inpn/tela  → cd_nom / nn → name → GBIF species/match
      powo/inat  → Wikidata by P5037/P3151 → P846
@@ -261,23 +265,24 @@ the classifier must accept both a bare URL and text containing one.
 - Reverse geocoding for `place_derived`: Photon (or Géoplateforme in France),
   called once per observation when online, cached in the row.
 
-## 9. Repository layout (proposed)
+## 9. Repository layout (sketch; `layout.md` is the decided version)
 
 ```
 herbier/
   dune-project
   app/            OCaml sources (js_of_ocaml)
-    ui/           rb.ml (react↔Brr glue), screens, tokens.ml (design tokens)
-    store/        sqlite bindings, schema migrations, outbox
-    sync/         PostgREST client, pull/push
+    ui/           rb.ml (react↔Brr glue), screens, theme.ml (reads CSS custom properties)
+    dbq/          typed queries, rendered to SQLite SQL and PostgREST requests
+    store/        sqlite transport, schema migrations, outbox, generated tables.ml
+    sync/         PostgREST transport, pull/push
     photos/       exif, compress, drive client, uploader binding
     reference/    per-source clients, projection, rate limiter
     resolver/     link/text → gbif_key
     map/          maplibre facade bindings
     capacitor/    plugin bindings (Jv)
-  web/            static shell: index.html, css, fonts, map.js, built app.js
+  web/            static shell: index.html, scss, fonts, map.js; dist → _build symlink
   android/        Capacitor project (generated), manifest intent-filters
-  supabase/       migrations, RLS, RPC functions, config
+  supabase/       hand-written migrations, schema dump, RLS, RPC functions, config
   docs/
 herbier-backups/  (separate private repo)
   .github/workflows/backup.yml   supabase db dump cron (keep-alive + backup)
@@ -295,17 +300,19 @@ Each is one or two days and answers a question the reports left open.
    stays; fail = same OCaml in a TWA.
 2. **Storage spike**: `@capacitor-community/sqlite` from OCaml, FTS5 search,
    a 300 KB preview written to `Directory.Data` and read back as a blob URL.
-3. **Map spike**: MapLibre in the WebView with OpenFreeMap positron, then a
-   PMTiles file read from the filesystem through the `pmtiles` protocol,
-   offline. This is the "painful" item; if filesystem-backed PMTiles fails,
-   fall back to an `addProtocol` write-through cache of visited tiles.
+3. **Map spike**: MapLibre in the WebView with OpenFreeMap positron. The
+   second half (a PMTiles file read from the filesystem through the
+   `pmtiles` protocol, offline) is deferred with the offline region to v2;
+   if filesystem-backed PMTiles then fails, fall back to an `addProtocol`
+   write-through cache of visited tiles.
 4. **Auth spike**: Credential Manager sign-in → Supabase `signInWithIdToken`;
    `AuthorizationClient` for `drive.file`; confirm the OAuth client can be
    "In production" with no verification prompt.
 5. **Reference spike**: run the §6 pipeline for two species from OCaml and
    render the projection; measure how many fields come back empty.
 6. **UI spike**: write the `rb.ml` glue (react + ReactiveData over Brr),
-   then screen 4a (Collection: tag chips, search, grid) and the bottom sheet
+   then screen 4a (Collection: tag chips, search, grid) over rows from the
+   local store (spike 2 comes first) and the bottom sheet
    drag as a signal-bound transform. Check that leaving and re-entering the
    screen releases every binding (no stale updates, no growth in
    `performance.memory`). If it disappoints, redo 4a in ocaml-vdom and
