@@ -5,6 +5,7 @@
 (dirs :standard \ dist node_modules)
 
 (rule
+ (alias web)
  (targets (dir dist))
  (deps
   index.html
@@ -17,7 +18,3 @@
   %{project_root}/scripts/build-web.sh)
  (action
   (run bash %{project_root}/scripts/build-web.sh %{project_root}/app/main.bc.js dist)))
-
-(alias
- (name web)
- (deps (dir dist)))
