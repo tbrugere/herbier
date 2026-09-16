@@ -139,6 +139,46 @@ before." Needed when a signal depends on its own past, for example a
 pagination cursor that depends on the previous cursor. Rare in UI code;
 `S.accum` and `S.fold` cover most cases.
 
+## 3b. map vs bind, and binding operators
+
+Unlike Lwt, where `map` is defined from `bind`, react defines `bind` from
+`map`: "`bind s sf` is `switch (map ~eq:( == ) sf s)`". The two operations
+mean different things in a dataflow graph:
+
+- `map`, `l2`, `app`, `pair`: a **static** graph. Dependencies are fixed at
+  construction, ranked once, updated in order. Signals are an applicative
+  functor (`S.app` "holds the value of `sf` applied to the value of `s`").
+  Use this by default.
+- `bind`, `switch`: a **dynamic** graph. Each change of the outer signal
+  runs your function, builds a new inner graph and abandons the old one
+  (a switch may trigger a further update step in the same instant). Use it
+  for structural changes only, in practice screen navigation. On
+  js_of_ocaml the abandoned inner graph is not collected by itself, so a
+  `bind` on a frequently changing value leaks one graph per change unless
+  its bindings are released; at screen granularity that is one `release`
+  per navigation.
+
+react 1.2.2 ships no binding operators or infix module. Define them once:
+
+```ocaml
+module Syntax = struct
+  let ( let+ ) s f = S.map f s          (* applicative, static *)
+  let ( and+ ) a b = S.Pair.pair a b    (* ('a * 'b) signal; structural eq by default *)
+  let ( let* ) s f = S.bind s f         (* monadic, dynamic: screen level only *)
+end
+
+let counter_label =
+  let+ n = counter
+  and+ tag = active_tag in
+  Printf.sprintf "%d plantes%s" n
+    (match tag with None -> "" | Some t -> " · " ^ t.name)
+```
+
+`let+ ... and+ ...` desugars to a `map` over a `pair`: still static and
+cheap. A `let*` outside navigation code is a smell. `S.Pair.pair` defaults
+to structural equality on the tuple, so pass `~eq:( == )` explicitly when a
+side holds closures or JS objects instead of using `and+`.
+
 ## 4. Update steps and simultaneity
 
 When a setter is called, react runs an **update step**: it "automatically
