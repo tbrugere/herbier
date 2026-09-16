@@ -226,6 +226,13 @@ its new value differs per `eq`. Two consequences:
   comparison. Structural `(=)` on a closure raises at runtime.
 - Choosing `eq` is also an optimisation: with a good `eq`, a recomputed list
   equal to the previous one stops propagation and the DOM is not touched.
+- Propagation is pruned per node. In a chain `a -> b -> c`, if `a` changes
+  but `b`'s recomputed value is equal to its old one under `b`'s `eq`, `b`
+  is not marked changed and `c` is never visited: its function does not
+  run. Setting a primitive to an `eq`-equal value does nothing at all.
+  `~eq:(fun _ _ -> false)` forces propagation. Events have no `eq`: every
+  occurrence propagates; use `S.hold` + `S.changes` for "only when
+  different".
 
 ## 5. Memory: the part that decides how the glue is written
 
