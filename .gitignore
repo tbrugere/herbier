@@ -1,1 +1,6 @@
+_build/
+*.install
+node_modules/
 .lavish/
+.DS_Store
+# web/dist is a symlink into _build; nothing generated is committed

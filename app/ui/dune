@@ -1,0 +1,19 @@
+; Screens and widgets: react + ReactiveData over Brr through rb.ml.
+; Subdirectories are qualified modules: Screens.Collection, Widgets.Chip.
+(include_subdirs qualified)
+
+(library
+ (name herbier_ui)
+ (libraries
+  herbier_domain
+  herbier_bindings
+  herbier_store
+  herbier_sync
+  herbier_photos
+  herbier_refs
+  herbier_refs_io
+  herbier_geo
+  postgrest
+  brr
+  react
+  reactiveData))

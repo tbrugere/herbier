@@ -1,0 +1,19 @@
+(version 0.3.1)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml react)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocsigen/reactiveData/releases/download/0.3.1/reactiveData-0.3.1.tbz)
+  (checksum
+   sha512=eece1988c8d60ffcbb714b9384a9bea893f6f4a44c0037395d6b2c43f0d06493377f9ca71f8e9751d2148bdfdc357cd8a5445e8b8ea73dc6b2e6acb3cc17bb5c)))

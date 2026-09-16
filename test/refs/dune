@@ -1,0 +1,5 @@
+; Decoders and projection over the recorded payloads in ../fixtures.
+(test
+ (name test_refs)
+ (libraries herbier_refs herbier_domain yojson alcotest)
+ (deps (glob_files %{project_root}/test/fixtures/*.json)))

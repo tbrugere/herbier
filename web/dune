@@ -1,0 +1,23 @@
+; The static shell. `dune build @web` fills dist/ (a directory target) with
+; index.html, app.css (sass), vendor.js (esbuild), app.js (jsoo output) and
+; the static folders. web/dist in the source tree is a symlink to
+; _build/default/web/dist and is excluded from scanning below.
+(dirs :standard \ dist node_modules)
+
+(rule
+ (targets (dir dist))
+ (deps
+  index.html
+  (source_tree scss)
+  (source_tree fonts)
+  (source_tree img)
+  (source_tree js)
+  (source_tree map)
+  ../app/main.bc.js
+  %{project_root}/scripts/build-web.sh)
+ (action
+  (run bash %{project_root}/scripts/build-web.sh %{project_root}/app/main.bc.js dist)))
+
+(alias
+ (name web)
+ (deps (dir dist)))

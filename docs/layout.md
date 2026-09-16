@@ -150,7 +150,7 @@ Notes:
   which has the shape of a PostgREST row; no query DSL on the SQLite side.
   Possible upgrade, not a decision: sqlgg could type that SQL from the
   CREATE TABLE statements if its async traits can be implemented over the
-  plugin (spike, `exploratory_research/sqlgg-jsoo.md`, report pending).
+  plugin (spike; see `exploratory_research/sqlgg-jsoo.md`: worth doing).
 - `store/tables.ml` is hand-written; `store/` and `sync/` share its
   declarations, and `scripts/check_tables.py` compares it with the schema
   dump in CI (§7), so a schema change is one migration, one dump and one

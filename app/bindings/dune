@@ -1,0 +1,4 @@
+; Jv/Brr bindings to Capacitor plugins and JS libraries. No domain, no logic.
+(library
+ (name herbier_bindings)
+ (libraries brr))

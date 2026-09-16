@@ -1,0 +1,4 @@
+; Capture, preview generation, EXIF, Drive upload queue.
+(library
+ (name herbier_photos)
+ (libraries herbier_domain herbier_store herbier_bindings brr))

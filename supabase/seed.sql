@@ -1,0 +1,2 @@
+-- Local development seed for `supabase start`. Two plants, nothing else;
+-- rows need an owner, so this runs after a dev user exists (M6).

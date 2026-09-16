@@ -1,0 +1,39 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ocaml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.3"
+          dune-cache: true
+      - name: Cache dune package builds
+        uses: actions/cache@v4
+        with:
+          path: _build/_private
+          key: dune-pkg-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}
+      - run: dune build
+      - run: dune test
+      - run: dune fmt --check
+      - uses: astral-sh/setup-uv@v5
+      - name: tables.ml matches the schema dump
+        run: uv run scripts/check_tables.py
+
+  supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - uses: astral-sh/setup-uv@v5
+      - run: supabase start
+      - run: supabase test db
+      - name: schema dump is fresh
+        run: uv run supabase/scripts/schema-dump.py --check

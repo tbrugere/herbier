@@ -1,0 +1,5 @@
+; Supabase auth and the outbox push/pull over PostgREST; transport.ml is
+; the Brr fetch adapter for Postgrest.Request.t.
+(library
+ (name herbier_sync)
+ (libraries herbier_domain herbier_store herbier_bindings postgrest brr))

@@ -1,0 +1,6 @@
+; Reference sources, pure part: request descriptions, payload decoders and
+; the projection. domain + yojson only, so it builds natively and is tested
+; against test/fixtures/.
+(library
+ (name herbier_refs)
+ (libraries herbier_domain yojson))
