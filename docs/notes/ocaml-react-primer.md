@@ -303,6 +303,49 @@ returns the root element plus the binding list. Navigation is
 `S.bind screen (...)` at the top, and the top-level code releases the
 previous screen's bindings when the inner signal switches.
 
+## 6b. ReactiveData: patches for collections
+
+A `plant list signal` is opaque to consumers: one added plant is "a new
+list", so a DOM binding would rebuild every card. ReactiveData (Ocsigen,
+built on react) carries **patches** next to the value:
+
+```ocaml
+type 'a p =
+  | I of int * 'a     (* insert v at position i *)
+  | R of int          (* remove position i *)
+  | U of int * 'a     (* replace position i with v *)
+  | X of int * int    (* swap i and j *)
+type 'a patch = 'a p list   (* sequential; indices relative to the state after the previous step *)
+```
+
+API in the order you meet it:
+
+- `RList.create : 'a list -> 'a t * 'a handle`; the handle has `cons`,
+  `snoc`, `insert v i`, `remove i`, `update v i`, `move i offset`, `set`,
+  `patch`. Same split as `S.create`: the `'a t` is read and derived from,
+  the handle mutates.
+- `RList.map f l`: "`f` is applied only on the new or modified elements".
+  `RList.map plant_card visible` runs `plant_card` once per inserted plant.
+  Also `filter`, `concat`, `rev`, `singleton_s` (a signal as a one-element
+  list, to mix a header with a dynamic list in one child sequence).
+- Bridges: `RList.signal l : 'a list signal` (value only, e.g. for a
+  counter), `RList.event l : 'a msg event` (the patch stream the `rlist`
+  binding subscribes to), `RList.fold`.
+- `RList.from_signal ?eq (s : 'a list signal)`: diffs consecutive values
+  into patches, "downstream computation only on the new and modified
+  elements". Keep computing `visible` with `S.l3 filter_plants ...` and
+  wrap it once. Pass an `eq` that compares ids and `updated_at`, not full
+  records with thumbnails.
+
+Two feeding styles will both appear: handle-driven when the code knows the
+structural change (outbox result "plant X inserted" → `RList.insert`), and
+`from_signal` for derived, filtered, sorted lists (Collection, Journal,
+chips). Patches are positional, so re-sorting yields removes and inserts
+rather than moves; fine for the DOM. Reactive lists are react nodes
+underneath, so the lifetime rule of §5 applies unchanged. `RMap` (keyed,
+`Add`/`Del` patches) exists for map-shaped stores; not needed for the
+screens we have.
+
 ## 7. Mental model checklist
 
 - State → signal. Happening → event. Never store state in an event.
