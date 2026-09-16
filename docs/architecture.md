@@ -269,12 +269,13 @@ the classifier must accept both a bare URL and text containing one.
 
 ```
 herbier/
-  dune-project
+  dune-project    two packages: herbier (the app), postgrest (lib/)
+  lib/
+    postgrest/    generic sans-IO PostgREST client: typed columns, row decoders, request rendering
   app/            OCaml sources (js_of_ocaml)
     ui/           rb.ml (react↔Brr glue), screens, theme.ml (reads CSS custom properties)
-    dbq/          typed queries, rendered to SQLite SQL and PostgREST requests
-    store/        sqlite transport, schema migrations, outbox, generated tables.ml
-    sync/         PostgREST transport, pull/push
+    store/        hand-written SQL over the sqlite plugin, schema migrations, outbox, tables.ml (columns)
+    sync/         Postgrest → Brr fetch adapter, pull/push
     photos/       exif, compress, drive client, uploader binding
     reference/    per-source clients, projection, rate limiter
     resolver/     link/text → gbif_key
