@@ -1,4 +1,4 @@
 ; Directories dune must not scan: JS deps, the generated Android project,
 ; SQL, docs and the review pages. Only app/, lib/, web/ and test/ have
 ; dune files.
-(dirs :standard \ node_modules android supabase docs scripts .lavish)
+(dirs :standard \ node_modules android supabase docs scripts www .lavish)

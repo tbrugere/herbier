@@ -4,6 +4,7 @@
 
 (library
  (name herbier_ui)
+ (public_name herbier.ui)
  (libraries
   herbier_domain
   herbier_bindings
@@ -13,7 +14,7 @@
   herbier_refs
   herbier_refs_io
   herbier_geo
-  postgrest
+  supabase
   brr
   react
   reactiveData))

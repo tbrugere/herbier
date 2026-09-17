@@ -1,4 +1,5 @@
 ; Reference sources, Brr part: rate-limited fetch, pipeline, resolver.
 (library
  (name herbier_refs_io)
+ (public_name herbier.refs_io)
  (libraries herbier_domain herbier_store herbier_bindings herbier_refs brr))

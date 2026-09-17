@@ -269,7 +269,7 @@ the classifier must accept both a bare URL and text containing one.
 
 ```
 herbier/
-  dune-project    two packages: herbier (the app), postgrest (lib/)
+  dune-project    two packages: herbier (the app), supabase (lib/)
   lib/
     postgrest/    generic sans-IO PostgREST client: typed columns, row decoders, request rendering
   app/            OCaml sources (js_of_ocaml)
@@ -281,7 +281,7 @@ herbier/
     resolver/     link/text → gbif_key
     map/          maplibre facade bindings
     capacitor/    plugin bindings (Jv)
-  web/            static shell: index.html, sass, fonts, map.js; dist → _build symlink
+  web/            static shell: index.html, sass, fonts, map.js; www → _build symlink
   android/        Capacitor project (generated), manifest intent-filters
   supabase/       hand-written migrations, schema dump, RLS, RPC functions, config
   docs/

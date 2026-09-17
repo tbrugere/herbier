@@ -1,4 +1,5 @@
 ; MapLibre facade, map style, geocoding. Offline tiles are v2.
 (library
  (name herbier_geo)
+ (public_name herbier.geo)
  (libraries herbier_domain herbier_store herbier_bindings brr))

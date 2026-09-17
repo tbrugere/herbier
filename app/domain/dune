@@ -1,6 +1,7 @@
 ; Pure types and rules. No JSON library, no Brr: builds natively for tests.
 (library
  (name herbier_domain)
+ (public_name herbier.domain)
  (libraries ptime uuidm))
 
 ; version.ml: `let git = "<git describe>"` for the User-Agent string.

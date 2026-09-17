@@ -146,7 +146,7 @@ let header =
 
 6.3 The same operators exist for `Option`, `Result` and `Fut`/`Lwt` where we
 use them, with the usual meaning (`let*` = bind, `let+` = map).
-`Postgrest.Row.Syntax` is applicative only: `let+` / `and+`, no `let*`.
+`Supabase.Postgrest.Row.Syntax` is applicative only: `let+` / `and+`, no `let*`.
 
 6.4 **Disambiguate by opening `Syntax` locally**, inside the function that
 needs it. Never open one at module top level, never two in the same scope;
@@ -245,7 +245,7 @@ without a comment saying why. CI runs `dune build @fmt`.
 ## 12. Tests
 
 12.1 `dune test` with **alcotest** (decided), one test executable per
-library that has no Brr dependency (`domain`, `postgrest`, `refs`) under
+library that has no Brr dependency (`domain`, `supabase`, `refs`) under
 `test/`. Browser-side tests only if the UI spike's leak check fails.
 
 12.2 Worth testing: pure domain logic (distances, filters, dates/seasons);

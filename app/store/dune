@@ -1,6 +1,7 @@
 ; Local SQLite over @capacitor-community/sqlite: hand-written SQL, rows
-; decoded with Postgrest.Row. tables.ml is hand-written and checked against
+; decoded with Supabase.Postgrest.Row. tables.ml is hand-written and checked against
 ; supabase/schema/ by scripts/check_tables.py.
 (library
  (name herbier_store)
- (libraries herbier_domain herbier_bindings postgrest brr))
+ (public_name herbier.store)
+ (libraries herbier_domain herbier_bindings supabase brr))
