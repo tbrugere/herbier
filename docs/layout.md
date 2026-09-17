@@ -23,7 +23,7 @@ herbier/
   capacitor.config.ts     appId, webDir → web/dist
   app/                    all Herbier OCaml; one dune library per subdir + main.ml (§2)
   lib/                    libraries with no Herbier-specific knowledge, publishable: postgrest/ (§2)
-  web/                    shell sources: index.html, scss/, fonts/, js/, map/; dist symlink (§3)
+  web/                    shell sources: index.html, sass/, fonts/, js/, map/; dist symlink (§3)
   android/                Capacitor Android project, generated then committed (§4)
   supabase/               config.toml, migrations/, schema/, scripts/, tests/ (§5)
   test/                   OCaml tests, native (§6)
@@ -167,16 +167,16 @@ Notes:
 
 ```
 web/
-  dune                    @web alias: copy index.html, fonts/, img/, map/; sass scss/app.scss →
+  dune                    @web alias: copy index.html, fonts/, img/, map/; sass sass/app.sass →
                           dist/app.css; esbuild js/vendor.js → dist/vendor.js;
                           copy ../app/main.bc.js → dist/app.js
   index.html              loads dist/app.css, dist/vendor.js then dist/app.js
-  scss/
-    app.scss              entry: @use the three partials, then every screens/*.scss
-    _tokens.scss          custom properties on :root; the only source of design tokens
-    _base.scss            reset, @font-face, type scale, sun-readability rules (5f)
-    _widgets.scss         chips, cards, tab bar, sheets, dialogs, fields, and the shared mixins
-    screens/              one file per handoff screen (collection.scss, map_tab.scss, …),
+  sass/                   indented Sass syntax (.sass), not SCSS
+    app.sass              entry: @use the three partials, then every screens/*.sass
+    _tokens.sass          custom properties on :root; the only source of design tokens
+    _base.sass            reset, @font-face, type scale, sun-readability rules (5f)
+    _widgets.sass         chips, cards, tab bar, sheets, dialogs, fields, and the shared mixins
+    screens/              one file per handoff screen (collection.sass, map_tab.sass, …),
                           handoff id in a header comment
   fonts/                  Manrope, Newsreader (variable woff2), Material Symbols subset
   js/
@@ -188,10 +188,11 @@ web/
   dist → ../_build/default/web/dist   committed symlink, filled by `dune build @web`
 ```
 
-- Styles are SCSS compiled by dart-sass (from npm) inside the `@web` rule,
+- Styles use the indented Sass syntax (`.sass`, not SCSS), compiled by
+  dart-sass (from npm) inside the `@web` rule,
   next to esbuild: mixins and nesting keep the styles reusable and concise.
   Class names follow the handoff vocabulary (`.chip`, `.card`, `.sheet`).
-- Design tokens exist once, as custom properties in `_tokens.scss`. OCaml
+- Design tokens exist once, as custom properties in `_tokens.sass`. OCaml
   never duplicates them: `ui/theme.ml` reads the few values it needs (map
   point colours, status-bar colour) with `getComputedStyle` on the root
   element once at startup.
@@ -317,7 +318,7 @@ Taken 2026-09-16.
 - Design tokens: CSS custom properties only, no `tokens.ml` generator;
   `ui/theme.ml` reads the few values OCaml needs with `getComputedStyle`
   once at startup.
-- Styles in SCSS (dart-sass from npm, compiled by the `@web` alias next to
+- Styles in the indented Sass syntax, not SCSS (dart-sass from npm, compiled by the `@web` alias next to
   esbuild): one file per screen plus shared partials. Mixins and nesting
   keep the styles reusable and concise.
 - Tests: alcotest natively on every library without a Brr dependency;

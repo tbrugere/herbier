@@ -20,7 +20,7 @@ milestone works. Each milestone ends in something runnable in a browser
 
 1. `dune-project` (two packages: `herbier`: js_of_ocaml, brr, react, reactiveData, yojson, ptime, uuidm, alcotest; `postgrest`: yojson, alcotest), `dune pkg lock` with `dune.lock/` committed, `.ocamlformat` (0.29.0). Done: `dune build` from a clean clone with only dune installed.
 2. `app/dune`, `app/main.ml` (`(modes js)`), `app/domain/dune` also built natively, `test/domain/` with one alcotest. Done: `dune test` passes; layout §2 dependency direction is in the `libraries` fields.
-3. `web/index.html`, `web/dune` (`@web` alias → `_build/default/web/dist`, `web/dist` symlink committed), `package.json` with esbuild and sass, empty `web/js/vendor.js` bundle, `web/scss/app.scss` compiled to `dist/app.css`. Done: serving `dist/` shows a "Herbier" heading written by Brr and styled by `app.css`.
+3. `web/index.html`, `web/dune` (`@web` alias → `_build/default/web/dist`, `web/dist` symlink committed), `package.json` with esbuild and sass, empty `web/js/vendor.js` bundle, `web/sass/app.sass` (indented syntax) compiled to `dist/app.css`. Done: serving `dist/` shows a "Herbier" heading written by Brr and styled by `app.css`.
 4. `npx cap init` + `npx cap add android`, `capacitor.config.ts` with `webDir` = `web/dist`, `android/` committed, `scripts/dev.sh`. Done: the same page on the phone through `cap run android -l` (spike 1, part 1).
 5. `.github/workflows/ci.yml` (build, test, `fmt --check`) and `android.yml` (debug APK artifact, the device build until M8). Done: green run on `main`; APK downloadable and sideloadable.
 
@@ -40,10 +40,10 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 ## M2 — UI foundation and record screens (spike 6; runnable: offline app with records, no photos)
 
 14. `ui/rb.ml` + `.mli` per primer §6: `text`, `attr`, `class_`, `style`, `children`, `rlist`, `ev`, `release`. Depends: M0. Done: a toy page with a counter, a class toggle and an `RList` of rows; `release` stops updates.
-15. `web/scss/_tokens.scss` (custom properties, the only token source), `_base.scss` (`@font-face`, type scale, 5f rules), `ui/theme.ml` (reads the properties OCaml needs with `getComputedStyle` once at startup), `fonts/` (Manrope, Newsreader, `scripts/subset-icons.sh`). Done: a dev route shows every colour and type role of the handoff; `Theme` returns the map colours the CSS declares.
-16. `ui/widgets/` chip, card, list_row, tab_bar, icon, text_field; `_widgets.scss` with its mixins. Done: each widget has a fixture entry on a dev "gallery" route.
+15. `web/sass/_tokens.sass` (custom properties, the only token source), `_base.sass` (`@font-face`, type scale, 5f rules), `ui/theme.ml` (reads the properties OCaml needs with `getComputedStyle` once at startup), `fonts/` (Manrope, Newsreader, `scripts/subset-icons.sh`). Done: a dev route shows every colour and type role of the handoff; `Theme` returns the map colours the CSS declares.
+16. `ui/widgets/` chip, card, list_row, tab_bar, icon, text_field; `_widgets.sass` with its mixins. Done: each widget has a fixture entry on a dev "gallery" route.
 17. `ui/router.ml` (route variant, `S.bind` on the current screen, release of the previous screen) and `ui/state.ml` (filters, network, account). Done: switching tabs tears the old screen down; binding count back to baseline.
-18. `screens/collection.ml` (4a) over `Store.Plants` and `Store.Search` on the M1 seed: title + counter, search filtering an `RList`, tag chips, 2-column grid; `scss/screens/collection.scss`. Done: search and chip filter patch the grid (only touched cards re-rendered).
+18. `screens/collection.ml` (4a) over `Store.Plants` and `Store.Search` on the M1 seed: title + counter, search filtering an `RList`, tag chips, 2-column grid; `sass/screens/collection.sass`. Done: search and chip filter patch the grid (only touched cards re-rendered).
 19. `widgets/sheet.ml`: bottom sheet whose drag is a `float` signal bound to `transform`, snap points. Done: 60 fps drag on the phone, no per-frame allocation visible in DevTools.
 20. Spike exit criterion: enter/leave 4a fifty times; no stale updates, `performance.memory` flat, no dropped frames on the sheet. **Fallback trigger**: either check still fails after one day of fixing, or `rb.ml` needs more than ~300 lines to stay correct → redo 4a in ocaml-vdom, compare, update `stack.md` either way.
 21. `ui/app.ml` (save orchestration, local only for now); `main.ml` opens the db and mounts the router. Done: app starts on an empty db.
@@ -97,7 +97,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 
 ## M8 — Polish and release (runnable: signed release APK)
 
-54. View Transitions (modal from bottom 300 ms, shared hero 4a → 4f 350 ms, fade fallback), pressed states, `scss/screens/` pass per handoff id. Done: side-by-side check against `Herbier v2.dc.html` for every screen.
+54. View Transitions (modal from bottom 300 ms, shared hero 4a → 4f 350 ms, fade fallback), pressed states, `sass/screens/` pass per handoff id. Done: side-by-side check against `Herbier v2.dc.html` for every screen.
 55. Empty and error states: 4n illustration in `web/img/`, offline texts on 4g/4i, "serveur en pause" in 4m, "Libérer" (refthumbs eviction, size counters). Done: each state reachable by toggling network or data.
 56. `scripts/release.sh`, signing config, `android.yml` release on tag; launcher icons, splash, `strings.xml`. Done: the release APK installed over the debug one keeps the database.
 

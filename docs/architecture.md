@@ -281,7 +281,7 @@ herbier/
     resolver/     link/text → gbif_key
     map/          maplibre facade bindings
     capacitor/    plugin bindings (Jv)
-  web/            static shell: index.html, scss, fonts, map.js; dist → _build symlink
+  web/            static shell: index.html, sass, fonts, map.js; dist → _build symlink
   android/        Capacitor project (generated), manifest intent-filters
   supabase/       hand-written migrations, schema dump, RLS, RPC functions, config
   docs/

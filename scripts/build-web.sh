@@ -12,7 +12,7 @@ cp "$web/index.html" "$out/"
 for d in fonts img map; do
   [ -d "$web/$d" ] && cp -R "$web/$d" "$out/$d"
 done
-(cd "$root" && npx --no-install sass --no-source-map "$web/scss/app.scss" "$PWD/$out/app.css")
+(cd "$root" && npx --no-install sass --no-source-map "$web/sass/app.sass" "$PWD/$out/app.css")
 (cd "$root" && npx --no-install esbuild "$web/js/vendor.js" --bundle --format=iife \
   --target=es2020 --minify --outfile="$PWD/$out/vendor.js")
 cp "$app_js" "$out/app.js"

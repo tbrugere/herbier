@@ -9,7 +9,7 @@
  (targets (dir dist))
  (deps
   index.html
-  (source_tree scss)
+  (source_tree sass)
   (source_tree fonts)
   (source_tree img)
   (source_tree js)
