@@ -18,7 +18,7 @@ milestone works. Each milestone ends in something runnable in a browser
 
 ## M0 — Toolchain (runnable: hello page in browser and on phone)
 
-1. `dune-project` (two packages: `herbier`: js_of_ocaml, brr, react, reactiveData, yojson, ptime, uuidm, alcotest; `supabase`: yojson, alcotest), `dune pkg lock` with `dune.lock/` committed, `.ocamlformat` (0.29.0). Done: `dune build` from a clean clone with only dune installed.
+1. `dune-project` (two packages: `herbier`: js_of_ocaml, brr, react, reactiveData, yojson, ptime, uuidm, alcotest; `postgrest`: yojson, alcotest), `dune pkg lock` with `dune.lock/` committed, `.ocamlformat` (0.29.0). Done: `dune build` from a clean clone with only dune installed.
 2. `app/dune`, `app/main.ml` (`(modes js)`), `app/domain/dune` also built natively, `test/domain/` with one alcotest. Done: `dune test` passes; layout §2 dependency direction is in the `libraries` fields.
 3. `web/index.html`, `web/dune` (`@web` alias → `_build/default/web/dist`, `www` symlink committed at the root), `package.json` with esbuild and sass, empty `web/js/vendor.js` bundle, `web/sass/app.sass` (indented syntax) compiled to `dist/app.css`. Done: serving `dist/` shows a "Herbier" heading written by Brr and styled by `app.css`.
 4. `npx cap init` + `npx cap add android`, `capacitor.config.ts` with `webDir` = `www`, `android/` committed, `scripts/dev.sh`. Done: the same page on the phone through `cap run android -l` (spike 1, part 1).
@@ -26,12 +26,12 @@ milestone works. Each milestone ends in something runnable in a browser
 
 ## M1 — Local store (spike 2; runnable: seeded db queried from a plain debug page on the phone)
 
-6. `domain/ids.ml`, `plant.ml`, `observation.ml`, `photo.ml`, `tag.ml`, `reference.ml`: records and typed ids, no codecs (rows go through `Supabase.Postgrest` column types). Done: builds natively and under jsoo; `test/domain` covers ids.
+6. `domain/ids.ml`, `plant.ml`, `observation.ml`, `photo.ml`, `tag.ml`, `reference.ml`: records and typed ids, no codecs (rows go through `Postgrest` column types). Done: builds natively and under jsoo; `test/domain` covers ids.
 7. `domain/places.ml`: Haversine, 500 m clustering, day-place rule of 4c. Done: native tests on a hand-written point set.
-8. `lib/supabase/` core, written now because the store decodes rows with it: `ty` GADT, `('table, 'a) col`, applicative `row` (`let+`/`and+`), `filter`, `request`, `select`/`upsert`/`delete`; `test/supabase/`. Done: each request kind renders to the expected path, query string, headers and body; a recorded response decodes through a `Row` spec; `is_null` on a non-nullable column is rejected by the compiler.
+8. `lib/postgrest/` core, written now because the store decodes rows with it: `ty` GADT, `('table, 'a) col`, applicative `row` (`let+`/`and+`), `filter`, `request`, `select`/`upsert`/`delete`; `test/postgrest/`. Done: each request kind renders to the expected path, query string, headers and body; a recorded response decodes through a `Row` spec; `is_null` on a non-nullable column is rejected by the compiler.
 9. `supabase/config.toml`, first hand-written migration (architecture §4 tables), `seed.sql`, first `schema-dump.py` run committed; hand-written `app/store/tables.ml` (`Postgrest` columns of the synced tables); `scripts/check_tables.py` in `ci.yml`. Depends: local stack (Docker) for the dump. Done: `check_tables.py` passes locally and in CI and fails when a column is renamed in only one of the two.
 10. `bindings/cap_sqlite.ml`, `cap_filesystem.ml`, `cap_preferences.ml`, `cap_app.ml` (Jv, `.mli`, `result` at the boundary). Depends: M0.4. Done: a db opened and a file written/read on the phone (spike 2, part 1).
-11. `store/db.ml` (open, exec, bind params over `cap_sqlite`, the plugin's JSON rows decoded with `Supabase.Postgrest.Row`), `store/schema.ml` (migration 1: architecture §2 tables + `outbox`, `sync_state`, `settings`; `user_version`). Done: fresh install and upgrade from an empty db both reach version 1; a `Tables.plants` row round-trips through the plugin.
+11. `store/db.ml` (open, exec, bind params over `cap_sqlite`, the plugin's JSON rows decoded with `Postgrest.Row`), `store/schema.ml` (migration 1: architecture §2 tables + `outbox`, `sync_state`, `settings`; `user_version`). Done: fresh install and upgrade from an empty db both reach version 1; a `Tables.plants` row round-trips through the plugin.
 12. `store/plants.ml`, `observations.ml`, `tags.ml`, `photos.ml` (rows only), `settings.ml`, `search.ml` (FTS5 `unicode61 remove_diacritics 2` over names, aliases, tags, place labels); a dev seed (a dozen plants, observations, tags) behind a debug flag for M2. Done: "digitale" finds "Digitale pourpre" and "Digitalis" (spike 2, part 2).
 13. `store/outbox.ml`: every write goes through one function that inserts the row and its outbox entry in a single transaction. Done: outbox grows with edits; nothing consumes it yet.
 
@@ -84,7 +84,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 
 45. Hand-write the remaining migrations (owner-only RLS policies, moddatetime + loc triggers, `plants_near` RPC), re-run `supabase/scripts/schema-dump.py`, commit migrations and dump together; pgTAP in `supabase/tests/`; `ci.yml` runs `supabase test db` and `schema-dump.py --check`. Done: tests green locally and in CI; anon reads nothing; the dump is fresh.
 46. `bindings/cap_social_login.ml`, `sync/auth.ml`: Credential Manager id token → `signInWithIdToken`, session in Preferences, auto-refresh on resume/background. Done: sign-in from 4m with an "In production" OAuth client and no verification prompt (spike 4, part 1).
-47. `sync/transport.ml` (`Supabase.Request.t` → Brr fetch, body to the decoder; JWT, paused-project detection), the push upsert and pull select-since requests over `Tables`, `domain/merge.ml` (LWW on `updated_at`, outbox wins); native tests for the rendered requests, merge and outbox ordering. Done: the upsert and select-since render to the expected PostgREST requests in `test/supabase/`; the style guide §12.2 merge cases are tested.
+47. `sync/transport.ml` (`Postgrest.Request.t` → Brr fetch, body to the decoder; JWT, paused-project detection), the push upsert and pull select-since requests over `Tables`, `domain/merge.ml` (LWW on `updated_at`, outbox wins); native tests for the rendered requests, merge and outbox ordering. Done: the upsert and select-since render to the expected PostgREST requests in `test/postgrest/`; the style guide §12.2 merge cases are tested.
 48. `sync/push.ml`, `pull.ml`, `engine.ml` (start, resume, after write, backoff, park 4xx with `last_error`), `store/sync_state.ml`, wired in `ui/app.ml`. Done: an edit on install A shows on install B after pull; parked rows listed in 4m.
 49. `sync/previews_mirror.ml` (optional Storage bucket, up and on-demand down); offline banner and "N en attente" from `state.ml`. Done: a fresh install fetches previews on demand.
 50. Separate repo `herbier-backups`: `backup.yml` cron running `supabase db dump` twice a week. Done: two dumps committed; project not paused after eight days.
@@ -142,7 +142,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 
 - R1 (M2.20): the glue fails its exit criterion → ocaml-vdom rewrite of 4a and `router.ml`; M1 and M3 onwards unaffected.
 - R2 (M1.10): `@capacitor-community/sqlite` is awkward from Jv (promise-heavy, transactions) → thin JS helper in `vendor.js`.
-- R3 (M1.11): `Supabase.Postgrest.Row` does not fit the plugin's row format → hand-written decoders per table; `Supabase.Postgrest` unchanged for sync.
+- R3 (M1.11): `Postgrest.Row` does not fit the plugin's row format → hand-written decoders per table; `Postgrest` unchanged for sync.
 - R4 (M3.28): `getUserMedia` in the WebView lacks resolution or torch control → `camera-preview` plugin, 4d layout unchanged.
 - R5 (M4.39): Pl@ntNet shares something the classifier cannot resolve → 4j falls back to 4i prefilled with the text.
 - R6 (M4.35): the spike shows most 4f fields empty outside France → shrink the reference block rather than add sources.
@@ -158,7 +158,7 @@ Taken 2026-09-16; the toolchain ones are in `layout.md`.
 - Photos (M3) before sync (M6): photos are the field workflow, text rows can wait.
 - Offline map region is v2; v1 uses online tiles only.
 - Link interception in v1 = the SEND share target and the VIEW intent-filters, Pl@ntUse host included.
-- Tests: alcotest natively on `domain/`, `lib/supabase/`, `refs/`; browser-side tests only if M2.20 fails its leak check.
+- Tests: alcotest natively on `domain/`, `lib/postgrest/`, `refs/`; browser-side tests only if M2.20 fails its leak check.
 - Package management: `dune pkg lock` from M0; opam switch with a lock file as the fallback.
 - References are fetched eagerly at link time, in the background: 4j promises it and 4f then works offline.
 - Device builds are debug-signed sideloads from `android.yml` artifacts until M8.

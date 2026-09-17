@@ -14,7 +14,7 @@
   herbier_refs
   herbier_refs_io
   herbier_geo
-  supabase
+  postgrest
   brr
   react
   reactiveData))

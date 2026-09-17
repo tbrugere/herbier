@@ -10,8 +10,8 @@
 (source (github tbrugere/herbier))
 
 (package
- (name supabase)
- (synopsis "Sans-IO Supabase client: typed PostgREST queries and GoTrue auth requests")
+ (name postgrest)
+ (synopsis "Sans-IO PostgREST client: typed columns, rows, filters, requests")
  (depends
   (ocaml (>= 5.3))
   (yojson (>= 2.0))
@@ -31,6 +31,6 @@
   ptime
   uuidm
   yojson
-  (supabase (= :version))
+  (postgrest (= :version))
   (alcotest :with-test)
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))
