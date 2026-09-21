@@ -53,7 +53,7 @@ published; `app/` is Herbier.
 
 ```
 lib/
-  postgrest/              generic, sans-IO PostgREST client; package `postgrest`; yojson only, no domain, no Brr
+  postgrest/              generic, sans-IO PostgREST client; package `postgrest`; yojson + ptime only, no domain, no Brr
     ty.ml                 GADT of column value types: Text, Int, Float, Bool, Uuid, Timestamptz, Json, Point, Nullable
     col.ml                ('table, 'a) col: name + ty, phantom table type
     row.ml                applicative row spec, `let+` / `and+` in Row.Syntax; JSON object → 'a, usable on any JSON row
@@ -124,7 +124,7 @@ Dependency direction (enforced by each `dune` file's `libraries` field):
 
 ```
 domain    ← ptime, uuidm                 (no JSON library, no Brr)
-postgrest ← yojson                       (lib/; no domain, no Brr)
+postgrest ← yojson, ptime                (lib/; no domain, no Brr)
 refs      ← domain, yojson               (no Brr)
 bindings  ← brr
 store     ← domain, bindings, postgrest

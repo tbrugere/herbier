@@ -15,6 +15,7 @@
  (depends
   (ocaml (>= 5.3))
   (yojson (>= 2.0))
+  (ptime (>= 1.0))
   (alcotest :with-test)))
 
 (package
