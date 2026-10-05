@@ -160,7 +160,7 @@ Notes:
 - Cross-service orchestration (save ⇒ outbox push ⇒ reference fetch ⇒
   geocode) lives in `ui/app.ml`, which keeps the siblings independent.
 - `ui/` uses `(include_subdirs qualified)`: `Screens.Collection`,
-  `Widgets.Chip`. `map_tab.ml` avoids shadowing `Stdlib.Map` in `Screens`.
+  `Widgets.Chip`. `map_tab.ml` avoids [shadowing](shadowing) `Stdlib.Map` in `Screens`.
 - The map, camera `<video>` and pinch viewer are ordinary widgets holding a
   JS object and subscribing to signals; no "islands" directory.
 
