@@ -16,6 +16,8 @@
   (ocaml (>= 5.3))
   (yojson (>= 2.0))
   (ptime (>= 1.0))
+  ppx_string
+  (uri (>= 4.0))
   (alcotest :with-test)))
 
 (package
