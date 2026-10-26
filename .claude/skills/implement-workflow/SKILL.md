@@ -38,6 +38,35 @@ rebuilding; the first `dune build` there still takes a minute or two. Release th
 
 Running in the cloud: work in place unless implementing several steps at once.
 
+# 0b. Several steps, tickets or PRs at once
+
+When asked to implement more than one thing ("implement M0.2 to M0.5", "do steps 6, 7 and 10",
+"these three PRs"), do not run them one after another in this conversation and do not
+interleave them by hand. Orchestrate them with the **Workflow tool**: this skill's instruction
+is the explicit opt-in the tool requires. Load the `workflow-authoring` skill first, then write
+a script in which **each step is one agent that runs this skill** (`/implement-workflow <step>`)
+in its own leased worktree and on its own branch, so the worktrees, `_build` directories and
+PRs never collide.
+
+Shape of the script:
+
+- Read the "Depends:" lines of the requested steps. Independent steps go in `parallel(...)`.
+  A step that depends on another requested step goes after it in a `pipeline(...)`, and its
+  agent is told to branch from the dependency's branch and to say so in its PR (stacked PR).
+  A step that depends on an unrequested, unmerged step is reported back instead of started.
+- Each agent gets: the step id, the base branch, the lease holder label, and the instruction
+  to return a small JSON result (`{step, branch, pr_url, report_url, design_decisions,
+  pushed_back, blocked}`) so the orchestrator never has to read the agents' transcripts.
+- Keep the agent count to the number of steps plus the review and PR-text agents each of them
+  spawns; that is within the session's workflow size guideline for up to four or five steps.
+  For more, batch by milestone.
+- After the workflow completes, one combined report (step 11) lists every PR with its design
+  decisions, the pushbacks and the blocked steps, and the hourly loop watches the whole batch.
+
+The same applies to several unrelated PRs or tickets from another tracker: one agent per unit
+of work, parallel when independent, pipelined when stacked, always through this skill so each
+one gets the plan, the red/green split, the review and the draft PR.
+
 # 1. Context and scope
 
 Read the step(s) in `docs/plan.md`: the text, the "Depends:" and the "Done:" criterion. Read the
