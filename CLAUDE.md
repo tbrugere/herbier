@@ -21,3 +21,15 @@ Personal Android app to record plants (single user).
 
 - This project does **not** use the `git-approve` gate / `/commit-review`
   skill. Commit directly with plain `git commit`.
+- `/implement <step>` runs a plan step of `docs/plan.md` end to end: plan,
+  tests written in parallel by the `test-writer` agent (red), implementation
+  (green), `/review`, fixes, draft PR with a design-decisions comment, report.
+  See `.claude/skills/implement/SKILL.md`.
+- `/review` is the parallel, path-gated review (lenses under
+  `.claude/skills/review/`, including `scope` against the plan step and
+  `comment-hygiene`). `/push-pr` opens the draft PR with the title and body
+  conventions.
+- `lib/postgrest/` library code is human-written (`lib/postgrest/AI_POLICY.md`):
+  agents write its tests, build files and codegen only. When a step needs a
+  change there, describe it and let the user make it.
+- "How do I ..." is a question to answer, not an instruction to act on.
