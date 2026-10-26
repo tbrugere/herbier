@@ -1,5 +1,5 @@
 ---
-name: implement
+name: implement-workflow
 description: Implement one step (or a small group of steps) of docs/plan.md end to end, autonomously - plan, tests written in parallel by a background agent (red), implementation (green), review agents, fixes, draft PR, report. Use when the user says "implement M0.2", "do step 11", "implement the toolchain milestone", or names a plan step.
 argument-hint: "[M0.2 | step 11 | M0.2-M0.3 | short description]"
 effort: xhigh

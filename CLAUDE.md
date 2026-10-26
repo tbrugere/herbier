@@ -21,10 +21,10 @@ Personal Android app to record plants (single user).
 
 - This project does **not** use the `git-approve` gate / `/commit-review`
   skill. Commit directly with plain `git commit`.
-- `/implement <step>` runs a plan step of `docs/plan.md` end to end: plan,
+- `/implement-workflow <step>` runs a plan step of `docs/plan.md` end to end: plan,
   tests written in parallel by the `test-writer` agent (red), implementation
   (green), `/review`, fixes, draft PR with a design-decisions comment, report.
-  See `.claude/skills/implement/SKILL.md`.
+  See `.claude/skills/implement-workflow/SKILL.md`.
 - `/review` is the parallel, path-gated review (lenses under
   `.claude/skills/review/`, including `scope` against the plan step and
   `comment-hygiene`). `/push-pr` opens the draft PR with the title and body
