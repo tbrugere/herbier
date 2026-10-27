@@ -21,6 +21,8 @@ Personal Android app to record plants (single user).
 
 - This project does **not** use the `git-approve` gate / `/commit-review`
   skill. Commit directly with plain `git commit`.
+- Pull requests are **squash-merged**; the PR title becomes the commit
+  subject on `main`.
 - `/implement-workflow <step>` runs a plan step of `docs/plan.md` end to end: plan,
   tests written in parallel by the `test-writer` agent (red), implementation
   (green), `/review`, fixes, draft PR with a design-decisions comment, report.
