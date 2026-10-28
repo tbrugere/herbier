@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+env:
+  DUNE_CACHE: enabled
+  DUNE_CACHE_ROOT: /home/runner/.cache/dune
+
 jobs:
   ocaml:
     runs-on: ubuntu-latest
@@ -15,12 +19,18 @@ jobs:
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.3"
-      - run: opam install -y dune
-      - name: Cache dune package builds
+          cache-prefix: v4-dune-ocamlformat
+      - run: opam install -y dune ocamlformat.0.29.0
+      - name: Cache dune's shared cache and the locked package builds
         uses: actions/cache@v4
         with:
-          path: _build/_private
-          key: dune-pkg-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}
+          path: |
+            ~/.cache/dune
+            _build/_private
+            _build/.db
+          key: dune-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-${{ hashFiles('dune-project', '**/dune') }}
+          restore-keys: |
+            dune-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -36,5 +46,4 @@ jobs:
           grep -q '"Herbier"' app.js
           grep -q 'h1.title' app.css
           grep -q 'app.js' index.html
-      - run: opam install -y ocamlformat.0.29.0
       - run: opam exec -- dune build @fmt

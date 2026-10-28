@@ -1,19 +1,16 @@
 name: android
-# Debug APK for sideloading; the only device build until M8.
+# Debug APK for sideloading, on tags and on demand; the only device build until M8.
 on:
   push:
     tags: ["v*"]
-  pull_request:
-    paths:
-      - "android/**"
-      - "capacitor.config.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/android.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  DUNE_CACHE: enabled
+  DUNE_CACHE_ROOT: /home/runner/.cache/dune
 
 jobs:
   apk:
@@ -23,12 +20,18 @@ jobs:
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.3"
-      - run: opam install -y dune
-      - name: Cache dune package builds
+          cache-prefix: v4-dune-ocamlformat
+      - run: opam install -y dune ocamlformat.0.29.0
+      - name: Cache dune's shared cache and the locked package builds
         uses: actions/cache@v4
         with:
-          path: _build/_private
-          key: dune-pkg-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}
+          path: |
+            ~/.cache/dune
+            _build/_private
+            _build/.db
+          key: dune-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-${{ hashFiles('dune-project', '**/dune') }}
+          restore-keys: |
+            dune-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
