@@ -21,7 +21,7 @@
     "@capacitor/filesystem": "^8.0.0",
     "@capacitor/geolocation": "^8.0.0",
     "@capacitor/preferences": "^8.0.0",
-    "@capacitor-community/sqlite": "^7.0.0",
+    "@capacitor-community/sqlite": "^8.0.0",
     "@capgo/capacitor-share-target": "^8.0.0",
     "@capgo/capacitor-social-login": "^8.0.0",
     "@capgo/capacitor-uploader": "^8.0.0",
@@ -33,6 +33,7 @@
     "@capacitor/cli": "^8.0.0",
     "esbuild": "^0.25.0",
     "sass": "^1.80.0",
-    "supabase": "^2.0.0"
+    "supabase": "^2.0.0",
+    "typescript": "^5.6.0"
   }
 }

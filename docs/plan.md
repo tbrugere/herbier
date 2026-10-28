@@ -20,8 +20,8 @@ milestone works. Each milestone ends in something runnable in a browser
 
 1. `dune-project` (two packages: `herbier`: js_of_ocaml, brr, react, reactiveData, yojson, ptime, uuidm, alcotest; `postgrest`: yojson, alcotest), `dune pkg lock` with `dune.lock/` committed, `.ocamlformat` (0.29.0). Done: `dune build` from a clean clone with only dune installed.
 2. `app/dune`, `app/main.ml` (`(modes js)`), `app/domain/dune` also built natively, `test/domain/` with one alcotest. Done: `dune test` passes; layout §2 dependency direction is in the `libraries` fields.
-3. `web/index.html`, `web/dune` (`@web` alias → `_build/default/web/dist`, `www` symlink committed at the root), `package.json` with esbuild and sass, empty `web/js/vendor.js` bundle, `web/sass/app.sass` (indented syntax) compiled to `dist/app.css`. Done: serving `dist/` shows a "Herbier" heading written by Brr and styled by `app.css`.
-4. `npx cap init` + `npx cap add android`, `capacitor.config.ts` with `webDir` = `www`, `android/` committed, `scripts/dev.sh`. Done: the same page on the phone through `cap run android -l` (spike 1, part 1).
+3. `web/index.html`, `web/dune` (`@web` alias → `_build/default/web/dist`, Capacitor's `webDir` pointed at it), `package.json` with esbuild and sass, empty `web/js/vendor.js` bundle, `web/sass/app.sass` (indented syntax) compiled to `dist/app.css`. Done: serving `dist/` shows a "Herbier" heading written by Brr and styled by `app.css`.
+4. `npx cap init` + `npx cap add android`, `capacitor.config.ts` with `webDir` = `_build/default/web/dist`, `android/` committed, `scripts/dev.sh`. Done: the same page on the phone through `cap run android -l` (spike 1, part 1).
 5. `.github/workflows/ci.yml` (build, test, `fmt --check`) and `android.yml` (debug APK artifact, the device build until M8). Done: green run on `main`; APK downloadable and sideloadable.
 
 ## M1 — Local store (spike 2; runnable: seeded db queried from a plain debug page on the phone)

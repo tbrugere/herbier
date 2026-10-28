@@ -4,6 +4,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   ocaml:
     runs-on: ubuntu-latest
@@ -12,28 +15,26 @@ jobs:
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.3"
-          dune-cache: true
+      - run: opam install -y dune
       - name: Cache dune package builds
         uses: actions/cache@v4
         with:
           path: _build/_private
           key: dune-pkg-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}
-      - run: dune build
-      - run: dune test
-      - run: dune fmt --check
-      - uses: astral-sh/setup-uv@v5
-      - name: tables.ml matches the schema dump
-        run: uv run scripts/check_tables.py
-
-  supabase:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-node@v4
         with:
-          version: latest
-      - uses: astral-sh/setup-uv@v5
-      - run: supabase start
-      - run: supabase test db
-      - name: schema dump is fresh
-        run: uv run supabase/scripts/schema-dump.py --check
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: opam exec -- dune build
+      - run: opam exec -- dune test
+      - run: opam exec -- dune build @web
+      - name: web shell contains the styled heading
+        run: |
+          cd _build/default/web/dist
+          test -f index.html && test -f app.css && test -f vendor.js && test -f app.js
+          grep -q '"Herbier"' app.js
+          grep -q 'h1.title' app.css
+          grep -q 'app.js' index.html
+      - run: opam install -y ocamlformat.0.29.0
+      - run: opam exec -- dune build @fmt

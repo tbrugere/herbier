@@ -20,8 +20,7 @@ herbier/
   .ocamlformat            version = 0.29.0, profile = default, margin = 80
   package.json            Capacitor CLI + plugins, maplibre-gl, pmtiles, exifr, esbuild, sass
   package-lock.json
-  capacitor.config.ts     appId, webDir → www
-  www → _build/default/web/dist   committed symlink, filled by `dune build @web`; Capacitor's webDir
+  capacitor.config.ts     appId, webDir → _build/default/web/dist (filled by `dune build @web`)
   app/                    all Herbier OCaml; one dune library per subdir + main.ml (§2)
   lib/                    libraries with no Herbier-specific knowledge, publishable: postgrest/ (§2)
   web/                    shell sources: index.html, sass/, fonts/, js/, map/ (§3)
@@ -132,7 +131,7 @@ sync      ← domain, store, bindings, postgrest
 photos | refs_io | geo   ← domain, store, bindings; refs_io also refs
                                          (siblings never import each other)
 ui        ← everything above + react, reactiveData
-main      ← ui
+main      ← ui, brr                     (main.ml builds the first element itself)
 ```
 
 Notes:
@@ -196,9 +195,11 @@ web/
   never duplicates them: `ui/theme.ml` reads the few values it needs (map
   point colours, status-bar colour) with `getComputedStyle` on the root
   element once at startup.
-- `webDir` is `www`, a committed symlink at the repo root into `_build`, so `npx cap
-  sync` copies exactly what dune built and nothing generated is committed.
-  After `dune clean` the link dangles until the next `dune build @web`. The
+- `webDir` is `_build/default/web/dist` directly, so `npx cap sync` copies exactly
+  what dune built and nothing generated is committed. A symlink at the root was
+  tried first: Capacitor's copy step reproduces a symlink as a symlink, which
+  dangles under `android/`. After `dune clean`, run `dune build @web` before
+  `cap sync`. The
   4n illustration and app icons go under `web/img/`.
 
 ## 4. `android/` — Capacitor project and Kotlin
@@ -269,10 +270,12 @@ the spikes (architecture §10) and manual runs cover them.
   run`; parses the CREATE TABLE statements of `supabase/schema/` and
   compares table, column names and types with `app/store/tables.ml`; needs
   no database, only the committed dump).
-- `ci.yml`: `dune build`, `dune test`, `dune fmt --check`,
-  `check_tables.py`; then on a local Supabase stack `supabase test db` and
-  `schema-dump.py --check`.
-  `android.yml`: debug APK on tag or manual run, uploaded as an artifact for
+- `ci.yml`: `dune build`, `dune test`, the formatting check (`dune build @fmt`,
+  ocamlformat installed from opam on the runner), `dune build @web` and checks on
+  its output. From M1.9: `check_tables.py` and `schema-dump.py --check` on a local
+  Supabase stack; from M6: `supabase test db`.
+  `android.yml`: debug APK on tag, manual run, or a pull request touching the
+  Android project, uploaded as an artifact for
   sideloading; the only device build until the polish milestone.
 
 ## 8. Naming conventions
@@ -304,9 +307,8 @@ Taken 2026-09-16.
 - `android/` at root, committed: the tooling assumes it and the manifest
   diff is the whole native layer.
 - jsoo output assembled by the `@web` alias into `_build/default/web/dist`;
-  `www` (repo root) is a committed symlink to it and Capacitor's `webDir`. No copy
-  step, no stale output; the link dangles after `dune clean` until the next
-  `dune build @web`.
+  Capacitor's `webDir` points at it directly (a root symlink does not survive
+  Capacitor's copy step). No copy step, no stale output.
 - esbuild bundles `vendor.js` from npm: plugins ship as ES modules and npm
   already exists for the Capacitor CLI.
 - Kotlin: one plugin class inline under `android/app/src/main`, until a

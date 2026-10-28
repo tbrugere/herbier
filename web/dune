@@ -1,7 +1,6 @@
 ; The static shell. `dune build @web` fills dist/ (a directory target) with
 ; index.html, app.css (sass), vendor.js (esbuild), app.js (jsoo output) and
-; the static folders. www/ at the repo root is a symlink to _build/default/web/dist
-; (Capacitor's webDir).
+; the static folders. Capacitor's webDir points at _build/default/web/dist.
 (dirs :standard \ node_modules)
 
 (rule

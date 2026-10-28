@@ -1,8 +1,7 @@
-; The only executable: the whole app compiled to JS. Fails to build until
-; main.ml exists (milestone M0).
+; The only executable: the whole app compiled to JS.
 (executable
  (name main)
  (modes js)
- (libraries herbier_ui)
+ (libraries brr herbier_ui)
  (js_of_ocaml
   (flags (:standard))))

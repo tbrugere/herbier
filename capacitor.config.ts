@@ -1,11 +1,11 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-// www/ is a symlink into dune's build directory; run `dune build @web`
+// dune builds the web shell there; run `dune build @web`
 // before `npx cap sync`.
 const config: CapacitorConfig = {
   appId: 're.bruge.herbier',
   appName: 'Herbier',
-  webDir: 'www',
+  webDir: '_build/default/web/dist',
   android: {
     allowMixedContent: false,
   },

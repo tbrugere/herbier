@@ -18,8 +18,6 @@ _opam/
 .merlin
 # dune-generated opam files are committed (herbier.opam, postgrest.opam); dune.lock/ too
 
-# www is a committed symlink into _build; nothing generated is committed
-
 # --- JS / Capacitor
 node_modules/
 # android/ is committed; Gradle outputs are covered by its own generated .gitignore

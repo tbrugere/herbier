@@ -4,15 +4,18 @@
 set -euo pipefail
 app_js="$1"
 out="$2"
-root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+# dune runs this inside _build (possibly in a sandbox copy); the repo root
+# is everything before the first /_build/ segment of the working directory.
+root="${PWD%%/_build/*}"
 web="$root/web"
 rm -rf "$out"
 mkdir -p "$out"
-cp "$web/index.html" "$out/"
+out_abs="$(cd "$out" >/dev/null && pwd)"
+cp "$web/index.html" "$out_abs/"
 for d in fonts img map; do
-  [ -d "$web/$d" ] && cp -R "$web/$d" "$out/$d"
+  [ -d "$web/$d" ] && cp -R "$web/$d" "$out_abs/$d"
 done
-(cd "$root" && npx --no-install sass --no-source-map "$web/sass/app.sass" "$PWD/$out/app.css")
+(cd "$root" && npx --no-install sass --no-source-map "$web/sass/app.sass" "$out_abs/app.css")
 (cd "$root" && npx --no-install esbuild "$web/js/vendor.js" --bundle --format=iife \
-  --target=es2020 --minify --outfile="$PWD/$out/vendor.js")
-cp "$app_js" "$out/app.js"
+  --target=es2020 --minify --outfile="$out_abs/vendor.js")
+cp "$app_js" "$out_abs/app.js"
