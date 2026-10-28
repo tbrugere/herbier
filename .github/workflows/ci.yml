@@ -24,13 +24,15 @@ jobs:
       - name: Cache dune's shared cache and the locked package builds
         uses: actions/cache@v4
         with:
+          # Not _build/.db: restoring dune's rule database without the rest of
+          # _build makes it look for action outputs that are not there
+          # ("open(_build/.actions/...): No such file or directory").
           path: |
             ~/.cache/dune
             _build/_private
-            _build/.db
-          key: dune-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-${{ hashFiles('dune-project', '**/dune') }}
+          key: dune-v2-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-${{ hashFiles('dune-project', '**/dune') }}
           restore-keys: |
-            dune-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-
+            dune-v2-${{ runner.os }}-${{ hashFiles('dune.lock/**') }}-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
