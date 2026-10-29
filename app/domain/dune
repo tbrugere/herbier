@@ -2,7 +2,7 @@
 (library
  (name herbier_domain)
  (public_name herbier.domain)
- (libraries ptime uuidm))
+ (libraries ptime ptime.clock.os uuidm))
 
 ; version.ml: `let git = "<git describe>"` for the User-Agent string.
 (rule

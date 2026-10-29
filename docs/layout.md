@@ -63,8 +63,11 @@ app/
   dune                    executable main, (modes js), js_of_ocaml flags
   main.ml                 entry: init plugins, open db, mount router, start sync
   domain/                 pure types and rules; Stdlib + ptime + uuidm; no Brr, no JSON library
-    plant.ml  observation.ml  photo.ml  tag.ml  reference.ml   records (reference: snapshot + source)
-    ids.ml                UUID generation, typed ids
+    plant.ml  observation.ml  photo.ml  tag.ml  reference.ml   row records and their enums
+                          (tag: + plant_tag; reference: + plant_ref, image, source/status/organ;
+                          the 4f snapshot arrives with refs/projection.ml)
+    ids.ml                UUID generation, one typed id per synced table (Ids.S); store/tables.ml
+                          declares id columns over Ids.*.of_string/to_string, not a second decoder
     merge.ml              last-write-wins on updated_at, outbox-wins rule
     link.ml               URL/text → classified link (gbif key, plantnet name, …), pure
     places.ml             500 m clustering, Haversine, day-place choice (4c)
@@ -247,7 +250,9 @@ Nothing in this repo reads them; this repo only documents the pointer.
 
 ```
 test/
-  domain/       native, alcotest: merge rules, link classification, places clustering
+  domain/       native, alcotest: ids, enum labels, merge rules, link classification, places clustering
+    jsoo/       js_of_ocaml build of domain run under node (needs node >= 19): proves it builds and
+                runs under jsoo
   postgrest/    native, alcotest: rendered requests (path, query string, headers, body) and decoded
                 responses compared to expected values
   refs/         native, alcotest: payload decoders and projection over fixtures/

@@ -21,4 +21,10 @@ let version_tests =
           (String.exists is_whitespace git) );
   ]
 
-let () = Alcotest.run "domain" [("version", version_tests)]
+let () =
+  Alcotest.run "domain"
+    [
+      ("version", version_tests);
+      ("ids", Test_ids.tests);
+      ("enums", Test_enums.tests);
+    ]

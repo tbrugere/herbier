@@ -1,3 +1,4 @@
 (test
  (name test_domain)
- (libraries herbier_domain alcotest))
+ (modules test_domain test_ids test_enums)
+ (libraries herbier_domain alcotest ptime ptime.clock.os))

@@ -51,32 +51,47 @@ row carries sync metadata.
 
 ```
 Plant        id, display_name, aliases[], scientific_name?, authorship?,
-             gbif_key?, notes, notes_updated_at, cover_photo_id?,
-             created_at, updated_at, deleted_at?
-PlantRef     plant_id, source (GBIF|WIKIDATA|WIKIPEDIA|POWO|IPNI|TAXREF|TELA|
-             EPPO|INAT|PLANTNET), external_id, url
+             gbif_key?, notes, notes_updated_at? (null until first edit),
+             cover_photo_id?, created_at, updated_at, deleted_at?
+PlantRef     id, plant_id, source (gbif|wikidata|wikipedia|powo|ipni|taxref|
+             tela|eppo|inat|plantnet), external_id, url,
+             created_at, updated_at, deleted_at?; unique (plant_id, source)
 Observation  id, plant_id? (null ⇒ « À identifier »), at, lat?, lon?,
              accuracy_m?, place_label?, place_derived?, note?,
-             created_at, updated_at, deleted_at?
-Photo        id, observation_id, taken_at, width, height, sha256,
+             created_at, updated_at, deleted_at?;
+             lat and lon both null or both set, accuracy_m only with them
+Photo        id, observation_id, taken_at, width, height,
+             sha256 (of the original as captured),
              preview_path (device), preview_bucket_key? (Supabase Storage),
-             original_target (NONE|DRIVE), drive_file_id?,
-             upload_state (PENDING|UPLOADED|FAILED|ORIGINAL_MISSING),
+             original_target (app_only|drive), drive_file_id?,
+             upload_state (pending|uploaded|failed|original_missing),
              created_at, updated_at, deleted_at?
 Tag          id, name, created_at, updated_at, deleted_at?
-PlantTag     plant_id, tag_id
-Reference    plant_id, source, fetched_at, payload (JSON as returned,
-             lightly normalised), status (OK|PARTIAL|MISSING|ERROR)
-RefImage     plant_id, source, organ?, remote_url, licence, attribution,
-             thumb_path? (device, ~300 px)
+PlantTag     id, plant_id, tag_id, created_at, updated_at, deleted_at?;
+             unique (plant_id, tag_id): re-adding a tag revives its row
+Reference    id, plant_id, source, fetched_at, payload (JSON as returned,
+             lightly normalised), status (complete|partial|missing|failed),
+             created_at, updated_at, deleted_at?; unique (plant_id, source)
+RefImage     plant_id, source, organ? (flower|leaf|fruit|habit), remote_url,
+             licence, attribution, thumb_path? (device, ~300 px); device-only
 ```
+
+Enum values are written as their stored labels (Postgres enum labels, SQLite
+text): lowercase snake_case, each the snake_case of its OCaml constructor
+(`Photo.Original_target`, `Photo.Upload_state`, `Reference.Source`,
+`Reference.Status`, `Reference.Organ`). `Reference.Source` is shared by
+`PlantRef`, `Reference` and `RefImage`. In OCaml, `PlantTag` is
+`Tag.Plant_tag`, `PlantRef` and `RefImage` are `Reference.Plant_ref` and
+`Reference.Image`; an observation's `lat`/`lon`/`accuracy_m` are one
+`position option`. `accuracy_m` is null when unknown: no accuracy reported,
+or the point was moved by hand (a manual move clears it).
 
 Rules from the handoff that the model must keep: a plant may have zero
 observations; an observation with no plant is "À identifier" and shows in
 Journal and Carte only; free-name plants (`scientific_name = null`) are
 valid and linking later fills `gbif_key`/refs and turns the free name into
 an alias; deleting a photo in Herbier only unlinks, never touches Drive;
-a Drive-side deletion becomes `ORIGINAL_MISSING` with the preview kept.
+a Drive-side deletion becomes `original_missing` with the preview kept.
 
 Derived, not stored: places. A "place" in the UI is a cluster of
 observations within 500 m; a user-given name is written to `place_label` on
@@ -102,10 +117,10 @@ each observation of the cluster (handoff 4b).
 
 ## 4. Sync (outbox to Supabase)
 
-Postgres tables `plants, plant_refs, observations, photos, tags, plant_tags`
-with:
+Postgres tables `plants, plant_refs, observations, photos, tags, plant_tags,
+reference` with:
 
-- `id uuid primary key` generated on device;
+- `id uuid primary key` generated on device (UUID v7, so ids sort by creation time);
 - `owner_id uuid not null default auth.uid()`, index, RLS
   `using ((select auth.uid()) = owner_id)` for `authenticated`, no anon
   policies;
@@ -114,8 +129,12 @@ with:
 - `observations.loc geography(Point, 4326)` + GiST, kept in sync from
   `lat/lon` by trigger; an RPC `plants_near(pt, radius_m)` for "Vues ici" in
   the Noter screen (handoff 4d) when online, with a local Haversine fallback;
-- `reference(plant_id, source, fetched_at, payload jsonb, status)` so the
-  reference cache is also backed up, not refetched on a new device.
+- `reference.payload jsonb`: the reference cache is synced like the other
+  tables, so it is backed up, not refetched on a new device;
+- the natural keys of §2 (`plant_refs`, `plant_tags`, `reference`) as unique
+  constraints next to the `id` primary key: the store looks a row up by its
+  natural key and reuses its `id`, so push stays `on_conflict=id` for every
+  table and the outbox keeps one `row_id` per row.
 
 Protocol, run on app start, on resume, and after each local write when
 online:
@@ -146,13 +165,13 @@ capture / pick
   → read EXIF (date, GPS) with exifr, before any canvas work
   → decode with createImageBitmap (applies orientation)
   → preview: resize to ≤1600 px, encode JPEG q0.7 (or WebP), write to
-    previews/<id>; insert Photo(PENDING) + outbox row
+    previews/<id>; insert Photo(pending) + outbox row
   → original: write to a temp file, enqueue in @capgo/capacitor-uploader
     (WorkManager; Wi-Fi-only if the setting says so) → Drive
     files.create (multipart) into Herbier/<scientific or display name>/
     with appProperties {herbier_photo_id, sha256}
-  → on success: drive_file_id, upload_state=UPLOADED, delete temp file
-  → on failure after N attempts: FAILED, badge « ↑ » stays, retry from
+  → on success: drive_file_id, upload_state=uploaded, delete temp file
+  → on failure after N attempts: failed, badge « ↑ » stays, retry from
     Settings → « Envoyer maintenant »
 ```
 
@@ -163,7 +182,7 @@ capture / pick
 - Displaying an original (viewer, "Ouvrir dans Google Drive ↗"): open the
   `webViewLink`; the app itself only ever renders the local preview.
 - Health check (weekly, when online): `files.get?fields=trashed` on a
-  batch of `drive_file_id`s; `trashed` or 404 → `ORIGINAL_MISSING`.
+  batch of `drive_file_id`s; `trashed` or 404 → `original_missing`.
 - App-only storage target (no Google): originals are simply not kept, only
   the preview. Settings explains the ~570-photo budget if the Storage mirror
   is on.

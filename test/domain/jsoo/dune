@@ -1,0 +1,16 @@
+; js_of_ocaml build of the domain library, run under node (>= 19, for
+; globalThis.crypto) by `dune test`. NODE_OPTIONS is cleared so that a
+; preload set in the developer's shell cannot break or alter the run.
+
+(executable
+ (name smoke)
+ (modes js)
+ (libraries herbier_domain))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run node %{dep:smoke.bc.js}))))

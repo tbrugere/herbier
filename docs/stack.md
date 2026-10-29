@@ -145,7 +145,7 @@ blocked: nothing.
 - **Originals → Google Drive**, scope `drive.file`, folder
   `Herbier/<species>/`, one file per original with `appProperties` carrying
   the Herbier photo id and content hash. Deletion on the Drive side shows as
-  `trashed:true` then 404 → `ORIGINAL_MISSING`. Thumbnails via
+  `trashed:true` then 404 → `original_missing`. Thumbnails via
   `thumbnailLink` (`=s1600` variant, community-documented). Counts against
   the account's shared 15 GB.
 - **Preview** (≤1600 px, JPEG q0.7 or WebP, 150–250 KB target) is always

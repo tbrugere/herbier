@@ -55,7 +55,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 ## M3 — Photos (runnable: field workflow 4d → 4e → 4f with local previews)
 
 26. `bindings/exifr.ml`, `cap_camera.ml`, `cap_geolocation.ml`; `photos/exif.ml` (date, GPS read before any canvas work). Done: EXIF of a phone photo read from OCaml; the mapping part tested on a fixture.
-27. `photos/preview.ml`: `createImageBitmap` → ≤1600 px canvas → JPEG q0.7 → `previews/<id>.jpg` via `store/files.ml`; sha256; `store/photos.ml` insert PENDING. Done: a 300 KB preview written and read back as a blob URL (spike 2, part 3), no EXIF left in it.
+27. `photos/preview.ml`: `createImageBitmap` → ≤1600 px canvas → JPEG q0.7 → `previews/<id>.jpg` via `store/files.ml`; sha256 of the original as captured (architecture §2, §5); `store/photos.ml` insert `pending`. Done: a 300 KB preview written and read back as a blob URL (spike 2, part 3), no EXIF left in it.
 28. `photos/capture.ml`: `getUserMedia` viewfinder + `cap_camera` gallery pick. Done: the shutter produces a preview file.
 29. 4d `screens/record.ml`: dark modal, thumbnail row, optional name with suggestions (collection first, then "Vues ici" from `places`, local only), GPS pill, save without network; 4e `saved.ml`. Done: an observation with two photos saved offline in under 2 s, GPS never blocking.
 30. `widgets/photo_grid.ml`, striped loading state, badges (`↑`, local); 4f hero pager (`scroll-snap`) and "Mes photos" grid; cover row in 5a; 4h mosaic and "+". Done: cover photos appear on 4a cards.
@@ -92,8 +92,8 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 ## M7 — Drive originals (spikes 1 and 4; runnable: originals in Drive)
 
 51. `sync/auth.ml` extension: `AuthorizationClient` `drive.file`, 1-hour token on demand; `photos/drive.ml` (folders `Herbier/<species>/`, multipart `files.create` with `appProperties`, `files.get?fields=trashed`). Done: a file lands in the right folder from OCaml (spike 4, part 2).
-52. `bindings/cap_uploader.ml`, `photos/upload_queue.ml` (temp original, enqueue, Wi-Fi-only constraint, per-job token callback, PENDING → UPLOADED/FAILED, temp cleanup). Done: an upload completes with the app swiped away and respects Wi-Fi only (spike 1, part 3). **Fallback**: foreground upload with retries.
-53. `photos/health.ml` weekly `trashed` check → ORIGINAL_MISSING; 5e "Ouvrir dans Google Drive ↗" and "original introuvable"; 4e Drive card; 4m account card, "File d'envoi", "Envoyer maintenant", storage radio effective. Done: every Drive-related row of 4e/4m/5e is live.
+52. `bindings/cap_uploader.ml`, `photos/upload_queue.ml` (temp original, enqueue, Wi-Fi-only constraint, per-job token callback, `pending` → `uploaded`/`failed`, temp cleanup). Done: an upload completes with the app swiped away and respects Wi-Fi only (spike 1, part 3). **Fallback**: foreground upload with retries.
+53. `photos/health.ml` weekly `trashed` check → `original_missing`; 5e "Ouvrir dans Google Drive ↗" and "original introuvable"; 4e Drive card; 4m account card, "File d'envoi", "Envoyer maintenant", storage radio effective. Done: every Drive-related row of 4e/4m/5e is live.
 
 ## M8 — Polish and release (runnable: signed release APK)
 
