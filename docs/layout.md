@@ -331,7 +331,8 @@ Taken 2026-09-16.
   keep the styles reusable and concise.
 - Tests: alcotest natively on every library without a Brr dependency;
   browser-side tests only if the UI spike's leak check fails.
-- `domain/` depends on no JSON library. Database rows go through
+- `domain/` uses yojson only for the `to_json` / `of_json` of its closed
+  value sets (the lookup-table codecs). Database rows go through
   `Postgrest` column types; external payload decoding and the projection
   live in `refs/` (domain + yojson, no Brr) so they build natively and run
   against the recorded fixtures; the fetching and orchestration that need
