@@ -151,8 +151,9 @@ blocked: nothing.
   not limited to strings. Values can then be added or
   retired with a row change instead of a type rewrite. Same convention as
   venso's worker codegen (`worker metadata: kind=lookup`). The device's
-  SQLite schema mirrors them: the same lookup tables and rows, with the
-  foreign keys, so a bad label is rejected locally too.
+  SQLite schema mirrors them: the same lookup tables and values (without
+  the description column), with the foreign keys, so a bad label is rejected
+  locally too.
 
 ### Photos: Google Drive first, previews everywhere, Photos deferred
 
