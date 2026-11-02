@@ -139,6 +139,15 @@ blocked: nothing.
   us. Sign-ups disabled in Supabase; RLS `owner_id = (select auth.uid())`.
   Fallback: email+password.
 - Pro ($25/month) only buys "never paused" and backups. Not needed.
+- **Closed value sets are lookup tables, never Postgres enum types.** One
+  table per set, `value text primary key, description text`, its rows
+  inserted by the migration that creates it, read-only for `authenticated`,
+  and a foreign key from each using column to `<table>(value)`. Its
+  `comment on table` ends with a marker line, `herbier metadata: kind=lookup`
+  (key=value pairs, extensible), which the `tables.ml` codegen reads to type
+  the column with the matching OCaml variant. Values can then be added or
+  retired with a row change instead of a type rewrite. Same convention as
+  venso's worker codegen (`worker metadata: kind=lookup`).
 
 ### Photos: Google Drive first, previews everywhere, Photos deferred
 

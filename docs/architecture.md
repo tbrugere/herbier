@@ -76,8 +76,8 @@ RefImage     plant_id, source, organ? (flower|leaf|fruit|habit), remote_url,
              licence, attribution, thumb_path? (device, ~300 px); device-only
 ```
 
-Enum values are written as their stored labels (Postgres enum labels, SQLite
-text): lowercase snake_case, each the snake_case of its OCaml constructor
+Enum values are written as their stored labels (the `value` of a Postgres
+lookup table, SQLite text): lowercase snake_case, each the snake_case of its OCaml constructor
 (`Photo.Original_target`, `Photo.Upload_state`, `Reference.Source`,
 `Reference.Status`, `Reference.Organ`). `Reference.Source` is shared by
 `PlantRef`, `Reference` and `RefImage`. In OCaml, `PlantTag` is
