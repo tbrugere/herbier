@@ -147,7 +147,9 @@ blocked: nothing.
   (key=value pairs, extensible), which the `tables.ml` codegen reads to type
   the column with the matching OCaml variant. Values can then be added or
   retired with a row change instead of a type rewrite. Same convention as
-  venso's worker codegen (`worker metadata: kind=lookup`).
+  venso's worker codegen (`worker metadata: kind=lookup`). The device's
+  SQLite schema mirrors them: the same lookup tables and rows, with the
+  foreign keys, so a bad label is rejected locally too.
 
 ### Photos: Google Drive first, previews everywhere, Photos deferred
 
