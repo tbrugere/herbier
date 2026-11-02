@@ -143,7 +143,7 @@ blocked: nothing.
   table per set, `value text primary key, description text`, its rows
   inserted by the migration that creates it, read-only for `authenticated`,
   and a foreign key from each using column to `<table>(value)`. Its
-  `comment on table` ends with a marker line, `herbier metadata: kind=lookup`
+  `comment on table` ends with a marker line, `metadata: kind=lookup`
   (key=value pairs, extensible), which the `tables.ml` codegen reads to type
   the column with the matching OCaml variant. Values can then be added or
   retired with a row change instead of a type rewrite. Same convention as
