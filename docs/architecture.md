@@ -95,7 +95,15 @@ a Drive-side deletion becomes `original_missing` with the preview kept.
 
 Derived, not stored: places. A "place" in the UI is a cluster of
 observations within 500 m; a user-given name is written to `place_label` on
-each observation of the cluster (handoff 4b).
+each observation of the cluster (handoff 4b). `Domain.Places.cluster` builds
+them in one greedy pass in `(at, id)` order: each observation joins the
+nearest cluster whose running centroid is within 500 m (inclusive; an exact
+tie goes to the earliest cluster) or starts a new one, with no second pass.
+Places are therefore stable under appends in time order only; a backdated
+observation (photo import, edited time) can split or merge later places. A
+place's or a day's name (4c) is `Places.label`: the most frequent trimmed
+`place_label` (ties to the earliest), else likewise `place_derived`, else
+the mean of the positions. Details in `app/domain/places.mli`.
 
 ## 3. Local store (device)
 
@@ -271,7 +279,7 @@ the classifier must accept both a bare URL and text containing one.
   set style, set GeoJSON source, on click/moveend, getCenter, flyTo, add
   metric circle. Bound from OCaml with Brr `Jv`.
 - Sources: observations as a GeoJSON source with `cluster: true`; the 500 m
-  semantics come from a **pre-clustering step in OCaml** (grid/Haversine) at
+  semantics come from a **pre-clustering step in OCaml** (`Places.cluster`) at
   low zooms, MapLibre clustering only merges overlapping markers on screen.
 - Styles: OpenFreeMap `positron` online; offline, the same style with the
   tile source swapped to `pmtiles://` pointing at `tiles/<region>.pmtiles`

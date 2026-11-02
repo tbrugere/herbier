@@ -5,7 +5,7 @@
 (executable
  (name smoke)
  (modes js)
- (libraries herbier_domain))
+ (libraries herbier_domain ptime))
 
 (rule
  (alias runtest)

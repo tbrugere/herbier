@@ -62,7 +62,7 @@ lib/
 app/
   dune                    executable main, (modes js), js_of_ocaml flags
   main.ml                 entry: init plugins, open db, mount router, start sync
-  domain/                 pure types and rules; Stdlib + ptime + uuidm + yojson; no Brr
+  domain/                 types and rules; Stdlib + ptime (+ clock for Ids.fresh) + uuidm + yojson; no Brr
     plant.ml  observation.ml  photo.ml  tag.ml  reference.ml   row records and their enums
                           (tag: + plant_tag; reference: + plant_ref, image, source/status/organ;
                           the 4f snapshot arrives with refs/projection.ml)
@@ -125,7 +125,8 @@ app/
 Dependency direction (enforced by each `dune` file's `libraries` field):
 
 ```
-domain    ← ptime, uuidm, yojson         (no Brr)
+domain    ← ptime, ptime.clock.os, uuidm, yojson
+                                         (no Brr; the clock is read by Ids.fresh, UUID v7)
 postgrest ← yojson, ptime                (lib/; no domain, no Brr)
 refs      ← domain, yojson               (no Brr)
 bindings  ← brr

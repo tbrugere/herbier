@@ -1,4 +1,5 @@
-; Pure types and rules. No JSON library, no Brr: builds natively for tests.
+; Types and rules, pure except Ids.fresh, which reads the wall clock and a
+; self-seeded RNG for UUID v7. No Brr: builds natively for tests.
 (library
  (name herbier_domain)
  (public_name herbier.domain)

@@ -27,4 +27,5 @@ let () =
       ("version", version_tests);
       ("ids", Test_ids.tests);
       ("enums", Test_enums.tests);
+      ("places", Test_places.tests);
     ]
