@@ -62,7 +62,7 @@ lib/
 app/
   dune                    executable main, (modes js), js_of_ocaml flags
   main.ml                 entry: init plugins, open db, mount router, start sync
-  domain/                 pure types and rules; Stdlib + ptime + uuidm; no Brr, no JSON library
+  domain/                 pure types and rules; Stdlib + ptime + uuidm + yojson; no Brr
     plant.ml  observation.ml  photo.ml  tag.ml  reference.ml   row records and their enums
                           (tag: + plant_tag; reference: + plant_ref, image, source/status/organ;
                           the 4f snapshot arrives with refs/projection.ml)
@@ -125,7 +125,7 @@ app/
 Dependency direction (enforced by each `dune` file's `libraries` field):
 
 ```
-domain    ← ptime, uuidm                 (no JSON library, no Brr)
+domain    ← ptime, uuidm, yojson         (no Brr)
 postgrest ← yojson, ptime                (lib/; no domain, no Brr)
 refs      ← domain, yojson               (no Brr)
 bindings  ← brr
@@ -139,12 +139,13 @@ main      ← ui, brr                     (main.ml builds the first element itse
 
 Notes:
 
-- Anything testable without a browser goes in `domain/` (rules, no JSON),
-  `refs/` (payload decoding and projection) or `lib/postgrest/` (request
-  rendering, response decoding); these three build natively and under
-  jsoo. `domain/` never sees `Yojson.Safe.t` or `Jv`: rows go through
-  `Postgrest` column types, not JSON, and external payloads are decoded in
-  `refs/`.
+- Anything testable without a browser goes in `domain/` (rules, value
+  codecs), `refs/` (payload decoding and projection) or `lib/postgrest/`
+  (request rendering, response decoding); these three build natively and
+  under jsoo. `domain/` uses `Yojson.Safe.t` only for the `to_json` /
+  `of_json` of its closed value sets, which the lookup-table metadata names
+  (`ocaml=<Module>`, stack.md); rows go through `Postgrest` column types,
+  never `Jv`, and external payloads are decoded in `refs/`.
 - `lib/postgrest/` knows nothing of Herbier and does no HTTP; the Brr fetch
   adapter is `sync/transport.ml`. If `postgrest` is published, that adapter
   could become a `postgrest-brr` package.
