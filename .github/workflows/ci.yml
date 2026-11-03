@@ -39,6 +39,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: opam exec -- dune build
+      # Also fails when a committed *.opam file is not what dune generates
+      # from dune-project.
       - run: opam exec -- dune test
       - run: opam exec -- dune build @web
       - name: web shell contains the styled heading

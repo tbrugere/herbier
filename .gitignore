@@ -16,7 +16,8 @@ _opam/
 *.byte
 *.native
 .merlin
-# dune-generated opam files are committed (herbier.opam, postgrest.opam); dune.lock/ too
+# dune-generated opam files are committed (herbier.opam, postgrest.opam);
+# refresh them with `dune build @opam --auto-promote`. dune.lock/ is committed too
 
 # --- JS / Capacitor
 node_modules/
