@@ -7,6 +7,8 @@ module type S = sig
   val equal : t -> t -> bool
   val compare : t -> t -> int
   val pp : Format.formatter -> t -> unit
+  val to_json : t -> Yojson.Safe.t
+  val of_json : Yojson.Safe.t -> t option
 end
 
 (* The canonical lowercase spelling is stored: it is what the store and the
@@ -46,6 +48,8 @@ module Uuid : S = struct
   let equal = String.equal
   let compare = String.compare
   let pp = Format.pp_print_string
+  let to_json t = `String t
+  let of_json = function `String s -> of_string s | _ -> None
 end
 
 module Plant_id : S = Uuid

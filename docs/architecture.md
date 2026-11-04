@@ -132,8 +132,8 @@ reference` with:
 - `owner_id uuid not null default auth.uid()`, index, RLS
   `using ((select auth.uid()) = owner_id)` for `authenticated`, no anon
   policies;
-- `updated_at timestamptz` maintained by the `moddatetime` trigger,
-  `deleted_at timestamptz` for soft delete;
+- `updated_at timestamptz` set to server time by a trigger on every insert
+  and update (below), `deleted_at timestamptz` for soft delete;
 - `observations.loc geography(Point, 4326)` + GiST, kept in sync from
   `lat/lon` by trigger; an RPC `plants_near(pt, radius_m)` for "Vues ici" in
   the Noter screen (handoff 4d) when online, with a local Haversine fallback;
@@ -142,7 +142,28 @@ reference` with:
 - the natural keys of §2 (`plant_refs`, `plant_tags`, `reference`) as unique
   constraints next to the `id` primary key: the store looks a row up by its
   natural key and reuses its `id`, so push stays `on_conflict=id` for every
-  table and the outbox keeps one `row_id` per row.
+  table and the outbox keeps one `row_id` per row. A new row of these three
+  tables gets an id derived from its natural key (UUID v5 of `plant_id` and
+  `tag_id` or `source`, under a fixed Herbier namespace), not a random one:
+  two installs that create the same link before syncing produce the same
+  id, so the second push merges instead of failing on the unique constraint;
+- server-only columns, `owner_id` (defaulted to the caller) and
+  `observations.loc` (set by the trigger), carry `metadata: server_only`
+  in their column comment and are left out of the generated
+  `app/store/tables.ml`: the app never sends or reads them;
+- foreign keys are checked without RLS, so a row may reference another
+  owner's row by id. Accepted: there is one account and sign-ups are off.
+
+`updated_at` has no default and the device always sends it, as its local
+last-write-wins clock, but the server's `set_updated_at` trigger replaces it
+by server time (`now()`) on every insert and update. The pull cursor
+therefore never compares a device clock: a row created offline and pushed
+hours later still sorts after every other install's last pull. The device
+adopts the server value from the push response (`Prefer:
+return=representation`) or the next pull. `now()` is the transaction start,
+so a long transaction can commit behind a cursor already advanced; the pull
+asks for a few seconds of overlap (`updated_at=gt.<last_pulled_at - 5 s>`),
+which LWW makes idempotent.
 
 Protocol, run on app start, on resume, and after each local write when
 online:
@@ -150,8 +171,10 @@ online:
 1. **Push**: for each outbox row in `seq` order, `POST …?on_conflict=id`
    with `Prefer: resolution=merge-duplicates` (upsert). On 2xx delete the
    outbox row; on 4xx park it with `last_error` (shown in Settings); on
-   network error stop and retry later with exponential backoff.
-2. **Pull**: per table, `GET …?updated_at=gt.<last_pulled_at>&order=updated_at`
+   network error stop and retry later with exponential backoff. Foreign keys
+   are not deferrable, so `seq` order (parents first) is load-bearing and a
+   parked row also parks the rows that reference it.
+2. **Pull**: per table, `GET …?updated_at=gt.<last_pulled_at - overlap>&order=updated_at`
    and apply with last-write-wins on `updated_at`; local rows with a pending
    outbox entry win. Update `last_pulled_at`.
 3. Previews: if the private Storage bucket is enabled, upload
@@ -301,7 +324,7 @@ herbier/
     postgrest/    generic sans-IO PostgREST client: typed columns, row decoders, request rendering
   app/            OCaml sources (js_of_ocaml)
     ui/           rb.ml (react↔Brr glue), screens, theme.ml (reads CSS custom properties)
-    store/        hand-written SQL over the sqlite plugin, schema migrations, outbox, tables.ml (columns)
+    store/        hand-written SQL over the sqlite plugin, schema migrations, outbox, tables.ml (generated columns)
     sync/         Postgrest → Brr fetch adapter, pull/push
     photos/       exif, compress, drive client, uploader binding
     reference/    per-source clients, projection, rate limiter

@@ -1,6 +1,9 @@
 (* The wire strings are pinned literally: they are the stored column values.
    Constructor order is pinned too, independently of to_string, so a swap of
-   two wire strings cannot pass as a swap of two constructors. *)
+   two wire strings cannot pass as a swap of two constructors. The Postgres
+   lookup tables hold the same values in the same order: test_schema_dump.ml
+   compares the rows the migrations insert with the to_string of [all]
+   pinned here. *)
 
 module Photo = Herbier_domain.Photo
 module Reference = Herbier_domain.Reference
@@ -69,9 +72,70 @@ let cases (type a) name ~(all : a list) ~(to_string : a -> string)
       ("of_string rejects any other string", rejects);
     ]
 
+(* The JSON codecs that tables.ml passes to Postgrest.Col.custom: the wire
+   string as a JSON string, checked against to_string, which [cases] pins. *)
+let json_cases (type a) name ~(all : a list) ~(to_string : a -> string)
+    ~(to_json : a -> Yojson.Safe.t) ~(of_json : Yojson.Safe.t -> a option) =
+  let value =
+    Alcotest.testable (fun f x -> Format.pp_print_string f (to_string x)) ( = )
+  in
+  let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal in
+  let wire () =
+    List.iter
+      (fun x ->
+        Alcotest.(check json)
+          (Printf.sprintf "to_json of %S" (to_string x))
+          (`String (to_string x))
+          (to_json x))
+      all
+  in
+  let round_trip () =
+    List.iter
+      (fun x ->
+        Alcotest.(check (option value))
+          (Printf.sprintf "of_json (to_json %S) gives it back" (to_string x))
+          (Some x)
+          (of_json (to_json x)))
+      all
+  in
+  let rejects () =
+    let none what j =
+      Alcotest.(check (option value)) (what ^ " is rejected") None (of_json j)
+    in
+    none "unknown string" (`String "unknown");
+    none "null" `Null;
+    none "int" (`Int 0);
+    List.iter
+      (fun x ->
+        none
+          (Printf.sprintf "list holding %S" (to_string x))
+          (`List [to_json x]))
+      all
+  in
+  List.map
+    (fun (fact, f) -> (name ^ ": " ^ fact, `Quick, f))
+    [
+      ("to_json is the JSON string of to_string", wire);
+      ("of_json inverts to_json", round_trip);
+      ("of_json rejects any other JSON value", rejects);
+    ]
+
 let tests =
   List.concat
     [
+      json_cases "Photo.Original_target" ~all:Photo.Original_target.all
+        ~to_string:Photo.Original_target.to_string
+        ~to_json:Photo.Original_target.to_json
+        ~of_json:Photo.Original_target.of_json;
+      json_cases "Photo.Upload_state" ~all:Photo.Upload_state.all
+        ~to_string:Photo.Upload_state.to_string
+        ~to_json:Photo.Upload_state.to_json ~of_json:Photo.Upload_state.of_json;
+      json_cases "Reference.Source" ~all:Reference.Source.all
+        ~to_string:Reference.Source.to_string ~to_json:Reference.Source.to_json
+        ~of_json:Reference.Source.of_json;
+      json_cases "Reference.Status" ~all:Reference.Status.all
+        ~to_string:Reference.Status.to_string ~to_json:Reference.Status.to_json
+        ~of_json:Reference.Status.of_json;
       cases "Photo.Original_target" ~all:Photo.Original_target.all
         ~to_string:Photo.Original_target.to_string
         ~of_string:Photo.Original_target.of_string

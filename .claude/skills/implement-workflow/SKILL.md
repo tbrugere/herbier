@@ -195,4 +195,5 @@ links to the PR and its comments, and what the next step is. Then release the wo
 - The PostgREST integration fixtures are recorded by `scripts/record-postgrest-fixtures.sh`
   against Docker; re-record rather than hand-edit `test/postgrest/fixtures/scenarios.json`.
 - Supabase schema changes are hand-written migrations plus the per-object dump from
-  `uv run supabase/scripts/schema-dump.py` (needs the local stack); both go in the same commit.
+  `uv run supabase/scripts/schema-dump.py` and the catalog from `scripts/catalog-dump.sh`
+  (both need the local stack); all go in the same commit.

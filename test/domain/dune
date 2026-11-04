@@ -1,4 +1,12 @@
+; test_schema_dump reads the catalog of supabase/schema/.
 (test
  (name test_domain)
- (modules test_domain test_ids test_enums test_places)
- (libraries herbier_domain alcotest ptime ptime.clock.os))
+ (modules test_domain test_ids test_enums test_places test_schema_dump)
+ (libraries
+  herbier_domain
+  postgrest-codegen
+  alcotest
+  ptime
+  ptime.clock.os
+  yojson)
+ (deps %{project_root}/supabase/schema/catalog.json))

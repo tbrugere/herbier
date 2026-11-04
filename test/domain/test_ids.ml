@@ -162,6 +162,30 @@ module Cases (I : Herbier_domain.Ids.S) = struct
       "pp prints to_string" v
       (Format.asprintf "%a" I.pp x)
 
+  let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal
+
+  let json_round_trips () =
+    let x = parse v in
+    Alcotest.(check json)
+      "to_json is the JSON string of to_string" (`String v) (I.to_json x);
+    Alcotest.(check (option id))
+      "of_json (to_json x) is x" (Some x)
+      (I.of_json (I.to_json x));
+    Alcotest.(check (option id))
+      "of_json of an uppercase string is the id" (Some x)
+      (I.of_json (`String (String.uppercase_ascii v)))
+
+  let json_rejects () =
+    List.iter
+      (fun (what, j) ->
+        Alcotest.(check (option id)) (what ^ " is rejected") None (I.of_json j))
+      [
+        ("a non-uuid string", `String "not-a-uuid");
+        ("null", `Null);
+        ("an int", `Int 1);
+        ("a list holding the uuid", `List [`String v]);
+      ]
+
   let tests name =
     List.map
       (fun (fact, f) -> (name ^ ": " ^ fact, `Quick, f))
@@ -181,6 +205,8 @@ module Cases (I : Herbier_domain.Ids.S) = struct
         ( "compare is the lexicographic order of to_string",
           compare_orders_like_strings );
         ("pp prints the canonical form", pp_prints_to_string);
+        ("of_json inverts to_json, a JSON string", json_round_trips);
+        ("of_json rejects other strings and non-strings", json_rejects);
       ]
 end
 

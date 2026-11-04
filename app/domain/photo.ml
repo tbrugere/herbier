@@ -8,6 +8,9 @@ module Original_target = struct
     | "app_only" -> Some App_only
     | "drive" -> Some Drive
     | _ -> None
+
+  let to_json t = `String (to_string t)
+  let of_json = function `String s -> of_string s | _ -> None
 end
 
 module Upload_state = struct
@@ -27,6 +30,9 @@ module Upload_state = struct
     | "failed" -> Some Failed
     | "original_missing" -> Some Original_missing
     | _ -> None
+
+  let to_json t = `String (to_string t)
+  let of_json = function `String s -> of_string s | _ -> None
 end
 
 (* style: [original_target], [drive_file_id] and [upload_state] are three

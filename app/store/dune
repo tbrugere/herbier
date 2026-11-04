@@ -1,7 +1,23 @@
 ; Local SQLite over @capacitor-community/sqlite: hand-written SQL, rows
-; decoded with Postgrest.Row. tables.ml is hand-written and checked against
-; postgrest/schema/ by scripts/check_tables.py.
+; decoded with Postgrest.Row.
 (library
  (name herbier_store)
  (public_name herbier.store)
  (libraries herbier_domain herbier_bindings postgrest brr))
+
+; tables.ml is generated from the committed catalog by postgrest-codegen
+; and committed. `dune test` fails when it is stale; `dune promote` (or
+; `dune test --auto-promote`) then updates it. After a migration: `npx
+; supabase db reset`, `scripts/catalog-dump.sh`, then promote; after a ppxlib
+; upgrade in dune.lock too (the layout is ppxlib's printer).
+(rule
+ (deps %{project_root}/supabase/schema/catalog.json)
+ (action
+  (with-stdout-to
+   tables.ml.gen
+   (run %{bin:postgrest-codegen} --module-prefix Herbier_domain %{deps}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff tables.ml tables.ml.gen)))

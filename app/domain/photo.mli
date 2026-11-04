@@ -8,10 +8,17 @@ module Original_target : sig
   (** Every constructor, in declaration order. *)
 
   val to_string : t -> string
-  (** ["app_only"] | ["drive"]: the Postgres enum labels. *)
+  (** ["app_only"] | ["drive"]: the values of its Postgres lookup table. *)
 
   val of_string : string -> t option
   (** Exact inverse of [to_string]; [None] for any other string. *)
+
+  val to_json : t -> Yojson.Safe.t
+  (** The JSON string [to_string t]: the column value as PostgREST sends and
+      receives it. *)
+
+  val of_json : Yojson.Safe.t -> t option
+  (** [of_string] of a JSON string; [None] for any other JSON value. *)
 end
 
 module Upload_state : sig
@@ -21,11 +28,18 @@ module Upload_state : sig
   (** Every constructor, in declaration order. *)
 
   val to_string : t -> string
-  (** ["pending"] | ["uploaded"] | ["failed"] | ["original_missing"]: the
-      Postgres enum labels. *)
+  (** ["pending"] | ["uploaded"] | ["failed"] | ["original_missing"]: the values
+      of its Postgres lookup table. *)
 
   val of_string : string -> t option
   (** Exact inverse of [to_string]; [None] for any other string. *)
+
+  val to_json : t -> Yojson.Safe.t
+  (** The JSON string [to_string t]: the column value as PostgREST sends and
+      receives it. *)
+
+  val of_json : Yojson.Safe.t -> t option
+  (** [of_string] of a JSON string; [None] for any other JSON value. *)
 end
 
 type id = Ids.Photo_id.t

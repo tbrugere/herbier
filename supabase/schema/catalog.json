@@ -1,0 +1,1003 @@
+{
+    "name": "observations",
+    "values": null,
+    "columns": [
+        {
+            "name": "id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "owner_id",
+            "type": "uuid",
+            "comment": "metadata: server_only",
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": true,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "plant_id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": "plants",
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "lat",
+            "type": "double precision",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "lon",
+            "type": "double precision",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "accuracy_m",
+            "type": "double precision",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "place_label",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "place_derived",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "note",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "loc",
+            "type": "geography(Point,4326)",
+            "comment": "Set from lat and lon by a trigger.\nmetadata: server_only",
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "One sighting, optionally of a plant, with its position.\nmetadata: id=Ids.Observation_id"
+}
+{
+    "name": "photo_original_targets",
+    "values": [
+        "app_only",
+        "drive"
+    ],
+    "columns": [
+        {
+            "name": "value",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "description",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "Where the original of a photo is kept.\nmetadata: kind=lookup, ocaml=Photo.Original_target"
+}
+{
+    "name": "photo_upload_states",
+    "values": [
+        "failed",
+        "original_missing",
+        "pending",
+        "uploaded"
+    ],
+    "columns": [
+        {
+            "name": "value",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "description",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "Upload state of a photo original.\nmetadata: kind=lookup, ocaml=Photo.Upload_state"
+}
+{
+    "name": "photos",
+    "values": null,
+    "columns": [
+        {
+            "name": "id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "owner_id",
+            "type": "uuid",
+            "comment": "metadata: server_only",
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": true,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "observation_id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": "observations",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "taken_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "width",
+            "type": "integer",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "height",
+            "type": "integer",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "sha256",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "preview_path",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "preview_bucket_key",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "original_target",
+            "type": "text",
+            "comment": null,
+            "fk_table": "photo_original_targets",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "drive_file_id",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "upload_state",
+            "type": "text",
+            "comment": null,
+            "fk_table": "photo_upload_states",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "A photo of an observation: the preview and where its original is kept.\nmetadata: id=Ids.Photo_id"
+}
+{
+    "name": "plant_refs",
+    "values": null,
+    "columns": [
+        {
+            "name": "id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "owner_id",
+            "type": "uuid",
+            "comment": "metadata: server_only",
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": true,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "plant_id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": "plants",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "source",
+            "type": "text",
+            "comment": null,
+            "fk_table": "reference_sources",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "external_id",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "url",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "The plant's identifier at one external source.\nmetadata: id=Ids.Plant_ref_id"
+}
+{
+    "name": "plant_tags",
+    "values": null,
+    "columns": [
+        {
+            "name": "id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "owner_id",
+            "type": "uuid",
+            "comment": "metadata: server_only",
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": true,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "plant_id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": "plants",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "tag_id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": "tags",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "A tag on a plant.\nmetadata: id=Ids.Plant_tag_id"
+}
+{
+    "name": "plants",
+    "values": null,
+    "columns": [
+        {
+            "name": "id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "owner_id",
+            "type": "uuid",
+            "comment": "metadata: server_only",
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": true,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "display_name",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "aliases",
+            "type": "text[]",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "scientific_name",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "authorship",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "gbif_key",
+            "type": "integer",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "notes",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "notes_updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "cover_photo_id",
+            "type": "uuid",
+            "comment": "The photo shown on the plant's card.\nmetadata: no_reverse",
+            "fk_table": "photos",
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "A plant of the collection.\nmetadata: id=Ids.Plant_id"
+}
+{
+    "name": "reference",
+    "values": null,
+    "columns": [
+        {
+            "name": "id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "owner_id",
+            "type": "uuid",
+            "comment": "metadata: server_only",
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": true,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "plant_id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": "plants",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "source",
+            "type": "text",
+            "comment": null,
+            "fk_table": "reference_sources",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "fetched_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "payload",
+            "type": "jsonb",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "status",
+            "type": "text",
+            "comment": null,
+            "fk_table": "reference_statuses",
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "What one external source said about a plant.\nmetadata: id=Ids.Reference_id"
+}
+{
+    "name": "reference_sources",
+    "values": [
+        "eppo",
+        "gbif",
+        "inat",
+        "ipni",
+        "plantnet",
+        "powo",
+        "taxref",
+        "tela",
+        "wikidata",
+        "wikipedia"
+    ],
+    "columns": [
+        {
+            "name": "value",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "description",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "Where a plant reference or a reference payload comes from.\nmetadata: kind=lookup, ocaml=Reference.Source"
+}
+{
+    "name": "reference_statuses",
+    "values": [
+        "complete",
+        "failed",
+        "missing",
+        "partial"
+    ],
+    "columns": [
+        {
+            "name": "value",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "description",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "How complete a fetched reference payload is.\nmetadata: kind=lookup, ocaml=Reference.Status"
+}
+{
+    "name": "tags",
+    "values": null,
+    "columns": [
+        {
+            "name": "id",
+            "type": "uuid",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": true,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": true
+        },
+        {
+            "name": "owner_id",
+            "type": "uuid",
+            "comment": "metadata: server_only",
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": true,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "name",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": true,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        },
+        {
+            "name": "deleted_at",
+            "type": "timestamp with time zone",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
+        }
+    ],
+    "comment": "A user-defined tag.\nmetadata: id=Ids.Tag_id"
+}

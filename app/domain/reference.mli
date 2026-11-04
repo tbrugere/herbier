@@ -19,10 +19,18 @@ module Source : sig
 
   val to_string : t -> string
   (** ["gbif"], ["wikidata"], ["wikipedia"], ["powo"], ["ipni"], ["taxref"],
-      ["tela"], ["eppo"], ["inat"], ["plantnet"]: the Postgres enum labels. *)
+      ["tela"], ["eppo"], ["inat"], ["plantnet"]: the values of its Postgres
+      lookup table. *)
 
   val of_string : string -> t option
   (** Exact inverse of [to_string]; [None] for any other string. *)
+
+  val to_json : t -> Yojson.Safe.t
+  (** The JSON string [to_string t]: the column value as PostgREST sends and
+      receives it. *)
+
+  val of_json : Yojson.Safe.t -> t option
+  (** [of_string] of a JSON string; [None] for any other JSON value. *)
 end
 
 module Status : sig
@@ -32,11 +40,18 @@ module Status : sig
   (** Every constructor, in declaration order. *)
 
   val to_string : t -> string
-  (** ["complete"] | ["partial"] | ["missing"] | ["failed"]: the Postgres enum
-      labels. *)
+  (** ["complete"] | ["partial"] | ["missing"] | ["failed"]: the values of its
+      Postgres lookup table. *)
 
   val of_string : string -> t option
   (** Exact inverse of [to_string]; [None] for any other string. *)
+
+  val to_json : t -> Yojson.Safe.t
+  (** The JSON string [to_string t]: the column value as PostgREST sends and
+      receives it. *)
+
+  val of_json : Yojson.Safe.t -> t option
+  (** [of_string] of a JSON string; [None] for any other JSON value. *)
 end
 
 module Organ : sig

@@ -1,9 +1,10 @@
 ; Types and rules, pure except Ids.fresh, which reads the wall clock and a
-; self-seeded RNG for UUID v7. No Brr: builds natively for tests.
+; self-seeded RNG for UUID v7. No Brr: builds natively for tests. yojson only
+; for the to_json/of_json column codecs of ids and closed value sets.
 (library
  (name herbier_domain)
  (public_name herbier.domain)
- (libraries ptime ptime.clock.os uuidm))
+ (libraries ptime ptime.clock.os uuidm yojson))
 
 ; version.ml: `let git = "<git describe>"` for the User-Agent string.
 (rule

@@ -42,6 +42,13 @@ module type S = sig
 
   val pp : Format.formatter -> t -> unit
   (** Prints [to_string]. *)
+
+  val to_json : t -> Yojson.Safe.t
+  (** The JSON string [to_string t]: a uuid column value as PostgREST sends and
+      receives it. *)
+
+  val of_json : Yojson.Safe.t -> t option
+  (** [of_string] of a JSON string; [None] for any other JSON value. *)
 end
 
 module Plant_id : S

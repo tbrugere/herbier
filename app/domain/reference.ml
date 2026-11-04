@@ -38,6 +38,9 @@ module Source = struct
     | "inat" -> Some Inat
     | "plantnet" -> Some Plantnet
     | _ -> None
+
+  let to_json t = `String (to_string t)
+  let of_json = function `String s -> of_string s | _ -> None
 end
 
 module Status = struct
@@ -57,6 +60,9 @@ module Status = struct
     | "missing" -> Some Missing
     | "failed" -> Some Failed
     | _ -> None
+
+  let to_json t = `String (to_string t)
+  let of_json = function `String s -> of_string s | _ -> None
 end
 
 module Organ = struct

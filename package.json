@@ -11,7 +11,8 @@
     "db:reset": "supabase db reset",
     "db:schema:dump": "uv run supabase/scripts/schema-dump.py",
     "db:schema:check": "uv run supabase/scripts/schema-dump.py --check",
-    "tables:check": "uv run scripts/check_tables.py"
+    "db:catalog:dump": "scripts/catalog-dump.sh",
+    "db:catalog:check": "scripts/catalog-dump.sh --check"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",

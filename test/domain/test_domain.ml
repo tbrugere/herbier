@@ -28,4 +28,5 @@ let () =
       ("ids", Test_ids.tests);
       ("enums", Test_enums.tests);
       ("places", Test_places.tests);
+      ("schema dump", Test_schema_dump.tests);
     ]

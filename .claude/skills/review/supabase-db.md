@@ -31,10 +31,14 @@ contents of `supabase/schema/**` (the dump); flag it when stale.
   than the cursor and orders by it; LWW compares `updated_at` set by the server trigger, not a
   device clock; a delete is a `PATCH` setting `deleted_at`.
 - **Staleness.** A migration in the diff with no corresponding change under
-  `supabase/schema/` (run `uv run supabase/scripts/schema-dump.py`); a column added, renamed
-  or retyped without the matching edit in `app/store/tables.ml` (`scripts/check_tables.py`
-  guards it in CI once it exists; until then, check by hand); an enum type changed in SQL
-  without its OCaml `enum` record changing.
+  `supabase/schema/` (run `uv run supabase/scripts/schema-dump.py`) or in
+  `supabase/schema/catalog.json` (run `scripts/catalog-dump.sh`); a schema change without
+  `app/store/tables.ml` regenerated (`dune promote` after `dune test` reports the diff; the
+  diff rule in `app/store/dune` guards it in CI), or a hand edit of that generated file; a lookup table's rows changed in SQL without
+  the OCaml variant and `test/domain/test_enums.ml` changing.
+- **Closed value sets.** A `create type ... as enum` in a migration: closed sets are lookup
+  tables with a `metadata: kind=lookup, ocaml=<Module>` comment and an FK from each using
+  column (docs/stack.md).
 - **Types across the boundary.** A Postgres type with no `Postgrest.Col.base` constructor
   (`geography`, `tsvector`, arrays) introduced without a plan for how the client reads it;
   `numeric` versus `double precision` chosen without regard to how JSON carries it.

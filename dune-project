@@ -21,6 +21,23 @@
   (alcotest :with-test)))
 
 (package
+ (name postgrest-codegen)
+ (synopsis "Generates postgrest column declarations from a Postgres catalog")
+ (description
+  "postgrest-codegen reads the Postgres catalog of a database's tables (the
+output of its catalog.sql) and prints the Postgrest.Col declarations of
+those tables as OCaml. A build-time tool, separate from the postgrest
+library so that the library does not depend on ppxlib.")
+ (depends
+  (ocaml (>= 5.3))
+  (postgrest (= :version))
+  (yojson (>= 2.0))
+  (ppxlib (>= 0.36))
+  (ppx_deriving_yojson (>= 3.10))
+  (alcotest :with-test)
+  (fmt :with-test)))
+
+(package
  (name herbier)
  (synopsis "Personal plant notebook for Android (js_of_ocaml + Capacitor)")
  (depends
@@ -35,5 +52,6 @@
   uuidm
   yojson
   (postgrest (= :version))
+  (postgrest-codegen (and :with-test (= :version)))
   (alcotest :with-test)
   (ocamlformat (and :with-dev-setup (= 0.29.0)))))

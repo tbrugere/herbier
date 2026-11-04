@@ -18,6 +18,7 @@ depends: [
   "uuidm"
   "yojson"
   "postgrest" {= version}
+  "postgrest-codegen" {with-test & = version}
   "alcotest" {with-test}
   "ocamlformat" {with-dev-setup & = "0.29.0"}
   "odoc" {with-doc}

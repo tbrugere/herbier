@@ -65,7 +65,7 @@ ViewNames = set[tuple[str, str]]
 
 def run_dump(out_file: Path) -> None:
     subprocess.run(
-        ['npx', '-y', 'supabase@latest', 'db', 'dump', '--local', '--keep-comments', '-f', str(out_file)],
+        ['npx', '--no-install', 'supabase', 'db', 'dump', '--local', '--keep-comments', '-f', str(out_file)],
         check=True,
         cwd=REPO_ROOT,
     )

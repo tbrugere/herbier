@@ -116,8 +116,8 @@ blocked: nothing.
   filesystem (`Directory.Data`). WebView storage (IndexedDB, localStorage,
   OPFS) is evictable on Android and is not used for anything durable.
 - **Supabase Free** mirrors the data through PostgREST with a hand-rolled
-  **outbox**: UUID primary keys generated on device, `updated_at` maintained by
-  `moddatetime`, soft delete via `deleted_at`, last-write-wins. Third-party
+  **outbox**: UUID primary keys generated on device, `updated_at` set to
+  server time by a trigger on every write, soft delete via `deleted_at`, last-write-wins. Third-party
   sync engines (PowerSync, ElectricSQL, RxDB, WatermelonDB, Legend-State) all
   need logical replication or paid storage and an always-unpaused project.
 - Free-tier numbers (2026-09-15): 500 MB DB, 1 GB storage (50 MB/file),
@@ -154,6 +154,33 @@ blocked: nothing.
   SQLite schema mirrors them: the same lookup tables and values (without
   the description column), with the foreign keys, so a bad label is rejected
   locally too.
+- **`app/store/tables.ml` is generated** from the committed catalog
+  (`supabase/schema/catalog.json`) by `postgrest-codegen`
+  (`lib/postgrest/codegen/`, its own package `postgrest-codegen`, so
+  that users of `postgrest` do not pull ppxlib), committed,
+  and checked fresh by `dune test`: a dune rule regenerates it into `_build`
+  and diffs it with the committed file, `dune promote` updates it. The catalog
+  comes from Postgres itself, not from parsing SQL: `catalog.sql` (shipped
+  with the codegen) is a plain SQL query over `pg_catalog`, runnable from
+  any client, that returns one pretty-printed JSON object per table (its
+  columns, and a lookup table's values), joins done in SQL;
+  `scripts/catalog-dump.sh` runs it against the local database and CI
+  checks the file is fresh. The codegen itself never connects to a
+  database, nor links `postgrest`: it decodes each table object with
+  `ppx_deriving_yojson` (strict, so an unknown field is an error),
+  applies the metadata rules and prints a Ppxlib AST with Pprintast. Column types follow the Postgres types; nullability and
+  `Mandatory` (NOT NULL without a default) follow the column; relationships
+  follow the single-column foreign keys (`One` or `Exactly_one` forward,
+  `Many` back). What SQL cannot say is in the same `metadata:` line:
+  `id=<Module>` on a synced table types its uuid key and every foreign key
+  to it (an `Ids.S` module, same `to_json` / `of_json` contract as
+  `ocaml=`); `server_only` on a column leaves it out (`owner_id`,
+  `observations.loc`); `no_reverse` on a foreign key column drops the
+  `Many` back to its table. A flag is a bare key. Only what would generate
+  wrong OCaml or an ambiguous embed is rejected (unknown metadata, an
+  unsupported type, a uuid without `id=`, a lookup without `ocaml=`, two
+  foreign keys between two tables); names that do not compile are left to
+  the compiler, which reads the output anyway.
 
 ### Photos: Google Drive first, previews everywhere, Photos deferred
 
