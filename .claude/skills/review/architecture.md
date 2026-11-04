@@ -34,10 +34,16 @@ main      <- ui
   module that validates or transforms beyond the JS shape.
 - **Orchestration.** Cross-service sequences (save, then outbox push, then reference fetch,
   then geocode) belong in `ui/app.ml`; a sibling service calling another is the smell.
-- **Duplication and drift.** Two definitions of the same record or variant in two libraries
-  (the domain type and a store copy); a second decoder for a shape `Postgrest.Row` already
-  decodes; a constant (500 m, preview size, backoff) defined twice; a column name as a string
-  literal outside `store/tables.ml`.
+- **Duplication and drift.** Two definitions of the same record or variant, in two libraries
+  (the domain type and a store copy) or side by side in one module (a private "wire" record
+  mirroring a public one, a field added only to keep a caller unchanged); near-identical
+  functions that differ by a constant; a second decoder for the rows of a table `Tables`
+  already declares; a constant (500 m, preview size, backoff) defined twice; a column name as a
+  string literal outside `store/tables.ml`. Plain data that is not a table (a JSON file, a
+  catalog) is decoded with an ordinary decoder such as `ppx_deriving_yojson`, not by
+  declaring its fields as `Postgrest.Col` columns.
+- **Leftovers of an earlier design.** After a rewrite: fields, helpers, comments or tests that
+  only made sense for the previous approach.
 - **Design debt introduced.** A new abstraction with one use; a module that will obviously
   need to be split before the next step; a "temporary" global `ref`.
 - **Drift from the docs.** A file placed elsewhere than `layout.md` says, a protocol detail
