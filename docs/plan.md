@@ -33,7 +33,7 @@ milestone works. Each milestone ends in something runnable in a browser
 10. `bindings/cap_sqlite.ml`, `cap_filesystem.ml`, `cap_preferences.ml`, `cap_app.ml` (Jv, `.mli`, `result` at the boundary). Depends: M0.4. Done: a db opened and a file written/read on the phone (spike 2, part 1).
 11. `store/db.ml` (open, exec, bind params over `cap_sqlite`, the plugin's JSON rows decoded with `Postgrest.Row`), `store/schema.ml` (migration 1: architecture §2 tables + `outbox`, `sync_state`, `settings`; `user_version`). Done: fresh install and upgrade from an empty db both reach version 1; a `Tables.plants` row round-trips through the plugin.
 12. `store/plants.ml`, `observations.ml`, `tags.ml` (`plant_tags` ids derived from the natural key, architecture §4), `photos.ml` (rows only), `settings.ml`, `search.ml` (FTS5 `unicode61 remove_diacritics 2` over names, aliases, tags, place labels); a dev seed (a dozen plants, observations, tags) behind a debug flag for M2. Done: "digitale" finds "Digitale pourpre" and "Digitalis" (spike 2, part 2).
-13. `store/outbox.ml`: every write goes through one function that inserts the row and its outbox entry in a single transaction. Done: outbox grows with edits; nothing consumes it yet.
+13. `store/outbox.ml`: every write goes through one function that inserts the row and its outbox entry in a single transaction; adds explicit begin/commit/rollback to `bindings/cap_sqlite.ml` (the plugin's per-call transaction is off inside them). Done: outbox grows with edits; nothing consumes it yet.
 
 Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed hand-written SQL for the store by inferring types from the CREATE TABLE statements, if its async traits can be implemented over the Capacitor plugin; a half-day spike, see `docs/exploratory_research/sqlgg-jsoo.md` (report pending).
 
@@ -42,7 +42,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 14. `ui/rb.ml` + `.mli` per primer §6: `text`, `attr`, `class_`, `style`, `children`, `rlist`, `ev`, `release`. Depends: M0. Done: a toy page with a counter, a class toggle and an `RList` of rows; `release` stops updates.
 15. `web/sass/_tokens.sass` (custom properties, the only token source), `_base.sass` (`@font-face`, type scale, 5f rules), `ui/theme.ml` (reads the properties OCaml needs with `getComputedStyle` once at startup), `fonts/` (Manrope, Newsreader, `scripts/subset-icons.sh`). Done: a dev route shows every colour and type role of the handoff; `Theme` returns the map colours the CSS declares.
 16. `ui/widgets/` chip, card, list_row, tab_bar, icon, text_field; `_widgets.sass` with its mixins. Done: each widget has a fixture entry on a dev "gallery" route.
-17. `ui/router.ml` (route variant, `S.bind` on the current screen, release of the previous screen) and `ui/state.ml` (filters, network, account). Done: switching tabs tears the old screen down; binding count back to baseline.
+17. `ui/router.ml` (route variant, `S.bind` on the current screen, release of the previous screen; takes over the `#dev/storage` fragment test from `main.ml`, available only in dev builds) and `ui/state.ml` (filters, network, account). Done: switching tabs tears the old screen down; binding count back to baseline.
 18. `screens/collection.ml` (4a) over `Store.Plants` and `Store.Search` on the M1 seed: title + counter, search filtering an `RList`, tag chips, 2-column grid; `sass/screens/collection.sass`. Done: search and chip filter patch the grid (only touched cards re-rendered).
 19. `widgets/sheet.ml`: bottom sheet whose drag is a `float` signal bound to `transform`, snap points. Done: 60 fps drag on the phone, no per-frame allocation visible in DevTools.
 20. Spike exit criterion: enter/leave 4a fifty times; no stale updates, `performance.memory` flat, no dropped frames on the sheet. **Fallback trigger**: either check still fails after one day of fixing, or `rb.ml` needs more than ~300 lines to stay correct → redo 4a in ocaml-vdom, compare, update `stack.md` either way.
@@ -141,7 +141,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 ## Risk points
 
 - R1 (M2.20): the glue fails its exit criterion → ocaml-vdom rewrite of 4a and `router.ml`; M1 and M3 onwards unaffected.
-- R2 (M1.10): `@capacitor-community/sqlite` is awkward from Jv (promise-heavy, transactions) → thin JS helper in `vendor.js`.
+- R2 (M1.10, M1.13): `@capacitor-community/sqlite` is awkward from Jv (promise-heavy, transactions) → thin JS helper in `vendor.js`. M1.10 bound it from Jv without a helper; transactions remain open until M1.13.
 - R3 (M1.11): `Postgrest.Row` does not fit the plugin's row format → hand-written decoders per table; `Postgrest` unchanged for sync.
 - R4 (M3.28): `getUserMedia` in the WebView lacks resolution or torch control → `camera-preview` plugin, 4d layout unchanged.
 - R5 (M4.39): Pl@ntNet shares something the classifier cannot resolve → 4j falls back to 4i prefilled with the text.

@@ -2,4 +2,5 @@
 (library
  (name herbier_bindings)
  (public_name herbier.bindings)
+ (private_modules cap_call)
  (libraries brr))

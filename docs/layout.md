@@ -102,6 +102,8 @@ app/
     cap_sqlite.ml  cap_filesystem.ml  cap_app.ml  cap_share_target.ml
     cap_social_login.ml  cap_uploader.ml  cap_geolocation.ml  cap_camera.ml
     cap_preferences.ml  maplibre.ml  pmtiles.ml  exifr.ml
+    cap_error.ml          binding-level error (plugin unavailable, rejected, unexpected result, invalid path), shared by the cap_*
+    cap_call.ml           private: plugin lookup on globalThis.herbier, promise → Fut with errors mapped to Cap_error
   store/                  local SQLite (§3 of architecture); hand-written SQL, no query DSL
     tables.ml             Postgrest columns of every synced table (~7 tables, ~50 columns), generated
                           from supabase/schema/catalog.json by postgrest-codegen, committed, a dune diff rule keeps it fresh
@@ -138,6 +140,7 @@ app/
     state.ml              global signals: filters, network, account (handoff « État »)
     router.ml             route type, `S.bind` over the current screen, release on switch
     app.ml                wires services: after-save → outbox push + reference fetch, …
+    dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device; ships in every build until the M2 router gates it to dev builds
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment

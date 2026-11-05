@@ -7,4 +7,9 @@ let mount el =
   | Some root -> El.set_children root [el]
   | None -> El.append_children (Document.body G.document) [el]
 
-let () = mount (title ())
+(* Read once at startup: the dev page is reached by reloading with the
+   fragment set. *)
+let () =
+  match Jstr.to_string (Uri.fragment (Window.location G.window)) with
+  | "dev/storage" -> mount (Herbier_ui.Dev.Storage_check.el ())
+  | _ -> mount (title ())

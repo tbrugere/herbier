@@ -107,8 +107,9 @@ the mean of the positions. Details in `app/domain/places.mli`.
 
 ## 3. Local store (device)
 
-- `@capacitor-community/sqlite`, one database `herbier.db`, schema mirroring
-  §2 plus:
+- `@capacitor-community/sqlite`, one database named `herbier` (the plugin
+  stores it as `herbierSQLite.db`), unencrypted (single user, app-private
+  storage), schema mirroring §2 plus:
   - `outbox(seq, table, row_id, op, payload_json, created_at, attempts,
     last_error)` — the sync queue.
   - `sync_state(table, last_pulled_at)`.
@@ -118,6 +119,11 @@ the mean of the positions. Details in `app/domain/places.mli`.
   - `refthumbs/<plant_id>/<source>-<n>.jpg` (~300 px), evictable via
     "Libérer".
   - `tiles/<region>.pmtiles`, downloaded once from Settings.
+- The binding (`Cap_sqlite.query`) returns each row as the JSON text of the
+  plugin's row object; `store/db.ml` parses it and decodes it with
+  `Postgrest.Row`, so yojson stays out of `bindings/`. Statements run in the
+  plugin's per-call transaction; multi-statement transactions need explicit
+  begin/commit/rollback in the binding (M1.13).
 - IndexedDB/localStorage are used for nothing durable (Android evicts them).
 - Full-text search over names is done locally (SQLite FTS5 with
   `unicode61 remove_diacritics 2`), so search works offline. The Postgres
