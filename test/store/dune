@@ -1,0 +1,22 @@
+; Native checks of the local schema SQL and of the store's value codec, run
+; through the sqlite3 command-line tool. They check the SQL and the codec,
+; not the Capacitor plugin: the device checks are the #dev/store page.
+; codec, schema and tables are copied from app/store/, so they must not
+; reference Db, Herbier_bindings or Brr. sqlite3 is a test dependency: the
+; build fails without it rather than skipping the SQL checks.
+
+(copy_files# ../../app/store/codec.{ml,mli})
+
+(copy_files# ../../app/store/schema.{ml,mli})
+
+(copy_files# ../../app/store/tables.ml)
+
+(test
+ (name test_store)
+ (libraries herbier_domain postgrest yojson ptime alcotest)
+ (deps %{bin:sqlite3})
+ (action
+  (setenv
+   SQLITE3
+   %{bin:sqlite3}
+   (run %{test}))))

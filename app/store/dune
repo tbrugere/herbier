@@ -1,9 +1,11 @@
 ; Local SQLite over @capacitor-community/sqlite: hand-written SQL, rows
 ; decoded with Postgrest.Row.
+; codec.ml, schema.ml and tables.ml must not reference Db, Herbier_bindings
+; or Brr: test/store compiles them natively through copy_files.
 (library
  (name herbier_store)
  (public_name herbier.store)
- (libraries herbier_domain herbier_bindings postgrest brr))
+ (libraries herbier_domain herbier_bindings postgrest yojson ptime brr))
 
 ; tables.ml is generated from the committed catalog by postgrest-codegen
 ; and committed. `dune test` fails when it is stale; `dune promote` (or

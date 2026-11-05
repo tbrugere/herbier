@@ -110,10 +110,35 @@ the mean of the positions. Details in `app/domain/places.mli`.
 - `@capacitor-community/sqlite`, one database named `herbier` (the plugin
   stores it as `herbierSQLite.db`), unencrypted (single user, app-private
   storage), schema mirroring §2 plus:
-  - `outbox(seq, table, row_id, op, payload_json, created_at, attempts,
+  - `outbox(seq, table_name, row_id, op, payload_json, created_at, attempts,
     last_error)` — the sync queue.
-  - `sync_state(table, last_pulled_at)`.
+  - `sync_state(table_name, last_pulled_at)`.
   - `settings(key, value)` — storage target, Wi-Fi-only, filters.
+- Local column types (`store/schema.ml`, migration 1): ids, lookup values
+  and text are `text`; timestamps are `text` in one fixed-width UTC format with
+  microseconds (`Codec.timestamp`), so text order is time order; `text[]`
+  and `jsonb` columns are `text` holding JSON, parsed back by
+  `Codec.decode ~json` before `Postgrest.Row`; `double precision` is `real`.
+  Foreign keys and the position checks mirror the server, except
+  `plants.cover_photo_id` (it would close a cycle with `photos` and break a
+  first pull). The four lookup tables (§2) exist locally too, with the same
+  values (no `description`) and the same foreign keys, so an unknown label
+  is rejected on the device; a value added later is a new local migration
+  inserting its row, and `test/store` checks each table holds the
+  `to_string` of every constructor. These local constraints are a hand-kept
+  copy of the server's, checked only by `test/store`, not against
+  `supabase/schema/`. The plugin enforces foreign keys on every open
+  and they cascade on delete, so a local upsert is `insert … on conflict (id)
+  do update set …`, never `insert or replace` / `replace into` (which deletes
+  the old row first, taking its children with it). JSON values that are
+  `null` and non-finite floats cannot be stored (they read back as SQL null).
+  `RefImage` (§2) is not in migration 1: it gets its table with the organ
+  photos (M4.37). The schema version is SQLite's `user_version`; a file at a
+  version above the app's is refused, not migrated. A migration is a list of
+  statements (`Schema.migration`), applied with its `user_version` bump in one
+  transaction by the plugin's `executeSet`, which prepares each string as
+  given; the plugin's `execute` splits its text on `;` and newline, so it is
+  used only for single statements.
 - Files under `Directory.Data`:
   - `previews/<photo_id>.jpg` (≤1600 px, q0.7 or WebP), always present.
   - `refthumbs/<plant_id>/<source>-<n>.jpg` (~300 px), evictable via
@@ -171,6 +196,13 @@ so a long transaction can commit behind a cursor already advanced; the pull
 asks for a few seconds of overlap (`updated_at=gt.<last_pulled_at - 5 s>`),
 which LWW makes idempotent.
 
+The local store keeps timestamps to the microsecond, as `timestamptz` does,
+but `Postgrest.Col` encodes a `TimestampTz` with whole seconds
+(`Ptime.to_rfc3339` without `~frac_s`), so until that encoder passes
+`~frac_s:6` a pushed `created_at`, `at` or `notes_updated_at` loses its
+fractional digits and the next pull brings back the truncated value.
+`updated_at` is unaffected (the server sets it).
+
 Protocol, run on app start, on resume, and after each local write when
 online:
 
@@ -182,7 +214,14 @@ online:
    parked row also parks the rows that reference it.
 2. **Pull**: per table, `GET …?updated_at=gt.<last_pulled_at - overlap>&order=updated_at`
    and apply with last-write-wins on `updated_at`; local rows with a pending
-   outbox entry win. Update `last_pulled_at`.
+   outbox entry win. Update `last_pulled_at`. Local foreign keys are
+   enforced, and a parent created elsewhere between the pull of its table and
+   the pull of its child's table reaches the device after the child. So the
+   tables are applied parents first (plants, tags, observations, photos, then
+   the link and reference tables) in one transaction with `pragma
+   defer_foreign_keys = on`; if the commit fails on a foreign key, the whole
+   pull rolls back with its cursors and the next cycle, which now sees the
+   parent, retries.
 3. Previews: if the private Storage bucket is enabled, upload
    `previews/<id>.jpg` missing remotely; download missing locally on demand
    (new device case).

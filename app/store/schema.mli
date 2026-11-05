@@ -1,0 +1,42 @@
+(** Local schema migrations, applied in order by {!Db.open_} and recorded in
+    SQLite's [PRAGMA user_version] (0 on a new database).
+
+    A migration is a list of statements, each string exactly one SQL statement
+    (multi-line, comments allowed, without a trailing [";"]), run in order in
+    one transaction by {!Db.open_} through the plugin's [executeSet], which
+    prepares each string as given. No column is named [sql_deleted] or
+    [last_modified]: when the database has both columns (in any tables), the
+    plugin rewrites every [DELETE] into [UPDATE … set sql_deleted = 1]. Checked
+    natively by [test/store].
+
+    Local foreign keys are enforced and cascade on delete, so an upsert is
+    [insert … on conflict (id) do update set …], never [insert or replace] or
+    [replace into]: those delete the old row first, and the cascade takes its
+    children with it. *)
+
+type migration = {version : int; statements : string list}
+
+val migrations : migration list
+(** In ascending [version] order, versions [1, 2, …] with no gap. Version 1
+    creates the seven synced tables of [Tables] (same names and columns, minus
+    the server-only [owner_id] and [observations.loc]), the four lookup tables
+    their value columns reference (same names and values as on the server), and
+    the local tables [outbox], [sync_state], [settings]. *)
+
+val latest : int
+(** Version of the last migration. *)
+
+type error =
+  | Unknown_version of {found : int; latest : int}
+      (** The database's [user_version] is negative or above {!latest}: written
+          by a newer app (downgrade) or by something else. Never migrated. *)
+
+val pending : current:int -> (migration list, error) result
+(** [pending ~current] is the migrations with [version > current], in order.
+    [Ok []] when [current = latest]; [Error (Unknown_version _)] when
+    [current < 0] or [current > latest]. *)
+
+val batch : migration -> string list
+(** [m.statements] followed by ["pragma user_version = <m.version>"]: the set of
+    one [executeSet] call, so that the plugin's transaction applies the
+    statements and the version bump together or not at all. *)

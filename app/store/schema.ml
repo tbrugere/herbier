@@ -1,0 +1,150 @@
+type migration = {version : int; statements : string list}
+
+(* Migration 1: the local mirror of the synced tables (store/tables.ml, same
+   names and columns, without the server-only owner_id and observations.loc),
+   plus the local-only outbox, sync_state and settings.
+   Types: uuid, lookup values and text are text. timestamptz is text in the
+   fixed-width UTC format of Codec.timestamp, so text order is time order.
+   text[] and jsonb are text holding JSON. double precision is real.
+   Foreign keys mirror the server except plants.cover_photo_id, which would
+   close a cycle with photos and break a first pull. Closed value sets are
+   lookup tables, as on the server (docs/stack.md), with the same values; a
+   value added later is a new migration inserting its row. Text primary keys
+   say not null: SQLite would otherwise accept a null one. *)
+let v1 =
+  [
+    {|create table reference_sources (value text primary key not null)|};
+    {|insert into reference_sources (value) values
+  ('gbif'), ('wikidata'), ('wikipedia'), ('powo'), ('ipni'),
+  ('taxref'), ('tela'), ('eppo'), ('inat'), ('plantnet')|};
+    {|create table reference_statuses (value text primary key not null)|};
+    {|insert into reference_statuses (value) values ('complete'), ('partial'), ('missing'), ('failed')|};
+    {|create table photo_original_targets (value text primary key not null)|};
+    {|insert into photo_original_targets (value) values ('app_only'), ('drive')|};
+    {|create table photo_upload_states (value text primary key not null)|};
+    {|insert into photo_upload_states (value) values ('pending'), ('uploaded'), ('failed'), ('original_missing')|};
+    {|create table plants (
+  id text primary key not null,
+  display_name text not null,
+  aliases text not null,
+  scientific_name text,
+  authorship text,
+  gbif_key integer,
+  notes text not null,
+  notes_updated_at text,
+  cover_photo_id text,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text
+)|};
+    {|create table observations (
+  id text primary key not null,
+  plant_id text references plants (id) on delete cascade,
+  at text not null,
+  lat real,
+  lon real,
+  accuracy_m real,
+  place_label text,
+  place_derived text,
+  note text,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  constraint observations_position_both_or_neither check ((lat is null) = (lon is null)),
+  constraint observations_accuracy_needs_position check (accuracy_m is null or lat is not null),
+  constraint observations_lat_range check (lat between -90 and 90),
+  constraint observations_lon_range check (lon between -180 and 180),
+  constraint observations_accuracy_nonnegative check (accuracy_m >= 0)
+)|};
+    {|create table photos (
+  id text primary key not null,
+  observation_id text not null references observations (id) on delete cascade,
+  taken_at text not null,
+  width integer not null,
+  height integer not null,
+  sha256 text not null,
+  preview_path text not null,
+  preview_bucket_key text,
+  original_target text not null references photo_original_targets (value),
+  drive_file_id text,
+  upload_state text not null references photo_upload_states (value),
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text
+)|};
+    {|create table tags (
+  id text primary key not null,
+  name text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text
+)|};
+    {|create table plant_tags (
+  id text primary key not null,
+  plant_id text not null references plants (id) on delete cascade,
+  tag_id text not null references tags (id) on delete cascade,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  constraint plant_tags_plant_id_tag_id_key unique (plant_id, tag_id)
+)|};
+    {|create table plant_refs (
+  id text primary key not null,
+  plant_id text not null references plants (id) on delete cascade,
+  source text not null references reference_sources (value),
+  external_id text not null,
+  url text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  constraint plant_refs_plant_id_source_key unique (plant_id, source)
+)|};
+    {|create table reference (
+  id text primary key not null,
+  plant_id text not null references plants (id) on delete cascade,
+  source text not null references reference_sources (value),
+  fetched_at text not null,
+  payload text not null,
+  status text not null references reference_statuses (value),
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text,
+  constraint reference_plant_id_source_key unique (plant_id, source)
+)|};
+    {|create table outbox (
+  seq integer primary key,
+  table_name text not null,
+  row_id text not null,
+  op text not null,
+  payload_json text not null,
+  created_at text not null,
+  attempts integer not null default 0,
+  last_error text
+)|};
+    {|create table sync_state (
+  table_name text primary key not null,
+  last_pulled_at text not null
+)|};
+    {|create table settings (
+  key text primary key not null,
+  value text not null
+)|};
+    {|create index observations_plant_id_idx on observations (plant_id)|};
+    {|create index photos_observation_id_idx on photos (observation_id)|};
+    {|create index plant_tags_tag_id_idx on plant_tags (tag_id)|};
+    {|create index plants_cover_photo_id_idx on plants (cover_photo_id)|};
+  ]
+
+let migrations = [{version = 1; statements = v1}]
+let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0
+
+type error = Unknown_version of {found : int; latest : int}
+
+let pending ~current =
+  match current with
+  | found when found < 0 || found > latest ->
+      Error (Unknown_version {found; latest})
+  | _ -> Ok (List.filter (fun m -> m.version > current) migrations)
+
+let batch m =
+  m.statements @ [Printf.sprintf "pragma user_version = %d" m.version]

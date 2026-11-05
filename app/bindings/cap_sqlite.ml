@@ -59,6 +59,16 @@ let execute {conn; database = _} sql =
 
 let params values = Jv.of_list jv_of_value values
 
+(* The Android side reads [values] of every element unconditionally, so it is
+   sent even when empty. *)
+let execute_set {conn; database = _} statements =
+  let element sql =
+    Jv.obj [|("statement", Jv.of_string sql); ("values", Jv.of_jv_array [||])|]
+  in
+  Cap_call.on conn "executeSet"
+    [|Jv.of_list element statements; Jv.true'|]
+    ~ok:(fun r -> Cap_call.int_field r "changes.changes")
+
 (* JSON.stringify throws on a BigInt or a cycle and gives undefined for
    undefined; [ok] runs in a promise callback and must not raise. *)
 let json_text row =

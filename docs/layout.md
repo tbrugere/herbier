@@ -108,7 +108,9 @@ app/
     tables.ml             Postgrest columns of every synced table (~7 tables, ~50 columns), generated
                           from supabase/schema/catalog.json by postgrest-codegen, committed, a dune diff rule keeps it fresh
     db.ml                 open, exec, bind params over cap_sqlite; plugin JSON rows decoded with Postgrest.Row
-    schema.ml             ordered migrations as SQL strings, `user_version`
+    codec.ml              pure half of db.ml: Col values → bound params, plugin row text → Row (JSON text columns),
+                          timestamp format; no Brr, tested natively in test/store/
+    schema.ml             ordered migrations, each a list of SQL statements; `user_version`
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table (joins, group by day, place bucketing)
     outbox.ml  sync_state.ml  settings.ml   local-only tables, columns declared next to their queries
     search.ml (FTS5)
@@ -140,7 +142,9 @@ app/
     state.ml              global signals: filters, network, account (handoff « État »)
     router.ml             route type, `S.bind` over the current screen, release on switch
     app.ml                wires services: after-save → outbox push + reference fetch, …
-    dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device; ships in every build until the M2 router gates it to dev builds
+    dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
+                          store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db;
+                          both ship in every build until the M2 router gates them to dev builds
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
@@ -161,7 +165,7 @@ postgrest-codegen ← ppxlib, ppx_deriving_yojson, yojson (lib/postgrest/codegen
                                          postgrest only as an opam version constraint, = version: the output targets its API)
 refs      ← domain, yojson               (no Brr)
 bindings  ← brr
-store     ← domain, bindings, postgrest
+store     ← domain, bindings, postgrest, yojson, ptime, brr (for Fut)
 sync      ← domain, store, bindings, postgrest
 photos | refs_io | geo   ← domain, store, bindings; refs_io also refs
                                          (siblings never import each other)
@@ -299,15 +303,18 @@ test/
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
   refs/         native, alcotest: payload decoders and projection over fixtures/
+  store/        native, alcotest: app/store/{codec,schema,tables}.ml copied in, schema SQL and codec run
+                through the sqlite3 CLI (needs sqlite3); not the Capacitor plugin (that is #dev/store)
   fixtures/     recorded API payloads only (gbif_<key>.json, wikidata_<key>.json, tela_<nn>.json,
                 inpn_<cd_nom>.json); never app rows
   js/           browser-side tests; added only if the UI spike's leak check fails
 ```
 
 alcotest runs natively, in `dune test` on every CI job, on every library
-without a Brr dependency (`domain`, `postgrest`, `refs`). Store, sync, photos,
-refs_io and geo are thin over device-only plugins and have no unit tests;
-the spikes (architecture §10) and manual runs cover them.
+without a Brr dependency (`domain`, `postgrest`, `refs`), and on the Brr-free
+modules of `store` (`codec`, `schema`, `tables`). The rest of store, and sync,
+photos, refs_io and geo, are thin over device-only plugins and have no unit
+tests; the spikes (architecture §10), dev pages and manual runs cover them.
 
 ## 7. `scripts/` and CI
 

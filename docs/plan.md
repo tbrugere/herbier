@@ -68,7 +68,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 34. `refs/sources/gbif.ml` (species, match, suggest, vernacular search, vernacularNames, distributions, occurrence count, Pl@ntNet media), `wikidata.ml`, `wikipedia.ml`: request descriptions and payload decoders; recorded payloads in `test/fixtures/`. Done: each decoder tested natively against fixtures.
 35. `refs/projection.ml` (reference rows → 4f snapshot fields), `store/references.ml` one row per source (`reference` and `plant_refs` ids derived from `(plant_id, source)`, architecture §4). Done: projection of two species from fixtures; the count of empty fields is recorded in this doc (spike 5).
 36. `refs_io/pipeline.ml` fan-out per gbif_key, `refs_io/resolver.ml` (`Domain.Link` + lookups → gbif_key + partial snapshot), wired in `ui/app.ml`: fetch eagerly at link time in the background, on ↻, on open when > 90 days. Done: linking fills 4f's reference block; a failing source leaves the others intact.
-37. 4f reference block complete: names, type, origin, `widgets/month_grid.ml`, habitat chips, toxicity, organ photos into `refthumbs/`, links row; rows without data disappear. Done: renders for the two spike species, offline after the first fetch.
+37. 4f reference block complete: names, type, origin, `widgets/month_grid.ml`, habitat chips, toxicity, organ photos into `refthumbs/` (with the local `ref_images` table, a store migration), links row; rows without data disappear. Done: renders for the two spike species, offline after the first fetch.
 38. 4i reference search (`species/suggest` + vernacular, 300 ms debounce, offline state); 4k/5c reference "+" path; 5a "Changer" and "Liens de référence" (paste link → `PlantRef`). Done: a free-name plant gets linked and its name becomes an alias.
 39. `AndroidManifest.xml` intent-filters (VIEW/BROWSABLE hosts of §7 including the Pl@ntUse one, SEND text/plain), `bindings/cap_share_target.ml`, `cap_app.ml` `appUrlOpen`; 4j sheet mode of `resolve.ml` with "Première observation ici", "Enlever", recent tags, "Déjà dans ma collection" variant. Done: a Pl@ntNet share, a gbif.org link and a Pl@ntUse link (after "Ouvrir par défaut") all land on 4j and add the plant (spike 1, part 2); what Pl@ntNet actually shares and the real Pl@ntUse host get written down here.
 
@@ -142,7 +142,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 
 - R1 (M2.20): the glue fails its exit criterion → ocaml-vdom rewrite of 4a and `router.ml`; M1 and M3 onwards unaffected.
 - R2 (M1.10, M1.13): `@capacitor-community/sqlite` is awkward from Jv (promise-heavy, transactions) → thin JS helper in `vendor.js`. M1.10 bound it from Jv without a helper; transactions remain open until M1.13.
-- R3 (M1.11): `Postgrest.Row` does not fit the plugin's row format → hand-written decoders per table; `Postgrest` unchanged for sync.
+- R3 (M1.11): `Postgrest.Row` does not fit the plugin's row format → hand-written decoders per table; `Postgrest` unchanged for sync. Resolved in M1.11: it fits except for JSON columns (SQLite returns their text), which `Codec.decode ~json` (the query's JSON columns, typed from `Tables`) parses before `Row`.
 - R4 (M3.28): `getUserMedia` in the WebView lacks resolution or torch control → `camera-preview` plugin, 4d layout unchanged.
 - R5 (M4.39): Pl@ntNet shares something the classifier cannot resolve → 4j falls back to 4i prefilled with the text.
 - R6 (M4.35): the spike shows most 4f fields empty outside France → shrink the reference block rather than add sources.

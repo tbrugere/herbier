@@ -34,10 +34,26 @@ val close : t -> (unit, Cap_error.t) result Fut.t
     used afterwards; a new {!connect} is needed. *)
 
 val execute : t -> string -> (int, Cap_error.t) result Fut.t
-(** [execute db sql] runs one or more [;]-separated statements without
-    parameters (DDL, migrations), in the plugin's own transaction (its default
-    [transaction = true]); returns [changes.changes]. [sql] carries no data:
-    values go through {!run} or {!query} parameters.
+(** [execute db sql] runs one statement without parameters, in the plugin's own
+    transaction (its default [transaction = true]); returns [changes.changes].
+    The plugin rewrites [sql] before running it (splits it on [";"] and newline,
+    drops what follows [--] on each line, even inside a string literal, joins
+    lines, turns [end;] into [END;]), so [sql] holds no [--] and no string
+    literal, and several statements (or a trigger) go through {!execute_set}
+    instead. [sql] carries no data: values go through {!run} or {!query}
+    parameters. [Error (Unexpected "changes.changes")] if the plugin omits it.
+*)
+
+val execute_set : t -> string list -> (int, Cap_error.t) result Fut.t
+(** [execute_set db statements] runs [statements] in order, without parameters,
+    in one plugin transaction ([executeSet(set, true)], each set element
+    [{statement; values = []}]): all of them apply or none. The plugin prepares
+    each string as given, with no splitting, so each one is exactly one
+    statement (multi-line, comments and trigger bodies allowed); Android's
+    statement compiler ignores any text after the first statement. Returns
+    [changes.changes], a [total_changes()] difference over the whole set.
+    [Error (Rejected _)] for an empty list (the plugin refuses an empty set) or
+    when a statement fails (the transaction is then rolled back);
     [Error (Unexpected "changes.changes")] if the plugin omits it. *)
 
 val run : t -> string -> value list -> (changes, Cap_error.t) result Fut.t
