@@ -55,27 +55,43 @@ let between ~from ~until =
   query " and at >= ? and at < ?"
     [Codec.param O.at from; Codec.param O.at until]
 
-let upsert (o : Observation.t) =
+let input (o : Observation.t) : (O.t, [`Full]) Postgrest.Input.t =
   let lat, lon, accuracy_m =
     match o.position with
     | None -> (None, None, None)
     | Some {lat; lon; accuracy_m} -> (Some lat, Some lon, accuracy_m)
   in
-  Stmt.upsert ~table:O.table
-    [
-      Stmt.col O.id o.id;
-      Stmt.col O.plant_id o.plant_id;
-      Stmt.col O.at o.at;
-      Stmt.col O.lat lat;
-      Stmt.col O.lon lon;
-      Stmt.col O.accuracy_m accuracy_m;
-      Stmt.col O.place_label o.place_label;
-      Stmt.col O.place_derived o.place_derived;
-      Stmt.col O.note o.note;
-      Stmt.col O.created_at o.created_at;
-      Stmt.col O.updated_at o.updated_at;
-      Stmt.col O.deleted_at o.deleted_at;
-    ]
+  Postgrest.Input.
+    {
+      fields =
+        [
+          Mandatory (O.id, Value o.id);
+          Optional (O.plant_id, Value o.plant_id);
+          Mandatory (O.at, Value o.at);
+          Optional (O.lat, Value lat);
+          Optional (O.lon, Value lon);
+          Optional (O.accuracy_m, Value accuracy_m);
+          Optional (O.place_label, Value o.place_label);
+          Optional (O.place_derived, Value o.place_derived);
+          Optional (O.note, Value o.note);
+          Mandatory (O.created_at, Value o.created_at);
+          Mandatory (O.updated_at, Value o.updated_at);
+          Optional (O.deleted_at, Value o.deleted_at);
+        ];
+    }
+
+(* No deleted_at filter: a soft delete must read back the row it deleted. *)
+let reread id =
+  Stmt.query ~json:[] row "select * from observations where id = ?"
+    [Codec.param O.id id]
+
+let edit id stmt =
+  Outbox.edit ~table:O.table ~reread:(reread id)
+    ~row_id:(fun (o : Observation.t) -> Observation_id.to_string o.id)
+    ~input stmt
+
+let upsert (o : Observation.t) =
+  edit o.id (Stmt.upsert ~table:O.table (input o))
 
 let soft_delete id ~at =
-  Stmt.soft_delete ~table:O.table ~id:(Codec.param O.id id) ~at
+  edit id (Stmt.soft_delete ~table:O.table ~id:(Codec.param O.id id) ~at)

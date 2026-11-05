@@ -17,30 +17,44 @@ val get : Tag_id.t -> Tag.t Stmt.query
 val of_plant : Plant_id.t -> Tag.t Stmt.query
 (** Live tags with a live link to the plant. *)
 
-val upsert : Tag.t -> Stmt.t
-(** Writes the whole record (see {!Stmt.upsert}). *)
+val input : Tag.t -> (Tables.Tags.t, [`Full]) Postgrest.Input.t
+(** Every column of [Tables.Tags], in its declaration order. The upsert's
+    columns and the outbox payload. *)
 
-val soft_delete : Tag_id.t -> at:Ptime.t -> Stmt.t
-(** See {!Stmt.soft_delete}. Links to the tag are left as they are; queries
-    ignore links to a deleted tag. *)
+val plant_tag_input :
+  Tag.Plant_tag.t -> (Tables.Plant_tags.t, [`Full]) Postgrest.Input.t
+(** Every column of [Tables.Plant_tags], in its declaration order: the outbox
+    payload of {!tag} and {!untag}. *)
+
+val upsert : Tag.t -> Outbox.edit
+(** Writes the whole record ({!Stmt.upsert} of {!input}); always changes the
+    row, so {!Db.edit} appends one entry. Read back by [id]. *)
+
+val soft_delete : Tag_id.t -> at:Ptime.t -> Outbox.edit
+(** {!Stmt.soft_delete}; read back by [id] whatever [deleted_at]. Appends an
+    entry when the tag was live, nothing otherwise. Links to the tag are left as
+    they are; queries ignore links to a deleted tag. *)
 
 val upsert_plant_tag : Tag.Plant_tag.t -> Stmt.t
 (** Writes a whole [plant_tags] row with conflict target [(plant_id, tag_id)],
     the natural key. On conflict it sets [updated_at] and [deleted_at] from the
-    record and keeps the existing row's [id] and [created_at]. *)
+    record and keeps the existing row's [id] and [created_at]. The dev seed's
+    write, and the pull's (architecture §4): a bare statement, no outbox entry.
+*)
 
-val tag : plant:Plant_id.t -> tag:Tag_id.t -> at:Ptime.t -> Stmt.t
+val tag : plant:Plant_id.t -> tag:Tag_id.t -> at:Ptime.t -> Outbox.edit
 (** Puts the tag on the plant (architecture §2 revive rule):
     - no row for [(plant, tag)]: inserts one with
       [id = Ids.Plant_tag_id.of_key ~plant ~tag], [created_at = updated_at = at]
-      and [deleted_at = null] → 1 change;
+      and [deleted_at = null] → appends an entry (payload id the derived one);
     - a soft-deleted row: revives it ([deleted_at = null], [updated_at = at]; id
-      and created_at kept) → 1 change;
-    - a live row: nothing changes (0 changes, [updated_at] not bumped).
+      and created_at kept) → appends an entry carrying the stored id;
+    - a live row: nothing changes ([updated_at] not bumped) → appends nothing.
 
-    The conflict target is [(plant_id, tag_id)]. Foreign keys apply: an unknown
-    plant or tag makes [Db.write] fail. *)
+    The conflict target is [(plant_id, tag_id)]; the row is read back by that
+    pair. Foreign keys apply: an unknown plant or tag makes {!Db.edit} fail. *)
 
-val untag : plant:Plant_id.t -> tag:Tag_id.t -> at:Ptime.t -> Stmt.t
-(** Soft-deletes the live link ([deleted_at = updated_at = at]) → 1 change; 0
-    when there is no live link. *)
+val untag : plant:Plant_id.t -> tag:Tag_id.t -> at:Ptime.t -> Outbox.edit
+(** Soft-deletes the live link ([deleted_at = updated_at = at]) → appends an
+    entry (payload [deleted_at = at], stored id); appends nothing when there is
+    no live link. Read back by [(plant_id, tag_id)]. *)

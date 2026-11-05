@@ -1,7 +1,14 @@
 (** The local SQLite database: open and migrate, statements with bound
     parameters, rows decoded with {!Postgrest.Row}. SQL is hand-written by the
-    callers; no query DSL. {!exec} and {!run} each run in the plugin's own
-    transaction; there is no multi-statement transaction with parameters. *)
+    callers; no query DSL. {!run}, {!write} and {!write_all} run each statement
+    in the plugin's own transaction; {!exec} runs its statements in one plugin
+    transaction; {!edit} runs its statements in one explicit transaction.
+
+    Every operation on a [t] ({!exec}, {!run}, {!query}, {!all}, {!find},
+    {!write}, {!write_all}, {!edit}, {!user_version}, {!close}) starts only once
+    the previous one on the same [t] has settled, success or error, so callers
+    may start operations without awaiting each other: a statement arriving in
+    the middle of an {!edit} would otherwise end its transaction. *)
 
 type t
 
@@ -18,6 +25,9 @@ type error =
   | Unexpected_rows of {sql : string; count : int}
       (** [sql] returned [count] rows where one row (or at most one, for
           {!find}) was expected. *)
+  | Raised of string
+      (** An OCaml exception escaped while starting the operation (a bug);
+          [Printexc.to_string] of it. Later operations still run. *)
 
 val error_to_string : error -> string
 
@@ -46,7 +56,8 @@ val exec : t -> string list -> (unit, error) result Fut.t
 
 val run : t -> string -> Codec.param list -> (int, error) result Fut.t
 (** [run db sql params] runs one statement with positional [?] parameters;
-    returns the number of rows changed. *)
+    returns the plugin's count of rows changed, which includes rows changed by
+    triggers. *)
 
 val query :
   t ->
@@ -70,10 +81,28 @@ val find : t -> 'a Stmt.query -> ('a option, error) result Fut.t
     for more. *)
 
 val write : t -> Stmt.t -> (int, error) result Fut.t
-(** {!run} of the statement: rows changed. A constraint violation (foreign key,
-    unique, check) is a [Plugin] error like any other; only its message tells
-    them apart. *)
+(** {!run} of the statement: rows changed (triggers included, as {!run}). For
+    local-only tables ({!Settings}); a synced row is written with {!edit}. A
+    constraint violation (foreign key, unique, check) is a [Plugin] error like
+    any other; only its message tells them apart. *)
 
 val write_all : t -> Stmt.t list -> (unit, error) result Fut.t
 (** {!write} each statement in order, stopping at the first error, which is
-    returned. Not atomic: statements before the failing one stay applied. *)
+    returned. Not atomic: statements before the failing one stay applied. For
+    the dev seed ({!Dev_seed.statements}), which appends no outbox entry. *)
+
+val edit : t -> Outbox.edit list -> (int, error) result Fut.t
+(** [edit db edits] runs every edit and its entry in one transaction, in order:
+    for each edit, its statement; when it changed at least one row, its
+    {!Outbox.reread}, then the {!Outbox.append} statement for that row. Commits
+    and returns the number of entries appended, or rolls everything back and
+    returns the first error:
+    - [Plugin _]: a statement failed (constraint, foreign key, …), or the begin
+      or commit failed;
+    - [Unexpected_rows {sql; count}]: the read-back returned [count <> 1] rows;
+    - [Decode {sql; row = 0; error}]: the read-back row did not decode.
+
+    [edits = []] is [Ok 0] and touches nothing. A rollback failure is logged to
+    the console; the first error is the one returned. This is the only way the
+    app writes a synced row; settings go through {!write}, the dev seed through
+    {!write_all}. *)

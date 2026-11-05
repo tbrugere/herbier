@@ -19,8 +19,15 @@ val of_plant : Plant_id.t -> Photo.t Stmt.query
     descending then [id] descending (the 4f hero picks the cover, else the
     first). *)
 
-val upsert : Photo.t -> Stmt.t
-(** Writes the whole record (see {!Stmt.upsert}). *)
+val input : Photo.t -> (Tables.Photos.t, [`Full]) Postgrest.Input.t
+(** Every column of [Tables.Photos], in its declaration order. The upsert's
+    columns and the outbox payload. *)
 
-val soft_delete : Photo_id.t -> at:Ptime.t -> Stmt.t
-(** See {!Stmt.soft_delete}. *)
+val upsert : Photo.t -> Outbox.edit
+(** Writes the whole record ({!Stmt.upsert} of {!input}); always changes the
+    row, so {!Db.edit} appends one entry. Read back by [id]. *)
+
+val soft_delete : Photo_id.t -> at:Ptime.t -> Outbox.edit
+(** {!Stmt.soft_delete}; read back by [id] whatever [deleted_at]. Appends an
+    entry (payload with [deleted_at = at]) when the photo was live, nothing when
+    it is absent or already deleted. *)

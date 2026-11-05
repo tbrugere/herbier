@@ -14,6 +14,39 @@ module Tag = Herbier_domain.Tag
 module P = Tables.Plants
 module Cli = Sqlite_cli
 
+(* These checks are about the bare statements and their changes() counts, so
+   each write goes through [Outbox.without_entry] (no entry); test_outbox
+   checks the entries. *)
+module Plants = struct
+  include Plants
+
+  let upsert p = Outbox.without_entry (upsert p)
+  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+end
+
+module Observations = struct
+  include Observations
+
+  let upsert o = Outbox.without_entry (upsert o)
+  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+end
+
+module Photos = struct
+  include Photos
+
+  let upsert p = Outbox.without_entry (upsert p)
+  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+end
+
+module Tags = struct
+  include Tags
+
+  let upsert t = Outbox.without_entry (upsert t)
+  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+  let tag ~plant ~tag:t ~at = Outbox.without_entry (tag ~plant ~tag:t ~at)
+  let untag ~plant ~tag ~at = Outbox.without_entry (untag ~plant ~tag ~at)
+end
+
 (* ---------- fixtures ---------- *)
 
 let time s =

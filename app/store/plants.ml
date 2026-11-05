@@ -6,7 +6,9 @@ module Row = Postgrest.Row
 
 (* Lenient: Codec.decode needs total mappers, and a damaged aliases value,
    even text that is not JSON, should cost the aliases, not the plant (style
-   8.4). So aliases is not a ~json column: the row parses its text itself. *)
+   8.4). So aliases is not a ~json column: the row parses its text itself.
+   The outbox payload is built from the decoded row, so a damaged value is
+   pushed as [] on the plant's next edit. *)
 let strings = function
   | `List items ->
       List.filter_map (function `String s -> Some s | _ -> None) items
@@ -69,22 +71,36 @@ let with_tag tag =
     ^ order_by)
     [Codec.param Tables.Tags.id tag]
 
-let upsert (p : Plant.t) =
-  Stmt.upsert ~table:P.table
-    [
-      Stmt.col P.id p.id;
-      Stmt.col P.display_name p.display_name;
-      Stmt.col P.aliases (`List (List.map (fun s -> `String s) p.aliases));
-      Stmt.col P.scientific_name p.scientific_name;
-      Stmt.col P.authorship p.authorship;
-      Stmt.col P.gbif_key p.gbif_key;
-      Stmt.col P.notes p.notes;
-      Stmt.col P.notes_updated_at p.notes_updated_at;
-      Stmt.col P.cover_photo_id p.cover_photo_id;
-      Stmt.col P.created_at p.created_at;
-      Stmt.col P.updated_at p.updated_at;
-      Stmt.col P.deleted_at p.deleted_at;
-    ]
+let input (p : Plant.t) : (P.t, [`Full]) Postgrest.Input.t =
+  Postgrest.Input.
+    {
+      fields =
+        [
+          Mandatory (P.id, Value p.id);
+          Mandatory (P.display_name, Value p.display_name);
+          Mandatory
+            (P.aliases, Value (`List (List.map (fun s -> `String s) p.aliases)));
+          Optional (P.scientific_name, Value p.scientific_name);
+          Optional (P.authorship, Value p.authorship);
+          Optional (P.gbif_key, Value p.gbif_key);
+          Mandatory (P.notes, Value p.notes);
+          Optional (P.notes_updated_at, Value p.notes_updated_at);
+          Optional (P.cover_photo_id, Value p.cover_photo_id);
+          Mandatory (P.created_at, Value p.created_at);
+          Mandatory (P.updated_at, Value p.updated_at);
+          Optional (P.deleted_at, Value p.deleted_at);
+        ];
+    }
+
+(* No deleted_at filter: a soft delete must read back the row it deleted. *)
+let reread id = query "select * from plants where id = ?" [Codec.param P.id id]
+
+let edit id stmt =
+  Outbox.edit ~table:P.table ~reread:(reread id)
+    ~row_id:(fun (p : Plant.t) -> Plant_id.to_string p.id)
+    ~input stmt
+
+let upsert (p : Plant.t) = edit p.id (Stmt.upsert ~table:P.table (input p))
 
 let soft_delete id ~at =
-  Stmt.soft_delete ~table:P.table ~id:(Codec.param P.id id) ~at
+  edit id (Stmt.soft_delete ~table:P.table ~id:(Codec.param P.id id) ~at)

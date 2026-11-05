@@ -5,11 +5,14 @@ module Codec = Herbier_store.Codec
 module Schema = Herbier_store.Schema
 module Plants = Herbier_store.Tables.Plants
 module Plant_queries = Herbier_store.Plants
+module Observation_queries = Herbier_store.Observations
+module Outbox = Herbier_store.Outbox
 module Search = Herbier_store.Search
 module Settings = Herbier_store.Settings
 module Row = Postgrest.Row
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Photo_id = Herbier_domain.Ids.Photo_id
+module Observation_id = Herbier_domain.Ids.Observation_id
 
 type failure =
   | Store of Db.error
@@ -306,10 +309,10 @@ let display_names =
    triggers exist on the device and keep the index in sync. *)
 let check_search log db =
   let open Fut.Result_syntax in
-  let* () =
-    step log "upsert 2 plants" ~detail:no_detail
-      (store
-         (Db.write_all db
+  let* (_ : int) =
+    step log "edit: upsert 2 plants" ~detail:no_detail
+      (expect string_of_int 2
+         (Db.edit db
             [
               Plant_queries.upsert
                 (search_plant "Digitale pourpre" (Some "Digitalis purpurea"));
@@ -340,13 +343,165 @@ let check_settings log db =
 type count
 
 let count_row : (count, int) Row.t = Row.col {ty = Not_Null Integer; name = "n"}
+let print_ints rows = String.concat ", " (List.map string_of_int rows)
 
+(* 2 from round-trip, 2 from search, 3 from the outbox group. *)
 let check_count log db =
-  step log "4 plants rows" ~detail:no_detail
-    (expect
-       (fun rows -> String.concat ", " (List.map string_of_int rows))
-       [4]
+  step log "7 plants rows" ~detail:no_detail
+    (expect print_ints [7]
        (Db.query db ~json:[] count_row "select count(*) as n from plants" []))
+
+let outbox_count db = Db.all db Outbox.count
+
+let check_outbox_count log db n =
+  step log
+    (Printf.sprintf "%d outbox entries" n)
+    ~detail:no_detail
+    (expect print_ints [n] (outbox_count db))
+
+let print_entries entries =
+  String.concat ", "
+    (List.map
+       (fun (e : Outbox.entry) ->
+         Printf.sprintf "%d %s %s" (Outbox.seq_to_int e.seq) e.table_name
+           e.row_id)
+       entries)
+
+let last_two entries =
+  match List.rev entries with b :: a :: _ -> [a; b] | [] | [_] -> []
+
+(* Both edits' entries come last, in order, for plants a and b. *)
+let expect_appended (a : Herbier_domain.Plant.t) (b : Herbier_domain.Plant.t)
+    fut =
+  let ids = [Plant_id.to_string a.id; Plant_id.to_string b.id] in
+  Fut.map
+    (fun r ->
+      Result.bind r (fun entries ->
+          match
+            List.map
+              (fun (e : Outbox.entry) -> (e.table_name, e.row_id))
+              (last_two entries)
+          with
+          | got when got = List.map (fun id -> ("plants", id)) ids -> Ok entries
+          | (_ : (string * string) list) ->
+              Error
+                (Mismatch
+                   {
+                     expected = "last: plants " ^ String.concat ", plants " ids;
+                     got = print_entries entries;
+                   })))
+    (store fut)
+
+let expect_plugin_error fut =
+  Fut.map
+    (function
+      | Error (Db.Plugin e) -> Ok (Cap_error.to_string e)
+      | Error e ->
+          Error
+            (Mismatch {expected = "a plugin error"; got = Db.error_to_string e})
+      | Ok n ->
+          Error
+            (Mismatch
+               {expected = "a plugin error"; got = Printf.sprintf "Ok %d" n}))
+    fut
+
+let orphan_observation () : Herbier_domain.Observation.t =
+  {
+    id = Observation_id.fresh ();
+    plant_id = Some (Plant_id.fresh ());
+    at = time "2026-10-28T16:00:00Z";
+    position = None;
+    place_label = None;
+    place_derived = None;
+    note = None;
+    created_at = time "2026-10-28T16:00:00Z";
+    updated_at = time "2026-10-28T16:00:00Z";
+    deleted_at = None;
+  }
+
+let plant_present db (p : Herbier_domain.Plant.t) expected =
+  expect
+    (function true -> "present" | false -> "absent")
+    expected
+    (Fut.map (Result.map Option.is_some) (Db.find db (Plant_queries.get p.id)))
+
+(* The explicit transaction, its rollback and Db's serialisation only exist
+   on the device. *)
+let check_outbox log db =
+  let open Fut.Result_syntax in
+  let a = search_plant "Outbox A" None and b = search_plant "Outbox B" None in
+  let* (_ : int list) = check_outbox_count log db 2 in
+  let* (_ : int) =
+    step log "edit: upsert a, b" ~detail:no_detail
+      (expect string_of_int 2
+         (Db.edit db [Plant_queries.upsert a; Plant_queries.upsert b]))
+  in
+  let* entries =
+    step log "next lists a, b last"
+      ~detail:(fun entries -> Some (print_entries entries))
+      (expect_appended a b (Db.all db (Outbox.next ~limit:10)))
+  in
+  let c = search_plant "Outbox C" None in
+  let* (_ : string) =
+    step log "edit: c + orphan observation fails"
+      ~detail:(fun e -> Some e)
+      (expect_plugin_error
+         (Db.edit db
+            [
+              Plant_queries.upsert c;
+              Observation_queries.upsert (orphan_observation ());
+            ]))
+  in
+  let* (_ : bool) =
+    step log "c rolled back" ~detail:no_detail (plant_present db c false)
+  in
+  let* (_ : int list) = check_outbox_count log db 4 in
+  let* (_ : int) =
+    step log "write after rollback" ~detail:no_detail
+      (expect_changed (Db.write db (Settings.set Wifi_only true)))
+  in
+  let d = search_plant "Outbox D" None in
+  let edited = Db.edit db [Plant_queries.upsert d] in
+  let written = Db.write db (Settings.set Wifi_only false) in
+  let* (_ : int) =
+    step log "overlapping edit" ~detail:no_detail
+      (expect string_of_int 1 edited)
+  in
+  let* (_ : int) =
+    step log "overlapping write" ~detail:no_detail (expect_changed written)
+  in
+  let* (_ : bool) =
+    step log "d present" ~detail:no_detail (plant_present db d true)
+  in
+  let* (_ : int list) = check_outbox_count log db 5 in
+  match entries with
+  | [] -> Fut.error (Mismatch {expected = "an entry"; got = "none"})
+  | (first : Outbox.entry) :: _ ->
+      let* (_ : int) =
+        step log "park first" ~detail:no_detail
+          (expect_changed (Db.write db (Outbox.park first.seq ~error:"test")))
+      in
+      let* (_ : string list) =
+        step log "next skips it" ~detail:no_detail
+          (expect print_names []
+             (Fut.map
+                (Result.map (fun entries ->
+                     List.filter_map
+                       (fun (e : Outbox.entry) ->
+                         match
+                           Int.equal (Outbox.seq_to_int e.seq)
+                             (Outbox.seq_to_int first.seq)
+                         with
+                         | true -> Some e.row_id
+                         | false -> None)
+                       entries))
+                (Db.all db (Outbox.next ~limit:10))))
+      in
+      let* (_ : int) =
+        step log "delete first" ~detail:no_detail
+          (expect_changed (Db.write db (Outbox.delete first.seq)))
+      in
+      check_outbox_count log db 4
 
 (* Runs [f db], then closes [db] when [f] failed, keeping [f]'s error: the
    next group then starts with no connection left open. *)
@@ -516,6 +671,8 @@ let fresh_then_reuse log database =
   let* (_ : string list) = closing_on_error db (check_search log) in
   heading log "settings";
   let* (_ : bool option) = closing_on_error db (check_settings log) in
+  heading log "outbox";
+  let* (_ : int list) = closing_on_error db (check_outbox log) in
   heading log "reopen";
   reopen log db database
 

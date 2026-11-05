@@ -44,18 +44,45 @@ let of_plant plant =
      by t.name collate nocase, t.id"
     [Codec.param Pt.plant_id plant]
 
-let upsert (t : Tag.t) =
-  Stmt.upsert ~table:T.table
-    [
-      Stmt.col T.id t.id;
-      Stmt.col T.name t.name;
-      Stmt.col T.created_at t.created_at;
-      Stmt.col T.updated_at t.updated_at;
-      Stmt.col T.deleted_at t.deleted_at;
-    ]
+let input (t : Tag.t) : (T.t, [`Full]) Postgrest.Input.t =
+  Postgrest.Input.
+    {
+      fields =
+        [
+          Mandatory (T.id, Value t.id);
+          Mandatory (T.name, Value t.name);
+          Mandatory (T.created_at, Value t.created_at);
+          Mandatory (T.updated_at, Value t.updated_at);
+          Optional (T.deleted_at, Value t.deleted_at);
+        ];
+    }
+
+let plant_tag_input (pt : Tag.Plant_tag.t) : (Pt.t, [`Full]) Postgrest.Input.t =
+  Postgrest.Input.
+    {
+      fields =
+        [
+          Mandatory (Pt.id, Value pt.id);
+          Mandatory (Pt.plant_id, Value pt.plant_id);
+          Mandatory (Pt.tag_id, Value pt.tag_id);
+          Mandatory (Pt.created_at, Value pt.created_at);
+          Mandatory (Pt.updated_at, Value pt.updated_at);
+          Optional (Pt.deleted_at, Value pt.deleted_at);
+        ];
+    }
+
+(* No deleted_at filter: a soft delete must read back the row it deleted. *)
+let reread id = query "select * from tags where id = ?" [Codec.param T.id id]
+
+let edit id stmt =
+  Outbox.edit ~table:T.table ~reread:(reread id)
+    ~row_id:(fun (t : Tag.t) -> Tag_id.to_string t.id)
+    ~input stmt
+
+let upsert (t : Tag.t) = edit t.id (Stmt.upsert ~table:T.table (input t))
 
 let soft_delete id ~at =
-  Stmt.soft_delete ~table:T.table ~id:(Codec.param T.id id) ~at
+  edit id (Stmt.soft_delete ~table:T.table ~id:(Codec.param T.id id) ~at)
 
 (* Conflict on the natural key, not on id: a row pulled from another install
    may carry a different id for the same pair (architecture §4). *)
@@ -77,35 +104,48 @@ let upsert_plant_tag (pt : Tag.Plant_tag.t) =
       ];
   }
 
+(* By the natural key, not the derived id: a revived or pulled link keeps
+   the id it was stored with, and the payload must carry that one. *)
+let plant_tag_edit ~plant ~tag stmt =
+  Outbox.edit ~table:Pt.table
+    ~reread:
+      (Stmt.query ~json:[] plant_tag_row
+         "select * from plant_tags where plant_id = ? and tag_id = ?"
+         [Codec.param Pt.plant_id plant; Codec.param Pt.tag_id tag])
+    ~row_id:(fun (pt : Tag.Plant_tag.t) -> Plant_tag_id.to_string pt.id)
+    ~input:plant_tag_input stmt
+
 (* The where clause of the update leaves a live link alone, so tagging twice
-   leaves updated_at alone. *)
+   leaves updated_at alone and appends no entry. *)
 let tag ~plant ~tag ~at =
-  {
-    Stmt.sql =
-      "insert into plant_tags (id, plant_id, tag_id, created_at, updated_at, \
-       deleted_at) values (?, ?, ?, ?, ?, null) on conflict (plant_id, tag_id) \
-       do update set deleted_at = null, updated_at = excluded.updated_at where \
-       plant_tags.deleted_at is not null";
-    params =
-      [
-        Codec.param Pt.id (Plant_tag_id.of_key ~plant ~tag);
-        Codec.param Pt.plant_id plant;
-        Codec.param Pt.tag_id tag;
-        Codec.param Pt.created_at at;
-        Codec.param Pt.updated_at at;
-      ];
-  }
+  plant_tag_edit ~plant ~tag
+    {
+      Stmt.sql =
+        "insert into plant_tags (id, plant_id, tag_id, created_at, updated_at, \
+         deleted_at) values (?, ?, ?, ?, ?, null) on conflict (plant_id, \
+         tag_id) do update set deleted_at = null, updated_at = \
+         excluded.updated_at where plant_tags.deleted_at is not null";
+      params =
+        [
+          Codec.param Pt.id (Plant_tag_id.of_key ~plant ~tag);
+          Codec.param Pt.plant_id plant;
+          Codec.param Pt.tag_id tag;
+          Codec.param Pt.created_at at;
+          Codec.param Pt.updated_at at;
+        ];
+    }
 
 let untag ~plant ~tag ~at =
-  {
-    Stmt.sql =
-      "update plant_tags set deleted_at = ?, updated_at = ? where plant_id = ? \
-       and tag_id = ? and deleted_at is null";
-    params =
-      [
-        Codec.param Pt.deleted_at (Some at);
-        Codec.param Pt.updated_at at;
-        Codec.param Pt.plant_id plant;
-        Codec.param Pt.tag_id tag;
-      ];
-  }
+  plant_tag_edit ~plant ~tag
+    {
+      Stmt.sql =
+        "update plant_tags set deleted_at = ?, updated_at = ? where plant_id = \
+         ? and tag_id = ? and deleted_at is null";
+      params =
+        [
+          Codec.param Pt.deleted_at (Some at);
+          Codec.param Pt.updated_at at;
+          Codec.param Pt.plant_id plant;
+          Codec.param Pt.tag_id tag;
+        ];
+    }

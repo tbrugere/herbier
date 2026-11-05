@@ -150,9 +150,32 @@ the mean of the positions. Details in `app/domain/places.mli`.
   - `tiles/<region>.pmtiles`, downloaded once from Settings.
 - The binding (`Cap_sqlite.query`) returns each row as the JSON text of the
   plugin's row object; `store/db.ml` parses it and decodes it with
-  `Postgrest.Row`, so yojson stays out of `bindings/`. Statements run in the
-  plugin's per-call transaction; multi-statement transactions need explicit
-  begin/commit/rollback in the binding (M1.13).
+  `Postgrest.Row`, so yojson stays out of `bindings/`. Single statements run
+  in the plugin's per-call transaction; `Cap_sqlite` also binds
+  `beginTransaction` / `commitTransaction` / `rollbackTransaction`, and a
+  statement inside such a transaction passes `transaction = false` (with the
+  plugin's own transaction it fails *and* rolls back the open one). So `Db`
+  serialises every operation on a connection: each starts once the previous
+  one settled, and a write started from another callback cannot land in the
+  middle of a transaction.
+- Every write to a synced row goes through `Db.edit` (M1.13): the per-table
+  modules return `Outbox.edit` values (the statement, a read-back query by
+  `id` or, for `plant_tags`, by `(plant_id, tag_id)`, and the table's
+  `Postgrest.Input` encoding); `Db.edit` runs a list of them in one explicit
+  transaction and, for each statement that changed a row, reads the row back
+  and appends `outbox(table_name, row_id, op = 'upsert', payload_json)`
+  where the payload is the stored row through `Postgrest.Input.to_json` (the
+  upsert body push sends; the stored row, so a soft delete or a revived link
+  carries its real id and `deleted_at`). A statement that changes nothing
+  appends nothing; entries are never coalesced (rewriting an earlier entry
+  could move a child's new foreign key ahead of its parent). Any error rolls
+  back rows and entries together. `created_at` is SQLite's clock
+  (`Codec.timestamp` format, milliseconds), for display only; order is `seq`.
+  Settings, pull and the dev seed write without entries (pull and the seed
+  through `Outbox.without_entry`). That the bare statement is used only there
+  is a convention, not a type: `Db.write` accepts it. `seq` has no `autoincrement`, so a number may
+  be reused once the newest entry is deleted: the sync engine must not hold a
+  `seq` across a `delete`.
 - IndexedDB/localStorage are used for nothing durable (Android evicts them).
 - Full-text search over names is done locally (SQLite FTS5 with
   `unicode61 remove_diacritics 2`), so search works offline. The Postgres

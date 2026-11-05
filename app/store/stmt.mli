@@ -28,18 +28,17 @@ val decode : 'a query -> string -> ('a, Codec.error) result
 (** [decode q text] is [Codec.decode ~json row text] for the [json] and [row] of
     [q]: one row as the plugin returns it (a JSON object text). Never raises. *)
 
-val col : ('table, 'a, 'optional) Postgrest.Col.t -> 'a -> string * Codec.param
-(** [col c v] is [(c.name, Codec.param c v)], one column of {!upsert}. *)
-
 val upsert :
-  table:'table Postgrest.Col.table -> (string * Codec.param) list -> t
-(** [upsert ~table columns] is
+  table:'table Postgrest.Col.table -> ('table, [`Full]) Postgrest.Input.t -> t
+(** [upsert ~table input] is
     [insert into table (c1, …) values (?, …) on conflict (id) do update set c =
-     excluded.c] for every column but ["id"], with the parameters of [columns]
-    in order ([do nothing] when ["id"] is the only column). [columns] must
-    include ["id"]. It never deletes the old row, so foreign-key cascades never
-    fire (see {!Schema}). [upsert] and {!soft_delete} are shared so that every
-    synced table follows the one write convention. *)
+     excluded.c] over the fields of [input] in order, each bound with
+    [Codec.param] of its column (an [Optional] field holding [Unspecified],
+    which the type admits, is left out, as {!Postgrest.Input.to_json} does),
+    every column but ["id"] in the update ([do nothing] when ["id"] is the only
+    one). [input] must include ["id"]. It never deletes the old row, so
+    foreign-key cascades never fire (see {!Schema}). [upsert] and {!soft_delete}
+    are shared so that every synced table follows the one write convention. *)
 
 val soft_delete :
   table:'table Postgrest.Col.table -> id:Codec.param -> at:Ptime.t -> t

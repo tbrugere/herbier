@@ -107,13 +107,16 @@ app/
   store/                  local SQLite (§3 of architecture); hand-written SQL, no query DSL
     tables.ml             Postgrest columns of every synced table (~7 tables, ~50 columns), generated
                           from supabase/schema/catalog.json by postgrest-codegen, committed, a dune diff rule keeps it fresh
-    db.ml                 open, exec, bind params over cap_sqlite; plugin JSON rows decoded with Postgrest.Row
+    db.ml                 open, exec, bind params over cap_sqlite; plugin JSON rows decoded with Postgrest.Row;
+                          operations serialised per connection; `edit` = the one synced write path (row + outbox
+                          entry in one explicit transaction)
     codec.ml              pure half of db.ml: Col values → bound params, plugin row text → Row (JSON text columns),
                           timestamp format; no Brr, tested natively in test/store/
     schema.ml             ordered migrations, each a list of SQL statements; `user_version`; migration 2 is the FTS5 index and its triggers
     stmt.ml               statements as pure values (SQL, params, row decoder), run by db.ml (all, find, write)
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
-    outbox.ml  sync_state.ml  settings.ml   local-only tables, columns declared next to their queries
+    outbox.ml  sync_state.ml  settings.ml   local-only tables, columns declared next to their queries;
+                          outbox.ml also holds `edit`, the value every synced write is (statement, read-back, payload)
     search.ml             FTS5 query text (folding, endings) and the plant search query
     dev_seed.ml           fixed development rows for M2, applied only by ui/dev/seed_check.ml
     files.ml              previews/, refthumbs/, tiles/ paths under Directory.Data
@@ -146,7 +149,8 @@ app/
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
-                          then searches and reads a setting; seed_check.ml (#dev/seed): applies store/dev_seed.ml
+                          then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
+                          serialisation, park/delete); seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; all ship in every build until the M2.17 router compiles them into dev builds only
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
@@ -317,10 +321,12 @@ test/
 
 alcotest runs natively, in `dune test` on every CI job, on every library
 without a Brr dependency (`domain`, `postgrest`, `refs`), and on the Brr-free
-modules of `store` (`codec`, `schema`, `tables`, `stmt`, the per-table
-query modules, `settings`, `search`, `dev_seed`): they build statements as
+modules of `store` (`codec`, `schema`, `tables`, `stmt`, `outbox`, the
+per-table query modules, `settings`, `search`, `dev_seed`): they build statements as
 values and never run them, so their SQL runs natively through the sqlite3
-CLI. The rest of store (`db.ml`), and sync,
+CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
+transaction). The rest of store (`db.ml`: the transaction, its rollback, the
+serialisation), and sync,
 photos, refs_io and geo, are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 

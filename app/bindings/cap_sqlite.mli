@@ -56,10 +56,35 @@ val execute_set : t -> string list -> (int, Cap_error.t) result Fut.t
     when a statement fails (the transaction is then rolled back);
     [Error (Unexpected "changes.changes")] if the plugin omits it. *)
 
-val run : t -> string -> value list -> (changes, Cap_error.t) result Fut.t
-(** [run db sql params] runs one statement with positional [?] parameters, in
-    the plugin's own transaction. [changed] is [changes.changes] (required, else
-    [Unexpected "changes.changes"]); [last_id] as described in {!changes}. *)
+val run :
+  ?transaction:bool ->
+  t ->
+  string ->
+  value list ->
+  (changes, Cap_error.t) result Fut.t
+(** [run db sql params] runs one statement with positional [?] parameters.
+    [transaction] (default [true], the plugin's default) is the plugin's third
+    argument: [true] wraps the statement in the plugin's own transaction;
+    [~transaction:false] runs it in the caller's explicit transaction
+    ({!begin_transaction}). [changed] is [changes.changes] (required, else
+    [Unexpected "changes.changes"]), a [total_changes()] difference: it includes
+    rows changed by triggers. [last_id] as described in {!changes}. *)
+
+val begin_transaction : t -> (unit, Cap_error.t) result Fut.t
+(** [beginTransaction()]. [Error] when a transaction is already active on the
+    connection or the database is not open. Statements run inside must pass
+    [~transaction:false] to {!run}: with the plugin's own per-call transaction
+    they fail, and their failure ends the open transaction (rolled back).
+    {!execute} and {!execute_set} always use the plugin's own transaction, so
+    inside one they fail the same way and roll the open transaction back. *)
+
+val commit_transaction : t -> (unit, Cap_error.t) result Fut.t
+(** [commitTransaction()]. [Error] when no transaction is active or the commit
+    fails; either way no transaction is active afterwards. *)
+
+val rollback_transaction : t -> (unit, Cap_error.t) result Fut.t
+(** [rollbackTransaction()]: ends the active transaction without committing;
+    does nothing (and is [Ok ()]) when none is active. *)
 
 val query : t -> string -> value list -> (string list, Cap_error.t) result Fut.t
 (** [query db sql params] runs a [SELECT] and returns its rows in order, each as

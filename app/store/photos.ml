@@ -57,24 +57,37 @@ let of_plant plant =
      ph.deleted_at is null order by ph.taken_at desc, ph.id desc"
     [Codec.param Tables.Observations.plant_id (Some plant)]
 
-let upsert (p : Photo.t) =
-  Stmt.upsert ~table:Ph.table
-    [
-      Stmt.col Ph.id p.id;
-      Stmt.col Ph.observation_id p.observation_id;
-      Stmt.col Ph.taken_at p.taken_at;
-      Stmt.col Ph.width p.width;
-      Stmt.col Ph.height p.height;
-      Stmt.col Ph.sha256 p.sha256;
-      Stmt.col Ph.preview_path p.preview_path;
-      Stmt.col Ph.preview_bucket_key p.preview_bucket_key;
-      Stmt.col Ph.original_target p.original_target;
-      Stmt.col Ph.drive_file_id p.drive_file_id;
-      Stmt.col Ph.upload_state p.upload_state;
-      Stmt.col Ph.created_at p.created_at;
-      Stmt.col Ph.updated_at p.updated_at;
-      Stmt.col Ph.deleted_at p.deleted_at;
-    ]
+let input (p : Photo.t) : (Ph.t, [`Full]) Postgrest.Input.t =
+  Postgrest.Input.
+    {
+      fields =
+        [
+          Mandatory (Ph.id, Value p.id);
+          Mandatory (Ph.observation_id, Value p.observation_id);
+          Mandatory (Ph.taken_at, Value p.taken_at);
+          Mandatory (Ph.width, Value p.width);
+          Mandatory (Ph.height, Value p.height);
+          Mandatory (Ph.sha256, Value p.sha256);
+          Mandatory (Ph.preview_path, Value p.preview_path);
+          Optional (Ph.preview_bucket_key, Value p.preview_bucket_key);
+          Mandatory (Ph.original_target, Value p.original_target);
+          Optional (Ph.drive_file_id, Value p.drive_file_id);
+          Mandatory (Ph.upload_state, Value p.upload_state);
+          Mandatory (Ph.created_at, Value p.created_at);
+          Mandatory (Ph.updated_at, Value p.updated_at);
+          Optional (Ph.deleted_at, Value p.deleted_at);
+        ];
+    }
+
+(* No deleted_at filter: a soft delete must read back the row it deleted. *)
+let reread id = query "select * from photos where id = ?" [Codec.param Ph.id id]
+
+let edit id stmt =
+  Outbox.edit ~table:Ph.table ~reread:(reread id)
+    ~row_id:(fun (p : Photo.t) -> Photo_id.to_string p.id)
+    ~input stmt
+
+let upsert (p : Photo.t) = edit p.id (Stmt.upsert ~table:Ph.table (input p))
 
 let soft_delete id ~at =
-  Stmt.soft_delete ~table:Ph.table ~id:(Codec.param Ph.id id) ~at
+  edit id (Stmt.soft_delete ~table:Ph.table ~id:(Codec.param Ph.id id) ~at)

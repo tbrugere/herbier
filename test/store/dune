@@ -3,16 +3,16 @@
 ; check the SQL and the codec, not the Capacitor plugin: the device checks are
 ; the #dev/store and #dev/seed pages. The modules below are copied from
 ; app/store/, so they must not reference Db, Herbier_bindings, Brr or Fut.
-; sqlite_cli.ml holds the helpers both tests share. sqlite3 is a test
+; sqlite_cli.ml holds the helpers the three tests share. sqlite3 is a test
 ; dependency: the build fails without it, and the suite fails rather than
 ; skipping the SQL checks when this sqlite3 has no FTS5.
 
-(copy_files# ../../app/store/{codec,schema,stmt,plants,observations,tags,photos,settings,search,dev_seed}.{ml,mli})
+(copy_files# ../../app/store/{codec,schema,stmt,outbox,plants,observations,tags,photos,settings,search,dev_seed}.{ml,mli})
 
 (copy_files# ../../app/store/tables.ml)
 
 (tests
- (names test_store test_queries)
+ (names test_store test_queries test_outbox)
  (libraries herbier_domain postgrest yojson ptime alcotest)
  (deps %{bin:sqlite3})
  (action

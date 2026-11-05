@@ -31,11 +31,18 @@ val with_tag : Tag_id.t -> Plant.t Stmt.query
 (** Live plants that have a live [plant_tags] row to this tag, the tag itself
     live; each plant once. *)
 
-val upsert : Plant.t -> Stmt.t
-(** Writes the whole record (see {!Stmt.upsert}): [deleted_at] included, so
-    upserting a record with [deleted_at = None] revives the row. [aliases] is
-    stored as a JSON array of strings (["[]"] when empty). *)
+val input : Plant.t -> (Tables.Plants.t, [`Full]) Postgrest.Input.t
+(** Every column of [Tables.Plants], in its declaration order; [aliases] as a
+    JSON array of strings. The upsert's columns and the outbox payload. *)
 
-val soft_delete : Plant_id.t -> at:Ptime.t -> Stmt.t
-(** Marks the plant deleted (see {!Stmt.soft_delete}). Its observations, photos
-    and tag links are untouched. *)
+val upsert : Plant.t -> Outbox.edit
+(** Writes the whole record ({!Stmt.upsert} of {!input}): [deleted_at] included,
+    so upserting a record with [deleted_at = None] revives the row. [aliases] is
+    stored as a JSON array of strings (["[]"] when empty). Always changes the
+    row, so {!Db.edit} appends one entry. Read back by [id]. *)
+
+val soft_delete : Plant_id.t -> at:Ptime.t -> Outbox.edit
+(** Marks the plant deleted ({!Stmt.soft_delete}); read back by [id] whatever
+    [deleted_at]. Appends an entry (payload with [deleted_at = at]) when the
+    plant was live, nothing when it is absent or already deleted. Its
+    observations, photos and tag links are untouched. *)

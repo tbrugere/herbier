@@ -26,12 +26,19 @@ val between : from:Ptime.t -> until:Ptime.t -> Observation.t Stmt.query
 (** Live observations with [from <= at < until]. For a Journal day the caller
     passes the UTC instants of local midnight. Empty when [until <= from]. *)
 
-val upsert : Observation.t -> Stmt.t
-(** Writes the whole record (see {!Stmt.upsert}). [position = None] writes
-    [lat], [lon] and [accuracy_m] as null. Nothing is validated here: SQLite
-    enforces the table's checks (lat/lon both or neither, ranges, accuracy ≥ 0),
-    and a record that violates them makes [Db.write] fail with a plugin error.
-*)
+val input : Observation.t -> (Tables.Observations.t, [`Full]) Postgrest.Input.t
+(** Every column of [Tables.Observations], in its declaration order;
+    [position = None] gives [lat], [lon] and [accuracy_m] null. The upsert's
+    columns and the outbox payload. *)
 
-val soft_delete : Observation_id.t -> at:Ptime.t -> Stmt.t
-(** See {!Stmt.soft_delete}. Its photos are untouched. *)
+val upsert : Observation.t -> Outbox.edit
+(** Writes the whole record ({!Stmt.upsert} of {!input}); always changes the
+    row, so {!Db.edit} appends one entry. Read back by [id]. Nothing is
+    validated here: SQLite enforces the table's checks (lat/lon both or neither,
+    ranges, accuracy ≥ 0) and foreign keys, and a record that violates them
+    makes {!Db.edit} fail with a plugin error. *)
+
+val soft_delete : Observation_id.t -> at:Ptime.t -> Outbox.edit
+(** {!Stmt.soft_delete}; read back by [id] whatever [deleted_at]. Appends an
+    entry (payload with [deleted_at = at]) when the observation was live,
+    nothing when it is absent or already deleted. Its photos are untouched. *)

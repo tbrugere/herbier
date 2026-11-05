@@ -1,9 +1,9 @@
-(* Helpers shared by test_store and test_queries: the sqlite3 CLI as a stand-in
-   for the Capacitor plugin (one process per call, parameters inlined by
-   position since the CLI cannot bind), migrations applied as Db.open_ applies
-   them, and the testables of the codec's types. A test that needs the CLI, or FTS5 in
-   it, fails when they are absent rather than skipping, so the search checks
-   cannot pass without running. *)
+(* Helpers shared by test_store, test_queries and test_outbox: the sqlite3
+   CLI as a stand-in for the Capacitor plugin (one process per call,
+   parameters inlined by position since the CLI cannot bind), migrations
+   applied as Db.open_ applies them, and the testables of the codec's types.
+   A test that needs the CLI, or FTS5 in it, fails when they are absent rather
+   than skipping, so the search checks cannot pass without running. *)
 
 (* ---------- small string helpers ---------- *)
 
@@ -248,8 +248,11 @@ let inline (s : Stmt.t) =
 let fk_on = "pragma foreign_keys = on;\n"
 
 (* Db.write: [Ok changes] or [Error stderr]. changes() counts the rows the
-   statement itself changed, not those its triggers changed, as the plugin's
-   run does. *)
+   statement itself changed, not those its triggers changed. The plugin's run
+   reports a total_changes() difference, which includes the rows changed by
+   triggers (the FTS triggers of migration 2 on plants), so exact counts can
+   differ on the device; "changes > 0" means the same on both sides, since a
+   statement that changes no row fires no trigger. *)
 let write db (s : Stmt.t) =
   match
     sqlite ~json:true db (fk_on ^ inline s ^ "select changes() as n;\n")
@@ -271,6 +274,43 @@ let write_ok what db s =
 
 let write_all_ok what db stmts =
   List.iter (fun s -> ignore (write_ok what db s : int)) stmts
+
+(* Every outbox row as sqlite3 -json prints it, in seq order. *)
+let outbox db = rows db "select * from outbox order by seq;\n"
+let outbox_count db = count db "select count(*) as n from outbox;\n"
+
+(* Db.edit without the transaction, one CLI process per statement: the edits
+   before a failing one stay written. *)
+let edit db edits =
+  let rec go appended = function
+    | [] -> Ok appended
+    | e :: rest -> (
+        match write db (Outbox.without_entry e) with
+        | Error err -> Error err
+        | Ok 0 -> go appended rest
+        | Ok _ -> (
+            let reread = Outbox.reread e in
+            match rows db (inline reread) with
+            | [row] -> (
+                match Outbox.append e (Yojson.Safe.to_string row) with
+                | Error err ->
+                    Alcotest.failf "Outbox.append on the row of %S: %s"
+                      reread.sql
+                      (Codec.error_to_string err)
+                | Ok s -> (
+                    match write db s with
+                    | Error err -> Error err
+                    | Ok _ -> go (appended + 1) rest))
+            | got ->
+                Alcotest.failf "read-back %S gave %d rows, expected one"
+                  reread.sql (List.length got)))
+  in
+  go 0 edits
+
+let edit_ok what db edits =
+  match edit db edits with
+  | Ok n -> n
+  | Error err -> Alcotest.failf "%s: an edit failed: %s" what err
 
 let string_of_row_error : Postgrest.Row.error -> string = function
   | `Missing -> "Missing"

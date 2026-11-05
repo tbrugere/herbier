@@ -82,9 +82,9 @@ let all_ok results =
     (fun r acc -> Result.bind r (fun x -> Result.map (List.cons x) acc))
     results (Ok [])
 
-let run {conn; database = _} sql values =
+let run ?(transaction = true) {conn; database = _} sql values =
   Cap_call.on conn "run"
-    [|Jv.of_string sql; params values|]
+    [|Jv.of_string sql; params values; Jv.of_bool transaction|]
     ~ok:(fun r ->
       Result.map
         (fun changed ->
@@ -93,6 +93,15 @@ let run {conn; database = _} sql values =
             last_id = Result.to_option (Cap_call.int_field r "changes.lastId");
           })
         (Cap_call.int_field r "changes.changes"))
+
+let begin_transaction {conn; database = _} =
+  Cap_call.on conn "beginTransaction" [||] ~ok:unit_ok
+
+let commit_transaction {conn; database = _} =
+  Cap_call.on conn "commitTransaction" [||] ~ok:unit_ok
+
+let rollback_transaction {conn; database = _} =
+  Cap_call.on conn "rollbackTransaction" [||] ~ok:unit_ok
 
 let query {conn; database = _} sql values =
   Cap_call.on conn "query"

@@ -174,8 +174,10 @@ let observations =
 let statements =
   List.concat
     [
-      List.map Plants.upsert plants;
-      List.map Tags.upsert tags;
+      List.map (fun p -> Outbox.without_entry (Plants.upsert p)) plants;
+      List.map (fun t -> Outbox.without_entry (Tags.upsert t)) tags;
       List.map Tags.upsert_plant_tag plant_tags;
-      List.map Observations.upsert observations;
+      List.map
+        (fun o -> Outbox.without_entry (Observations.upsert o))
+        observations;
     ]

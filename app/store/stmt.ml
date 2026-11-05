@@ -12,9 +12,20 @@ type 'a query =
 let query ~json row sql params = Query {stmt = {sql; params}; json; row}
 let stmt (Query {stmt; json = _; row = _}) = stmt
 let decode (Query {stmt = _; json; row}) text = Codec.decode ~json row text
-let col (c : (_, _, _) Postgrest.Col.t) v = (c.name, Codec.param c v)
 
-let upsert ~table columns =
+(* Postgrest.Input's [Optional] does not tie its value's mode to the
+   field's, so [`Full] still admits [Optional (_, Unspecified)]; it is
+   skipped, as Input.to_json skips it, so the upsert and the outbox payload
+   keep the same columns. *)
+let column : type table.
+    (table, [`Full]) Postgrest.Input.field -> (string * Codec.param) option =
+  function
+  | Mandatory (c, Value v) -> Some (c.name, Codec.param c v)
+  | Optional (c, Value v) -> Some (c.name, Codec.param c v)
+  | Optional (_, Unspecified) -> None
+
+let upsert ~table ({fields} : (_, [`Full]) Postgrest.Input.t) =
+  let columns = List.filter_map column fields in
   let names = List.map fst columns in
   let updates =
     List.filter_map
