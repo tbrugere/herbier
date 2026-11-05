@@ -29,6 +29,16 @@ val timestamp : Ptime.t -> string
     order in SQL ([ORDER BY updated_at], [updated_at > ?]). Sub-microsecond
     digits are truncated (Postgres rounds them; the app's clocks carry none). *)
 
+val text :
+  name:string ->
+  to_string:('a -> string) ->
+  of_string:(string -> 'a option) ->
+  'a Postgrest.Col.custom
+(** A [Custom] codec exchanging [to_string v] as a JSON string, the shape that
+    round-trips locally (see {!param}); its [of_json] is [of_string] of a JSON
+    string and [None] for any other JSON value. For the local-only columns; the
+    synced columns' codecs come with {!Tables}. *)
+
 type 'table json_column
 (** A result column holding JSON text, of the table ['table]. *)
 

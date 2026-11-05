@@ -110,10 +110,12 @@ app/
     db.ml                 open, exec, bind params over cap_sqlite; plugin JSON rows decoded with Postgrest.Row
     codec.ml              pure half of db.ml: Col values → bound params, plugin row text → Row (JSON text columns),
                           timestamp format; no Brr, tested natively in test/store/
-    schema.ml             ordered migrations, each a list of SQL statements; `user_version`
-    plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table (joins, group by day, place bucketing)
+    schema.ml             ordered migrations, each a list of SQL statements; `user_version`; migration 2 is the FTS5 index and its triggers
+    stmt.ml               statements as pure values (SQL, params, row decoder), run by db.ml (all, find, write)
+    plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
     outbox.ml  sync_state.ml  settings.ml   local-only tables, columns declared next to their queries
-    search.ml (FTS5)
+    search.ml             FTS5 query text (folding, endings) and the plant search query
+    dev_seed.ml           fixed development rows for M2, applied only by ui/dev/seed_check.ml
     files.ml              previews/, refthumbs/, tiles/ paths under Directory.Data
   sync/                   Supabase (§4 of architecture)
     auth.ml               Google id token → signInWithIdToken, session, auto-refresh
@@ -143,8 +145,9 @@ app/
     router.ml             route type, `S.bind` over the current screen, release on switch
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
-                          store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db;
-                          both ship in every build until the M2 router gates them to dev builds
+                          store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
+                          then searches and reads a setting; seed_check.ml (#dev/seed): applies store/dev_seed.ml
+                          to `herbier`; all ship in every build until the M2.17 router compiles them into dev builds only
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
@@ -303,8 +306,10 @@ test/
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
   refs/         native, alcotest: payload decoders and projection over fixtures/
-  store/        native, alcotest: app/store/{codec,schema,tables}.ml copied in, schema SQL and codec run
-                through the sqlite3 CLI (needs sqlite3); not the Capacitor plugin (that is #dev/store)
+  store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
+                the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
+                codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
+                (that is #dev/store)
   fixtures/     recorded API payloads only (gbif_<key>.json, wikidata_<key>.json, tela_<nn>.json,
                 inpn_<cd_nom>.json); never app rows
   js/           browser-side tests; added only if the UI spike's leak check fails
@@ -312,7 +317,10 @@ test/
 
 alcotest runs natively, in `dune test` on every CI job, on every library
 without a Brr dependency (`domain`, `postgrest`, `refs`), and on the Brr-free
-modules of `store` (`codec`, `schema`, `tables`). The rest of store, and sync,
+modules of `store` (`codec`, `schema`, `tables`, `stmt`, the per-table
+query modules, `settings`, `search`, `dev_seed`): they build statements as
+values and never run them, so their SQL runs natively through the sqlite3
+CLI. The rest of store (`db.ml`), and sync,
 photos, refs_io and geo, are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 

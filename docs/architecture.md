@@ -113,7 +113,11 @@ the mean of the positions. Details in `app/domain/places.mli`.
   - `outbox(seq, table_name, row_id, op, payload_json, created_at, attempts,
     last_error)` — the sync queue.
   - `sync_state(table_name, last_pulled_at)`.
-  - `settings(key, value)` — storage target, Wi-Fi-only, filters.
+  - `settings(key, value)` — storage target, Wi-Fi-only, filters. Keys are
+    typed (`store/settings.ml`, a GADT): `storage_target` (the
+    `photo_original_target` label) and `wifi_only` (`true` / `false`) so
+    far; a value that does not parse is a decode error, not a silent
+    default.
 - Local column types (`store/schema.ml`, migration 1): ids, lookup values
   and text are `text`; timestamps are `text` in one fixed-width UTC format with
   microseconds (`Codec.timestamp`), so text order is time order; `text[]`
@@ -153,6 +157,22 @@ the mean of the positions. Details in `app/domain/places.mli`.
 - Full-text search over names is done locally (SQLite FTS5 with
   `unicode61 remove_diacritics 2`), so search works offline. The Postgres
   side has the equivalent pg_trgm/unaccent index for any future web client.
+  Migration 2 creates `plant_search(plant_id unindexed, names, tags, places)`:
+  one document per live plant keyed by the plant's id (not its rowid, which a
+  `VACUUM`, a re-key or a table rebuild may renumber), holding its display
+  name, scientific name and aliases, the names of its live tags (through live links), and the
+  `place_label` / `place_derived` of its live observations. Triggers on
+  `plants`, `plant_tags`, `tags` and `observations` rebuild the documents of
+  the plants a write touches, so every writer (UI, seed, pull, cascade)
+  keeps the index right.
+  The query side (`Search.match_expression`) treats non-ASCII punctuation
+  (NBSP, « », ’, …, dashes) as spaces, drops terms of symbols only, folds
+  what was typed (ASCII case, Latin-1 accents), strips one French or Latin
+  ending (`-es -is -us -um -ae`, else `-e -s -a -i`, keeping at least 4
+  bytes) and prefix-matches each term
+  quoted, so "digitale" finds both "Digitale pourpre" and "Digitalis".
+  Results come in the Collection's order (`display_name collate nocase`),
+  not by rank.
 
 ## 4. Sync (outbox to Supabase)
 
@@ -175,7 +195,10 @@ reference` with:
   natural key and reuses its `id`, so push stays `on_conflict=id` for every
   table and the outbox keeps one `row_id` per row. A new row of these three
   tables gets an id derived from its natural key (UUID v5 of `plant_id` and
-  `tag_id` or `source`, under a fixed Herbier namespace), not a random one:
+  `tag_id` or `source`, under the Herbier namespace
+  `b85c6db9-9479-4fb1-af57-3ff6ad665b62`, of the name
+  `<table>/<plant_id>/<tag_id or source>` in canonical lowercase, e.g.
+  `plant_tags/<plant_id>/<tag_id>`: `Ids.Plant_tag_id.of_key`), not a random one:
   two installs that create the same link before syncing produce the same
   id, so the second push merges instead of failing on the unique constraint;
 - server-only columns, `owner_id` (defaulted to the caller) and

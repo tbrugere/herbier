@@ -25,6 +25,13 @@ let param : type a. ('table, a, 'optional) Col.t -> a -> param =
   | Nullable base -> (
       match v with None -> Null | Some v -> base_param base v)
 
+let text ~name ~to_string ~of_string : 'a Col.custom =
+  {
+    name;
+    to_json = (fun v -> `String (to_string v));
+    of_json = (function `String s -> of_string s | _ -> None);
+  }
+
 type 'table json_column = string
 
 let json (c : (_, Yojson.Safe.t, _) Col.t) = c.name

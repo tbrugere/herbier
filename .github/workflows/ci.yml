@@ -39,8 +39,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: opam exec -- dune build
-      - name: sqlite3 for test/store
-        run: command -v sqlite3 || (sudo apt-get update && sudo apt-get install -y sqlite3)
+      - name: sqlite3 for test/store (with FTS5, for the search index)
+        run: |
+          command -v sqlite3 || (sudo apt-get update && sudo apt-get install -y sqlite3)
+          sqlite3 :memory: 'pragma compile_options;' | grep -qx ENABLE_FTS5
       # Also fails when app/store/tables.ml is not what postgrest-codegen
       # generates from supabase/schema/catalog.json (the diff rule in
       # app/store/dune).

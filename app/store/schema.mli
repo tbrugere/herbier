@@ -21,7 +21,12 @@ val migrations : migration list
     creates the seven synced tables of [Tables] (same names and columns, minus
     the server-only [owner_id] and [observations.loc]), the four lookup tables
     their value columns reference (same names and values as on the server), and
-    the local tables [outbox], [sync_state], [settings]. *)
+    the local tables [outbox], [sync_state], [settings]. Version 2 creates the
+    FTS5 table [plant_search] of {!Search}, the triggers that keep it in sync
+    with [plants], [plant_tags], [tags] and [observations], and indexes the
+    plants already present. It needs FTS5 in the device's SQLite (the plugin's
+    SQLCipher build has it): without it, version 2 fails and {!Db.open_} returns
+    [Migration {version = 2; _}]. *)
 
 val latest : int
 (** Version of the last migration. *)

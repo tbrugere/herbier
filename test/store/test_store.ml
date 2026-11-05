@@ -3,7 +3,9 @@
    transaction as the plugin's executeSet runs it; it creates the tables of
    Tables and the lookup tables holding the domain's values, constraints as on
    the server) and the codec (parameters written by Codec.param read back
-   through Codec.decode). *)
+   through Codec.decode). Migration 2 (the FTS5 search table and its
+   triggers) is checked here for its objects and its upgrade paths; what the
+   triggers keep in the index is in test_queries. *)
 
 module Col = Postgrest.Col
 module Row = Postgrest.Row
@@ -12,152 +14,28 @@ module Photo = Herbier_domain.Photo
 module Source = Herbier_domain.Reference.Source
 module Status = Herbier_domain.Reference.Status
 module P = Tables.Plants
+module Cli = Sqlite_cli
 
-(* ---------- small string helpers ---------- *)
-
-let rec find_from ~sub s i =
-  let n = String.length sub in
-  match i + n > String.length s with
-  | true -> None
-  | false -> (
-      match String.sub s i n = sub with
-      | true -> Some i
-      | false -> find_from ~sub s (i + 1))
-
-let contains ~sub s = Option.is_some (find_from ~sub s 0)
-
-let split_on ~sep s =
-  let rec go i acc =
-    match find_from ~sub:sep s i with
-    | None -> List.rev (String.sub s i (String.length s - i) :: acc)
-    | Some j -> go (j + String.length sep) (String.sub s i (j - i) :: acc)
-  in
-  go 0 []
-
-let replace_all ~sub ~by s = String.concat by (split_on ~sep:sub s)
-
-(* ---------- the sqlite3 CLI ---------- *)
-
-let sqlite3 : string option Lazy.t =
-  lazy
-    (let exe =
-       match Sys.getenv_opt "SQLITE3" with
-       | Some p when p <> "" -> p
-       | Some _ | None -> "sqlite3"
-     in
-     let code =
-       Sys.command
-         (Filename.quote_command exe ~stdout:Filename.null ~stderr:Filename.null
-            ["-version"])
-     in
-     match code with 0 -> Some exe | _ -> None)
-
-let require_sqlite3 () =
-  match Lazy.force sqlite3 with
-  | Some exe -> exe
-  | None -> Alcotest.fail "sqlite3 not found (set SQLITE3 or put it on PATH)"
-
-let read_file path = In_channel.with_open_bin path In_channel.input_all
-let temp_files = ref []
-
-let temp_file suffix =
-  let path = Filename.temp_file "herbier_store_" suffix in
-  temp_files := path :: !temp_files;
-  path
-
-let () =
-  at_exit (fun () ->
-      List.iter
-        (fun p ->
-          match Sys.file_exists p with true -> Sys.remove p | false -> ())
-        !temp_files)
-
-(* A database path with no file behind it. *)
-let fresh_db () =
-  let path = temp_file ".db" in
-  Sys.remove path;
-  path
-
-(* Runs [sql] on [db] in one sqlite3 process (one connection), stopping at the
-   first error: [Ok stdout] or [Error stderr]. *)
-let sqlite ?(json = false) db sql =
-  let exe = require_sqlite3 () in
-  let input = temp_file ".sql" in
-  let out = temp_file ".out" in
-  let err = temp_file ".err" in
-  Out_channel.with_open_bin input (fun oc -> Out_channel.output_string oc sql);
-  let flags = match json with true -> ["-json"] | false -> [] in
-  let code =
-    Sys.command
-      (Filename.quote_command exe ~stdin:input ~stdout:out ~stderr:err
-         (["-bail"; "-batch"] @ flags @ [db]))
-  in
-  match code with 0 -> Ok (read_file out) | _ -> Error (read_file err)
-
-let exec_ok what db sql =
-  match sqlite db sql with
-  | Ok _ -> ()
-  | Error e -> Alcotest.failf "%s: sqlite3 failed: %s" what e
-
-(* Rows of a SELECT, as sqlite3 -json prints them (empty output: no row). *)
-let rows db sql : Yojson.Safe.t list =
-  match sqlite ~json:true db sql with
-  | Error e -> Alcotest.failf "query %S failed: %s" sql e
-  | Ok out -> (
-      match String.trim out with
-      | "" -> []
-      | text -> (
-          match Yojson.Safe.from_string text with
-          | `List rows -> rows
-          | other ->
-              Alcotest.failf "sqlite3 -json printed %s"
-                (Yojson.Safe.to_string other)))
-
-let field name (row : Yojson.Safe.t) =
-  match row with
-  | `Assoc kvs -> (
-      match List.assoc_opt name kvs with
-      | Some v -> v
-      | None ->
-          Alcotest.failf "no column %s in %s" name (Yojson.Safe.to_string row))
-  | other -> Alcotest.failf "not a row: %s" (Yojson.Safe.to_string other)
-
-let string_field name row =
-  match field name row with
-  | `String s -> s
-  | other ->
-      Alcotest.failf "column %s is %s, not text" name
-        (Yojson.Safe.to_string other)
-
-let int_field name row =
-  match field name row with
-  | `Int n -> n
-  | other ->
-      Alcotest.failf "column %s is %s, not an integer" name
-        (Yojson.Safe.to_string other)
-
-let user_version db =
-  match rows db "pragma user_version;\n" with
-  | [row] -> int_field "user_version" row
-  | _ -> Alcotest.fail "pragma user_version gave no single row"
-
-let names_of db sql = List.map (string_field "name") (rows db sql)
-
-let table_names db =
-  names_of db
-    "select name from sqlite_master where type = 'table' and name not like \
-     'sqlite_%' order by name;\n"
-
-let column_names db table =
-  List.sort String.compare
-    (names_of db (Printf.sprintf "pragma table_info(%s);\n" table))
-
-(* The CLI cannot bind, so parameters are inlined. *)
-let sql_literal : Codec.param -> string = function
-  | Null -> "NULL"
-  | Int n -> string_of_int n
-  | Float f -> Printf.sprintf "%.17g" f
-  | Text s -> "'" ^ replace_all ~sub:"'" ~by:"''" s ^ "'"
+let contains = Cli.contains
+let replace_all = Cli.replace_all
+let sqlite = Cli.sqlite
+let exec_ok = Cli.exec_ok
+let rows = Cli.rows
+let string_field = Cli.string_field
+let int_field = Cli.int_field
+let user_version = Cli.user_version
+let names_of = Cli.names_of
+let table_names = Cli.table_names
+let column_names = Cli.column_names
+let sql_literal = Cli.sql_literal
+let fresh_db = Cli.fresh_db
+let migrated_db = Cli.migrated_db
+let migrate = Cli.migrate
+let string_of_codec_error = Cli.string_of_codec_error
+let param = Cli.param
+let codec_error = Cli.codec_error
+let yojson = Cli.yojson
+let ptime = Cli.ptime
 
 (* ---------- schema facts ---------- *)
 
@@ -315,36 +193,6 @@ let all_tables =
     @ List.map fst local_tables
     @ List.map fst lookup_tables)
 
-(* The text sqlite3 runs for one executeSet of [statements]: each string
-   followed by its own ";" line (a string may end in a -- comment), all in one
-   transaction. *)
-let batch_text statements =
-  "begin;\n"
-  ^ String.concat "" (List.map (fun s -> s ^ "\n;\n") statements)
-  ^ "commit;\n"
-
-(* Applies the pending migrations the way Db.open_ does it: one transaction
-   per migration, its Schema.batch. *)
-let migrate db ~current =
-  match Schema.pending ~current with
-  | Ok ms ->
-      List.iter
-        (fun (m : Schema.migration) ->
-          exec_ok
-            (Printf.sprintf "migration %d" m.version)
-            db
-            (batch_text (Schema.batch m)))
-        ms
-  | Error (Schema.Unknown_version {found; latest}) ->
-      Alcotest.failf
-        "pending ~current:%d: Unknown_version {found = %d; latest = %d}" current
-        found latest
-
-let migrated_db () =
-  let db = fresh_db () in
-  migrate db ~current:0;
-  db
-
 (* ---------- Schema ---------- *)
 
 let string_of_pending = function
@@ -364,7 +212,7 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  Alcotest.(check int) "latest is 1" 1 Schema.latest;
+  Alcotest.(check int) "latest is 2" 2 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -381,6 +229,11 @@ let pending_at_latest () =
   Alcotest.(check string)
     "pending at latest is empty" "Ok []"
     (string_of_pending (Schema.pending ~current:Schema.latest))
+
+let pending_from_one () =
+  Alcotest.(check string)
+    "pending from 1 is migration 2 alone" "Ok [2]"
+    (string_of_pending (Schema.pending ~current:1))
 
 let pending_above_latest () =
   Alcotest.(check string)
@@ -433,11 +286,38 @@ let one_statement_per_string () =
 
 (* ---------- migrations run through sqlite3 ---------- *)
 
+let search_triggers =
+  List.sort String.compare
+    [
+      "plants_search_ai";
+      "plants_search_au";
+      "plants_search_ad";
+      "plant_tags_search_ai";
+      "plant_tags_search_au";
+      "plant_tags_search_ad";
+      "tags_search_au";
+      "observations_search_ai";
+      "observations_search_au";
+      "observations_search_ad";
+    ]
+
 let check_at_latest what db =
-  Alcotest.(check int) (what ^ ": user_version is 1") 1 (user_version db);
+  Alcotest.(check int)
+    (what ^ ": user_version is latest")
+    Schema.latest (user_version db);
   Alcotest.(check (list string))
     (what ^ ": the fourteen tables exist")
-    all_tables (table_names db)
+    all_tables (table_names db);
+  Alcotest.(check (list string))
+    (what ^ ": the search triggers exist")
+    search_triggers (Cli.trigger_names db);
+  Alcotest.(check int)
+    (what ^ ": plant_search is an fts5 table with the decided tokenizer")
+    1
+    (Cli.count db
+       "select count(*) as n from sqlite_master where name = 'plant_search' \
+        and lower(sql) like '%using fts5%' and lower(sql) like '%unicode61 \
+        remove_diacritics 2%';\n")
 
 let fresh_install () =
   let db = fresh_db () in
@@ -456,6 +336,18 @@ let upgrade_from_empty () =
   Alcotest.(check string)
     "reopening at the read version applies nothing" "Ok []"
     (string_of_pending (Schema.pending ~current:(user_version db)))
+
+let upgrade_from_version_1 () =
+  let db = fresh_db () in
+  (match Schema.migrations with
+  | m :: _ -> Cli.apply_migrations db [m]
+  | [] -> Alcotest.fail "no migration");
+  Alcotest.(check int)
+    "after migration 1 alone, user_version is 1" 1 (user_version db);
+  Alcotest.(check (list string))
+    "at version 1 there is no trigger" [] (Cli.trigger_names db);
+  migrate db ~current:1;
+  check_at_latest "upgrade from 1" db
 
 let columns () =
   let db = migrated_db () in
@@ -843,56 +735,6 @@ let outbox_defaults () =
     "attempts defaults to 0" [0; 0]
     (List.map (int_field "attempts") got)
 
-(* ---------- Codec testables ---------- *)
-
-let string_of_param : Codec.param -> string = function
-  | Null -> "Null"
-  | Int n -> Printf.sprintf "Int %d" n
-  | Float f -> Printf.sprintf "Float %.17g" f
-  | Text s -> Printf.sprintf "Text %S" s
-
-let equal_param (a : Codec.param) (b : Codec.param) =
-  match (a, b) with
-  | Null, Null -> true
-  | Int a, Int b -> Int.equal a b
-  | Float a, Float b -> Float.equal a b
-  | Text a, Text b -> String.equal a b
-  | (Null | Int _ | Float _ | Text _), _ -> false
-
-let param =
-  Alcotest.testable
-    (fun f p -> Format.pp_print_string f (string_of_param p))
-    equal_param
-
-let string_of_row_error : Row.error -> string = function
-  | `Missing -> "Missing"
-  | `NotAnObject -> "NotAnObject"
-  | `WrongType -> "WrongType"
-  | `UnexpectedNull -> "UnexpectedNull"
-  | `DummyRow -> "DummyRow"
-
-let string_of_codec_error : Codec.error -> string = function
-  | Invalid_row m -> Printf.sprintf "Invalid_row %S" m
-  | Invalid_json_column c -> Printf.sprintf "Invalid_json_column %S" c
-  | Row e -> "Row " ^ string_of_row_error e
-
-let codec_error =
-  Alcotest.testable
-    (fun f e -> Format.pp_print_string f (string_of_codec_error e))
-    (fun a b ->
-      String.equal (string_of_codec_error a) (string_of_codec_error b))
-
-let yojson =
-  Alcotest.testable
-    (fun f j -> Format.pp_print_string f (Yojson.Safe.to_string j))
-    Yojson.Safe.equal
-
-let ptime =
-  Alcotest.testable
-    (fun f t ->
-      Format.pp_print_string f (Ptime.to_rfc3339 ~frac_s:12 ~tz_offset_s:0 t))
-    Ptime.equal
-
 (* ---------- fixtures ---------- *)
 
 let time s =
@@ -961,6 +803,25 @@ let param_custom () =
        (Some (photo_id "00000000-0000-4000-8000-000000000001")));
   check_param "Nullable Custom None is Null" Null
     (Codec.param P.cover_photo_id None)
+
+let text_codec () =
+  let c =
+    Codec.text ~name:"flag" ~to_string:string_of_bool ~of_string:(function
+      | "true" -> Some true
+      | _ -> None)
+  in
+  let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal in
+  Alcotest.(check json)
+    "to_json is a JSON string" (`String "false") (c.to_json false);
+  Alcotest.(check (option bool))
+    "of_json reads a JSON string" (Some true)
+    (c.of_json (`String "true"));
+  Alcotest.(check (option bool))
+    "of_json rejects a JSON bool" None
+    (c.of_json (`Bool true));
+  Alcotest.(check (option bool))
+    "of_json rejects an unknown string" None
+    (c.of_json (`String "yes"))
 
 let param_json () =
   check_param "JSON [\"a\"] is Text [\"a\"]" (Text "[\"a\"]")
@@ -1335,6 +1196,7 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
+          case "pending from 1 is migration 2" pending_from_one;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
@@ -1342,9 +1204,14 @@ let () =
         ] );
       ( "Schema in sqlite3",
         [
-          case "a fresh install reaches version 1 with fourteen tables"
+          case
+            "a fresh install reaches the latest version with fourteen tables, \
+             the search table and its triggers"
             fresh_install;
-          case "an empty database upgrades to version 1" upgrade_from_empty;
+          case "an empty database upgrades to the latest version"
+            upgrade_from_empty;
+          case "a version 1 database upgrades to the latest version"
+            upgrade_from_version_1;
           case "each statement string is one SQL statement"
             one_statement_per_string;
           case "no column is named sql_deleted or last_modified"
@@ -1377,6 +1244,7 @@ let () =
           case "Bool is Int 1 or 0" param_bool;
           case "Str is Text verbatim" param_str;
           case "Custom is Text of its string" param_custom;
+          case "text builds a JSON-string Custom codec" text_codec;
           case "JSON is Text of its compact form" param_json;
           case "TimestampTz is Text in UTC microseconds" param_timestamp;
         ] );

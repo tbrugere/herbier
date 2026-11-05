@@ -14,7 +14,7 @@ end
 (* The canonical lowercase spelling is stored: it is what the store and the
    REST API exchange, so [to_string] is free, and string order is the
    order of the UUID bytes. *)
-module Uuid : S = struct
+module Uuid = struct
   type t = string
 
   (* Milliseconds since the POSIX epoch, without going through floats. *)
@@ -56,6 +56,20 @@ module Plant_id : S = Uuid
 module Observation_id : S = Uuid
 module Photo_id : S = Uuid
 module Tag_id : S = Uuid
-module Plant_tag_id : S = Uuid
+
+module Plant_tag_id = struct
+  include Uuid
+
+  (* Generated once for Herbier (architecture §4); changing it changes every
+     derived id. A constant, so Option.get only fails on a typo here. *)
+  let namespace =
+    Option.get (Uuidm.of_string "b85c6db9-9479-4fb1-af57-3ff6ad665b62")
+
+  let of_key ~plant ~tag =
+    Uuidm.to_string
+      (Uuidm.v5 namespace
+         ("plant_tags/" ^ Plant_id.to_string plant ^ "/" ^ Tag_id.to_string tag))
+end
+
 module Plant_ref_id : S = Uuid
 module Reference_id : S = Uuid

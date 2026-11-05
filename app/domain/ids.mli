@@ -55,6 +55,19 @@ module Plant_id : S
 module Observation_id : S
 module Photo_id : S
 module Tag_id : S
-module Plant_tag_id : S
+
+module Plant_tag_id : sig
+  include S
+
+  val of_key : plant:Plant_id.t -> tag:Tag_id.t -> t
+  (** The id of the [plant_tags] row for [(plant, tag)] (architecture §4): the
+      UUID v5 under the Herbier namespace [b85c6db9-9479-4fb1-af57-3ff6ad665b62]
+      of the name
+      ["plant_tags/" ^ Plant_id.to_string plant ^ "/" ^ Tag_id.to_string tag]
+      (canonical lowercase forms). Deterministic across installs and runs;
+      distinct pairs give distinct ids (barring SHA-1 collisions); swapping the
+      two uuids gives a different id. Never raises. *)
+end
+
 module Plant_ref_id : S
 module Reference_id : S

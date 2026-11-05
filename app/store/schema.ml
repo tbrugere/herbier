@@ -135,7 +135,95 @@ let v1 =
     {|create index plants_cover_photo_id_idx on plants (cover_photo_id)|};
   ]
 
-let migrations = [{version = 1; statements = v1}]
+(* Migration 2: the FTS5 index of Search (architecture §3). One document per
+   live plant, keyed by the plant's id in the unindexed plant_id column (not by
+   rowid: plants have no INTEGER PRIMARY KEY, so a VACUUM, a re-key or a table
+   rebuild may renumber their rowids). Triggers keep it in sync for every
+   writer (UI, seed, pulls, cascades); each one rebuilds the documents of the
+   plants its row touches.
+
+   The helpers below are frozen with migration 2: a database at version 2
+   holds the triggers they built. A later migration copies them, never edits
+   them. *)
+
+let names =
+  "p.display_name || ' ' || coalesce(p.scientific_name, '') || ' ' || \
+   coalesce((select group_concat(j.value, ' ') from \
+   json_each(iif(json_valid(p.aliases), p.aliases, '[]')) j where j.type = \
+   'text'), '')"
+
+let tags =
+  "coalesce((select group_concat(t.name, ' ') from plant_tags pt join tags t \
+   on t.id = pt.tag_id where pt.plant_id = p.id and pt.deleted_at is null and \
+   t.deleted_at is null), '')"
+
+let places =
+  "coalesce((select group_concat(coalesce(o.place_label, '') || ' ' || \
+   coalesce(o.place_derived, ''), ' ') from observations o where o.plant_id = \
+   p.id and o.deleted_at is null), '')"
+
+let documents where =
+  Printf.sprintf
+    "insert into plant_search (plant_id, names, tags, places)\n\
+    \    select p.id,\n\
+    \      %s,\n\
+    \      %s,\n\
+    \      %s\n\
+    \    from plants p\n\
+    \    where %s"
+    names tags places where
+
+(* The statements of a trigger body that rebuild the documents of the plants
+   matching [cond]. *)
+let reindex cond =
+  [
+    Printf.sprintf
+      "delete from plant_search\n\
+      \    where plant_id in (select p.id from plants p where %s)"
+      cond;
+    documents (Printf.sprintf "(%s) and p.deleted_at is null" cond);
+  ]
+
+let trigger ~name ~event ~table body =
+  Printf.sprintf "create trigger %s after %s on %s for each row\nbegin\n%send"
+    name event table
+    (String.concat "" (List.map (fun s -> "  " ^ s ^ ";\n") body))
+
+let v2 =
+  [
+    "create virtual table plant_search using fts5(\n\
+    \  plant_id unindexed, names, tags, places,\n\
+    \  tokenize = 'unicode61 remove_diacritics 2'\n\
+     )";
+    trigger ~name:"plants_search_ai" ~event:"insert" ~table:"plants"
+      (reindex "p.id = new.id");
+    trigger ~name:"plants_search_au" ~event:"update" ~table:"plants"
+      (reindex "p.id in (old.id, new.id)");
+    trigger ~name:"plants_search_ad" ~event:"delete" ~table:"plants"
+      ["delete from plant_search where plant_id = old.id"];
+    trigger ~name:"plant_tags_search_ai" ~event:"insert" ~table:"plant_tags"
+      (reindex "p.id = new.plant_id");
+    trigger ~name:"plant_tags_search_au" ~event:"update" ~table:"plant_tags"
+      (reindex "p.id in (old.plant_id, new.plant_id)");
+    trigger ~name:"plant_tags_search_ad" ~event:"delete" ~table:"plant_tags"
+      (reindex "p.id = old.plant_id");
+    (* A hard tag delete cascades to plant_tags, whose delete trigger then
+       fires: no tags_search_ad needed. *)
+    trigger ~name:"tags_search_au" ~event:"update" ~table:"tags"
+      (reindex "p.id in (select plant_id from plant_tags where tag_id = new.id)");
+    trigger ~name:"observations_search_ai" ~event:"insert" ~table:"observations"
+      (reindex "p.id = new.plant_id");
+    trigger ~name:"observations_search_au" ~event:"update" ~table:"observations"
+      (reindex "p.id in (old.plant_id, new.plant_id)");
+    trigger ~name:"observations_search_ad" ~event:"delete" ~table:"observations"
+      (reindex "p.id = old.plant_id");
+    (* Indexes the plants already present. *)
+    documents "p.deleted_at is null";
+  ]
+
+let migrations =
+  [{version = 1; statements = v1}; {version = 2; statements = v2}]
+
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0
 
 type error = Unknown_version of {found : int; latest : int}

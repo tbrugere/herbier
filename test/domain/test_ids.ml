@@ -218,9 +218,101 @@ module Plant_tag = Cases (Herbier_domain.Ids.Plant_tag_id)
 module Plant_ref = Cases (Herbier_domain.Ids.Plant_ref_id)
 module Reference = Cases (Herbier_domain.Ids.Reference_id)
 
+(* Plant_tag_id.of_key: the vectors are Python's uuid.uuid5 under the
+   Herbier namespace b85c6db9-9479-4fb1-af57-3ff6ad665b62,
+   not values computed by the function under test. *)
+module Key = struct
+  module Ids = Herbier_domain.Ids
+
+  let plant s =
+    match Ids.Plant_id.of_string s with
+    | Some x -> x
+    | None -> Alcotest.failf "Plant_id.of_string %S gave None" s
+
+  let tag s =
+    match Ids.Tag_id.of_string s with
+    | Some x -> x
+    | None -> Alcotest.failf "Tag_id.of_string %S gave None" s
+
+  let plant_a = "00000000-0000-4000-8000-00000000000a"
+  let plant_b = "00000000-0000-4000-8000-00000000000b"
+  let tag_c1 = "00000000-0000-4000-8000-0000000000c1"
+
+  let key ~plant:p ~tag:t =
+    Ids.Plant_tag_id.of_key ~plant:(plant p) ~tag:(tag t)
+
+  let str ~plant ~tag = Ids.Plant_tag_id.to_string (key ~plant ~tag)
+
+  let vectors () =
+    Alcotest.(check string)
+      "plant ...0a with tag ...c1 is the uuid5 vector"
+      "643fde24-732d-5b5d-865c-8caca18b4fcb"
+      (str ~plant:plant_a ~tag:tag_c1);
+    Alcotest.(check string)
+      "plant ...0b with tag ...c1 is the uuid5 vector"
+      "a4c3cf73-7a45-5c95-b6fc-7c723c420ef6"
+      (str ~plant:plant_b ~tag:tag_c1)
+
+  let letter_case () =
+    Alcotest.(check string)
+      "uppercase inputs give the id of the lowercase ones"
+      "643fde24-732d-5b5d-865c-8caca18b4fcb"
+      (str
+         ~plant:(String.uppercase_ascii plant_a)
+         ~tag:(String.uppercase_ascii tag_c1))
+
+  let deterministic () =
+    Alcotest.(check string)
+      "two calls with the same pair give the same id"
+      (str ~plant:plant_a ~tag:tag_c1)
+      (str ~plant:plant_a ~tag:tag_c1)
+
+  let version_5 () =
+    let s = str ~plant:plant_b ~tag:tag_c1 in
+    Alcotest.(check char) "version nibble is 5" '5' s.[14];
+    Alcotest.(check bool)
+      (Printf.sprintf "variant nibble %C is one of 8 9 a b" s.[19])
+      true
+      (String.contains "89ab" s.[19])
+
+  let swapped () =
+    Alcotest.(check bool)
+      "swapping the plant and tag uuids gives another id" false
+      (String.equal
+         (str ~plant:plant_a ~tag:tag_c1)
+         (str ~plant:tag_c1 ~tag:plant_a))
+
+  let distinct () =
+    let plants =
+      List.init 20 (Printf.sprintf "00000000-0000-4000-8000-%012x")
+    in
+    let tags = List.init 20 (Printf.sprintf "00000000-0000-4000-9000-%012x") in
+    let ids =
+      List.concat_map
+        (fun p -> List.map (fun t -> str ~plant:p ~tag:t) tags)
+        plants
+    in
+    Alcotest.(check int)
+      "400 distinct pairs give 400 distinct ids" 400
+      (List.length (List.sort_uniq String.compare ids))
+
+  let tests =
+    List.map
+      (fun (fact, f) -> ("Plant_tag_id.of_key: " ^ fact, `Quick, f))
+      [
+        ("matches the uuid5 test vectors", vectors);
+        ("ignores the letter case of its inputs", letter_case);
+        ("is deterministic", deterministic);
+        ("is a version 5 UUID", version_5);
+        ("depends on the order of plant and tag", swapped);
+        ("gives distinct ids to distinct pairs", distinct);
+      ]
+end
+
 let tests =
   List.concat
     [
+      Key.tests;
       Plant.tests "Plant_id";
       Observation.tests "Observation_id";
       Photo.tests "Photo_id";

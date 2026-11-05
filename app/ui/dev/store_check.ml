@@ -4,6 +4,9 @@ module Db = Herbier_store.Db
 module Codec = Herbier_store.Codec
 module Schema = Herbier_store.Schema
 module Plants = Herbier_store.Tables.Plants
+module Plant_queries = Herbier_store.Plants
+module Search = Herbier_store.Search
+module Settings = Herbier_store.Settings
 module Row = Postgrest.Row
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Photo_id = Herbier_domain.Ids.Photo_id
@@ -84,12 +87,14 @@ let check_tables log db =
     (expect print_names table_names
        (Db.query db ~json:[] name_row
           "select name from sqlite_master where type = 'table' and name not \
-           like 'sqlite_%' order by name"
+           like 'sqlite_%' and name not like 'plant_search%' order by name"
           []))
 
 let check_version log db =
-  step log "user_version = 1" ~detail:no_detail
-    (expect string_of_int 1 (Db.user_version db))
+  step log
+    (Printf.sprintf "user_version = %d" Schema.latest)
+    ~detail:no_detail
+    (expect string_of_int Schema.latest (Db.user_version db))
 
 type plant = {
   id : Plant_id.t;
@@ -233,13 +238,17 @@ let full () =
     deleted_at = Some (time "2026-10-28T14:00:00.5Z");
   }
 
+(* At least one row, not exactly one: the plugin's count includes the rows
+   triggers write (an insert into plants also writes plant_search), so the
+   steps after a write read its row back instead. *)
 let expect_changed fut =
   Fut.map
     (fun r ->
       Result.bind r (function
-        | 1 -> Ok 1
+        | n when n >= 1 -> Ok n
         | n ->
-            Error (Mismatch {expected = "1 row changed"; got = string_of_int n})))
+            Error
+              (Mismatch {expected = ">= 1 row changed"; got = string_of_int n})))
     (store fut)
 
 let expect_plants expected fut =
@@ -274,15 +283,69 @@ let round_trip log db =
   in
   ()
 
+let search_plant display_name scientific_name : Herbier_domain.Plant.t =
+  {
+    id = Plant_id.fresh ();
+    display_name;
+    aliases = [];
+    scientific_name;
+    authorship = None;
+    gbif_key = None;
+    notes = "";
+    notes_updated_at = None;
+    cover_photo_id = None;
+    created_at = time "2026-10-28T15:00:00Z";
+    updated_at = time "2026-10-28T15:00:00Z";
+    deleted_at = None;
+  }
+
+let display_names =
+  List.map (fun (p : Herbier_domain.Plant.t) -> p.display_name)
+
+(* Through the real plugin, this shows that migration 2's FTS5 table and
+   triggers exist on the device and keep the index in sync. *)
+let check_search log db =
+  let open Fut.Result_syntax in
+  let* () =
+    step log "upsert 2 plants" ~detail:no_detail
+      (store
+         (Db.write_all db
+            [
+              Plant_queries.upsert
+                (search_plant "Digitale pourpre" (Some "Digitalis purpurea"));
+              Plant_queries.upsert (search_plant "Digitalis" None);
+            ]))
+  in
+  let found =
+    match Search.plants "digitale" with
+    | None -> Fut.ok []
+    | Some q -> Fut.map (Result.map display_names) (Db.all db q)
+  in
+  step log "search \"digitale\""
+    ~detail:(fun names -> Some (print_names names))
+    (expect print_names ["Digitale pourpre"; "Digitalis"] found)
+
+let check_settings log db =
+  let open Fut.Result_syntax in
+  let* (_ : int) =
+    step log "settings: wifi_only := true" ~detail:no_detail
+      (expect_changed (Db.write db (Settings.set Wifi_only true)))
+  in
+  step log "settings: wifi_only = true" ~detail:no_detail
+    (expect
+       (function None -> "none" | Some b -> string_of_bool b)
+       (Some true)
+       (Db.find db (Settings.get Wifi_only)))
+
 type count
 
 let count_row : (count, int) Row.t = Row.col {ty = Not_Null Integer; name = "n"}
 
 let check_count log db =
-  step log "2 plants rows" ~detail:no_detail
+  step log "4 plants rows" ~detail:no_detail
     (expect
        (fun rows -> String.concat ", " (List.map string_of_int rows))
-       [2]
+       [4]
        (Db.query db ~json:[] count_row "select count(*) as n from plants" []))
 
 (* Runs [f db], then closes [db] when [f] failed, keeping [f]'s error: the
@@ -449,6 +512,10 @@ let fresh_then_reuse log database =
   let* db = fresh log database in
   heading log "round-trip";
   let* () = closing_on_error db (round_trip log) in
+  heading log "search";
+  let* (_ : string list) = closing_on_error db (check_search log) in
+  heading log "settings";
+  let* (_ : bool option) = closing_on_error db (check_settings log) in
   heading log "reopen";
   reopen log db database
 

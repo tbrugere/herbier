@@ -25,7 +25,7 @@ let error_to_string = function
       Printf.sprintf "database at version %d after migrating, expected %d" found
         expected
   | Unexpected_rows {sql; count} ->
-      Printf.sprintf "%S returned %d rows, expected 1" sql count
+      Printf.sprintf "%S returned %d rows, expected one" sql count
 
 let plugin fut = Fut.map (Result.map_error (fun e -> Plugin e)) fut
 
@@ -47,20 +47,23 @@ let run db sql params =
        (Result.map (fun {Cap_sqlite.changed; last_id = _} -> changed))
        (Cap_sqlite.run db sql (List.map value params)))
 
-let decode_rows ~json spec sql rows =
+let decode_rows decode sql rows =
   let rec go acc i = function
     | [] -> Ok (List.rev acc)
     | text :: rest -> (
-        match Codec.decode ~json spec text with
+        match decode text with
         | Ok v -> go (v :: acc) (i + 1) rest
         | Error error -> Error (Decode {sql; row = i; error}))
   in
   go [] 0 rows
 
-let query db ~json spec sql params =
+let all db q =
+  let {Stmt.sql; params} = Stmt.stmt q in
   Fut.map
-    (fun r -> Result.bind r (decode_rows ~json spec sql))
+    (fun r -> Result.bind r (decode_rows (Stmt.decode q) sql))
     (plugin (Cap_sqlite.query db sql (List.map value params)))
+
+let query db ~json spec sql params = all db (Stmt.query ~json spec sql params)
 
 type pragma
 
@@ -121,3 +124,26 @@ let open_ ~database =
           Error e)
 
 let close db = plugin (Cap_sqlite.close db)
+
+let find db q =
+  let {Stmt.sql; params = _} = Stmt.stmt q in
+  Fut.map
+    (fun r ->
+      Result.bind r (function
+        | [] -> Ok None
+        | [v] -> Ok (Some v)
+        | _ :: _ :: _ as rows ->
+            Error (Unexpected_rows {sql; count = List.length rows})))
+    (all db q)
+
+let write db {Stmt.sql; params} = run db sql params
+
+let write_all db stmts =
+  let open Fut.Result_syntax in
+  let rec go = function
+    | [] -> Fut.ok ()
+    | stmt :: rest ->
+        let* (_ : int) = write db stmt in
+        go rest
+  in
+  go stmts

@@ -1,0 +1,77 @@
+module Db = Herbier_store.Db
+module Dev_seed = Herbier_store.Dev_seed
+module Plants = Herbier_store.Plants
+module Tags = Herbier_store.Tags
+module Observations = Herbier_store.Observations
+module Search = Herbier_store.Search
+module Plant = Herbier_domain.Plant
+
+(* Duplicated from storage_check: the dev pages share no module. *)
+let append log text = Brr.El.append_children log [Brr.El.div [Brr.El.txt' text]]
+
+let step log label ~detail fut =
+  Fut.map
+    (fun r ->
+      (match r with
+      | Ok v -> (
+          match detail v with
+          | "" -> append log (label ^ ": ok")
+          | d -> append log (label ^ ": ok · " ^ d))
+      | Error e -> append log (label ^ ": " ^ Db.error_to_string e));
+      r)
+    fut
+
+let count v = string_of_int (List.length v)
+
+let names plants =
+  String.concat ", " (List.map (fun (p : Plant.t) -> p.display_name) plants)
+
+let search db =
+  match Search.plants "digitale" with
+  | None -> Fut.ok []
+  | Some q -> Db.all db q
+
+let steps log db =
+  let open Fut.Result_syntax in
+  let* () =
+    step log "apply seed"
+      ~detail:(fun () ->
+        Printf.sprintf "%d statements" (List.length Dev_seed.statements))
+      (Db.write_all db Dev_seed.statements)
+  in
+  let* (_ : Plant.t list) =
+    step log "live plants" ~detail:count (Db.all db Plants.list)
+  in
+  let* (_ : Herbier_domain.Tag.t list) =
+    step log "live tags" ~detail:count (Db.all db Tags.list)
+  in
+  let* (_ : Herbier_domain.Observation.t list) =
+    step log "live observations" ~detail:count (Db.all db Observations.list)
+  in
+  let+ (_ : Plant.t list) =
+    step log "search \"digitale\"" ~detail:names (search db)
+  in
+  ()
+
+let run log =
+  let open Fut.Syntax in
+  let* opened =
+    step log "open herbier" ~detail:(fun _ -> "") (Db.open_ ~database:"herbier")
+  in
+  match opened with
+  | Error (_ : Db.error) -> Fut.return (append log "done")
+  | Ok db ->
+      let* (_ : (unit, Db.error) result) = steps log db in
+      let+ (_ : (unit, Db.error) result) =
+        step log "close" ~detail:(fun () -> "") (Db.close db)
+      in
+      append log "done"
+
+let el () =
+  let log =
+    Brr.El.div
+      ~at:[Brr.At.v (Jstr.v "role") (Jstr.v "log")]
+      [Brr.El.h1 [Brr.El.txt' "Seed check"]]
+  in
+  Fut.await (run log) Fun.id;
+  log

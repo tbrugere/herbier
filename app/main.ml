@@ -13,4 +13,5 @@ let () =
   match Jstr.to_string (Uri.fragment (Window.location G.window)) with
   | "dev/storage" -> mount (Herbier_ui.Dev.Storage_check.el ())
   | "dev/store" -> mount (Herbier_ui.Dev.Store_check.el ())
+  | "dev/seed" -> mount (Herbier_ui.Dev.Seed_check.el ())
   | _ -> mount (title ())
