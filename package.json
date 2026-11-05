@@ -6,6 +6,10 @@
   "scripts": {
     "web": "dune build @web",
     "dev": "scripts/dev.sh",
+    "emu:start": "scripts/emulator.sh start",
+    "emu:stop": "scripts/emulator.sh stop",
+    "emu:install": "scripts/emulator.sh install",
+    "emu:open": "scripts/emulator.sh open",
     "release": "scripts/release.sh",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

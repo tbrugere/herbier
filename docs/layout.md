@@ -29,7 +29,7 @@ herbier/
   android/                Capacitor Android project, generated then committed (§4)
   supabase/               config.toml, migrations/, schema/, scripts/, tests/ (§5)
   test/                   OCaml tests, native (§6)
-  scripts/                dev loop, icon subset, PMTiles extract, release (§7)
+  scripts/                dev loop, emulator, icon subset, PMTiles extract, release (§7)
   docs/                   stack, architecture, this file, handoff, research, notes
   .github/workflows/      ci.yml, android.yml (§7)
 ```
@@ -312,7 +312,11 @@ the spikes (architecture §10) and manual runs cover them.
   `subset-icons.sh` (Material Symbols subset from `icons.txt`),
   `pmtiles-extract.sh` (region extract, v2), `release.sh` (`dune build
   @web`, `cap sync`, `gradle assembleRelease`), `catalog-dump.sh`
-  (`supabase/schema/catalog.json` from the local database, §5).
+  (`supabase/schema/catalog.json` from the local database, §5),
+  `emulator.sh` (headless Android emulator: create the AVD, boot, debug
+  install, open a dev page; skill `.claude/skills/emulator/`) and
+  `webview.mjs` (a dependency-free DevTools Protocol client for the app's
+  WebView: eval, page text, screenshot).
 - `ci.yml`: `dune build`, `dune test`, the formatting check (`dune build @fmt`,
   ocamlformat installed from opam on the runner), `dune build @web` and checks on
   its output. From M1.9: `dune test` also checks `app/store/tables.ml` against the catalog, and `schema-dump.py --check`,
