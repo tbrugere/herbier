@@ -7,7 +7,9 @@ model: opus
 ---
 
 Implement `$ARGUMENTS` from `docs/plan.md`. Be fully autonomous: the only point where the
-user intervenes is after the draft PR is posted. Never ask the user to validate the plan.
+user intervenes is after the draft PR is posted. Never ask the user to validate the plan. If the
+user asks for **fully autonomous** work, also follow "Fully autonomous mode" below: merge PRs
+yourself when ready, stop only for their code or for an unsatisfactory hack.
 
 Hard rules, from the repo:
 
@@ -21,6 +23,35 @@ Hard rules, from the repo:
   and species in the handoff are placeholders.
 - **"How do I" is a question**, not an instruction (memory rule). This skill is only invoked on an
   explicit "implement ...".
+
+# Fully autonomous mode
+
+Applies only when the user explicitly asks to work **fully autonomously** (e.g. "do M2 fully
+autonomously"). It changes who merges and when to stop; everything else in this skill holds.
+
+- **Merge when ready.** No need to wait for the user to mark a PR ready. A PR is ready when its
+  plan step's "Done:" criterion is met; the review lenses and the second scope / comment-hygiene
+  pass are clean, with pushbacks written in the PR; the local checks pass on its head (GitHub
+  Actions is disabled: `dune build`, `dune test`, `dune build @web`, `dune build @fmt`, plus local
+  Supabase `db reset` / `schema-dump.py --check` / `scripts/catalog-dump.sh --check` / `smoke.sql`
+  when `supabase/` or the codegen changed); and its device checks, if the step has any, passed on
+  the emulator (`emulator` skill) with the results posted on the PR. Then squash-merge (the title
+  becomes the commit subject), delete the branch after retargeting the next PR to `main`, rebase
+  the rest of the stack, and carry on with the next step.
+- **Fix without asking.** Defects found by tests, reviews or device checks inside the milestone's
+  scope are fixed on the branch where they belong, re-verified, pushed.
+- **Stop and ask only in two cases**:
+  1. **The change belongs to the user**: the human-written core of `lib/postgrest/` (its top-level
+     `.ml`/`.mli`). Describe the exact change needed, park the work that depends on it, continue
+     with everything that does not.
+  2. **The only solution found is an unsatisfactory hack**: something that cannot be solved
+     elegantly (e.g. writing a "SQL contract" and a fake splitter to survive a plugin's statement
+     splitting, when the right answer was another plugin API). Stop that part, explain the problem
+     and the options considered, and brainstorm with the user. Continue on unrelated work.
+- **Still never**: force-push `main`, bypass the local checks, or merge something whose checks did
+  not run ("no checks reported" is not a pass).
+- **Report** as usual (step 11 and the background report), listing what was merged, with links,
+  and what is parked and why.
 
 # 0. Workspace
 
