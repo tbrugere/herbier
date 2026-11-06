@@ -26,6 +26,25 @@ Lenses:
 
 # Workflow
 
+**The structure is the point of this skill. Three layers of agents, never collapsed:**
+
+1. **One lens agent per selected lens**, all in parallel (step 5).
+2. **One grouping agent** that reads every lens report and turns them into one list of distinct
+   findings, each a single checkable claim (step 6a).
+3. **One verify agent per finding**, all in parallel, each independent of the lens that raised
+   it (step 6b). Every finding is verified, not only the contested ones.
+
+The orchestrator dispatches and calibrates; it never reviews code itself and never verifies a
+finding itself, and no lens verifies its own findings. A review where one agent applies the
+lenses in turn, or where the reviewer writes its own "verified" section, is not this review:
+its findings are unfiltered and fixes made from them may fix problems that do not exist.
+
+If the orchestrator cannot spawn agents (for example it is itself an agent started by a
+Workflow script, which has no Agent tool), it must not fall back to doing the lenses itself:
+stop and report that the caller has to dispatch the three layers. A Workflow script runs this
+skill by calling `agent()` for each lens, then the grouping agent, then one verifier per
+finding (see `.claude/skills/implement-workflow/SKILL.md`, "Review inside a Workflow").
+
 ## 1. Setup
 
 - Create `.review-report/` if missing; delete any existing files inside it (fresh run).
@@ -90,13 +109,19 @@ context file; mode, base, `HEAD_OID`; the subset of changed files in its scope; 
 surface low-confidence findings marked `low` with the unverified assumption named; the
 instruction to write only `.review-report/<lens>.md`. Lenses review; they never edit source.
 
-## 6. Verify contested or unsupported findings
+## 6. Group, then verify every finding
 
-Read every report. For a disagreement between two lenses, or a finding that rests on an
-asserted fact with no reference (library behaviour, PostgREST or Postgres behaviour, Capacitor
-plugin behaviour, dune semantics), launch a [verify.md](verify.md) agent per claim, in parallel.
-Fold the verdicts back: `confirmed` keeps the finding with the evidence merged in; `refuted`
-drops it and notes it was checked; `uncertain` becomes a question for the author.
+**6a. Group.** One agent reads every report in `.review-report/` and writes
+`.review-report/_findings.md`: the distinct findings, duplicates across lenses merged (keep
+every lens that raised it), each with an id, `file:line`, the claim in one sentence, the
+trigger, the lens's evidence and suggested fix, and the lens's severity. Lens disagreements
+become one finding stating both sides. Questions for the author are listed apart.
+
+**6b. Verify.** One [verify.md](verify.md) agent per finding, all in parallel, none of them a
+lens that raised it. Each is told to try to refute the claim and to default to `uncertain`
+without primary evidence. Fold the verdicts back: `confirmed` keeps the finding with the
+evidence merged in; `refuted` drops it and notes it was checked; `uncertain` becomes a
+question for the author. Only confirmed findings are fixed.
 
 ## 7. Calibrate severity
 

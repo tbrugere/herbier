@@ -164,9 +164,29 @@ you did not write).
 
 # 6. Review
 
-Run `/review` in Mode A against `origin/main` (or the base branch). It launches the lens agents
-that match the changed paths, including `scope` and `comment-hygiene`, verifies contested
-findings and calibrates severity. Do not fix while it runs.
+Run `/review` in Mode A against `origin/main` (or the base branch). Its structure is the main
+quality gate of this skill and must not be collapsed: **one agent per lens in parallel, then
+one grouping agent, then one verify agent per finding in parallel**. Only verified
+(`confirmed`) findings go to step 7; `uncertain` ones become questions for the PR. Never let the
+agent that wrote the code, the orchestrator or a lens verify findings. Do not fix while it runs.
+
+## Review inside a Workflow
+
+Agents started by a Workflow script cannot start agents. So when steps run through the
+Workflow tool (section 0b), **never tell a workflow agent to "run /review"**: it would apply
+every lens and verify its own findings alone. The script itself dispatches the three layers:
+
+```js
+// per step: gate computed beforehand (changed paths x the table in review/SKILL.md)
+const reports = await parallel(lenses.map(l => () => agent(lensPrompt(step, l), {phase: 'Review'})))
+const {findings} = await agent(groupPrompt(step), {phase: 'Group', schema: FINDINGS})
+const verdicts = await parallel(findings.map(f => () =>
+  agent(verifyPrompt(step, f), {phase: 'Verify', schema: VERDICT})))
+// fix agent gets only the confirmed findings, the uncertain ones as questions
+```
+
+Use `pipeline()` across steps so one step's verifiers run while another's lenses still do.
+Size it honestly in the `meta` description: lenses × steps + steps + findings agents.
 
 # 7. Fix
 
