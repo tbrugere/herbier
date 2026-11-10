@@ -14,4 +14,5 @@ let () =
   | "dev/storage" -> mount (Herbier_ui.Dev.Storage_check.el ())
   | "dev/store" -> mount (Herbier_ui.Dev.Store_check.el ())
   | "dev/seed" -> mount (Herbier_ui.Dev.Seed_check.el ())
+  | "dev/refs-http" -> mount (Herbier_ui.Dev.Refs_http_check.el ())
   | _ -> mount (title ())

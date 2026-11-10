@@ -348,10 +348,13 @@ gbif_key
 - Distribution map on the species page: GBIF density tiles
   `v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=` over the base
   map; attribution GBIF.
-- All requests carry `User-Agent: Herbier/<version> (<contact>)`; Wikimedia
-  without it is limited to 10 req/min.
-- Reference fetches go through a small **rate-limited queue** (one source at
-  a time, ≤3 concurrent overall) since we call several public APIs at once.
+- Wikimedia requests carry `Api-User-Agent: Herbier/<version> (<contact>)`;
+  Wikimedia without it is limited to 10 req/min. The WebView drops a
+  page-set `User-Agent`, so the other sources see the WebView's own, and they
+  get no custom header: GBIF refuses CORS preflights.
+- Reference fetches go through a small **rate-limited queue** (at most one
+  request in flight per source, ≤3 overall) since we call several public
+  APIs at once.
 
 ## 7. Link interception and resolution
 

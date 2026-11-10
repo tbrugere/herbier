@@ -47,8 +47,9 @@ Dev pages print one line per step: `<label>: ok`, `<label>: ok · <detail>`,
 or `<label>: <error>`, where the error is the plugin's code and message
 verbatim (`OS-PLUG-FILE-0008: …`) or `expected …, got …`. A group stops at
 its first failure, so the groups after it in the same chain are absent from
-the page, not passed: report them as not reached. `done` is printed when
-every group has settled; `open dev/…` waits for it (2 min at most), other
+the page, not passed: report them as not reached. `done` (or
+`done: <summary>`, e.g. `done: 15 ok, 2 errors`) is printed when every group
+has settled; `open dev/…` waits for it (2 min at most), other
 fragments wait until the text has not changed for 2 s.
 
 The raw plugins are reachable from `webview eval` as `Capacitor.Plugins.*`
