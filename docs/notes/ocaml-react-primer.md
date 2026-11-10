@@ -152,11 +152,11 @@ mean different things in a dataflow graph:
 - `bind`, `switch`: a **dynamic** graph. Each change of the outer signal
   runs your function, builds a new inner graph and abandons the old one
   (a switch may trigger a further update step in the same instant). Use it
-  for structural changes only, in practice screen navigation. On
-  js_of_ocaml the abandoned inner graph is not collected by itself, so a
-  `bind` on a frequently changing value leaks one graph per change unless
-  its bindings are released; at screen granularity that is one `release`
-  per navigation.
+  for structural changes only, in practice screen navigation. The
+  abandoned inner graph keeps running until the garbage collector gets to
+  it (§5), so a `bind` on a frequently changing value piles up live graphs
+  unless its bindings are released; at screen granularity that is one
+  `release` per navigation.
 
 react 1.2.2 ships no binding operators or infix module. Define them once:
 
@@ -250,16 +250,21 @@ let () = Gc.full_major (); List.iter set_x [2; 2; 3]
 On native OCaml, a primitive holds its dependents through **weak** references,
 so a derived signal nobody references is collected and silently stops.
 
-**On js_of_ocaml this reverses.** JavaScript has no weak arrays, so
-js_of_ocaml gives weak arrays strong semantics. The documentation of `stop`
-says so: "The `strong` argument should only be used on platforms where weak
-arrays have a strong semantics (i.e. JavaScript)." Consequences for Herbier:
+**js_of_ocaml keeps the weak semantics.** The `stop` documentation says
+"The `strong` argument should only be used on platforms where weak arrays
+have a strong semantics (i.e. JavaScript)", but that predates `WeakRef`:
+js_of_ocaml 6.4.1 (the locked version) stores a weak array's entries as
+`WeakRef`s whenever the engine has them (`runtime/js/weak.js`,
+`caml_ephe_set_key`), and the Android WebView does. Consequences for Herbier:
 
-- Nothing is ever collected by accident. A derived signal keeps updating as
-  long as its source exists, even if nothing else references it. Silent
-  stops are not our bug class.
-- **Leaks are.** Every binding created for a screen keeps running, and keeps
-  its DOM nodes alive, after the screen is gone, unless stopped explicitly:
+- **Silent stops are a bug class.** A binding nobody references may be
+  collected and stop updating its element, at whatever moment the collector
+  runs. A screen keeps its bindings in a list it holds (in practice, the
+  closure that releases them).
+- **So are leaks, until the collector runs.** A binding still referenced
+  keeps running, and keeps its DOM nodes alive, after the screen is gone;
+  one no longer referenced keeps running until it is collected. Teardown
+  stops them explicitly and at once:
 
 ```ocaml
 S.stop : ?strong:bool -> 'a signal -> unit
@@ -274,13 +279,19 @@ E.stop : ?strong:bool -> 'a event -> unit
 
 - Caveat from the docs: "if direct references are kept on an intermediate
   event or signal of the reactive system it may suddenly stop updating if
-  all its dependents were strongly stopped." So strongly stop only the leaf
-  bindings you created for a screen, never a shared intermediate signal.
+  all its dependents were strongly stopped." Stopping a leaf is enough to
+  trigger it: the strong stop walks the leaf's producers and stops each
+  derived one left without dependents, recursively. So strongly stop only the
+  leaf bindings you created for a screen, and make whatever must outlive the
+  screen a primitive (never stopped) or give it a dependent that is never
+  stopped (`Rb.anchor`, `Rb.anchor_list`). A reactive list always has a
+  derived event inside, even one from `RList.create`, so a list that outlives
+  the screen binding it needs an anchor.
 
 **Therefore the glue rule is:** every DOM binding returns a handle, the
 screen collects its handles, and leaving the screen calls
-`S.stop ~strong:true` / `E.stop ~strong:true` on each. That is the `keep`
-and teardown in `rb.ml`. (`S.retain` exists but only "keeps a reference to
+`S.stop ~strong:true` / `E.stop ~strong:true` on each. That is the binding
+list and `release` in `rb.ml`. (`S.retain` exists but only "keeps a reference to
 the closure `c` in `e`"; it is a native-side trick and not what we need.)
 
 ## 6. How the glue module maps onto this
@@ -289,21 +300,23 @@ the closure `c` in `e`"; it is a native-side trick and not what we need.)
 (* app/ui/rb.ml — react over Brr *)
 type binding                      (* opaque: the stoppable node *)
 val text     : El.t -> string signal -> binding
-val attr     : El.t -> At.name -> string signal -> binding
+val attr     : El.t -> string -> string option signal -> binding  (* None removes *)
 val class_   : El.t -> string -> bool signal -> binding
 val style    : El.t -> string -> string signal -> binding
 val children : El.t -> El.t list signal -> binding
 val rlist    : El.t -> ('a -> El.t) -> 'a ReactiveData.RList.t -> binding
 val ev       : El.t -> 'a Ev.type' -> 'a Ev.t event * binding
 val release  : binding list -> unit      (* strong stop, in one place *)
+val anchor   : 'a signal -> anchor       (* keeps a shared derived signal alive *)
+val anchor_list : 'a ReactiveData.RList.t -> anchor
 ```
 
 Each of `text`, `attr`, `class_`, `style`, `children` is `S.map` with a Brr
 call as the side effect, returning the mapped signal as the binding. `ev`
 is `E.create` whose sender is called from a Brr `Ev.listen` callback; the
 listener id is kept in the binding so `release` can `Ev.unlisten` too.
-`rlist` consumes ReactiveData patches (`I` insert, `R` remove, `U` update,
-`X` move) and applies them with `El.insert_siblings` / `El.remove`.
+`rlist` is an `E.map` over the list's patch events (`I` insert, `R` remove,
+`U` update, `X` move by an offset) and applies them with `El.insert_siblings` / `El.remove`.
 
 A screen is a function that builds its DOM, creates its bindings, and
 returns the root element plus the binding list. Navigation is
@@ -321,7 +334,7 @@ type 'a p =
   | I of int * 'a     (* insert v at position i *)
   | R of int          (* remove position i *)
   | U of int * 'a     (* replace position i with v *)
-  | X of int * int    (* swap i and j *)
+  | X of int * int    (* move position i by an offset *)
 type 'a patch = 'a p list   (* sequential; indices relative to the state after the previous step *)
 ```
 

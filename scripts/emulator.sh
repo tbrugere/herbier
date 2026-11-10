@@ -9,7 +9,7 @@
 #   scripts/emulator.sh kill-app         force-stop the app
 #   scripts/emulator.sh forward          forward the app's WebView devtools socket, print the port
 #   scripts/emulator.sh open [fragment]  launch, forward, reload the page at #<fragment> (none: no
-#                                        fragment), wait until it is done (dev/* pages: a final
+#                                        fragment), wait until it is done (dev/* pages: a
 #                                        "done" or "done: <summary>" line; others: text
 #                                        unchanged for 2 s), print it
 #   scripts/emulator.sh webview <cmd>... run scripts/webview.mjs on the forwarded port
@@ -187,11 +187,12 @@ cmd_open() {
   webview eval "history.replaceState(null, '', location.pathname + location.search + '$hash'); location.reload(); true" >/dev/null
   sleep 1
   webview wait-for "document.readyState === 'complete' && location.hash === '$hash'" 20000 >/dev/null
-  # Dev pages end with a "done" line (or "done: <summary>") once every group
-  # has settled; a slow step can leave the text unchanged for seconds before
+  # Dev pages print a "done" line (or "done: <summary>") once every group
+  # has settled, last in their log; an interactive page has its controls
+  # below it. A slow step can leave the text unchanged for seconds before
   # that.
   if [[ "$fragment" == dev/* ]]; then
-    webview wait-for "/(^|\\n)done(: [^\\n]*)?\$/.test(document.body.innerText.trim())" 120000 >/dev/null \
+    webview wait-for "/^done(: .*)?\$/m.test(document.body.innerText)" 120000 >/dev/null \
       || { webview text; die "#$fragment did not print done within 2 min"; }
     webview text
   else

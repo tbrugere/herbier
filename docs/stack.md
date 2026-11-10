@@ -89,10 +89,10 @@ Why not the two runners-up (see `ocaml-android-stacks.md`):
   event into a `react` event; `release` strongly stops a screen's bindings.
   Every binding is collected by its screen and released with
   `S.stop ~strong:true` / `E.stop ~strong:true` when the screen is torn
-  down. On js_of_ocaml weak arrays are strong, so react never collects a
-  binding by accident (the classic native pitfall); the risk is the
-  opposite, leaks, and the release rule is what prevents them. See
-  `notes/ocaml-react-primer.md`.
+  down. js_of_ocaml backs weak arrays with `WeakRef`, so a binding nobody
+  holds may be collected and stop (the classic native pitfall) and one still
+  held keeps running after its screen is gone: the screen holds its list and
+  the release rule stops it. See `notes/ocaml-react-primer.md`.
 - Known costs, accepted: state is spread across signals rather than one
   value (snapshotting for debugging is manual); setters must not be called
   during a propagation step; no compile-time HTML structure checks (TyXML

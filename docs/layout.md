@@ -166,7 +166,10 @@ app/
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight; photo_check.ml (#dev/photos): gallery pick, then per photo
                           exifr → Exif, sha256, Preview.make → dev/preview.jpg written, read back (sizes compared,
-                          EXIF segment checked) and shown as a blob: URL; one GPS fix; all ship in every build until the M2.17 router compiles them into dev builds only
+                          EXIF segment checked) and shown as a blob: URL; one GPS fix; rb_check.ml (#dev/rb):
+                          self-checks every Rb binding, rlist's in-place patches and anchors, then a counter,
+                          class toggle and RList rows frozen by release; all ship in every build until the
+                          M2.17 router compiles them into dev builds only
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
