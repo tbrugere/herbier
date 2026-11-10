@@ -375,6 +375,7 @@ input (URL or text)
   → classify by host/pattern
      gbif       → key from path
      plantnet   → decode "Genus species Author" from path → GBIF species/match
+     plantnet observation → no name in the path; lookup or 4i fallback decided in M4.36
      plantuse   → "Genus_species" wiki page name → GBIF species/match (host to verify)
      wikipedia  → REST summary → wikibase_item → Wikidata P846
      inpn/tela  → cd_nom / nn → name → GBIF species/match

@@ -1,7 +1,7 @@
 ; test_schema_dump reads the catalog of supabase/schema/.
 (test
  (name test_domain)
- (modules test_domain test_ids test_enums test_places test_schema_dump)
+ (modules test_domain test_ids test_enums test_places test_link test_schema_dump)
  (libraries
   herbier_domain
   postgrest-codegen

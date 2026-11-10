@@ -28,5 +28,6 @@ let () =
       ("ids", Test_ids.tests);
       ("enums", Test_enums.tests);
       ("places", Test_places.tests);
+      ("link", Test_link.tests);
       ("schema dump", Test_schema_dump.tests);
     ]
