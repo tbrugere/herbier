@@ -36,6 +36,10 @@ Two scripts do the work; this skill is how to use them and what goes wrong.
    - Home then reopen: `adb shell input keyevent KEYCODE_HOME`, then
      `scripts/emulator.sh launch` (resumes, does not reload), then
      `scripts/emulator.sh webview text`;
+   - Android back: `adb shell input keyevent KEYCODE_BACK`; once back has
+     exited the app, `open` restarts it (the process can outlive the
+     activity); taps: `adb shell input tap X Y` in device pixels (CSS px ×
+     `devicePixelRatio`, plus the status bar);
    - fresh install state: `adb shell pm clear re.bruge.herbier`;
    - app files: `adb shell run-as re.bruge.herbier ls databases`.
 5. `scripts/emulator.sh stop` at the end (kills the emulator, removes the
@@ -79,7 +83,9 @@ with `python3 -m http.server 8765 -d _build/default/web/dist`, then
   the launcher activity and uses `am start -W`.
 - The devtools socket is `@webview_devtools_remote_<pid>` and appears a moment
   after the activity starts; `forward` polls for it. Only debug builds have it.
-- The app reads the fragment once at startup: setting `location.hash` alone
-  does nothing; `open` replaces the URL and reloads.
+- Setting `location.hash` navigates in place (the router follows
+  `hashchange`; leaving a `#dev/*` page reloads). `open` replaces the URL and
+  reloads anyway, for a clean state: `herbierDev.live()` at its baseline and
+  no SQLite connection left from the previous page.
 - Native SQLite connections outlive a page reload; a probe that opens a
   database the page also opens can hit "connection already exists".

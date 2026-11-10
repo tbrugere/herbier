@@ -2,6 +2,12 @@ module Original_target = struct
   type t = App_only | Drive
 
   let all = [App_only; Drive]
+
+  let equal a b =
+    match (a, b) with
+    | App_only, App_only | Drive, Drive -> true
+    | (App_only | Drive), _ -> false
+
   let to_string = function App_only -> "app_only" | Drive -> "drive"
 
   let of_string = function

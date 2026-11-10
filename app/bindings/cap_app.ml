@@ -27,4 +27,10 @@ let on_state_change f = add_listener "appStateChange" state_of_event f
 let on_url_open f =
   add_listener "appUrlOpen" (fun ev -> Cap_call.string_field ev "url") f
 
+let on_back_button f =
+  add_listener "backButton"
+    (fun ev -> Cap_call.bool_field ev "canGoBack")
+    (fun can_go_back -> f ~can_go_back)
+
+let exit_app () = Cap_call.call plugin "exitApp" [||] ~ok:Cap_call.unit_ok
 let remove handle = Cap_call.on handle "remove" [||] ~ok:Cap_call.unit_ok

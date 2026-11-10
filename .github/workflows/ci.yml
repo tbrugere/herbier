@@ -50,13 +50,20 @@ jobs:
       # from dune-project.
       - run: opam exec -- dune test
       - run: opam exec -- dune build @web
-      - name: web shell contains the styled heading
+      - name: web bundle contains the app shell
         run: |
           cd _build/default/web/dist
           test -f index.html && test -f app.css && test -f vendor.js && test -f app.js
-          grep -q '"Herbier"' app.js
-          grep -q 'h1.title' app.css
+          grep -q 'shell__screen' app.js
+          grep -q '\.shell' app.css
           grep -q 'app.js' index.html
+      # The app's JS in the release profile (what release.sh ships as
+      # app.js) links no dev page and no herbierDev hook.
+      - name: release app has no dev pages
+        run: |
+          opam exec -- dune build --build-dir _build_release --profile release app/main.bc.js
+          test -s _build_release/default/app/main.bc.js
+          ! grep -q herbierDev _build_release/default/app/main.bc.js
       - run: opam exec -- dune build @fmt
 
   supabase:

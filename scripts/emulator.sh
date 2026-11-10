@@ -142,6 +142,11 @@ cmd_launch() {
   adb -s "$s" shell am start -W -n "$activity" >/dev/null
 }
 
+app_in_front() {
+  adb -s "$(serial)" shell dumpsys activity activities \
+    | grep -m1 topResumedActivity | grep -q "$(app_id)/"
+}
+
 cmd_kill_app() {
   adb -s "$(serial)" shell am force-stop "$(app_id)"
 }
@@ -178,20 +183,29 @@ webview() { node "$here/webview.mjs" --port "$port" "$@"; }
 cmd_open() {
   local fragment="${1:-}"
   fragment="${fragment#\#}"
+  # After back exits the app, its process can outlive the activity (no WebView
+  # to drive) and die on the next launch: restart unless the app is in front.
+  if [[ -n "$(app_pid)" ]] && ! app_in_front; then cmd_kill_app; fi
   [[ -n "$(app_pid)" ]] || { cmd_launch; sleep 2; }
   cmd_forward >/dev/null
   webview wait-for "document.readyState === 'complete'" 20000 >/dev/null
   local hash=""
   [[ -n "$fragment" ]] && hash="#$fragment"
-  # The app reads the fragment once at startup, so set it and reload.
-  webview eval "history.replaceState(null, '', location.pathname + location.search + '$hash'); location.reload(); true" >/dev/null
+  # Set the fragment and reload, for a clean state (binding baseline, no
+  # SQLite connection left by the previous page). The marker tells the
+  # reloaded page from the old one; the hash is not compared, since the app
+  # may rewrite a non-canonical fragment ("" or an unknown route).
+  webview eval "window.__herbierOpenPending = true; history.replaceState(null, '', location.pathname + location.search + '$hash'); location.reload(); true" >/dev/null
   sleep 1
-  webview wait-for "document.readyState === 'complete' && location.hash === '$hash'" 20000 >/dev/null
+  webview wait-for "document.readyState === 'complete' && !window.__herbierOpenPending" 20000 >/dev/null
   # Dev pages print a "done" line (or "done: <summary>") once every group
   # has settled, last in their log; an interactive page has its controls
   # below it. A slow step can leave the text unchanged for seconds before
   # that.
-  if [[ "$fragment" == dev/* ]]; then
+  # An unknown dev page is rewritten to a tab: wait for "done" only on a
+  # dev page the app actually shows.
+  if [[ "$fragment" == dev/* ]] \
+    && [[ "$(webview eval "location.hash")" == "#$fragment" ]]; then
     webview wait-for "/^done(: .*)?\$/m.test(document.body.innerText)" 120000 >/dev/null \
       || { webview text; die "#$fragment did not print done within 2 min"; }
     webview text

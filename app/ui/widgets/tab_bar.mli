@@ -3,6 +3,8 @@
 
 type tab = Collection | Map | Journal | Settings
 
+val equal : tab -> tab -> bool
+
 type t = {
   el : Brr.El.t;  (** a [nav] *)
   select : tab React.event;  (** a tab was pressed, even the active one *)

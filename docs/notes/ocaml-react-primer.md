@@ -125,7 +125,7 @@ These let the graph itself change over time. Screen navigation is the
 typical use: `screen : screen signal`, and the content is
 `S.bind screen (function Collection -> collection_view | Species id -> species_view id)`.
 Each time `screen` changes, the previous inner signal is abandoned and the new
-one becomes current.
+one becomes current. (Herbier's router does without the inner signal: see §6.)
 
 **Feedback loops: fix**
 
@@ -152,7 +152,8 @@ mean different things in a dataflow graph:
 - `bind`, `switch`: a **dynamic** graph. Each change of the outer signal
   runs your function, builds a new inner graph and abandons the old one
   (a switch may trigger a further update step in the same instant). Use it
-  for structural changes only, in practice screen navigation. The
+  for structural changes only, in practice screen navigation (Herbier's
+  router uses the inner `map` alone, §6). The
   abandoned inner graph is collected only once nothing references it any
   more (§5), and its DOM listeners stay attached until its bindings are
   released, so a `bind` on a frequently changing value leaks one graph per
@@ -165,7 +166,6 @@ react 1.2.2 ships no binding operators or infix module. Define them once:
 module Syntax = struct
   let ( let+ ) s f = S.map f s          (* applicative, static *)
   let ( and+ ) a b = S.Pair.pair a b    (* ('a * 'b) signal; structural eq by default *)
-  let ( let* ) s f = S.bind s f         (* monadic, dynamic: screen level only *)
 end
 
 let counter_label =
@@ -176,7 +176,8 @@ let counter_label =
 ```
 
 `let+ ... and+ ...` desugars to a `map` over a `pair`: still static and
-cheap. A `let*` outside navigation code is a smell. `S.Pair.pair` defaults
+cheap. There is no `let*`: navigation, the one dynamic part, is written
+out in the router (§6). `S.Pair.pair` defaults
 to structural equality on the tuple, so pass `~eq:( == )` explicitly when a
 side holds closures or JS objects instead of using `and+`.
 
@@ -294,6 +295,9 @@ screen collects its handles, and leaving the screen calls
 `S.stop ~strong:true` / `E.stop ~strong:true` on each. That is the binding
 list and `release` in `rb.ml`. (`S.retain` exists but only "keeps a reference to
 the closure `c` in `e`"; it is a native-side trick and not what we need.)
+"Reachable" must survive the compiler: js_of_ocaml drops an unused
+capture, even `ignore (Sys.opaque_identity v)`, so `Rb.hold` stores the list
+on a DOM node instead.
 
 ## 6. How the glue module maps onto this
 
@@ -325,8 +329,9 @@ listener id is kept in the binding so `release` can `Ev.unlisten` too.
 
 A screen is a function that builds its DOM, creates its bindings, and
 returns the root element plus the binding list. Navigation is
-`S.bind screen (...)` at the top, and the top-level code releases the
-previous screen's bindings when the inner signal switches.
+`S.map ~eq:( == )` over the route that builds the screen, plus an `S.diff`
+effect that releases the previous screen's bindings (`app/ui/router.ml`);
+`S.bind` would add an inner-signal switch the screens do not use.
 
 ## 6b. ReactiveData: patches for collections
 

@@ -4,6 +4,8 @@
 module Original_target : sig
   type t = App_only | Drive
 
+  val equal : t -> t -> bool
+
   val all : t list
   (** Every constructor, in declaration order. *)
 

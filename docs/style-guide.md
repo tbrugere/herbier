@@ -133,8 +133,9 @@ val get : 'a key -> 'a
 module that offers them defines them in a submodule named `Syntax`.
 
 6.2 For signals: `let+` = `S.map`, `and+` = `S.Pair.pair` (static graph, the
-default); `let*` = `S.bind` (dynamic graph, **screen level only** —
-navigation). A `let*` on signals anywhere else is a design mistake.
+default). There is no `let*` on signals: the only dynamic part of the graph
+is navigation, and the router builds each screen with an `S.map ~eq:( == )`
+and releases the previous one explicitly (primer §6) instead of `S.bind`.
 
 ```ocaml
 let header =

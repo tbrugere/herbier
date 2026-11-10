@@ -88,6 +88,7 @@ lib/
 app/
   dune                    executable main, (modes js), js_of_ocaml flags
   main.ml                 entry: init plugins, open db, mount router, start sync
+  dev_pages.{dev,release}.ml  the #dev/* table, copied to dev_pages.ml by profile (release: empty)
   domain/                 types and rules; Stdlib + ptime (+ clock for Ids.fresh) + uuidm + yojson; no Brr
     plant.ml  observation.ml  photo.ml  tag.ml  reference.ml   row records and their enums
                           (tag: + plant_tag; reference: + plant_ref, image, source/status/organ;
@@ -111,6 +112,9 @@ app/
     cap_call.ml           private: plugin lookup on globalThis.herbier, promise → Fut with errors mapped to Cap_error
     css_var.ml            custom properties: getPropertyValue on the computed style (Brr's computed_style
                           cannot read them), names declared on :root (dev page)
+    dev_hook.ml           dev builds only: functions set on globalThis.herbierDev (a DevTools console or test driver)
+    keep.ml               keeps OCaml values reachable from a DOM node (Rb.hold)
+    location.ml           window.location.replace, which Brr lacks: the router's tab switch without a history entry
   store/                  local SQLite (§3 of architecture); hand-written SQL, no query DSL
     tables.ml             Postgrest columns of every synced table (~7 tables, ~50 columns), generated
                           from supabase/schema/catalog.json by postgrest-codegen, committed, a dune diff rule keeps it fresh
@@ -159,7 +163,9 @@ app/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
     theme.ml              reads the custom properties OCaml needs (map colours, status bar) once at startup
     state.ml              global signals: filters, network, account (handoff « État »)
-    router.ml             route type, `S.bind` over the current screen, release on switch
+    router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
+                          the shell holds the tab bar
+    screen.ml             a screen's root element + its bindings, as the router takes them
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
@@ -172,8 +178,9 @@ app/
                           self-checks every Rb binding, rlist's in-place patches and anchors, then a counter,
                           class toggle and RList rows frozen by release; theme_check.ml (#dev/theme): every
                           colour token, type role and bundled icon, and what Theme reads; gallery.ml
-                          (#dev/gallery): one fixture entry per widget and state, with an event log; all ship in
-                          every build until the M2.17 router compiles them into dev builds only
+                          (#dev/gallery): one fixture entry per widget and state, with an event log; hooks.ml:
+                          herbierDev.live(), the leak count; linked only outside the release profile
+                          (app/dev_pages.ml, see app/dune)
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
@@ -199,7 +206,7 @@ sync      ← domain, store, bindings, postgrest, brr (for Fut)
 photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs; photos also yojson, ptime
                                          (siblings never import each other)
 ui        ← everything above + react, reactiveData
-main      ← ui, brr                     (main.ml builds the first element itself)
+main      ← ui, brr                     (main.ml finds the root element and starts the router)
 ```
 
 Notes:
@@ -242,11 +249,12 @@ web/
                           copy ../app/main.bc.js → dist/app.js
   index.html              loads dist/app.css, dist/vendor.js then dist/app.js
   sass/                   indented Sass syntax (.sass), not SCSS
-    app.sass              entry: @use the three partials, then every screens/*.sass
+    app.sass              entry: @use the four partials, then every screens/*.sass
     _tokens.sass          custom properties on :root; the only source of design tokens
     _base.sass            reset, @font-face, type-role, icon and photo-scrim mixins with their .t-* classes,
                           sun-readability rules (5f)
     _widgets.sass         chips, cards, tab bar, sheets, dialogs, fields, and the widget mixins
+    _shell.sass           the router's shell: scrolling screen above the tab bar, screen margins
     screens/              one file per handoff screen (collection.sass, map_tab.sass, …),
                           handoff id in a header comment
   fonts/                  Manrope, Newsreader (variable woff2), Material Symbols subset

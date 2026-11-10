@@ -1,12 +1,25 @@
 open Brr
 module RList = ReactiveData.RList
 
-type binding =
-  | Signal : unit React.signal -> binding
-  | Event : 'a React.event -> binding
-  | Listener : Ev.listener * 'a React.event -> binding
+type node =
+  | Signal : unit React.signal -> node
+  | Event : 'a React.event -> node
+  | Listener : Ev.listener * 'a React.event -> node
 
-let write s f = Signal (React.S.map f s)
+(* style: [live] is mutated by [release] only and makes a double release
+   harmless. [count] is a global counter because the leak check needs the
+   number of unreleased bindings over the whole app: [make] increments it,
+   [release] decrements it once per binding thanks to [live]. *)
+type binding = {node : node; mutable live : bool}
+
+let count = ref 0
+
+let make node =
+  incr count;
+  {node; live = true}
+
+let live () = !count
+let write s f = make (Signal (React.S.map f s))
 let text el s = write s (fun v -> El.set_children el [El.txt' v])
 
 let attr el name s =
@@ -78,41 +91,51 @@ let apply_step el f kids step =
 let rlist el f l =
   let rebuild () = El.set_children el (List.map f (RList.value l)) in
   rebuild ();
-  Event
-    (React.E.map
-       (function
-         | RList.Set _ -> rebuild ()
-         | RList.Patch steps ->
-             let kids = ref (Array.of_list (El.children el)) in
-             if not (List.for_all (apply_step el f kids) steps) then (
-               Console.(
-                 warn
-                   [
-                     str
-                       "Rb.rlist: child nodes out of step with the list, \
-                        rebuilding";
-                   ]);
-               rebuild ()))
-       (RList.event l))
+  make
+    (Event
+       (React.E.map
+          (function
+            | RList.Set _ -> rebuild ()
+            | RList.Patch steps ->
+                let kids = ref (Array.of_list (El.children el)) in
+                if not (List.for_all (apply_step el f kids) steps) then (
+                  Console.(
+                    warn
+                      [
+                        str
+                          "Rb.rlist: child nodes out of step with the list, \
+                           rebuilding";
+                      ]);
+                  rebuild ()))
+          (RList.event l)))
 
 let ev el type' =
   let e, send = React.E.create () in
   let listener = Ev.listen type' send (El.as_target el) in
-  (e, Listener (listener, e))
+  (e, make (Listener (listener, e)))
 
 let click el =
   let e, b = ev el Ev.click in
   (React.E.map (fun _ -> ()) e, b)
 
-let on e f = Event (React.E.map f e)
+let on e f = make (Event (React.E.map f e))
+let hold el bs = Herbier_bindings.Keep.on el bs
+
+let stop = function
+  | Signal s -> React.S.stop ~strong:true s
+  | Event e -> React.E.stop ~strong:true e
+  | Listener (l, e) ->
+      Ev.unlisten l;
+      React.E.stop ~strong:true e
 
 let release =
-  List.iter (function
-    | Signal s -> React.S.stop ~strong:true s
-    | Event e -> React.E.stop ~strong:true e
-    | Listener (l, e) ->
-        Ev.unlisten l;
-        React.E.stop ~strong:true e)
+  List.iter (fun b ->
+      match b.live with
+      | false -> ()
+      | true ->
+          stop b.node;
+          b.live <- false;
+          decr count)
 
 type anchor = Anchor : 'a React.event -> anchor
 

@@ -1,5 +1,6 @@
 # --- OCaml / dune (from github/gitignore OCaml.gitignore, trimmed to what dune produces)
 _build/
+_build_release/
 _opam/
 *.install
 *.annot

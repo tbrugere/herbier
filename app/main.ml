@@ -1,22 +1,13 @@
 open Brr
 
-let title () = El.h1 ~at:At.[class' (Jstr.v "title")] [El.txt' "Herbier"]
-
-let mount el =
+let root () =
   match Document.find_el_by_id G.document (Jstr.v "app") with
-  | Some root -> El.set_children root [el]
-  | None -> El.append_children (Document.body G.document) [el]
+  | Some root -> root
+  | None ->
+      let root = El.div [] in
+      El.append_children (Document.body G.document) [root];
+      root
 
-(* Read once at startup: the dev page is reached by reloading with the
-   fragment set. *)
 let () =
-  match Jstr.to_string (Uri.fragment (Window.location G.window)) with
-  | "dev/storage" -> mount (Herbier_ui.Dev.Storage_check.el ())
-  | "dev/store" -> mount (Herbier_ui.Dev.Store_check.el ())
-  | "dev/seed" -> mount (Herbier_ui.Dev.Seed_check.el ())
-  | "dev/refs-http" -> mount (Herbier_ui.Dev.Refs_http_check.el ())
-  | "dev/photos" -> mount (Herbier_ui.Dev.Photo_check.el ())
-  | "dev/rb" -> mount (Herbier_ui.Dev.Rb_check.el ())
-  | "dev/theme" -> mount (Herbier_ui.Dev.Theme_check.el ())
-  | "dev/gallery" -> mount (Herbier_ui.Dev.Gallery.el ())
-  | _ -> mount (title ())
+  Herbier_ui.Router.start ~root:(root ()) ~tab:Herbier_ui.Screens.Placeholder.v
+    ~dev:Dev_pages.find

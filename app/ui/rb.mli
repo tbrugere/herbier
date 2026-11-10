@@ -69,6 +69,15 @@ val on : 'a React.event -> ('a -> unit) -> binding
     that occurrence unrun. A plugin call only starts its future here and handles
     the result outside the step. *)
 
+val hold : Brr.El.t -> binding list -> unit
+(** [hold el bs] keeps [bs] reachable for as long as [el] is (see the module
+    doc): for bindings that live as long as an element and are never released,
+    such as the app shell's. *)
+
+val live : unit -> int
+(** How many bindings exist and are not released yet, over the whole app: a leak
+    check (a screen switch must bring it back to the same value). *)
+
 val release : binding list -> unit
 (** Stops every binding strongly ([S.stop ~strong:true] / [E.stop ~strong:true])
     and removes their listeners: none of them writes to the DOM or fires again.

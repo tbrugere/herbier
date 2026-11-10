@@ -41,6 +41,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: npm ci
+      # Release-profile web (no #dev/* pages, no herbierDev) in a
+      # debug-signed shell: this artifact is the phone's build.
       - run: opam exec -- dune build --profile release @web
       - run: npx cap sync android
       - run: cd android && ./gradlew assembleDebug --no-daemon

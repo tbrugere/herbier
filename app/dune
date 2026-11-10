@@ -5,3 +5,18 @@
  (libraries brr herbier_ui)
  (js_of_ocaml
   (flags (:standard))))
+
+; Dev pages (#dev/*) exist in every profile but release: dev_pages.ml is a
+; copy of one of the two implementations. In release, main references no
+; Herbier_ui.Dev module and neither herbier_ui nor main is linked with
+; -linkall, so the bytecode link leaves those .cma members out and the JS has
+; none of them. ci.yml and scripts/release.sh check the release bundle.
+(rule
+ (target dev_pages.ml)
+ (enabled_if (<> %{profile} release))
+ (action (copy dev_pages.dev.ml %{target})))
+
+(rule
+ (target dev_pages.ml)
+ (enabled_if (= %{profile} release))
+ (action (copy dev_pages.release.ml %{target})))

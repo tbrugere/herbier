@@ -1,0 +1,24 @@
+// The app shell (app/ui/router.ml): the current tab's screen scrolls above the
+// tab bar, which stays at the bottom. Dev pages are shown alone.
+
+.shell
+  display: flex
+  flex-direction: column
+  height: 100vh
+  height: 100dvh
+
+.shell__screen
+  flex: 1
+  min-height: 0
+  overflow-y: auto
+
+// A screen's own padding: the side margin of the handoff, and the status bar
+// inset at the top.
+.screen
+  padding: calc(16px + env(safe-area-inset-top)) var(--space-screen) var(--space-screen)
+  display: flex
+  flex-direction: column
+  gap: 16px
+
+.dev-page
+  padding: var(--space-screen)

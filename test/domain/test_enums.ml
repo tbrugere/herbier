@@ -120,9 +120,28 @@ let json_cases (type a) name ~(all : a list) ~(to_string : a -> string)
       ("of_json rejects any other JSON value", rejects);
     ]
 
+(* [equal] against the index in [all]: true on the diagonal only. *)
+let equal_cases (type a) name ~(all : a list) ~(to_string : a -> string)
+    ~(equal : a -> a -> bool) =
+  let diagonal () =
+    List.iteri
+      (fun i x ->
+        List.iteri
+          (fun j y ->
+            Alcotest.(check bool)
+              (Printf.sprintf "equal %s %s" (to_string x) (to_string y))
+              (Int.equal i j) (equal x y))
+          all)
+      all
+  in
+  [(name ^ ": equal holds for the same constructor only", `Quick, diagonal)]
+
 let tests =
   List.concat
     [
+      equal_cases "Photo.Original_target" ~all:Photo.Original_target.all
+        ~to_string:Photo.Original_target.to_string
+        ~equal:Photo.Original_target.equal;
       json_cases "Photo.Original_target" ~all:Photo.Original_target.all
         ~to_string:Photo.Original_target.to_string
         ~to_json:Photo.Original_target.to_json
