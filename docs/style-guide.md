@@ -210,7 +210,10 @@ must cause a change, derive it (`S.hold`, `S.sample`, `S.accum`).
 resolutions, plugin callbacks, timers. Primitives that change together share
 one `Step`.
 
-9.4 Every binding a screen creates is collected in that screen's list and
+9.4 Every binding a screen creates is collected in that screen's list,
+which stays reachable until the screen is torn down (the router holds the
+current screen's: js_of_ocaml 6 implements weak arrays with `WeakRef`, so an
+unreferenced binding is collected and silently stops, primer §5), and is
 released on teardown with `S.stop ~strong:true` / `E.stop ~strong:true`
 (there is no `S.keep`). Strongly stop your own leaf bindings only, never a
 shared intermediate signal.

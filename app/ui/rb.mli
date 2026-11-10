@@ -56,6 +56,19 @@ val ev : Brr.El.t -> 'a Brr.Ev.type' -> 'a Brr.Ev.t React.event * binding
     would fire inside the step that made the write, and react raises. Releasing
     the binding removes the listener and stops the event. *)
 
+val click : Brr.El.t -> unit React.event * binding
+(** [click el] is [ev el Ev.click] without the DOM event, for buttons whose
+    click carries nothing. *)
+
+val on : 'a React.event -> ('a -> unit) -> binding
+(** [on e f] calls [f] on each occurrence of [e], inside the update step, for an
+    effect outside the reactive graph (a log, a plugin call). [f] must not set a
+    primitive signal, send an event or touch an [RList] handle: those run from
+    outside a step (a DOM callback, a resolved future). [f] must not raise
+    either: an exception leaves the step unfinished and the other bindings of
+    that occurrence unrun. A plugin call only starts its future here and handles
+    the result outside the step. *)
+
 val release : binding list -> unit
 (** Stops every binding strongly ([S.stop ~strong:true] / [E.stop ~strong:true])
     and removes their listeners: none of them writes to the DOM or fires again.

@@ -48,25 +48,6 @@ let roles =
     {cls = "t-button-secondary"; sample = "Coller un lien"};
   ]
 
-(* A copy of web/fonts/icons.txt, the list the bundled icon font is subset
-   to: keep the two equal. *)
-let icons =
-  [
-    "add";
-    "arrow_back";
-    "check";
-    "close";
-    "edit";
-    "grid_view";
-    "list";
-    "map";
-    "more_horiz";
-    "my_location";
-    "refresh";
-    "search";
-    "settings";
-  ]
-
 let cls c = At.class' (Jstr.v c)
 
 let swatch (name, value) =
@@ -185,7 +166,7 @@ let el () =
             (List.map
                (fun n ->
                  El.span ~at:[cls "icon"; At.title (Jstr.v n)] [El.txt' n])
-               icons);
+               (List.map Widgets.Icon.name Widgets.Icon.all));
         ];
       section "Theme.load" [theme_result ()];
       done_line ();

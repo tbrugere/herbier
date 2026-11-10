@@ -156,7 +156,7 @@ app/
     tiles.ml              region extract download and storage (v2, with the offline map)
     geocode.ml            Photon / Géoplateforme forward and reverse
   ui/
-    rb.ml                 react ↔ Brr glue (API in notes/ocaml-react-primer.md §6)
+    rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
     theme.ml              reads the custom properties OCaml needs (map colours, status bar) once at startup
     state.ml              global signals: filters, network, account (handoff « État »)
     router.ml             route type, `S.bind` over the current screen, release on switch
@@ -171,8 +171,9 @@ app/
                           EXIF segment checked) and shown as a blob: URL; one GPS fix; rb_check.ml (#dev/rb):
                           self-checks every Rb binding, rlist's in-place patches and anchors, then a counter,
                           class toggle and RList rows frozen by release; theme_check.ml (#dev/theme): every
-                          colour token, type role and bundled icon, and what Theme reads; all ship in every
-                          build until the M2.17 router compiles them into dev builds only
+                          colour token, type role and bundled icon, and what Theme reads; gallery.ml
+                          (#dev/gallery): one fixture entry per widget and state, with an event log; all ship in
+                          every build until the M2.17 router compiles them into dev builds only
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment

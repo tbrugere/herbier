@@ -18,4 +18,5 @@ let () =
   | "dev/photos" -> mount (Herbier_ui.Dev.Photo_check.el ())
   | "dev/rb" -> mount (Herbier_ui.Dev.Rb_check.el ())
   | "dev/theme" -> mount (Herbier_ui.Dev.Theme_check.el ())
+  | "dev/gallery" -> mount (Herbier_ui.Dev.Gallery.el ())
   | _ -> mount (title ())

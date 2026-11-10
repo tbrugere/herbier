@@ -153,10 +153,11 @@ mean different things in a dataflow graph:
   runs your function, builds a new inner graph and abandons the old one
   (a switch may trigger a further update step in the same instant). Use it
   for structural changes only, in practice screen navigation. The
-  abandoned inner graph keeps running until the garbage collector gets to
-  it (§5), so a `bind` on a frequently changing value piles up live graphs
-  unless its bindings are released; at screen granularity that is one
-  `release` per navigation.
+  abandoned inner graph is collected only once nothing references it any
+  more (§5), and its DOM listeners stay attached until its bindings are
+  released, so a `bind` on a frequently changing value leaks one graph per
+  change unless they are; at screen granularity that is one `release` per
+  navigation, which detaches the old graph at once.
 
 react 1.2.2 ships no binding operators or infix module. Define them once:
 
@@ -274,8 +275,8 @@ E.stop : ?strong:bool -> 'a event -> unit
   "`stop s` stops updating `s`. It conceptually becomes const with the
   signal's last value and cannot be restarted." With `~strong:true` it also
   "walks over the list of events and signals that it depends on and
-  unregisters itself from these ones as a dependent", which is what actually
-  frees memory on JS.
+  unregisters itself from these ones as a dependent", which detaches the
+  binding at once instead of waiting for the GC.
 
 - Caveat from the docs: "if direct references are kept on an intermediate
   event or signal of the reactive system it may suddenly stop updating if
@@ -306,10 +307,14 @@ val style    : El.t -> string -> string signal -> binding
 val children : El.t -> El.t list signal -> binding
 val rlist    : El.t -> ('a -> El.t) -> 'a ReactiveData.RList.t -> binding
 val ev       : El.t -> 'a Ev.type' -> 'a Ev.t event * binding
+val click    : El.t -> unit event * binding
+val on       : 'a event -> ('a -> unit) -> binding  (* effect outside the graph *)
 val release  : binding list -> unit      (* strong stop, in one place *)
 val anchor   : 'a signal -> anchor       (* keeps a shared derived signal alive *)
 val anchor_list : 'a ReactiveData.RList.t -> anchor
 ```
+
+A summary: `app/ui/rb.mli` is the reference, with each function's rules.
 
 Each of `text`, `attr`, `class_`, `style`, `children` is `S.map` with a Brr
 call as the side effect, returning the mapped signal as the binding. `ev`
@@ -375,8 +380,9 @@ screens we have.
   callbacks, timers.
 - Several setters at once → one `Step`.
 - Signals of closures or JS objects → `~eq:( == )`.
-- Every binding is released on screen teardown with a strong stop. On
-  js_of_ocaml, forgetting this leaks; it never silently stops.
+- A screen keeps its binding list reachable while it is shown (an
+  unreferenced binding is collected and silently stops), and releases it on
+  teardown with a strong stop (forgetting this leaks).
 - Read `S.value` only outside propagation, and rarely.
 
 ## 8. Further reading

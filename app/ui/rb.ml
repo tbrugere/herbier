@@ -100,6 +100,12 @@ let ev el type' =
   let listener = Ev.listen type' send (El.as_target el) in
   (e, Listener (listener, e))
 
+let click el =
+  let e, b = ev el Ev.click in
+  (React.E.map (fun _ -> ()) e, b)
+
+let on e f = Event (React.E.map f e)
+
 let release =
   List.iter (function
     | Signal s -> React.S.stop ~strong:true s
