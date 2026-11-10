@@ -114,6 +114,7 @@ app/
                           cannot read them), names declared on :root (dev page)
     dev_hook.ml           dev builds only: functions set on globalThis.herbierDev (a DevTools console or test driver)
     keep.ml               keeps OCaml values reachable from a DOM node (Rb.hold)
+    pointer_capture.ml    Element.setPointerCapture (missing from Brr 0.0.9), best effort: the sheet's drag
     location.ml           window.location.replace, which Brr lacks: the router's tab switch without a history entry
   store/                  local SQLite (§3 of architecture); hand-written SQL, no query DSL
     tables.ml             Postgrest columns of every synced table (~7 tables, ~50 columns), generated
@@ -169,6 +170,7 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items; pure, tested in test/ui/
     collection_filter.ml  observation counts per plant and the all-tags filter of 4a; pure, tested in test/ui/
+    snap.ml               the sheet's snap points: nearest, clamp, release projection; pure, tested in test/ui/
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
@@ -183,8 +185,8 @@ app/
                           release, with Rb.live shown; theme_check.ml (#dev/theme): every colour token, type role
                           and bundled icon, and what Theme reads; gallery.ml (#dev/gallery): one fixture entry per
                           widget and state, with an event log; collection_check.ml (#dev/collection): 4a over the
-                          herbier db; hooks.ml: herbierDev.live(), the leak count; linked only outside the release
-                          profile
+                          herbier db; sheet_check.ml (#dev/sheet): a 3-snap sheet; hooks.ml: herbierDev.live(),
+                          the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
@@ -346,7 +348,7 @@ test/
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
   refs/         native, alcotest: payload decoders and projection over fixtures/
-  ui/           native, alcotest: the pure modules of app/ui/ copied in (list_patch, collection_filter)
+  ui/           native, alcotest: the pure modules of app/ui/ copied in (list_patch, collection_filter, snap)
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
                 the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
@@ -363,7 +365,7 @@ alcotest runs natively, in `dune test` on every CI job, on every library
 without a Brr dependency (`domain`, `postgrest`, `refs`), and on the Brr-free
 modules of `store` (`codec`, `schema`, `tables`, `stmt`, `outbox`, the
 per-table query modules, `settings`, `search`, `dev_seed`) and of `ui`
-(`list_patch`, `collection_filter`). The store ones build statements as
+(`list_patch`, `collection_filter`, `snap`). The store ones build statements as
 values and never run them, so their SQL runs natively through the sqlite3
 CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the

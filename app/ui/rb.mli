@@ -62,6 +62,12 @@ val ev : Brr.El.t -> 'a Brr.Ev.type' -> 'a Brr.Ev.t React.event * binding
     would fire inside the step that made the write, and react raises. Releasing
     the binding removes the listener and stops the event. *)
 
+val listen : Brr.El.t -> 'a Brr.Ev.type' -> ('a Brr.Ev.t -> unit) -> binding
+(** [listen el type' f] calls [f] from the DOM listener itself, outside any
+    update step and with no react event in between: for per-frame input such as
+    a drag, where [f] sets a primitive signal. Releasing removes the listener.
+*)
+
 val click : Brr.El.t -> unit React.event * binding
 (** [click el] is [ev el Ev.click] without the DOM event, for buttons whose
     click carries nothing. *)

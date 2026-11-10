@@ -86,7 +86,8 @@ Why not the two runners-up (see `ocaml-android-stacks.md`):
   `style` bind one DOM property to a signal; `children` replaces a child
   list from a signal; `rlist` applies ReactiveData patches (insert, remove,
   update, move) with `El.insert_siblings`/`El.remove`; `ev` turns a Brr DOM
-  event into a `react` event; `release` strongly stops a screen's bindings.
+  event into a `react` event; `listen` is a plain DOM listener for per-frame
+  input that sets a signal (the sheet's drag); `release` strongly stops a screen's bindings.
   Every binding is collected by its screen and released with
   `S.stop ~strong:true` / `E.stop ~strong:true` when the screen is torn
   down. js_of_ocaml backs weak arrays with `WeakRef`, so a binding nobody

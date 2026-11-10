@@ -182,7 +182,7 @@ cmd_forward() {
 webview() { node "$here/webview.mjs" --port "$port" "$@"; }
 
 # Dev pages that show a screen rather than a check log, so print no "done".
-INTERACTIVE_DEV_PAGES="dev/gallery dev/collection"
+INTERACTIVE_DEV_PAGES="dev/gallery dev/collection dev/sheet"
 
 cmd_open() {
   local fragment="${1:-}"

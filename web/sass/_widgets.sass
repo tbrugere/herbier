@@ -291,3 +291,46 @@
 // An rlist container inside a chip row: its chips lay out as the row's own.
 .chip-row__items
   display: contents
+
+// Sheet
+
+.sheet
+  position: fixed
+  left: 0
+  right: 0
+  bottom: 0
+  z-index: 10
+  display: flex
+  flex-direction: column
+  background: var(--paper)
+  border-radius: 26px 26px 0 0
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, .14)
+  will-change: transform
+  // Snap heights count from above the gesture area, which the sheet extends
+  // over. --sheet-height and --sheet-hidden are set by sheet.ml.
+  height: calc(var(--sheet-height) + env(safe-area-inset-bottom))
+  padding-bottom: env(safe-area-inset-bottom)
+
+// Timing borrowed from the handoff's "Transitions" (bottom modals).
+.sheet--settling
+  transition: transform 300ms cubic-bezier(0, 0, .2, 1)
+
+.sheet__grab
+  flex: none
+  padding: 0 20px 8px
+  touch-action: none
+  cursor: grab
+
+.sheet__handle
+  width: 40px
+  height: 4px
+  margin: 10px auto 12px
+  border-radius: 2px
+  background: var(--line-soft)
+
+.sheet__body
+  flex: 1
+  min-height: 0
+  overflow-y: auto
+  // The part of the sheet below the screen, so the end can scroll into view.
+  padding: 0 20px var(--sheet-hidden)

@@ -6,6 +6,7 @@ type node =
   | Event : 'a React.event -> node
   | Listener : Ev.listener * 'a React.event -> node
   | List_items : unit React.event * (El.t * binding list) array ref -> node
+  | Dom_listener : Ev.listener -> node
 
 (* style: [live] is mutated by [release] only and makes a double release
    harmless. [count] is a global counter because the leak check needs the
@@ -45,6 +46,7 @@ let rec stop = function
   | Listener (l, e) ->
       Ev.unlisten l;
       React.E.stop ~strong:true e
+  | Dom_listener l -> Ev.unlisten l
   | List_items (e, items) ->
       React.E.stop ~strong:true e;
       release_all !items;
@@ -174,6 +176,9 @@ let ev el type' =
   let e, send = React.E.create () in
   let listener = Ev.listen type' send (El.as_target el) in
   (e, make (Listener (listener, e)))
+
+let listen el type' f =
+  make (Dom_listener (Ev.listen type' f (El.as_target el)))
 
 let click el =
   let e, b = ev el Ev.click in

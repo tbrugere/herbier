@@ -13,10 +13,14 @@
 //   wait-stable [quiet-ms] [timeout-ms]
 //                                 wait until the page text has not changed for quiet-ms (default
 //                                 2000; timeout 60000), then print it
+//   drag <x,y[,ms]>...            one touch gesture in CSS px: press at the first point, move
+//                                 through the others, lift at the last; ms is the pause after
+//                                 reaching that point (default 16), so a rest before lifting is
+//                                 `x,y,200` last
 import { writeFileSync } from "node:fs";
 
 const usage = () => {
-  console.error("usage: webview.mjs [--port N] targets | eval <js> | text | screenshot <file> | wait-for <js> [ms] | wait-stable [quiet-ms] [ms]");
+  console.error("usage: webview.mjs [--port N] targets | eval <js> | text | screenshot <file> | wait-for <js> [ms] | wait-stable [quiet-ms] [ms] | drag <x,y[,ms]>...");
   process.exit(2);
 };
 
@@ -134,6 +138,25 @@ async function main() {
           }
           await sleep(250);
         }
+      }
+      case "drag": {
+        if (rest.length < 2) usage();
+        const points = rest.map((p) => {
+          const [x, y, ms = 16] = p.split(",").map(Number);
+          if ([x, y, ms].some(Number.isNaN)) usage();
+          return { x, y, ms };
+        });
+        const touch = (type, { x, y }) =>
+          cdp.send("Input.dispatchTouchEvent", {
+            type,
+            touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
+          });
+        for (const [i, p] of points.entries()) {
+          await touch(i === 0 ? "touchStart" : "touchMove", p);
+          await sleep(p.ms);
+        }
+        await touch("touchEnd", points.at(-1));
+        return console.log("ok");
       }
       default:
         usage();

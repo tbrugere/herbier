@@ -22,4 +22,5 @@ let find =
   | "theme" -> Some (page D.Theme_check.el)
   | "gallery" -> Some (page D.Gallery.el)
   | "collection" -> Some (page D.Collection_check.el)
+  | "sheet" -> Some (page D.Sheet_check.el)
   | _ -> None

@@ -307,7 +307,9 @@ What it offers, by role:
 - DOM writes from a signal: `text`, `attr`, `class_`, `style`, `children`.
 - A reactive list: `rlist el f l`, where `f` builds one item's node and
   that item's own bindings, released with the item.
-- DOM events in: `ev`, `click`.
+- DOM events in: `ev`, `click`; `listen` for per-frame input (a drag),
+  whose callback runs from the DOM listener outside any update step and may
+  set a primitive signal.
 - Reacting to an event: `on` (inside the update step, for effects outside
   the graph) and `act` (after the step, in a microtask: may set state, touch
   an `RList` handle or start a query; once released it drops even an
