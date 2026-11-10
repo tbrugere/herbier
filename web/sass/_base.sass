@@ -1,0 +1,205 @@
+// Reset, bundled fonts, the handoff's type scale and the sun-readability rules
+// (5f). Type roles are mixins so screens and widgets apply them to their own
+// classes; the .t-* classes exist for the dev page (#dev/theme) and for plain
+// text that needs no other style.
+
+$latin: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD
+$latin-ext: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF
+
+@mixin face($family, $file, $style, $weight, $range)
+  @font-face
+    font-family: $family
+    src: url('fonts/#{$file}.woff2') format('woff2')
+    font-style: $style
+    font-weight: $weight
+    font-display: swap
+    unicode-range: $range
+
+// latin is declared last so it wins where the two ranges overlap.
+@each $subset, $range in (latin-ext: $latin-ext, latin: $latin)
+  +face(Manrope, manrope-#{$subset}, normal, 400 800, $range)
+  +face(Newsreader, newsreader-#{$subset}, normal, 400 500, $range)
+  +face(Newsreader, newsreader-italic-#{$subset}, italic, 400 500, $range)
+
+@font-face
+  font-family: 'Material Symbols Outlined'
+  src: url('fonts/material-symbols.woff2') format('woff2')
+  font-style: normal
+  font-weight: 400
+  font-display: block
+
+// Type scale (handoff "Typographie"). Where the handoff gives a range, the
+// mixin takes the size and defaults to the value the mockup
+// (Herbier v2.dc.html) uses most.
+
+@mixin ui($size, $weight)
+  font-family: var(--font-ui)
+  font-size: $size
+  font-weight: $weight
+
+@mixin sci($size)
+  font-family: var(--font-sci)
+  font-style: italic
+  font-size: $size
+  font-weight: 400
+
+@mixin screen-title
+  +ui(34px, 800)
+  letter-spacing: -0.03em
+  line-height: 1
+
+@mixin hero-name
+  +ui(36px, 800)
+  letter-spacing: -0.03em
+  line-height: 1.05
+  color: var(--paper)
+
+// The author that follows a scientific name: roman, smaller, softer.
+@mixin author($size)
+  font-style: normal
+  font-size: $size
+  opacity: .85
+
+@mixin hero-sci
+  +sci(24px)
+  color: var(--paper)
+  .author
+    +author(15px)
+
+@mixin sheet-title($size: 24px)
+  +ui($size, 800)
+  letter-spacing: -0.02em
+  line-height: 1.1
+
+@mixin list-name($size: 16px)
+  +ui($size, 800)
+  line-height: 1.2
+
+@mixin list-sci($size: 14px)
+  +sci($size)
+  color: var(--ink-soft)
+
+@mixin body
+  +ui(15px, 400)
+  line-height: 1.45
+
+@mixin notes
+  +sci(20px)
+  line-height: 1.35
+
+@mixin meta($size: 13px, $weight: 400)
+  +ui($size, $weight)
+  color: var(--muted)
+
+@mixin section-label($color: var(--muted))
+  +ui(11px, 700)
+  text-transform: uppercase
+  letter-spacing: .18em
+  color: $color
+
+@mixin tab-label
+  +ui(12px, 700)
+
+@mixin button-primary
+  +ui(17px, 800)
+
+@mixin button-secondary
+  +ui(15px, 700)
+
+@mixin icon($size: 24px)
+  font-family: 'Material Symbols Outlined'
+  font-weight: 400
+  font-style: normal
+  font-size: $size
+  line-height: 1
+  letter-spacing: normal
+  text-transform: none
+  white-space: nowrap
+  direction: ltr
+  font-feature-settings: 'liga'
+  -webkit-font-feature-settings: 'liga'
+  user-select: none
+
+// 5f: the gradient under names on photos; its stops are --scrim and
+// --scrim-mid.
+@mixin photo-scrim
+  background: linear-gradient(to top, var(--scrim), var(--scrim-mid) 45%, transparent 65%)
+
+// Reset
+
+*, *::before, *::after
+  box-sizing: border-box
+
+html
+  -webkit-text-size-adjust: 100%
+  text-size-adjust: 100%
+
+body
+  margin: 0
+  background: var(--paper)
+  color: var(--ink)
+  -webkit-font-smoothing: antialiased
+  -webkit-tap-highlight-color: transparent
+  +body
+
+h1, h2, h3, p, ul, ol, figure
+  margin: 0
+
+ul, ol
+  padding: 0
+  list-style: none
+
+button, input, textarea, select
+  font: inherit
+  color: inherit
+
+img
+  display: block
+  max-width: 100%
+
+.t-screen-title
+  +screen-title
+.t-hero-name
+  +hero-name
+.t-hero-sci
+  +hero-sci
+.t-sheet-title
+  +sheet-title
+.t-list-name
+  +list-name
+.t-list-sci
+  +list-sci
+.t-body
+  +body
+.t-notes
+  +notes
+.t-meta
+  +meta
+.t-section-label
+  +section-label
+.t-section-label-ref
+  +section-label(var(--moss))
+.t-tab-label
+  +tab-label
+.t-button-primary
+  +button-primary
+.t-button-secondary
+  +button-secondary
+.t-photo-scrim
+  +photo-scrim
+.icon
+  +icon
+
+// Dev page layout (#dev/theme).
+.dev-section
+  margin: 24px 0
+.dev-swatch
+  display: inline-block
+  width: 40px
+  height: 24px
+  vertical-align: middle
+  border: 1px solid var(--line)
+.dev-hero
+  background: var(--moss-dark)
+  > div
+    padding: 40px 16px 16px

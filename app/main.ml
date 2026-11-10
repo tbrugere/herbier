@@ -17,4 +17,5 @@ let () =
   | "dev/refs-http" -> mount (Herbier_ui.Dev.Refs_http_check.el ())
   | "dev/photos" -> mount (Herbier_ui.Dev.Photo_check.el ())
   | "dev/rb" -> mount (Herbier_ui.Dev.Rb_check.el ())
+  | "dev/theme" -> mount (Herbier_ui.Dev.Theme_check.el ())
   | _ -> mount (title ())

@@ -1,4 +1,14 @@
-// Colour tokens, from the handoff's token table. The only source of colours.
+// Design tokens, from the handoff's token table: custom properties on :root,
+// the only source of colours, type families, spacing, radii, shadows and
+// gradients. Sass variables exist only so the derived tokens below (alpha
+// variants) are computed from the same value; everything else reads the
+// custom properties, and OCaml reads a few of them at startup
+// (app/ui/theme.ml).
+@use 'sass:color'
+
+$moss: #4f6b3a
+$dark: #1d1a14
+
 \:root
   --paper: #f6f1e7
   --sand: #ece5d6
@@ -9,9 +19,52 @@
   --ink-soft: #3d3830
   --muted: #5a5449
   --hint: #9a9385
-  --moss: #4f6b3a
+  --moss: #{$moss}
   --moss-dark: #3a5029
   --moss-light: #8fbf6a
   --ochre: #b8781a
   --danger: #a3402f
-  --dark: #1d1a14
+  --dark: #{$dark}
+  // Veil over photos and the dark screens (Noter, viewer), and the stops of
+  // the gradient under names on photos: .92 at the bottom, .35 at 45% (5f).
+  --veil: #{color.change($dark, $alpha: .6)}
+  --scrim: #{color.change($dark, $alpha: .92)}
+  --scrim-mid: #{color.change($dark, $alpha: .35)}
+
+  // Map (4b, 4h mini-map). Read by Theme for MapLibre, which cannot see CSS.
+  --map-point: var(--ink)
+  --map-point-border: var(--paper)
+  --map-selected: var(--moss)
+  --map-selected-halo: #{color.change($moss, $alpha: .25)}
+  --map-to-identify: var(--ochre)
+  --map-accuracy-fill: #{color.change($moss, $alpha: .18)}
+  --map-accuracy-line: #{color.change($moss, $alpha: .6)}
+  // Android status bar, behind the screen titles.
+  --status-bar: var(--paper)
+
+  --font-ui: Manrope, system-ui, sans-serif
+  --font-sci: Newsreader, Georgia, serif
+
+  // Spacing and sizes ("Espacements & rayons").
+  --space-screen: 20px
+  --grid-gap: 10px
+  --touch-min: 44px
+  --button-primary-height: 60px
+  --button-secondary-height: 52px
+
+  // Radii.
+  --radius-card: 14px
+  --radius-thumb: 16px
+  --radius-thumb-small: 12px
+  --radius-sheet: 26px
+  --radius-pill: 999px
+
+  // Shadows ("Ombres").
+  --shadow-card: 0 14px 44px rgba(40, 30, 10, .18)
+  --shadow-note-button: 0 8px 20px #{color.change($moss, $alpha: .4)}
+  --shadow-map-search: 0 6px 18px rgba(0, 0, 0, .14)
+  --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, .14)
+
+  // The fiche hero's gradient: dark at the top under the bar, dark at the
+  // bottom under the names.
+  --hero-gradient: linear-gradient(to bottom, #{color.change($dark, $alpha: .4)}, transparent 28%, transparent 50%, #{color.change($dark, $alpha: .82)})

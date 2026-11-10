@@ -1,0 +1,16 @@
+# Material Symbols Outlined names bundled in material-symbols.woff2, one per
+# line (handoff README, "Icônes"). After editing, run scripts/subset-icons.sh
+# and commit the regenerated font.
+add
+arrow_back
+check
+close
+edit
+grid_view
+list
+map
+more_horiz
+my_location
+refresh
+search
+settings

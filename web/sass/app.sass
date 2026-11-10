@@ -1,16 +1,9 @@
 @use 'tokens'
+@use 'base'
 
 body
-  margin: 0
-  padding: 20px
-  background: var(--paper)
-  color: var(--ink)
-  font-family: Manrope, system-ui, sans-serif
+  padding: var(--space-screen)
 
 h1.title
-  margin: 0
+  +base.screen-title
   color: var(--moss)
-  font-size: 34px
-  font-weight: 800
-  letter-spacing: -0.03em
-  line-height: 1
