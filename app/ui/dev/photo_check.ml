@@ -3,6 +3,8 @@ module Cap_error = Herbier_bindings.Cap_error
 module Cap_geolocation = Herbier_bindings.Cap_geolocation
 module Exifr = Herbier_bindings.Exifr
 module Exif = Herbier_photos.Exif
+module Preview = Herbier_photos.Preview
+module Files = Herbier_store.Files
 
 let append log text = Brr.El.append_children log [Brr.El.div [Brr.El.txt' text]]
 
@@ -33,28 +35,96 @@ let tz_offset_at (year, month, day) (hour, minute, second) =
   Herbier_bindings.Js_date.local_offset_s ~year ~month ~day ~hour ~minute
     ~second
 
-let read_exif m =
+let read_exif blob =
   let open Fut.Syntax in
-  let* blob = Herbier_bindings.Web_path.blob m.Cap_camera.web_path in
+  let+ r = Exifr.parse ~pick:Exif.tags blob in
+  match r with
+  | Ok None -> "no EXIF"
+  | Ok (Some text) ->
+      describe (Exif.of_string ~tz_offset_at text) ^ " · " ^ text
+  | Error e -> Cap_error.to_string e
+
+(* Dev scratch file, outside previews/: no row points to it. *)
+let preview_path = "dev/preview.jpg"
+let preview fut = Fut.map (Result.map_error Preview.error_to_string) fut
+let file fut = Fut.map (Result.map_error Cap_error.to_string) fut
+
+let bytes blob =
+  Fut.map
+    (Result.map (fun buffer ->
+         Brr.Tarray.to_string (Brr.Tarray.of_buffer Brr.Tarray.Uint8 buffer)))
+    (Brr.Blob.array_buffer blob)
+
+let show log blob =
+  let url = Herbier_bindings.Object_url.create blob in
+  let img =
+    Brr.El.img
+      ~at:
+        [
+          Brr.At.src url;
+          Brr.At.width 200;
+          Brr.At.v (Jstr.v "alt") (Jstr.v "Aperçu relu");
+        ]
+      ()
+  in
+  let _ : Brr.Ev.listener =
+    Brr.Ev.listen Brr.Ev.load
+      (fun _ -> Herbier_bindings.Object_url.revoke url)
+      (Brr.El.as_target img)
+  in
+  Brr.El.append_children log [img]
+
+let check_preview log original =
+  let open Fut.Result_syntax in
+  let* sha = preview (Preview.sha256_hex original) in
+  let* p = preview (Preview.make original) in
+  let* () = file (Files.write_blob ~path:preview_path p.jpeg) in
+  let* back = file (Files.read_blob ~path:preview_path ~type':"image/jpeg") in
+  let+ back_bytes =
+    Fut.map
+      (Result.map_error (fun e -> Jstr.to_string (Jv.Error.message e)))
+      (bytes back)
+  in
+  let written = Brr.Blob.byte_length p.jpeg in
+  let read = Brr.Blob.byte_length back in
+  append log
+    (Printf.sprintf
+       "preview %dx%d, %d bytes written, %d read back (%s), EXIF segment: %s, \
+        original sha256 %s"
+       p.width p.height written read
+       (match written = read with
+       | true -> "round-trip ok"
+       | false -> "MISMATCH")
+       (match Herbier_photos.Jpeg.has_exif back_bytes with
+       | true -> "PRESENT"
+       | false -> "none")
+       sha);
+  show log back
+
+(* One photo at a time: each decodes its full-resolution original, and all
+   share the scratch file. *)
+let check log (m : Cap_camera.media) =
+  let open Fut.Syntax in
+  let* blob = Herbier_bindings.Web_path.blob m.web_path in
   match blob with
-  | Error e -> Fut.return ("fetch: " ^ e)
-  | Ok blob -> (
-      let+ r = Exifr.parse ~pick:Exif.tags blob in
-      match r with
-      | Ok None -> "no EXIF"
-      | Ok (Some text) ->
-          describe (Exif.of_string ~tz_offset_at text) ^ " · " ^ text
-      | Error e -> Cap_error.to_string e)
+  | Error e ->
+      append log (m.web_path ^ ": fetch: " ^ e);
+      Fut.return ()
+  | Ok blob ->
+      let* line = read_exif blob in
+      append log (m.web_path ^ ": " ^ line);
+      let+ r = check_preview log blob in
+      Result.iter_error (fun e -> append log ("preview: " ^ e)) r
 
 let pick log () =
   Fut.await (Cap_camera.choose_photos ~limit:5) (function
     | Error e -> append log ("pick: " ^ Cap_error.to_string e)
     | Ok media ->
-        List.iter
-          (fun (m : Cap_camera.media) ->
-            Fut.await (read_exif m) (fun line ->
-                append log (m.web_path ^ ": " ^ line)))
-          media)
+        Fut.await
+          (List.fold_left
+             (fun previous m -> Fut.bind previous (fun () -> check log m))
+             (Fut.return ()) media)
+          Fun.id)
 
 let locate log () =
   Fut.await

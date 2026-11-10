@@ -1,7 +1,7 @@
 ; Native checks of the pure modules of app/photos/, copied in: they must not
 ; reference Brr, Fut or Herbier_bindings.
 
-(copy_files# ../../app/photos/exif.{ml,mli})
+(copy_files# ../../app/photos/{exif,preview_size,jpeg}.{ml,mli})
 
 (test
  (name test_photos)

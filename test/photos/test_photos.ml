@@ -1,6 +1,6 @@
 (* Exif.of_json over exifr output recorded by scripts/exifr-fixture.mjs
    (test/fixtures/exifr_*.json) and over hand-written objects for the edge
-   cases. *)
+   cases; Preview_size.fit; Jpeg.has_exif over hand-built segments. *)
 
 let fixture name =
   let path = Filename.concat "../fixtures" ("exifr_" ^ name ^ ".json") in
@@ -350,6 +350,54 @@ let tag_tests =
         Alcotest.(check (list string)) "pick" Exif.tags picked );
   ]
 
+let size = Alcotest.(pair int int)
+
+let fit_tests =
+  let case name (width, height) expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check size name expected (Preview_size.fit ~width ~height) )
+  in
+  [
+    case "at the bound, unchanged" (1600, 1200) (1600, 1200);
+    case "landscape scaled down" (4000, 3000) (1600, 1200);
+    case "portrait scaled down" (1200, 4000) (480, 1600);
+    case "small, never upscaled" (640, 480) (640, 480);
+    case "thin side clamped to 1" (10000, 1) (1600, 1);
+    case "empty becomes 1 x 1" (0, 0) (1, 1);
+    case "rounded, not truncated" (3001, 1999) (1600, 1066);
+  ]
+
+let segment marker payload =
+  let len = String.length payload + 2 in
+  Printf.sprintf "\xFF%c%c%c%s" (Char.chr marker)
+    (Char.chr (len lsr 8))
+    (Char.chr (len land 0xFF))
+    payload
+
+let soi = "\xFF\xD8"
+let sos = segment 0xDA "\x00\x01" ^ "scan data \xFF\xE1"
+let app0 = segment 0xE0 "JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+let exif = segment 0xE1 "Exif\x00\x00MM\x00\x2A"
+let xmp = segment 0xE1 "http://ns.adobe.com/xap/1.0/\x00<x/>"
+
+let jpeg_tests =
+  let case name bytes expected =
+    ( name,
+      `Quick,
+      fun () -> Alcotest.(check bool) name expected (Jpeg.has_exif bytes) )
+  in
+  [
+    case "canvas output: JFIF only" (soi ^ app0 ^ sos) false;
+    case "EXIF APP1 after JFIF" (soi ^ app0 ^ exif ^ sos) true;
+    case "EXIF APP1 first" (soi ^ exif ^ sos) true;
+    case "APP1 that is XMP, not EXIF" (soi ^ xmp ^ sos) false;
+    case "FF E1 inside the scan data is not a segment" (soi ^ sos) false;
+    case "not a JPEG" "Exif\x00\x00" false;
+    case "truncated segment" (soi ^ "\xFF\xE1\x00") false;
+  ]
+
 let () =
   Alcotest.run "photos"
     [
@@ -360,4 +408,6 @@ let () =
       ("exif fallback offset", offset_tests);
       ("exif input", input_tests);
       ("exif tags", tag_tests);
+      ("preview size", fit_tests);
+      ("jpeg exif segment", jpeg_tests);
     ]

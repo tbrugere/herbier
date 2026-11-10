@@ -102,6 +102,9 @@ app/
     cap_sqlite.ml  cap_filesystem.ml  cap_app.ml  cap_share_target.ml
     cap_social_login.ml  cap_uploader.ml  cap_geolocation.ml  cap_camera.ml
     cap_preferences.ml  maplibre.ml  pmtiles.ml  exifr.ml
+    image_bitmap.ml       createImageBitmap with EXIF orientation applied
+    canvas_blob.ml        canvas toBlob with a type and quality
+    object_url.ml         URL.createObjectURL / revokeObjectURL: a blob: URL for an <img>
     js_date.ml            JavaScript Date: the device's UTC offset at a local wall-clock time (EXIF dates without offset)
     web_path.ml           fetch of a plugin's webPath as a Blob, a non-ok status as an error
     cap_error.ml          binding-level error (plugin unavailable, rejected, unexpected result, invalid path), shared by the cap_*
@@ -121,13 +124,18 @@ app/
                           outbox.ml also holds `edit`, the value every synced write is (statement, read-back, payload)
     search.ml             FTS5 query text (folding, endings) and the plant search query
     dev_seed.ml           fixed development rows for M2, applied only by ui/dev/seed_check.ml
-    files.ml              previews/, refthumbs/, tiles/ paths under Directory.Data
+    files.ml              paths under Directory.Data (previews/, refthumbs/, tiles/); blob write, read, delete
+                          over cap_filesystem
   sync/                   Supabase (§4 of architecture)
     auth.ml               Google id token → signInWithIdToken, session, auto-refresh
     transport.ml          Postgrest.Request.t → Brr fetch, body to the decoder; JWT, paused-project detection
     push.ml  pull.ml  engine.ml (schedule, backoff)  previews_mirror.ml
   photos/                 §5 of architecture
-    exif.ml  preview.ml (canvas resize+encode)  capture.ml (getUserMedia / pick)
+    exif.ml  capture.ml (getUserMedia / pick)
+    preview.ml            canvas resize + JPEG encode, sha256 of the original; save: previews/<id>.jpg
+                          then the pending photo row through Db.edit
+    preview_size.ml       pure: the preview's size rule and JPEG quality
+    jpeg.ml               pure: JPEG segment reading (is there an EXIF APP1)
     drive.ml (files.create, folders, trashed check)  upload_queue.ml  health.ml
   refs/                   §6–7 of architecture, pure part: domain + yojson, no Brr
     sources/              gbif.ml  wikidata.ml  wikipedia.ml: request descriptions + payload decoders
@@ -156,8 +164,9 @@ app/
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
                           serialisation, park/delete); seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
-                          with the sources in flight; photo_check.ml (#dev/photos): gallery pick → exifr → Exif,
-                          one GPS fix; all ship in every build until the M2.17 router compiles them into dev builds only
+                          with the sources in flight; photo_check.ml (#dev/photos): gallery pick, then per photo
+                          exifr → Exif, sha256, Preview.make → dev/preview.jpg written, read back (sizes compared,
+                          EXIF segment checked) and shown as a blob: URL; one GPS fix; all ship in every build until the M2.17 router compiles them into dev builds only
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
@@ -320,8 +329,8 @@ test/
                 the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
                 (that is #dev/store)
-  photos/       native, alcotest: the pure modules of app/photos/ copied in (exif), over recorded
-                exifr output (fixtures/exifr_*.json)
+  photos/       native, alcotest: the pure modules of app/photos/ copied in (exif, over recorded
+                exifr output in fixtures/exifr_*.json; preview_size; jpeg)
   fixtures/     recorded payloads only: API responses (gbif_<key>.json, wikidata_<key>.json,
                 tela_<nn>.json, inpn_<cd_nom>.json) and exifr output (exifr_<name>.json,
                 scripts/exifr-fixture.mjs); never app rows
@@ -336,7 +345,7 @@ values and never run them, so their SQL runs natively through the sqlite3
 CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the
 serialisation), and sync,
-photos (except the pure `exif`, tested in `test/photos/`), refs_io and geo, are thin over device-only plugins and have no unit
+photos (except the pure `exif`, `preview_size` and `jpeg`, tested in `test/photos/`), refs_io and geo, are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 
 ## 7. `scripts/` and CI

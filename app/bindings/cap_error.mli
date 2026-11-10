@@ -23,3 +23,7 @@ type t =
 
 val to_string : t -> string
 (** One line for logs and the dev page; includes [code] when present. *)
+
+val of_jv_error : Jv.Error.t -> t
+(** A JavaScript error raised outside a plugin call (a Brr blob, base64 or
+    canvas operation), as [Rejected] with its message and no [code]. *)
