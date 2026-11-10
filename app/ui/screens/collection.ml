@@ -21,6 +21,7 @@ let equal a b =
   && Ptime.equal a.plant.updated_at b.plant.updated_at
   && Int.equal a.observations b.observations
 
+(* French: 0 and 1 take the singular. *)
 let plural n one many =
   Printf.sprintf "%d %s" n (match n with 0 | 1 -> one | _ -> many)
 
@@ -69,7 +70,8 @@ let toggle tag tags =
   | true -> List.filter (fun t -> not (Tag_id.equal t tag)) tags
   | false -> tag :: tags
 
-let v ~db ~(state : State.t) =
+let v app =
+  let db = App.db app and state = App.state app in
   let grid, grid_handle = RList.create [] in
   let tags, tags_handle = RList.create [] in
   let counter, set_counter = React.S.create "" in
@@ -189,6 +191,7 @@ let v ~db ~(state : State.t) =
           Rb.rlist chip_list tag_chip tags;
           Rb.rlist grid_el card grid;
           Rb.act changes refresh;
+          Rb.act (App.saved app) load;
           Rb.act all.click (fun () ->
               let f = React.S.value (State.filters state) in
               State.set_filters state {f with tags = []});

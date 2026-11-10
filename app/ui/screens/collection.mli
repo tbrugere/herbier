@@ -10,4 +10,5 @@
     counter (on entry) or in a line above the grid (on a filter change). Covers
     are the "no photo" state; "Coller un lien" and "Tags ›" do nothing. *)
 
-val v : db:Herbier_store.Db.t -> state:State.t -> Screen.t
+val v : App.t -> Screen.t
+(** Reloads (counter, tags, grid) whenever {!App.saved} fires. *)

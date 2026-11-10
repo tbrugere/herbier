@@ -215,7 +215,11 @@
 
 // Tab bar
 
+// Positioned so the record button, which rises above the bar, paints over the
+// screen's positioned cards instead of under them.
 .tab-bar
+  position: relative
+  z-index: 1
   display: grid
   grid-template-columns: 1fr 1fr auto 1fr 1fr
   align-items: center

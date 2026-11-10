@@ -1,5 +1,5 @@
-(** Dev-only page for 4a: opens the [herbier] database and shows the Collection
-    screen over it. Seed it first with [#dev/seed]. Reached with the URL
-    fragment [#dev/collection]. *)
+(** Dev-only page for 4a: shows the Collection screen over the app's [herbier]
+    database, or why there is none. Seed it first with [#dev/seed]. Reached with
+    the URL fragment [#dev/collection]. *)
 
-val el : unit -> Brr.El.t
+val el : (Herbier_store.Db.t, string) result -> Brr.El.t

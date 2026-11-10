@@ -1,10 +1,10 @@
 (** Dev-only page for the UI spike's exit criterion, reached with the URL
-    fragment [#dev/spike] over the [herbier] database (seed it with [#dev/seed]
-    first). Enters and leaves the Collection screen (4a) fifty times per round,
-    four rounds, reading the binding count and the JS heap after each; then
-    enters and leaves it fifty more times keeping the screens left, filters on
-    the first tag, and checks that a screen kept bound (the control) changes
-    while none of those left does.
+    fragment [#dev/spike] over the app's [herbier] database (seed it with
+    [#dev/seed] first). Enters and leaves the Collection screen (4a) fifty times
+    per round, four rounds, reading the binding count and the JS heap after
+    each; then enters and leaves it fifty more times keeping the screens left,
+    filters on the first tag, and checks that a screen kept bound (the control)
+    changes while none of those left does.
 
     The result is in [#result]: [data-ok] is [true] when the binding count is
     back to its baseline after every round and no left screen changed. A
@@ -21,4 +21,4 @@
     {!Herbier_bindings.Dev_hook.heap_used}): read the heap with
     [scripts/webview.mjs heap] when [data-round] reaches each value instead. *)
 
-val el : unit -> Brr.El.t
+val el : (Herbier_store.Db.t, string) result -> Brr.El.t

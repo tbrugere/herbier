@@ -53,25 +53,15 @@ let steps log db =
   in
   ()
 
-let run log =
-  let open Fut.Syntax in
-  let* opened =
-    step log "open herbier" ~detail:(fun _ -> "") (Db.open_ ~database:"herbier")
-  in
-  match opened with
-  | Error (_ : Db.error) -> Fut.return (append log "done")
-  | Ok db ->
-      let* (_ : (unit, Db.error) result) = steps log db in
-      let+ (_ : (unit, Db.error) result) =
-        step log "close" ~detail:(fun () -> "") (Db.close db)
-      in
-      append log "done"
-
-let el () =
+let el db =
   let log =
     Brr.El.div
       ~at:[Brr.At.v (Jstr.v "role") (Jstr.v "log")]
       [Brr.El.h1 [Brr.El.txt' "Seed check"]]
   in
-  Fut.await (run log) Fun.id;
+  (match db with
+  | Error e -> append log ("no herbier database: " ^ e)
+  | Ok db ->
+      Fut.await (steps log db) (fun (_ : (unit, Db.error) result) ->
+          append log "done"));
   log

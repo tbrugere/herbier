@@ -215,7 +215,7 @@ sync      ← domain, store, bindings, postgrest, brr (for Fut)
 photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs; photos also yojson, ptime
                                          (siblings never import each other)
 ui        ← everything above + react, reactiveData
-main      ← ui, brr                     (main.ml finds the root element and starts the router)
+main      ← ui, store, domain, brr      (main.ml opens the db, reads settings, builds State/App, starts the router)
 ```
 
 Notes:
