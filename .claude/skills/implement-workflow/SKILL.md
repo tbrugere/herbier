@@ -7,8 +7,8 @@ model: opus
 ---
 
 Implement `$ARGUMENTS` from `docs/plan.md`. Be fully autonomous: the only point where the
-user intervenes is after the draft PR is posted. Never ask the user to validate the plan. If the
-user asks for **fully autonomous** work, also follow "Fully autonomous mode" below: merge PRs
+user intervenes is after the draft PR is posted. Never ask the user to validate the plan. **"Fully
+autonomous mode" below is the default**: no draft PRs left for the user to read, merge PRs
 yourself when ready, stop only for their code or for an unsatisfactory hack.
 
 Hard rules, from the repo:
@@ -26,8 +26,10 @@ Hard rules, from the repo:
 
 # Fully autonomous mode
 
-Applies only when the user explicitly asks to work **fully autonomously** (e.g. "do M2 fully
-autonomously"). It changes who merges and when to stop; everything else in this skill holds.
+The default since 2026-11-10 (the user: "no draft PRs for me to read, you can just merge when
+ready"). It changes who merges and when to stop; everything else in this skill holds. The PR is
+still opened (as a draft while work is in progress) so its comments record the design decisions,
+pushbacks and device checks, then marked ready and merged by you.
 
 - **Merge when ready.** No need to wait for the user to mark a PR ready. A PR is ready when its
   plan step's "Done:" criterion is met; the review lenses and the second scope / comment-hygiene
