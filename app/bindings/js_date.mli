@@ -1,5 +1,11 @@
 (** The WebView's time zone, through JavaScript's [Date]. *)
 
+val offset_at_s : float -> int
+(** [offset_at_s t] for [t] in seconds since the epoch: seconds east of UTC of
+    the device's zone at that instant
+    ([-60 * new Date(t * 1000).getTimezoneOffset()]), so it follows daylight
+    saving time for that date, not today's. *)
+
 val local_offset_s :
   year:int ->
   month:int ->

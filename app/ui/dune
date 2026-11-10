@@ -17,4 +17,6 @@
   postgrest
   brr
   react
-  reactiveData))
+  reactiveData
+  ptime
+  ptime.clock.os))

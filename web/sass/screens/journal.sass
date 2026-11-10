@@ -1,0 +1,31 @@
+// 4c Journal (app/ui/screens/journal.ml).
+@use '../base'
+
+.journal
+  gap: 14px
+
+.journal__header
+  display: flex
+  justify-content: space-between
+  align-items: flex-end
+
+.journal__counter
+  +base.meta(14px)
+
+.journal__day-header
+  display: flex
+  justify-content: space-between
+  align-items: baseline
+  padding: 18px 0 6px
+  border-bottom: 1px solid var(--ink)
+
+.journal__date
+  +base.ui(18px, 800)
+  letter-spacing: -0.02em
+
+.journal__place
+  +base.ui(13px, 700)
+  display: inline-flex
+  align-items: center
+  gap: 2px
+  color: var(--moss)

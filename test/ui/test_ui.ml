@@ -92,6 +92,11 @@ let exhaustive =
 
 (* Collection_filter *)
 
+let utc y m d h mi =
+  match Ptime.of_date_time ((y, m, d), ((h, mi, 0), 0)) with
+  | Some t -> t
+  | None -> failwith "bad date"
+
 module Plant_id = Herbier_domain.Ids.Plant_id
 
 let p1 = Plant_id.fresh ()
@@ -115,7 +120,40 @@ let obs plant_id : Herbier_domain.Observation.t =
 
 let collection_filter =
   let open Collection_filter in
+  let t1 = Herbier_domain.Ids.Tag_id.fresh ()
+  and t2 = Herbier_domain.Ids.Tag_id.fresh () in
+  let link tag_id plant_id : Herbier_domain.Tag.Plant_tag.t =
+    {
+      id = Herbier_domain.Ids.Plant_tag_id.of_key ~plant:plant_id ~tag:tag_id;
+      plant_id;
+      tag_id;
+      created_at = Ptime.epoch;
+      updated_at = Ptime.epoch;
+      deleted_at = None;
+    }
+  in
+  let ids =
+    Alcotest.testable
+      (Fmt.of_to_string Herbier_domain.Ids.Tag_id.to_string)
+      Herbier_domain.Ids.Tag_id.equal
+  in
   [
+    Alcotest.test_case "tagged: the plants of each selected tag" `Quick
+      (fun () ->
+        let links = [link t1 p1; link t2 p2; link t1 p3] in
+        Alcotest.(check (list (list bool)))
+          "t2 then t1"
+          [[false; true; false]; [true; false; true]]
+          (List.map
+             (fun ps ->
+               List.map
+                 (fun p -> List.exists (Plant_id.equal p) ps)
+                 [p1; p2; p3])
+             (tagged links [t2; t1]));
+        Alcotest.(check int) "none selected" 0 (List.length (tagged links [])));
+    Alcotest.test_case "toggle_tag" `Quick (fun () ->
+        Alcotest.(check (list ids)) "add" [t2; t1] (toggle_tag t2 [t1]);
+        Alcotest.(check (list ids)) "remove" [t1] (toggle_tag t2 [t2; t1]));
     Alcotest.test_case "counts" `Quick (fun () ->
         let c =
           counts [obs (Some p1); obs None; obs (Some p1); obs (Some p2)]
@@ -137,6 +175,67 @@ let collection_filter =
         Alcotest.(check (list bool))
           "p1 p2 p3" [false; true; false]
           (List.map (has_all_tags ~tagged) [p1; p2; p3]));
+  ]
+
+(* Journal_filter: the year of an observation is its UTC year here. *)
+
+let journal_filter =
+  let year_of (o : Herbier_domain.Observation.t) =
+    Fr_date.year ~tz_offset_s:0 o.at
+  in
+  let at y o = {o with Herbier_domain.Observation.at = utc y 6 1 12 0} in
+  let o1 = at 2025 (obs (Some p1))
+  and o2 = at 2026 (obs (Some p2))
+  and o3 = at 2026 (obs None) in
+  let all = [o1; o2; o3] in
+  let kept ?year ?(to_identify_only = false) ?(tagged = []) () =
+    List.map (Journal_filter.keep ~year_of ~year ~to_identify_only ~tagged) all
+  in
+  let bools = Alcotest.(list bool) in
+  [
+    Alcotest.test_case "no filter keeps all" `Quick (fun () ->
+        Alcotest.check bools "kept" [true; true; true] (kept ()));
+    Alcotest.test_case "year" `Quick (fun () ->
+        Alcotest.check bools "2026" [false; true; true] (kept ~year:2026 ()));
+    Alcotest.test_case "à identifier" `Quick (fun () ->
+        Alcotest.check bools "no plant" [false; false; true]
+          (kept ~to_identify_only:true ()));
+    Alcotest.test_case "tags: all required, no plant left out" `Quick (fun () ->
+        Alcotest.check bools "p1 and p2 tagged" [true; true; false]
+          (kept ~tagged:[[p1; p2]] ());
+        Alcotest.check bools "only p2 has both" [false; true; false]
+          (kept ~tagged:[[p1; p2]; [p2]] ()));
+    Alcotest.test_case "filters combine" `Quick (fun () ->
+        Alcotest.check bools "2026 and tagged" [false; true; false]
+          (kept ~year:2026 ~tagged:[[p1; p2]] ()));
+    Alcotest.test_case "year chips: newest first, a selected year stays" `Quick
+      (fun () ->
+        Alcotest.(check (list int))
+          "present" [2026; 2025]
+          (Journal_filter.year_chips ~year_of ~year:None all);
+        Alcotest.(check (list int))
+          "selected, none left" [2026; 2025; 2024]
+          (Journal_filter.year_chips ~year_of ~year:(Some 2024) all);
+        Alcotest.(check (list int))
+          "empty" []
+          (Journal_filter.year_chips ~year_of ~year:None []));
+    Alcotest.test_case "à identifier chip stays while on" `Quick (fun () ->
+        let chip = Alcotest.(option int) in
+        Alcotest.check chip "count" (Some 1)
+          (Journal_filter.to_identify_chip ~to_identify_only:false all);
+        Alcotest.check chip "none: no chip" None
+          (Journal_filter.to_identify_chip ~to_identify_only:false [o1; o2]);
+        Alcotest.check chip "none, filter on" (Some 0)
+          (Journal_filter.to_identify_chip ~to_identify_only:true [o1; o2]));
+  ]
+
+let fr_text =
+  [
+    Alcotest.test_case "plural" `Quick (fun () ->
+        Alcotest.(check (list string))
+          "0 1 2"
+          ["0 plante"; "1 plante"; "2 plantes"]
+          (List.map (fun n -> Fr_text.plural n "plante" "plantes") [0; 1; 2]));
   ]
 
 (* Snap: where a released sheet settles, over the dev page's points. *)
@@ -183,9 +282,254 @@ and b = (2, "b")
 and c = (3, "c")
 and d = (4, "d")
 
+(* Fr_date *)
+
+let fr_date =
+  let str = Alcotest.string in
+  [
+    Alcotest.test_case "day header" `Quick (fun () ->
+        let header = Fr_date.day_header ~this_year:2026 in
+        Alcotest.check str "fri" "Ven. 12 juin" (header (2026, 6, 12));
+        Alcotest.check str "accent" "Sam. 15 août" (header (2026, 8, 15));
+        Alcotest.check str "another year" "Lun. 1 mars 2027"
+          (header (2027, 3, 1));
+        Alcotest.check str "no such date: no weekday" "30 février"
+          (header (2026, 2, 30)));
+    Alcotest.test_case "year at the New Year" `Quick (fun () ->
+        let t = utc 2026 12 31 23 30 in
+        Alcotest.(check int) "utc" 2026 (Fr_date.year ~tz_offset_s:0 t);
+        Alcotest.(check int) "paris" 2027 (Fr_date.year ~tz_offset_s:3600 t));
+    Alcotest.test_case "local date, negative offset" `Quick (fun () ->
+        Alcotest.(check (triple int int int))
+          "new york" (2026, 6, 11)
+          (Fr_date.local_date ~tz_offset_s:(-14400) (utc 2026 6 12 2 0)));
+    Alcotest.test_case "local date crosses midnight" `Quick (fun () ->
+        let t = utc 2026 6 11 22 30 in
+        Alcotest.(check (triple int int int))
+          "utc" (2026, 6, 11)
+          (Fr_date.local_date ~tz_offset_s:0 t);
+        Alcotest.(check (triple int int int))
+          "paris summer" (2026, 6, 12)
+          (Fr_date.local_date ~tz_offset_s:7200 t));
+    Alcotest.test_case "time" `Quick (fun () ->
+        Alcotest.check str "padded" "09:05"
+          (Fr_date.time ~tz_offset_s:3600 (utc 2026 1 3 8 5)));
+  ]
+
+(* Journal_day *)
+
+let obs ?(hour = 12) ?label ?derived ?pos () : Herbier_domain.Observation.t =
+  let t = utc 2026 6 12 hour 0 in
+  {
+    id = Herbier_domain.Ids.Observation_id.fresh ();
+    plant_id = None;
+    at = t;
+    position =
+      Option.map
+        (fun (lat, lon) ->
+          {Herbier_domain.Observation.lat; lon; accuracy_m = None})
+        pos;
+    place_label = label;
+    place_derived = derived;
+    note = None;
+    created_at = t;
+    updated_at = t;
+    deleted_at = None;
+  }
+
+let journal_day =
+  let place = Alcotest.(option string) in
+  [
+    Alcotest.test_case "group consecutive" `Quick (fun () ->
+        let days =
+          Journal_day.group ~date:fst
+            [((1, 1, 2), "a"); ((1, 1, 2), "b"); ((1, 1, 1), "c")]
+        in
+        Alcotest.(check (list (list string)))
+          "items"
+          [["a"; "b"]; ["c"]]
+          (List.map (fun (d : _ Journal_day.t) -> List.map snd d.items) days));
+    Alcotest.test_case "a date that comes back is a new day" `Quick (fun () ->
+        let days =
+          Journal_day.group ~date:fst
+            [((1, 1, 2), "a"); ((1, 1, 1), "b"); ((1, 1, 2), "c")]
+        in
+        Alcotest.(check (list (list string)))
+          "items" [["a"]; ["b"]; ["c"]]
+          (List.map (fun (d : _ Journal_day.t) -> List.map snd d.items) days));
+    Alcotest.test_case "one item, empty" `Quick (fun () ->
+        Alcotest.(check int)
+          "one day" 1
+          (List.length (Journal_day.group ~date:Fun.id [(1, 1, 1)]));
+        Alcotest.(check int)
+          "no day" 0
+          (List.length (Journal_day.group ~date:Fun.id [])));
+    Alcotest.test_case "majority label" `Quick (fun () ->
+        Alcotest.check place "label" (Some "Col")
+          (Journal_day.place
+             [
+               obs ~label:"Lac" ();
+               obs ~label:"Col" ();
+               obs ~label:"Col" ();
+               obs ~derived:"Près" ();
+             ]));
+    Alcotest.test_case "tie to the earliest, blank and padded labels" `Quick
+      (fun () ->
+        (* The store gives a day newest first. *)
+        Alcotest.check place "earliest" (Some "Col")
+          (Journal_day.place
+             [obs ~hour:15 ~label:"Lac" (); obs ~hour:9 ~label:"Col" ()]);
+        Alcotest.check place "trimmed, blank ignored" (Some "Lac")
+          (Journal_day.place
+             [obs ~label:"  " (); obs ~label:" Lac " (); obs ~derived:"Près" ()]));
+    Alcotest.test_case "derived, then coordinates" `Quick (fun () ->
+        Alcotest.check place "derived" (Some "Près de Colmar")
+          (Journal_day.place
+             [obs ~pos:(48.1, 7.2) (); obs ~derived:"Près de Colmar" ()]);
+        Alcotest.check place "coords" (Some "48.0633, 7.0081")
+          (Journal_day.place [obs (); obs ~pos:(48.0633, 7.0081) ()]);
+        Alcotest.check place "mean of the positions" (Some "48.2000, 7.1000")
+          (Journal_day.place
+             [obs ~hour:15 ~pos:(48.1, 7.0) (); obs ~hour:9 ~pos:(48.3, 7.2) ()]);
+        Alcotest.check place "a nan position is not placeable" None
+          (Journal_day.place [obs ~pos:(Float.nan, 7.0) ()]);
+        Alcotest.check place "none" None (Journal_day.place [obs ()]));
+  ]
+
+(* Tag_edits *)
+
+let tag_id = Herbier_domain.Ids.Tag_id.fresh
+let plant_id = Herbier_domain.Ids.Plant_id.fresh
+
+let tag_edits =
+  let p1 = plant_id ()
+  and p2 = plant_id ()
+  and p3 = plant_id ()
+  and p4 = plant_id ()
+  and p5 = plant_id () in
+  let ta = tag_id () and tb = tag_id () and tc = tag_id () in
+  let model () =
+    Tag_edits.init
+      [(ta, "bois", [p1]); (tb, "forêt", [p1; p2]); (tc, "lisière", [p3])]
+  in
+  let names m =
+    List.map (fun (e : Tag_edits.entry) -> e.name) (Tag_edits.visible m)
+  in
+  let tag_name id =
+    List.assoc_opt id [(ta, "a"); (tb, "b"); (tc, "c")]
+    |> Option.value ~default:"?"
+  and plant_name id =
+    List.assoc_opt id [(p1, "p1"); (p2, "p2"); (p3, "p3")]
+    |> Option.value ~default:"?"
+  in
+  let show = function
+    | Tag_edits.Rename (id, n) -> tag_name id ^ "=" ^ n
+    | Tag_edits.Delete id -> "del " ^ tag_name id
+    | Tag_edits.Link {plant; tag} ->
+        Printf.sprintf "link %s %s" (plant_name plant) (tag_name tag)
+    | Tag_edits.Unlink {plant; tag} ->
+        Printf.sprintf "unlink %s %s" (plant_name plant) (tag_name tag)
+  in
+  let ops m = List.map show (Tag_edits.plan m) in
+  let strs = Alcotest.(list string) in
+  [
+    Alcotest.test_case "nothing staged, nothing planned" `Quick (fun () ->
+        Alcotest.check strs "ops" [] (ops (model ())));
+    Alcotest.test_case "rename, blank ignored" `Quick (fun () ->
+        let m =
+          Tag_edits.rename ta "  " (Tag_edits.rename ta "bosquet" (model ()))
+        in
+        Alcotest.check strs "names" ["bosquet"; "forêt"; "lisière"] (names m);
+        Alcotest.check strs "ops" ["a=bosquet"] (ops m));
+    Alcotest.test_case "delete" `Quick (fun () ->
+        let m = Tag_edits.delete [tc] (model ()) in
+        Alcotest.check strs "names" ["bois"; "forêt"] (names m);
+        Alcotest.check strs "ops" ["del c"] (ops m));
+    Alcotest.test_case "merge keeps the most used" `Quick (fun () ->
+        let m = model () in
+        Alcotest.(check (option string))
+          "winner" (Some "forêt")
+          (Option.map
+             (fun (e : Tag_edits.entry) -> e.name)
+             (Tag_edits.winner [ta; tb] m));
+        let m = Tag_edits.merge [ta; tb] m in
+        Alcotest.check strs "names" ["forêt"; "lisière"] (names m);
+        Alcotest.(check int)
+          "plants" 2
+          (List.length (Tag_edits.plants m (List.nth (Tag_edits.visible m) 0)));
+        Alcotest.check strs "ops" ["link p1 b"; "unlink p1 a"; "del a"] (ops m));
+    Alcotest.test_case "merge follows an earlier merge" `Quick (fun () ->
+        (* a into b, then b and c: b keeps 2 plants (a's p1 is already on
+           it), c has 1. *)
+        let m =
+          Tag_edits.merge [tb; tc] (Tag_edits.merge [ta; tb] (model ()))
+        in
+        Alcotest.check strs "names" ["forêt"] (names m);
+        Alcotest.check strs "ops"
+          [
+            "link p1 b";
+            "unlink p1 a";
+            "del a";
+            "link p3 b";
+            "unlink p3 c";
+            "del c";
+          ]
+          (ops m));
+    Alcotest.test_case "a later winner takes the earlier merge along" `Quick
+      (fun () ->
+        let m =
+          Tag_edits.init
+            [
+              (ta, "bois", [p1]);
+              (tb, "forêt", [p1; p2]);
+              (tc, "lisière", [p3; p4; p5]);
+            ]
+        in
+        let m = Tag_edits.merge [tb; tc] (Tag_edits.merge [ta; tb] m) in
+        Alcotest.check strs "names" ["lisière"] (names m);
+        Alcotest.check strs "ops"
+          [
+            "link p1 c";
+            "unlink p1 a";
+            "del a";
+            "link p1 c";
+            "link p2 c";
+            "unlink p1 b";
+            "unlink p2 b";
+            "del b";
+          ]
+          (ops m));
+    Alcotest.test_case "deleting a winner deletes what it absorbed" `Quick
+      (fun () ->
+        let m = Tag_edits.delete [tb] (Tag_edits.merge [ta; tb] (model ())) in
+        Alcotest.check strs "names" ["lisière"] (names m);
+        Alcotest.check strs "ops" ["del a"; "del b"] (ops m);
+        Alcotest.(check (list string))
+          "filter" []
+          (List.map tag_name (Tag_edits.followed m [ta])));
+    Alcotest.test_case "followed: merged to the winner, deleted dropped" `Quick
+      (fun () ->
+        let m = Tag_edits.delete [tc] (Tag_edits.merge [ta; tb] (model ())) in
+        Alcotest.(check (list string))
+          "filter" ["b"]
+          (List.map tag_name (Tag_edits.followed m [ta; tb; tc])));
+    Alcotest.test_case "winner: a tie goes to the first in model order" `Quick
+      (fun () ->
+        Alcotest.(check (option string))
+          "winner" (Some "bois")
+          (Option.map
+             (fun (e : Tag_edits.entry) -> e.name)
+             (Tag_edits.winner [tc; ta] (model ()))));
+    Alcotest.test_case "one selected: no merge" `Quick (fun () ->
+        Alcotest.check strs "ops" [] (ops (Tag_edits.merge [ta] (model ()))));
+  ]
+
 let () =
   Alcotest.run "ui"
     [
+      ("tag_edits", tag_edits);
+      ("fr_date", fr_date);
+      ("journal_day", journal_day);
       ( "list_patch",
         [
           check "identical" [a; b; c] [a; b; c] (Some []);
@@ -212,5 +556,7 @@ let () =
           exhaustive;
         ] );
       ("collection_filter", collection_filter);
+      ("journal_filter", journal_filter);
+      ("fr_text", fr_text);
       ("snap", snap);
     ]

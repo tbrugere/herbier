@@ -578,6 +578,45 @@ let plants_with_tag () =
     "an unknown tag has no plants" []
     (names (all db (Plants.with_tag (tag_id 0xc9))))
 
+let tags_links () =
+  let db = Cli.migrated_db () in
+  writes "plants, tags, links" db
+    [
+      Plants.upsert (plant 0x11 "Thym");
+      Plants.upsert (plant 0x12 "basilic");
+      Plants.upsert (plant 0x13 "Sauge");
+      Plants.upsert (plant 0x14 "Romarin");
+      Tags.upsert (tag 0xc1 "Aromatique");
+      Tags.upsert (tag 0xc2 "Jardin");
+      Tags.upsert (tag 0xc3 "Toxique");
+      Tags.tag ~plant:(plant_id 0x12) ~tag:(tag_id 0xc2) ~at:t0;
+      Tags.tag ~plant:(plant_id 0x11) ~tag:(tag_id 0xc1) ~at:t0;
+      Tags.tag ~plant:(plant_id 0x12) ~tag:(tag_id 0xc1) ~at:t0;
+      Tags.tag ~plant:(plant_id 0x13) ~tag:(tag_id 0xc1) ~at:t0;
+      Tags.untag ~plant:(plant_id 0x13) ~tag:(tag_id 0xc1) ~at:t1;
+      Tags.tag ~plant:(plant_id 0x14) ~tag:(tag_id 0xc1) ~at:t0;
+      Plants.soft_delete (plant_id 0x14) ~at:t1;
+      Tags.tag ~plant:(plant_id 0x11) ~tag:(tag_id 0xc3) ~at:t0;
+      Tags.soft_delete (tag_id 0xc3) ~at:t1;
+    ];
+  let pairs =
+    List.map
+      (fun (pt : Tag.Plant_tag.t) ->
+        (Ids.Tag_id.to_string pt.tag_id, Ids.Plant_id.to_string pt.plant_id))
+      (all db Tags.links)
+  in
+  Alcotest.(check (list (pair string string)))
+    "live links of live tags and plants, by tag then plant"
+    [
+      ( Ids.Tag_id.to_string (tag_id 0xc1),
+        Ids.Plant_id.to_string (plant_id 0x11) );
+      ( Ids.Tag_id.to_string (tag_id 0xc1),
+        Ids.Plant_id.to_string (plant_id 0x12) );
+      ( Ids.Tag_id.to_string (tag_id 0xc2),
+        Ids.Plant_id.to_string (plant_id 0x12) );
+    ]
+    pairs
+
 let plants_upsert_overwrites () =
   check_upsert_overwrites "Plants" plant_t ~setup:[] ~upsert:Plants.upsert
     ~get:(fun (p : Plant.t) -> Plants.get p.id)
@@ -1793,6 +1832,7 @@ let () =
             plants_soft_delete;
           case "with_tag is live plants with a live link to a live tag"
             plants_with_tag;
+          case "Tags.links is live links of live tags and plants" tags_links;
           case "upsert over an existing id rewrites every column"
             plants_upsert_overwrites;
           case "upsert is insert on conflict, never replace" plants_upsert_sql;

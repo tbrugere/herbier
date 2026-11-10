@@ -22,7 +22,12 @@ let storage db =
 
 let tab app = function
   | Herbier_ui.Widgets.Tab_bar.Collection -> Herbier_ui.Screens.Collection.v app
-  | (Map | Journal | Settings) as t -> Herbier_ui.Screens.Placeholder.v t
+  | Journal -> Herbier_ui.Screens.Journal.v app
+  | (Map | Settings) as t -> Herbier_ui.Screens.Placeholder.v t
+
+let modal app = function
+  | Herbier_ui.Route.Tags -> Herbier_ui.Screens.Tags.v app
+  | Herbier_ui.Route.Manage_tags -> Herbier_ui.Screens.Manage_tags.v app
 
 (* [online] is read once, here: no online or offline listener updates it. *)
 let create_app db storage =
@@ -79,4 +84,4 @@ let () =
       | Ok (_ : Herbier_ui.App.t) -> ()
       | Error reason -> Console.(error [str "herbier: startup"; str reason]));
       Herbier_ui.Router.start ~root ~tab:(or_unavailable tab app)
-        ~dev:(Dev_pages.find db))
+        ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db))

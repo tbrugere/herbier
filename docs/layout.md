@@ -106,7 +106,8 @@ app/
     image_bitmap.ml       createImageBitmap with EXIF orientation applied
     canvas_blob.ml        canvas toBlob with a type and quality
     object_url.ml         URL.createObjectURL / revokeObjectURL: a blob: URL for an <img>
-    js_date.ml            JavaScript Date: the device's UTC offset at a local wall-clock time (EXIF dates without offset)
+    js_date.ml            JavaScript Date: the device's UTC offset at a local wall-clock time (EXIF dates without
+                          offset) or at an instant (the Journal's local days)
     web_path.ml           fetch of a plugin's webPath as a Blob, a non-ok status as an error
     cap_error.ml          binding-level error (plugin unavailable, rejected, unexpected result, invalid path), shared by the cap_*
     cap_call.ml           private: plugin lookup on globalThis.herbier, promise → Fut with errors mapped to Cap_error
@@ -167,9 +168,12 @@ app/
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
                           the shell holds the tab bar
     screen.ml             a screen's root element + its bindings, as the router takes them
+    route.ml              route = parsed URL fragment (tabs, modals, dev pages); go / back
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
-                          RList without re-rendering unchanged items; pure, tested in test/ui/
-    collection_filter.ml  observation counts per plant and the all-tags filter of 4a; pure, tested in test/ui/
+                          RList without re-rendering unchanged items
+    collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml
+                          pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    tag_usage.ml          live tags with their plants (4l, 5d), from Tags.list and Tags.links
     snap.ml               the sheet's snap points: nearest, clamp, release projection; pure, tested in test/ui/
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
@@ -190,13 +194,14 @@ app/
                           stale-update check against a live control, heap per round; fixture.ml: the dev pages' State; hooks.ml:
                           herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
-    widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
+    widgets/              button, chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
-      collection.ml (4a)  map_tab.ml (4b)  journal.ml (4c)  record.ml (4d)
+      collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
+      journal.ml (4c)     record.ml (4d)
       saved.ml (4e)       species.ml (4f, 4g)  observation.ml (4h)
       resolve.ml (4i, 4j, 4k, 5c: one screen, four entry modes)
-      tags.ml (4l, 5d)    settings.ml (4m)  onboarding.ml (4n)
+      tags.ml (4l)        manage_tags.ml (5d)  settings.ml (4m)
       edit_plant.ml (5a)  move_point.ml (5b)  viewer.ml (5e)
 ```
 
@@ -350,7 +355,7 @@ test/
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
   refs/         native, alcotest: payload decoders and projection over fixtures/
-  ui/           native, alcotest: the pure modules of app/ui/ copied in (list_patch, collection_filter, snap)
+  ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune)
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
                 the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
@@ -367,7 +372,7 @@ alcotest runs natively, in `dune test` on every CI job, on every library
 without a Brr dependency (`domain`, `postgrest`, `refs`), and on the Brr-free
 modules of `store` (`codec`, `schema`, `tables`, `stmt`, `outbox`, the
 per-table query modules, `settings`, `search`, `dev_seed`) and of `ui`
-(`list_patch`, `collection_filter`, `snap`). The store ones build statements as
+(those test/ui/dune copies in). The store ones build statements as
 values and never run them, so their SQL runs natively through the sqlite3
 CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the

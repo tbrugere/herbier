@@ -44,6 +44,14 @@ let of_plant plant =
      by t.name collate nocase, t.id"
     [Codec.param Pt.plant_id plant]
 
+let links =
+  Stmt.query ~json:[] plant_tag_row
+    "select pt.* from plant_tags pt join tags t on t.id = pt.tag_id join \
+     plants p on p.id = pt.plant_id where pt.deleted_at is null and \
+     t.deleted_at is null and p.deleted_at is null order by pt.tag_id, \
+     pt.plant_id"
+    []
+
 let input (t : Tag.t) : (T.t, [`Full]) Postgrest.Input.t =
   Postgrest.Input.
     {

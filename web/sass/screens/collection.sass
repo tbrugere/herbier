@@ -1,5 +1,6 @@
 // 4a Collection (app/ui/screens/collection.ml).
 @use '../base'
+@use '../widgets'
 
 .collection
   gap: 14px
@@ -7,6 +8,28 @@
 .collection__counter
   +base.meta(14px)
   margin-top: 4px
+
+.collection__filled
+  display: flex
+  flex-direction: column
+  gap: 14px
+
+// 4n
+.collection__empty
+  display: flex
+  flex-direction: column
+  gap: 14px
+  padding-top: 12px
+
+.collection__illustration
+  aspect-ratio: 4 / 3
+  border-radius: 20px
+  +widgets.striped
+
+.collection__empty-title
+  +base.ui(26px, 800)
+  letter-spacing: -0.02em
+  line-height: 1.15
 
 // A failed store read; empty (and hidden) otherwise.
 .collection__failure

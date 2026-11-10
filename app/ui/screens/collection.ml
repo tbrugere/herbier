@@ -21,10 +21,6 @@ let equal a b =
   && Ptime.equal a.plant.updated_at b.plant.updated_at
   && Int.equal a.observations b.observations
 
-(* French: 0 and 1 take the singular. *)
-let plural n one many =
-  Printf.sprintf "%d %s" n (match n with 0 | 1 -> one | _ -> many)
-
 let card item =
   let mention = Printf.sprintf "sans photo · %d obs." item.observations in
   let c =
@@ -44,14 +40,10 @@ let visible db ~counts ~text ~tags =
     match Search.plants text with None -> Plants.list | Some q -> q
   in
   let* plants = Db.all db base in
-  let+ tagged =
-    List.fold_left
-      (fun acc tag ->
-        let* acc = acc in
-        let+ ps = Db.all db (Plants.with_tag tag) in
-        List.map (fun (p : Plant.t) -> p.id) ps :: acc)
-      (Fut.ok []) tags
+  let+ links =
+    match tags with [] -> Fut.ok [] | _ :: _ -> Db.all db Tags.links
   in
+  let tagged = Filter.tagged links tags in
   List.filter_map
     (fun (p : Plant.t) ->
       match Filter.has_all_tags ~tagged p.id with
@@ -65,17 +57,13 @@ let apply handle =
     | List_patch.Insert (i, v) -> RList.insert v i handle
     | List_patch.Update (i, v) -> RList.update v i handle)
 
-let toggle tag tags =
-  match List.exists (Tag_id.equal tag) tags with
-  | true -> List.filter (fun t -> not (Tag_id.equal t tag)) tags
-  | false -> tag :: tags
-
 let v app =
   let db = App.db app and state = App.state app in
   let grid, grid_handle = RList.create [] in
   let tags, tags_handle = RList.create [] in
   let counter, set_counter = React.S.create "" in
   let failure, set_failure = React.S.create "" in
+  let empty, set_empty = React.S.create false in
   let search =
     W.Text_field.v ~icon:W.Icon.Search ~action:"Coller un lien"
       ~placeholder:"Nom, tag, lieu…" ()
@@ -98,7 +86,8 @@ let v app =
     let set =
       Rb.act chip.click (fun () ->
           let f = React.S.value (State.filters state) in
-          State.set_filters state {f with tags = toggle tag.id f.tags})
+          State.set_filters state
+            {f with tags = Filter.toggle_tag tag.id f.tags})
     in
     (chip.el, set :: chip.bindings)
   in
@@ -133,10 +122,12 @@ let v app =
         set_counter "Lecture impossible"
     | Ok (observations, plants, all_tags) ->
         counts := Filter.counts observations;
+        set_empty (match plants with [] -> true | _ :: _ -> false);
         set_counter
-          (plural (List.length plants) "plante" "plantes"
+          (Fr_text.plural (List.length plants) "plante" "plantes"
           ^ " · "
-          ^ plural (List.length observations) "observation" "observations");
+          ^ Fr_text.plural (List.length observations) "observation"
+              "observations");
         RList.set tags_handle all_tags;
         refresh ()
   in
@@ -157,6 +148,37 @@ let v app =
     El.div ~at:[At.class' (Jstr.v "chip-row")] [all.el; chip_list; tags_link.el]
   in
   let grid_el = El.div ~at:[At.class' (Jstr.v "card-grid")] [] in
+  let first = W.Button.v ~icon:W.Icon.Add "Noter ma première plante" in
+  let paste =
+    W.Button.v ~kind:W.Button.Secondary "Coller un lien Pl@ntNet / GBIF"
+  in
+  let empty_el =
+    El.div
+      ~at:[At.class' (Jstr.v "collection__empty")]
+      [
+        El.div ~at:[At.class' (Jstr.v "collection__illustration")] [];
+        El.h2
+          ~at:[At.class' (Jstr.v "collection__empty-title")]
+          [El.txt' "La première plante s'ajoute dehors ou depuis un lien."];
+        El.p
+          ~at:[At.class' (Jstr.v "t-body")]
+          [
+            El.txt'
+              "Prenez une photo sur le terrain, ou collez un lien d'une espèce \
+               vue sur Pl@ntNet, GBIF ou Wikipédia.";
+          ];
+        first.el;
+        paste.el;
+        El.p
+          ~at:[At.class' (Jstr.v "t-meta")]
+          [El.txt' "Google Photos se connecte plus tard, à la première photo."];
+      ]
+  in
+  let filled =
+    El.div
+      ~at:[At.class' (Jstr.v "collection__filled")]
+      [search.el; chips_el; failure_el; grid_el]
+  in
   let el =
     El.div
       ~at:[At.class' (Jstr.v "screen"); At.class' (Jstr.v "collection")]
@@ -168,10 +190,8 @@ let v app =
               [El.txt' "Collection"];
             counter_el;
           ];
-        search.el;
-        chips_el;
-        failure_el;
-        grid_el;
+        filled;
+        empty_el;
       ]
   in
   let changes =
@@ -196,7 +216,14 @@ let v app =
               let f = React.S.value (State.filters state) in
               State.set_filters state {f with tags = []});
         ];
+        [
+          Rb.class_ empty_el "is-hidden" (React.S.map not empty);
+          Rb.class_ filled "is-hidden" empty;
+          Rb.act tags_link.click (fun () -> Route.go (Route.Modal Route.Tags));
+        ];
         search.bindings;
+        first.bindings;
+        paste.bindings;
         all.bindings;
         tags_link.bindings;
       ]
