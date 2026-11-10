@@ -23,4 +23,5 @@ let find =
   | "gallery" -> Some (page D.Gallery.el)
   | "collection" -> Some (page D.Collection_check.el)
   | "sheet" -> Some (page D.Sheet_check.el)
+  | "spike" -> Some (page D.Spike_check.el)
   | _ -> None

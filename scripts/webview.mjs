@@ -9,6 +9,7 @@
 //   eval <js>                     evaluate an expression in the page (promises awaited), print the value
 //   text                          print document.body.innerText
 //   screenshot <file.png>         save a PNG of the viewport
+//   heap                          force a full GC, then print the JS heap in use (bytes)
 //   wait-for <js> [timeout-ms]    poll until the expression is truthy (default 30000)
 //   wait-stable [quiet-ms] [timeout-ms]
 //                                 wait until the page text has not changed for quiet-ms (default
@@ -20,7 +21,7 @@
 import { writeFileSync } from "node:fs";
 
 const usage = () => {
-  console.error("usage: webview.mjs [--port N] targets | eval <js> | text | screenshot <file> | wait-for <js> [ms] | wait-stable [quiet-ms] [ms] | drag <x,y[,ms]>...");
+  console.error("usage: webview.mjs [--port N] targets | eval <js> | text | screenshot <file> | heap | wait-for <js> [ms] | wait-stable [quiet-ms] [ms] | drag <x,y[,ms]>...");
   process.exit(2);
 };
 
@@ -98,6 +99,13 @@ async function main() {
         const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
         writeFileSync(rest[0], Buffer.from(data, "base64"));
         return console.log(rest[0]);
+      }
+      case "heap": {
+        // performance.memory is bucketed and cached outside a site-locked
+        // renderer (the WebView); the protocol's reading is exact.
+        await cdp.send("HeapProfiler.collectGarbage");
+        const { usedSize } = await cdp.send("Runtime.getHeapUsage");
+        return console.log(usedSize);
       }
       case "wait-for": {
         if (!rest[0]) usage();

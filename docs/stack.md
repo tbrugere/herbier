@@ -34,6 +34,29 @@ evidence. Open decisions are listed at the end.
   (self-described experimental, "will break"), Bonsai (too heavy),
   Tyxml_js.R (ready-made glue but a second DOM binding next to Brr),
   Melange + reason-react (second toolchain, only worth it for npm widgets).
+  **Spike result (M2.20): provisionally kept. No stale update, a flat
+  heap and no dropped frame on the sheet hold in the emulator's WebView; the
+  frames are still to check on the phone (plan R1).** `rb.ml` is 207 lines. `#dev/spike` enters and
+  leaves 4a (built with `Screens.Collection.v` directly, since leaving a dev page
+  reloads it: M2.21 reruns the cycles through the router once `main.ml`
+  routes to 4a) 50 times per round, four rounds, over
+  the seeded store: the binding count is back to its baseline after every
+  round, and none of the 50 screens left last changes when a filter moves a
+  live control screen. Heap after a forced GC, before the first round then
+  after each: headless Chromium (2026-11-06) 14.7 → 15.6 → 15.7 → 15.8 →
+  15.8 MB; Android 15 emulator WebView (2026-11-11, `scripts/webview.mjs heap`
+  at each `data-round`, since the WebView's `performance.memory` is bucketed)
+  7.9 → 8.5 → 8.6 → 8.6 → 8.6 MB: warm-up, then flat. Sheet frames on
+  the same emulator (2026-11-11, `#dev/sheet`, its `#frames` meter counts the
+  animation frames from press to release against their median interval): ten
+  drags between the bottom and top snap points, 95 to 104 frames each, 0
+  dropped, longest interval 16.8 ms; a 100 ms main-thread block injected
+  mid-drag reads as 5 dropped, so the meter sees jank. What the spike
+  taught: js_of_ocaml 6's weak arrays are real `WeakRef`s, so bindings must be
+  kept reachable as well as released (primer §5 note, `Rb.hold`, the router
+  holds each screen's list); list items carry their own bindings
+  (`Rb.rlist`); widget events become state changes after the update step
+  (`Rb.act`) or straight from the DOM for per-frame input (`Rb.listen`).
 - **Capacitor 8** as the Android shell. Plugins we depend on (all with 2026
   releases): `@capacitor/app` (deep links), `@capgo/capacitor-share-target`
   (SEND share sheet), `@capgo/capacitor-social-login` or

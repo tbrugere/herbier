@@ -8,3 +8,14 @@ let export_int name f =
     | false -> Jv.get Jv.global "herbierDev"
   in
   Jv.set hook name (Jv.callback ~arity:1 (fun _ -> Jv.of_int (f ())))
+
+let heap_used () =
+  Jv.find_path Jv.global ["performance"; "memory"; "usedJSHeapSize"]
+  |> Option.map Jv.to_float
+
+let collect_garbage () =
+  match Jv.find Jv.global "gc" with
+  | Some gc when Jv.instanceof gc ~cons:(Jv.get Jv.global "Function") ->
+      ignore (Jv.apply gc [||]);
+      true
+  | Some _ | None -> false

@@ -185,8 +185,10 @@ app/
                           release, with Rb.live shown; theme_check.ml (#dev/theme): every colour token, type role
                           and bundled icon, and what Theme reads; gallery.ml (#dev/gallery): one fixture entry per
                           widget and state, with an event log; collection_check.ml (#dev/collection): 4a over the
-                          herbier db; sheet_check.ml (#dev/sheet): a 3-snap sheet; hooks.ml: herbierDev.live(),
-                          the leak count; linked only outside the release profile
+                          herbier db; sheet_check.ml (#dev/sheet): a 3-snap sheet and a dropped-frame meter;
+                          spike_check.ml (#dev/spike): 4 rounds of 50 enter/leave cycles of 4a, binding count,
+                          stale-update check against a live control, heap per round; fixture.ml: the dev pages' State; hooks.ml:
+                          herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
