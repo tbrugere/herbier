@@ -9,8 +9,9 @@
 #   scripts/emulator.sh kill-app         force-stop the app
 #   scripts/emulator.sh forward          forward the app's WebView devtools socket, print the port
 #   scripts/emulator.sh open [fragment]  launch, forward, reload the page at #<fragment> (none: no
-#                                        fragment), wait until it is done (dev/* pages: a
-#                                        "done" or "done: <summary>" line; others: text
+#                                        fragment), wait until it is done (dev/* check pages: a
+#                                        "done" or "done: <summary>" line; others, and
+#                                        dev/gallery and dev/collection: text
 #                                        unchanged for 2 s), print it
 #   scripts/emulator.sh webview <cmd>... run scripts/webview.mjs on the forwarded port
 #   scripts/emulator.sh env              print the exports this script uses (eval "$(… env)")
@@ -180,6 +181,9 @@ cmd_forward() {
 
 webview() { node "$here/webview.mjs" --port "$port" "$@"; }
 
+# Dev pages that show a screen rather than a check log, so print no "done".
+INTERACTIVE_DEV_PAGES="dev/gallery dev/collection"
+
 cmd_open() {
   local fragment="${1:-}"
   fragment="${fragment#\#}"
@@ -203,8 +207,11 @@ cmd_open() {
   # below it. A slow step can leave the text unchanged for seconds before
   # that.
   # An unknown dev page is rewritten to a tab: wait for "done" only on a
-  # dev page the app actually shows.
+  # dev page the app actually shows. The screen pages (a widget gallery, a
+  # screen over the seeded db) have no end to report: they are waited on like
+  # a tab, until their text stops changing.
   if [[ "$fragment" == dev/* ]] \
+    && [[ " $INTERACTIVE_DEV_PAGES " != *" $fragment "* ]] \
     && [[ "$(webview eval "location.hash")" == "#$fragment" ]]; then
     webview wait-for "/^done(: .*)?\$/m.test(document.body.innerText)" 120000 >/dev/null \
       || { webview text; die "#$fragment did not print done within 2 min"; }

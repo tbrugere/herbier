@@ -301,24 +301,20 @@ on a DOM node instead.
 
 ## 6. How the glue module maps onto this
 
-```ocaml
-(* app/ui/rb.ml — react over Brr *)
-type binding                      (* opaque: the stoppable node *)
-val text     : El.t -> string signal -> binding
-val attr     : El.t -> string -> string option signal -> binding  (* None removes *)
-val class_   : El.t -> string -> bool signal -> binding
-val style    : El.t -> string -> string signal -> binding
-val children : El.t -> El.t list signal -> binding
-val rlist    : El.t -> ('a -> El.t) -> 'a ReactiveData.RList.t -> binding
-val ev       : El.t -> 'a Ev.type' -> 'a Ev.t event * binding
-val click    : El.t -> unit event * binding
-val on       : 'a event -> ('a -> unit) -> binding  (* effect outside the graph *)
-val release  : binding list -> unit      (* strong stop, in one place *)
-val anchor   : 'a signal -> anchor       (* keeps a shared derived signal alive *)
-val anchor_list : 'a ReactiveData.RList.t -> anchor
-```
+`app/ui/rb.mli` is the reference: the signatures and each function's rules.
+What it offers, by role:
 
-A summary: `app/ui/rb.mli` is the reference, with each function's rules.
+- DOM writes from a signal: `text`, `attr`, `class_`, `style`, `children`.
+- A reactive list: `rlist el f l`, where `f` builds one item's node and
+  that item's own bindings, released with the item.
+- DOM events in: `ev`, `click`.
+- Reacting to an event: `on` (inside the update step, for effects outside
+  the graph) and `act` (after the step, in a microtask: may set state, touch
+  an `RList` handle or start a query; once released it drops even an
+  occurrence already queued).
+- Lifetime: `release` (strong stop, in one place), `hold` (bindings that live
+  as long as an element), `live` (the leak count), `anchor` / `anchor_list`
+  (keep a shared derived source alive past its bindings).
 
 Each of `text`, `attr`, `class_`, `style`, `children` is `S.map` with a Brr
 call as the side effect, returning the mapped signal as the binding. `ev`

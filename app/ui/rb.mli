@@ -36,17 +36,23 @@ val children : Brr.El.t -> Brr.El.t list React.signal -> binding
     of this one and is not released with it. For a list whose items change one
     at a time, use {!rlist}. *)
 
-val rlist : Brr.El.t -> ('a -> Brr.El.t) -> 'a ReactiveData.RList.t -> binding
-(** [rlist el f l] keeps [el]'s child nodes equal to [List.map f] of [l],
-    applying each patch to the DOM: an insert or an update calls [f] on that
-    item only and the other children are left as they are; a [Set] rebuilds them
-    all. [f] may return a text node, and must build static nodes: a binding made
-    inside a row is not part of this one and is not released with it. [el] must
-    hold nothing else. An out-of-range patch never reaches the binding
-    (ReactiveData raises first); a step that no longer fits [el]'s child nodes,
-    because something else added or removed some, logs a warning and rebuilds
-    the children from the list's value. Releasing the binding also stops the
-    list itself unless it is anchored (see {!release}). *)
+val rlist :
+  Brr.El.t ->
+  ('a -> Brr.El.t * binding list) ->
+  'a ReactiveData.RList.t ->
+  binding
+(** [rlist el f l] keeps [el]'s child nodes equal to the nodes of [List.map f]
+    of [l], applying each patch to the DOM: an insert or an update calls [f] on
+    that item only and the other children are left as they are; a [Set] rebuilds
+    them all. [f] may return a text node. [el] must hold nothing else. [f] also
+    returns the item's own bindings (a card's click listener): they are released
+    when the item is removed or replaced, and all of them when the [rlist]
+    binding is released. An out-of-range patch never reaches the binding
+    (ReactiveData raises first); a patch arriving when [el]'s child nodes no
+    longer match the ones the binding made, because something else added or
+    removed some, logs a warning and rebuilds the children from the list's
+    value. Releasing the binding also stops the list itself unless it is
+    anchored (see {!release}). *)
 
 val ev : Brr.El.t -> 'a Brr.Ev.type' -> 'a Brr.Ev.t React.event * binding
 (** [ev el type'] is an event fired by each DOM event [type'] on [el], outside
@@ -68,6 +74,12 @@ val on : 'a React.event -> ('a -> unit) -> binding
     either: an exception leaves the step unfinished and the other bindings of
     that occurrence unrun. A plugin call only starts its future here and handles
     the result outside the step. *)
+
+val act : 'a React.event -> ('a -> unit) -> binding
+(** [act e f] calls [f] on each occurrence of [e] once the update step is over
+    (in a microtask), so [f] may set primitive signals, touch [RList] handles
+    and start queries: how a screen turns a widget's event into a state change.
+    Released, it stops calling [f], even for an occurrence already queued. *)
 
 val hold : Brr.El.t -> binding list -> unit
 (** [hold el bs] keeps [bs] reachable for as long as [el] is (see the module

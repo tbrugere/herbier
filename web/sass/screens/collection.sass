@@ -1,0 +1,16 @@
+// 4a Collection (app/ui/screens/collection.ml).
+@use '../base'
+
+.collection
+  gap: 14px
+
+.collection__counter
+  +base.meta(14px)
+  margin-top: 4px
+
+// A failed store read; empty (and hidden) otherwise.
+.collection__failure
+  +base.meta(14px)
+  color: var(--danger)
+  &:empty
+    display: none

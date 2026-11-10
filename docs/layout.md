@@ -166,6 +166,9 @@ app/
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
                           the shell holds the tab bar
     screen.ml             a screen's root element + its bindings, as the router takes them
+    list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
+                          RList without re-rendering unchanged items; pure, tested in test/ui/
+    collection_filter.ml  observation counts per plant and the all-tags filter of 4a; pure, tested in test/ui/
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
@@ -175,11 +178,13 @@ app/
                           with the sources in flight; photo_check.ml (#dev/photos): gallery pick, then per photo
                           exifr → Exif, sha256, Preview.make → dev/preview.jpg written, read back (sizes compared,
                           EXIF segment checked) and shown as a blob: URL; one GPS fix; rb_check.ml (#dev/rb):
-                          self-checks every Rb binding, rlist's in-place patches and anchors, then a counter,
-                          class toggle and RList rows frozen by release; theme_check.ml (#dev/theme): every
-                          colour token, type role and bundled icon, and what Theme reads; gallery.ml
-                          (#dev/gallery): one fixture entry per widget and state, with an event log; hooks.ml:
-                          herbierDev.live(), the leak count; linked only outside the release profile
+                          self-checks every Rb binding, rlist's in-place patches, item bindings and anchors, then a
+                          counter, class toggle, RList rows (one binding each) and an Rb.act handler frozen by
+                          release, with Rb.live shown; theme_check.ml (#dev/theme): every colour token, type role
+                          and bundled icon, and what Theme reads; gallery.ml (#dev/gallery): one fixture entry per
+                          widget and state, with an event log; collection_check.ml (#dev/collection): 4a over the
+                          herbier db; hooks.ml: herbierDev.live(), the leak count; linked only outside the release
+                          profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
@@ -341,6 +346,7 @@ test/
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
   refs/         native, alcotest: payload decoders and projection over fixtures/
+  ui/           native, alcotest: the pure modules of app/ui/ copied in (list_patch, collection_filter)
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
                 the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
@@ -356,7 +362,8 @@ test/
 alcotest runs natively, in `dune test` on every CI job, on every library
 without a Brr dependency (`domain`, `postgrest`, `refs`), and on the Brr-free
 modules of `store` (`codec`, `schema`, `tables`, `stmt`, `outbox`, the
-per-table query modules, `settings`, `search`, `dev_seed`): they build statements as
+per-table query modules, `settings`, `search`, `dev_seed`) and of `ui`
+(`list_patch`, `collection_filter`). The store ones build statements as
 values and never run them, so their SQL runs natively through the sqlite3
 CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the

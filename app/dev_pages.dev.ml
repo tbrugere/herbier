@@ -21,4 +21,5 @@ let find =
   | "rb" -> Some (page D.Rb_check.el)
   | "theme" -> Some (page D.Theme_check.el)
   | "gallery" -> Some (page D.Gallery.el)
+  | "collection" -> Some (page D.Collection_check.el)
   | _ -> None
