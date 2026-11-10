@@ -2,4 +2,4 @@
 (library
  (name herbier_photos)
  (public_name herbier.photos)
- (libraries herbier_domain herbier_store herbier_bindings brr))
+ (libraries herbier_domain herbier_store herbier_bindings brr yojson ptime))

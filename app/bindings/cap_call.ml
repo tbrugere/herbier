@@ -68,4 +68,10 @@ let to_int x =
 
 let string_field = typed_field "string" (fun x -> Some (Jv.to_string x))
 let int_field = typed_field "number" to_int
+
+let finite x =
+  let f = Jv.to_float x in
+  match Float.is_finite f with true -> Some f | false -> None
+
+let float_field = typed_field "number" finite
 let bool_field = typed_field "boolean" (fun x -> Some (Jv.to_bool x))

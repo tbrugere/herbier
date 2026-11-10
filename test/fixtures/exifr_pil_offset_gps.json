@@ -1,0 +1,20 @@
+{
+  "DateTimeOriginal": "2026:05:12 14:03:22",
+  "OffsetTimeOriginal": "+02:00",
+  "SubSecTimeOriginal": "417",
+  "GPSLatitudeRef": "N",
+  "GPSLatitude": [
+    45,
+    10,
+    30.6
+  ],
+  "GPSLongitudeRef": "E",
+  "GPSLongitude": [
+    5,
+    43,
+    12
+  ],
+  "GPSHPositioningError": 12.5,
+  "latitude": 45.17516666666666,
+  "longitude": 5.72
+}

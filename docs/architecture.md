@@ -284,7 +284,9 @@ resume, `stopAutoRefresh` on background.
 
 ```
 capture / pick
-  → read EXIF (date, GPS) with exifr, before any canvas work
+  → read EXIF (date, GPS) with exifr, before any canvas work; the Android
+    system photo picker empties the GPS tags of a picked copy (seen on the
+    emulator, API 35)
   → decode with createImageBitmap (applies orientation)
   → preview: resize to ≤1600 px, encode JPEG q0.7 (or WebP), write to
     previews/<id>; insert Photo(pending) + outbox row

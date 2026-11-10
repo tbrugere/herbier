@@ -102,6 +102,8 @@ app/
     cap_sqlite.ml  cap_filesystem.ml  cap_app.ml  cap_share_target.ml
     cap_social_login.ml  cap_uploader.ml  cap_geolocation.ml  cap_camera.ml
     cap_preferences.ml  maplibre.ml  pmtiles.ml  exifr.ml
+    js_date.ml            JavaScript Date: the device's UTC offset at a local wall-clock time (EXIF dates without offset)
+    web_path.ml           fetch of a plugin's webPath as a Blob, a non-ok status as an error
     cap_error.ml          binding-level error (plugin unavailable, rejected, unexpected result, invalid path), shared by the cap_*
     cap_call.ml           private: plugin lookup on globalThis.herbier, promise → Fut with errors mapped to Cap_error
   store/                  local SQLite (§3 of architecture); hand-written SQL, no query DSL
@@ -154,7 +156,8 @@ app/
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
                           serialisation, park/delete); seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
-                          with the sources in flight; all ship in every build until the M2.17 router compiles them into dev builds only
+                          with the sources in flight; photo_check.ml (#dev/photos): gallery pick → exifr → Exif,
+                          one GPS fix; all ship in every build until the M2.17 router compiles them into dev builds only
     widgets/              chip, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
@@ -176,8 +179,8 @@ postgrest-codegen ← ppxlib, ppx_deriving_yojson, yojson (lib/postgrest/codegen
 refs      ← domain, yojson               (no Brr)
 bindings  ← brr
 store     ← domain, bindings, postgrest, yojson, ptime, brr (for Fut)
-sync      ← domain, store, bindings, postgrest
-photos | refs_io | geo   ← domain, store, bindings; refs_io also refs
+sync      ← domain, store, bindings, postgrest, brr (for Fut)
+photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs; photos also yojson, ptime
                                          (siblings never import each other)
 ui        ← everything above + react, reactiveData
 main      ← ui, brr                     (main.ml builds the first element itself)
@@ -317,8 +320,11 @@ test/
                 the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
                 (that is #dev/store)
-  fixtures/     recorded API payloads only (gbif_<key>.json, wikidata_<key>.json, tela_<nn>.json,
-                inpn_<cd_nom>.json); never app rows
+  photos/       native, alcotest: the pure modules of app/photos/ copied in (exif), over recorded
+                exifr output (fixtures/exifr_*.json)
+  fixtures/     recorded payloads only: API responses (gbif_<key>.json, wikidata_<key>.json,
+                tela_<nn>.json, inpn_<cd_nom>.json) and exifr output (exifr_<name>.json,
+                scripts/exifr-fixture.mjs); never app rows
   js/           browser-side tests; added only if the UI spike's leak check fails
 ```
 
@@ -330,7 +336,7 @@ values and never run them, so their SQL runs natively through the sqlite3
 CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the
 serialisation), and sync,
-photos, refs_io and geo, are thin over device-only plugins and have no unit
+photos (except the pure `exif`, tested in `test/photos/`), refs_io and geo, are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 
 ## 7. `scripts/` and CI
@@ -343,7 +349,11 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   `emulator.sh` (headless Android emulator: create the AVD, boot, debug
   install, open a dev page; skill `.claude/skills/emulator/`) and
   `webview.mjs` (a dependency-free DevTools Protocol client for the app's
-  WebView: eval, page text, screenshot).
+  WebView: eval, page text, screenshot), `exif-fixture-jpegs.py` (`uv run`:
+  the Pillow JPEGs behind `test/fixtures/exifr_pil_*.json`) and
+  `exifr-fixture.mjs` (exifr output of a photo into
+  `test/fixtures/exifr_<name>.json`, with the options of
+  `app/bindings/exifr.ml` and `pick` = `Exif.tags`).
 - `ci.yml`: `dune build`, `dune test`, the formatting check (`dune build @fmt`,
   ocamlformat installed from opam on the runner), `dune build @web` and checks on
   its output. From M1.9: `dune test` also checks `app/store/tables.ml` against the catalog, and `schema-dump.py --check`,

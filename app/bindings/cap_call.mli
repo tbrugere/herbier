@@ -44,8 +44,10 @@ val field : Jv.t -> string -> (Jv.t, Cap_error.t) result
     {!field} plus a [typeof] check (["string"], ["number"], ["boolean"]);
     [Error (Unexpected path)] on a type mismatch. [int_field] also requires an
     integer within OCaml's [int] range (32 bits under jsoo), else
-    [Error (Unexpected path)]; it never truncates. *)
+    [Error (Unexpected path)]; it never truncates. [float_field] requires a
+    finite number ([NaN] and infinities are [Error (Unexpected path)]). *)
 
 val string_field : Jv.t -> string -> (string, Cap_error.t) result
 val int_field : Jv.t -> string -> (int, Cap_error.t) result
+val float_field : Jv.t -> string -> (float, Cap_error.t) result
 val bool_field : Jv.t -> string -> (bool, Cap_error.t) result

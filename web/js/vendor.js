@@ -4,10 +4,16 @@ import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite';
 import { Filesystem } from '@capacitor/filesystem';
 import { Preferences } from '@capacitor/preferences';
 import { App } from '@capacitor/app';
+import { Camera } from '@capacitor/camera';
+import { Geolocation } from '@capacitor/geolocation';
+import exifr from 'exifr';
 
 globalThis.herbier = {
   sqlite: new SQLiteConnection(CapacitorSQLite),
   filesystem: Filesystem,
   preferences: Preferences,
   app: App,
+  camera: Camera,
+  geolocation: Geolocation,
+  exifr,
 };

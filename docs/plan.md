@@ -154,7 +154,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 
 Taken 2026-09-16; the toolchain ones are in `layout.md`.
 
-- The local store comes first (M1) and the UI spike (M2) runs on real rows; `test/fixtures/` keeps recorded API payloads only. No throwaway data layer, and the spike exercises the queries it will live on.
+- The local store comes first (M1) and the UI spike (M2) runs on real rows; `test/fixtures/` keeps recorded API payloads only. No throwaway data layer, and the spike exercises the queries it will live on. Addendum 2026-11-10 (M3.26): "recorded API payloads" widens to recorded external payloads (API responses, library output such as exifr's), still never app rows.
 - Photos (M3) before sync (M6): photos are the field workflow, text rows can wait.
 - Offline map region is v2; v1 uses online tiles only.
 - Link interception in v1 = the SEND share target and the VIEW intent-filters, Pl@ntUse host included.
