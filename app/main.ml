@@ -48,6 +48,7 @@ let modal app = function
       Herbier_ui.Screens.Resolve.v app Herbier_ui.Screens.Resolve.Identify id
   | Herbier_ui.Route.Record -> Herbier_ui.Screens.Record.v app
   | Herbier_ui.Route.Saved id -> Herbier_ui.Screens.Saved.v app id
+  | Herbier_ui.Route.Viewer id -> Herbier_ui.Screens.Viewer.v app id
   | Herbier_ui.Route.New_plant ->
       Herbier_ui.Screens.Edit_plant.v app Herbier_ui.Screens.Edit_plant.New
 

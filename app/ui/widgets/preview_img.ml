@@ -1,8 +1,11 @@
 open Brr
 
-let v ?(cls = []) path =
-  let img = El.img ~at:[At.v (Jstr.v "alt") Jstr.empty] () in
-  let at = List.map (fun c -> At.class' (Jstr.v c)) ("preview-img" :: cls) in
+let v ?(cls = []) ?(alt = "") path =
+  let img = El.img ~at:[At.v (Jstr.v "alt") (Jstr.v alt)] () in
+  let at =
+    At.v (Jstr.v "data-path") (Jstr.v path)
+    :: List.map (fun c -> At.class' (Jstr.v c)) ("preview-img" :: cls)
+  in
   let box = El.div ~at [img] in
   let warn detail = Console.(warn [str ("preview " ^ path); str detail]) in
   Fut.await

@@ -123,6 +123,15 @@ let hero_media (d : data) =
           [])
       ordered
   in
+  (* style: the page in view, written by the scroll listener. *)
+  let page = ref 0 in
+  let b_page_tap =
+    Rb.listen pager Ev.click (fun _ ->
+        match List.nth_opt ordered !page with
+        | Some (ph : Herbier_domain.Photo.t) ->
+            Route.go (Route.Modal (Route.Viewer ph.id))
+        | None -> ())
+  in
   let b_pager =
     Rb.listen pager Ev.scroll (fun _ ->
         let w = El.bound_w pager in
@@ -130,6 +139,8 @@ let hero_media (d : data) =
         | false -> ()
         | true ->
             let i = Float.to_int (Float.round (El.scroll_x pager /. w)) in
+            let i = max 0 (min (List.length ordered - 1) i) in
+            page := i;
             List.iteri
               (fun j dot -> El.set_class (Jstr.v "is-active") (i = j) dot)
               dots)
@@ -144,7 +155,7 @@ let hero_media (d : data) =
           (let n = List.length dots in
            match n >= 2 && n <= max_dots with true -> dots | false -> []);
       ],
-    [b_pager] )
+    [b_pager; b_page_tap] )
 
 let names (d : data) =
   let p = d.plant in
@@ -260,7 +271,9 @@ let render app (data : data React.signal) =
                 (Printf.sprintf "Mes photos · %d" (List.length d.photos))
                 [] [grid.el];
             ],
-          grid.bindings )
+          Rb.act grid.tap (fun (ph : Herbier_domain.Photo.t) ->
+              Route.go (Route.Modal (Route.Viewer ph.id)))
+          :: grid.bindings )
   in
   let adder = W.Adder.v ~label:"tag" ~placeholder:"Nom du tag" () in
   (* style: [known] holds the tags this fiche put on the plant, so that a tag

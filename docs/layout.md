@@ -174,7 +174,7 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
-    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml
+    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml
                           pure helpers of the screens; these and list_patch are tested natively in test/ui/
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     zone.ml               the phone's zone offset at an instant, for Fr_date
@@ -203,7 +203,7 @@ app/
                           herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
-                          month_grid, photo_grid, preview_img, icon, viewer_zoom (imperative)
+                          photo_grid, preview_img, icon, viewer_zoom (imperative); month_grid (planned)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
       journal.ml (4c)     record.ml (4d)

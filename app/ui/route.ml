@@ -2,6 +2,7 @@ open Brr
 module Tab_bar = Widgets.Tab_bar
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Observation_id = Herbier_domain.Ids.Observation_id
+module Photo_id = Herbier_domain.Ids.Photo_id
 
 type modal =
   | Tags
@@ -14,6 +15,7 @@ type modal =
   | Identify of Observation_id.t
   | Record
   | Saved of Observation_id.t
+  | Viewer of Photo_id.t
 
 type t = Tab of Tab_bar.tab | Modal of modal | Dev of string
 
@@ -50,6 +52,10 @@ let of_fragment = function
           observation id (fun id -> Change_species id)
       | ["a-identifier"; id] -> observation id (fun id -> Identify id)
       | ["noter"; "enregistre"; id] -> observation id (fun id -> Saved id)
+      | ["photo"; id] -> (
+          match Photo_id.of_string id with
+          | Some id -> Modal (Viewer id)
+          | None -> Tab Tab_bar.Collection)
       | _ -> Tab Tab_bar.Collection)
 
 let to_fragment = function
@@ -68,6 +74,7 @@ let to_fragment = function
   | Modal (Identify id) -> "a-identifier/" ^ Observation_id.to_string id
   | Modal Record -> "noter"
   | Modal (Saved id) -> "noter/enregistre/" ^ Observation_id.to_string id
+  | Modal (Viewer id) -> "photo/" ^ Photo_id.to_string id
   | Dev name -> dev_prefix ^ name
 
 let fragment () = Jstr.to_string (Uri.fragment (Window.location G.window))

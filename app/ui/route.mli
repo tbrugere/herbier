@@ -13,6 +13,7 @@ type modal =
   | Identify of Herbier_domain.Ids.Observation_id.t  (** 4k *)
   | Record  (** 4d *)
   | Saved of Herbier_domain.Ids.Observation_id.t  (** 4e *)
+  | Viewer of Herbier_domain.Ids.Photo_id.t  (** 5e *)
 
 type t = Tab of Widgets.Tab_bar.tab | Modal of modal | Dev of string
 
@@ -23,8 +24,9 @@ val of_fragment : string -> t
     [Modal (Edit_plant id)]; ["plante/nouvelle"] → [Modal New_plant];
     ["observation/<id>"], ["observation/<id>/espece"], ["a-identifier/<id>"] →
     [Observation], [Change_species], [Identify]; ["noter"] → [Modal Record];
-    ["noter/enregistre/<id>"] → [Modal (Saved id)]; ["dev/<name>"] → [Dev name].
-    Anything else (an id that is not a UUID too) is [Tab Collection]. *)
+    ["noter/enregistre/<id>"] → [Modal (Saved id)]; ["photo/<id>"] →
+    [Modal (Viewer id)]; ["dev/<name>"] → [Dev name]. Anything else (an id that
+    is not a UUID too) is [Tab Collection]. *)
 
 val to_fragment : t -> string
 (** Inverse of {!of_fragment} on its canonical forms ([Tab Collection] is

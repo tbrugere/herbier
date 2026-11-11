@@ -215,18 +215,27 @@ let render app (data : data React.signal) =
       Rb.attr add "aria-busy"
         (React.S.map (function true -> Some "true" | false -> None) adding)
     in
-    let el =
+    (* Each tile with the listener that opens it in the viewer. *)
+    let tile ~cls (ph : Herbier_domain.Photo.t) =
+      let t = W.Photo_grid.tile ~cls ph in
+      ( t,
+        Rb.listen t Ev.click (fun _ ->
+            Route.go (Route.Modal (Route.Viewer ph.id))) )
+    in
+    let el, tiles =
       match photos with
       | [] ->
-          El.div
-            ~at:[cls "observation__mosaic"; cls "observation__mosaic--empty"]
-            [add]
+          ( El.div
+              ~at:[cls "observation__mosaic"; cls "observation__mosaic--empty"]
+              [add],
+            [] )
       | first :: rest ->
+          let large, b_large = tile ~cls:"observation__large" first in
           let more =
             match rest with
             | [] -> []
             | second :: others ->
-                let t = W.Photo_grid.tile ~cls:"observation__small" second in
+                let t, b = tile ~cls:"observation__small" second in
                 (match others with
                 | [] -> ()
                 | _ ->
@@ -236,16 +245,19 @@ let render app (data : data React.signal) =
                           ~at:[cls "observation__more"]
                           [El.txt' (Printf.sprintf "+%d" (List.length others))];
                       ]);
-                [t]
+                [(t, b)]
           in
-          El.div
-            ~at:[cls "observation__mosaic"]
-            [
-              W.Photo_grid.tile ~cls:"observation__large" first;
-              El.div ~at:[cls "observation__column"] (more @ [add]);
-            ]
+          ( El.div
+              ~at:[cls "observation__mosaic"]
+              [
+                large;
+                El.div
+                  ~at:[cls "observation__column"]
+                  (List.map fst more @ [add]);
+              ],
+            b_large :: List.map snd more )
     in
-    (el, [b_add; busy; Rb.act add_click add_photos])
+    (el, b_add :: busy :: Rb.act add_click add_photos :: tiles)
   in
   let mosaic_el = El.div [] in
   let modify = W.Button.text "Modifier" in
