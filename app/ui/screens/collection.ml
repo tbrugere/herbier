@@ -40,10 +40,7 @@ let log_error what e =
    required), in the store's order. *)
 let visible db ~counts ~text ~tags =
   let open Fut.Result_syntax in
-  let base =
-    match Search.plants text with None -> Plants.list | Some q -> q
-  in
-  let* plants = Db.all db base in
+  let* plants = Db.all db (Search.plants_or_all text) in
   let+ links =
     match tags with [] -> Fut.ok [] | _ :: _ -> Db.all db Tags.links
   in

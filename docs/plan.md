@@ -49,7 +49,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 21. `ui/app.ml` (save orchestration, local only for now); `main.ml` opens the db and mounts the router. Done: app starts on an empty db; the spike's enter/leave is rerun through the router (`#collection` ↔ `#journal` fifty times with `scripts/webview.mjs`, `herbierDev.live()` back to its baseline).
 22. Screens from the store: 4n empty state, 4c journal grouped by day with year/À identifier/tag filters, 4l tags, 5d manage tags (rename, merge, delete). Done: tags (seeded until 23) renamed, merged and deleted, Collection and Journal filtered by them, offline.
 23. 4f/4g `screens/species.ml`: hero (placeholder), tags, observations list, notes edited in place, reference block reduced to the 4g text; 5a `edit_plant.ml`: name, aliases, tags, delete with confirmation. Done: a plant is created, edited, deleted; a tag is created from the fiche (« + tag »); observations cascade as the handoff says.
-24. 4h `screens/observation.ml` (date, note, delete; place card as text, map later); 4i/4k/5c `screens/resolve.ml` collection modes only: search my collection, link/relink an observation, free name, "Remettre À identifier", keep/delete dialog. Done: an "À identifier" observation from Journal is linked to an existing or free-name plant.
+24. 4h `screens/observation.ml` (date, note, delete; place card as text, map later); 4k/5c `screens/resolve.ml` collection modes only: search my collection, link/relink an observation, free name, "Remettre À identifier", keep/delete dialog. Done: an "À identifier" observation from Journal is linked to an existing or free-name plant.
 25. 4m `settings.ml` skeleton: switches and the storage radio (Drive / app only; no Google Photos row) persisted in `settings`, other rows static. Done: a setting survives a restart.
 
 ## M3 — Photos (runnable: field workflow 4d → 4e → 4f with local previews)
@@ -69,7 +69,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 35. `refs/projection.ml` (reference rows → 4f snapshot fields), `store/references.ml` one row per source (`reference` and `plant_refs` ids derived from `(plant_id, source)`, architecture §4). Done: projection of two species from fixtures; the count of empty fields is recorded in this doc (spike 5).
 36. `refs_io/pipeline.ml` fan-out per gbif_key, `refs_io/resolver.ml` (`Domain.Link` + lookups → gbif_key + partial snapshot), wired in `ui/app.ml`: fetch eagerly at link time in the background, on ↻, on open when > 90 days. Done: linking fills 4f's reference block; a failing source leaves the others intact.
 37. 4f reference block complete: names, type, origin, `widgets/month_grid.ml`, habitat chips, toxicity, organ photos into `refthumbs/` (with the local `ref_images` table, a store migration), links row; rows without data disappear. Done: renders for the two spike species, offline after the first fetch.
-38. 4i reference search (`species/suggest` + vernacular, 300 ms debounce, offline state); 4k/5c reference "+" path; 5a "Changer" and "Liens de référence" (paste link → `PlantRef`). Done: a free-name plant gets linked and its name becomes an alias.
+38. 4i as a mode of `resolve.ml`, entered from 4j's « Chercher »: my collection (« Ouvrir › ») and reference search (`species/suggest` + vernacular, 300 ms debounce, offline state); 4k/5c reference "+" path; 5a "Changer" and "Liens de référence" (paste link → `PlantRef`). Done: a free-name plant gets linked and its name becomes an alias.
 39. `AndroidManifest.xml` intent-filters (VIEW/BROWSABLE hosts of §7 including the Pl@ntUse one, SEND text/plain), `bindings/cap_share_target.ml`, `cap_app.ml` `appUrlOpen`; 4j sheet mode of `resolve.ml` with "Première observation ici", "Enlever", recent tags, "Déjà dans ma collection" variant. Done: a Pl@ntNet share, a gbif.org link and a Pl@ntUse link (after "Ouvrir par défaut") all land on 4j and add the plant (spike 1, part 2); what Pl@ntNet actually shares and the real Pl@ntUse host get written down here.
 
 ## M5 — Map and places (spike 3; runnable: 4b, 5b, mini-map)
@@ -113,7 +113,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 | 4f Fiche espèce | M2 (my data) | M3 photos, M4 reference block |
 | 4g Fiche sans référence | M2 | M4 "Lier" |
 | 4h Observation | M2 | M3 mosaic, M5 mini-map |
-| 4i Chercher | M2 (collection) | M4 GBIF search, paste link |
+| 4i Chercher | M4 (collection and GBIF search; entered from 4j) | paste link |
 | 4j Lien intercepté | M4 | — |
 | 4k À identifier → lier | M2 (collection) | M4 reference "+" |
 | 4l Tags | M2 | M3 cover photos |

@@ -369,6 +369,11 @@
   border-color: var(--danger)
   color: var(--danger)
 
+// An ochre outline for what goes back to « À identifier » (5c).
+.button--ochre
+  border-color: var(--ochre)
+  color: var(--ochre)
+
 .text-button
   +bare-button
   +base.ui(15px, 700)
@@ -502,7 +507,7 @@
   background: var(--paper)
   outline: none
 
-// 5a delete confirmation: a centred box over a veil.
+// Dialog (widgets/dialog.ml): a centred box over a veil.
 .confirm
   position: fixed
   inset: 0
@@ -523,3 +528,24 @@
   border-radius: 20px
   background: var(--paper)
   +shadow-card
+
+// Text edited in place (Inline_text); the screen sets the type role. Line
+// breaks typed in the textarea stay in the text.
+.inline-text
+  +bare-button
+  width: 100%
+  white-space: pre-wrap
+  overflow-wrap: anywhere
+  &.inline-text--empty
+    color: var(--hint)
+
+.inline-text__input
+  width: 100%
+  min-height: 6em
+  padding: 10px 12px
+  border: 1.5px solid var(--moss)
+  border-radius: 12px
+  background: var(--paper)
+  resize: vertical
+  outline: none
+

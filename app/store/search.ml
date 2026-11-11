@@ -133,3 +133,5 @@ let plants text =
         ^ Plants.order_by)
         [Codec.Text expression])
     (match_expression text)
+
+let plants_or_all text = Option.value (plants text) ~default:Plants.list

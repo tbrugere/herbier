@@ -10,6 +10,13 @@ val day_header : this_year:int -> Ptime.date -> string
     full, lower case), then the year when it is not [this_year]:
     ["Mer. 3 décembre 2025"]. No weekday for a date that does not exist. *)
 
+val long_day : Ptime.date -> string
+(** {!day_header} always with the year: ["Ven. 12 juin 2026"] (4h, 4k). *)
+
+val day_time : tz_offset_s:int -> Ptime.t -> string
+(** {!long_day} of the instant's date in that zone, then its {!time}:
+    ["Ven. 12 juin 2026 · 14:32"] (4h, 4k). *)
+
 val time : tz_offset_s:int -> Ptime.t -> string
 (** ["14:32"], ["09:05"]: hours and minutes, zero-padded. *)
 

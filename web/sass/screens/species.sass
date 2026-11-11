@@ -89,31 +89,16 @@
   gap: 8px
 
 .species__obs
+  +widgets.bare-button
+  width: 100%
   padding: 12px 14px
   border: 1px solid var(--line)
   border-radius: 14px
+  &:active
+    background: var(--sand)
 
 .species__obs-date
   +base.ui(15px, 700)
-
-// Line breaks typed in the textarea stay in the text.
-.species__notes
-  +widgets.bare-button
-  width: 100%
-  white-space: pre-wrap
-  overflow-wrap: anywhere
-  &.species__notes--empty
-    color: var(--hint)
-
-.species__notes-input
-  width: 100%
-  min-height: 6em
-  padding: 10px 12px
-  border: 1.5px solid var(--moss)
-  border-radius: 12px
-  background: var(--paper)
-  resize: vertical
-  outline: none
 
 .species__reference
   display: flex

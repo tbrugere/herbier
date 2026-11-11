@@ -6,6 +6,7 @@
 
     A chip whose filter is on stays while no observation matches it, so it can
     be turned off. Reloads on {!App.saved}; a failed read shows in the counter.
-    Rows and the day's ◎ are not interactive; rows show no photo count. *)
+    A row opens 4h, or 4k when it is « À identifier »; the day's ◎ is not
+    interactive; rows show no photo count. *)
 
 val v : App.t -> Screen.t

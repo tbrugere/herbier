@@ -37,3 +37,6 @@ val plants : string -> Herbier_domain.Plant.t Stmt.query option
     unfiltered list. Otherwise the query returns each live plant whose document
     matches, once, in {!Plants.order_by} (not by rank), decoded with
     {!Plants.row}. *)
+
+val plants_or_all : string -> Herbier_domain.Plant.t Stmt.query
+(** {!plants}, or {!Plants.list} when the text has no term. *)

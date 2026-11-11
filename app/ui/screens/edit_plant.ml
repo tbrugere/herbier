@@ -34,22 +34,7 @@ type data = {
   origin : origin;
 }
 
-let blank () =
-  let now = Ptime_clock.now () in
-  {
-    Plant.id = Plant_id.fresh ();
-    display_name = "";
-    aliases = [];
-    scientific_name = None;
-    authorship = None;
-    gbif_key = None;
-    notes = "";
-    notes_updated_at = None;
-    cover_photo_id = None;
-    created_at = now;
-    updated_at = now;
-    deleted_at = None;
-  }
+let blank () = Plant.v ~id:(Plant_id.fresh ()) ~at:(Ptime_clock.now ()) ""
 
 let load db mode =
   let open Fut.Result_syntax in
@@ -93,11 +78,13 @@ let leaving ~observations ~photos =
       Printf.sprintf "La fiche et %s quittent l'herbier." (its_observations n)
   | n, p ->
       Printf.sprintf
-        "La fiche, %s et %s %s quittent l'herbier. Les photos envoyées dans \
-         Google Photos y restent."
+        "La fiche, %s et %s %s quittent l'herbier. Les originaux envoyés dans \
+         Google Drive y restent."
         (its_observations n)
         (match n with 1 -> "ses" | _ -> "leurs")
         (Fr_text.plural p "photo" "photos")
+
+type delete = Delete | Keep
 
 (* Built for a stored plant only. *)
 let delete_part ~problem ~leave app (d : data) ~observations ~photos =
@@ -108,32 +95,16 @@ let delete_part ~problem ~leave app (d : data) ~observations ~photos =
       | 0 -> "Supprimer la plante ›"
       | n -> Printf.sprintf "Supprimer la plante et %s ›" (its_observations n))
   in
-  let confirm_shown, set_confirm = React.S.create false in
-  let keep = W.Button.v ~kind:W.Button.Secondary "Garder la plante" in
-  let really = W.Button.v ~kind:W.Button.Danger "Supprimer" in
   let confirm =
-    El.div
-      ~at:[cls "confirm"]
+    W.Dialog.v
+      ~title:(Printf.sprintf "Supprimer « %s » ?" d.plant.display_name)
+      ~text:(leaving ~observations:n ~photos:(List.length photos))
       [
-        El.div
-          ~at:[cls "confirm__box"]
-          [
-            El.h2
-              ~at:[cls "t-sheet-title"]
-              [
-                El.txt'
-                  (Printf.sprintf "Supprimer « %s » ?" d.plant.display_name);
-              ];
-            El.p
-              ~at:[cls "t-body"]
-              [El.txt' (leaving ~observations:n ~photos:(List.length photos))];
-            really.el;
-            keep.el;
-          ];
+        (W.Button.Danger, "Supprimer", Delete);
+        (W.Button.Secondary, "Garder la plante", Keep);
       ]
   in
   let do_delete () =
-    set_confirm false;
     Fut.await
       (App.save app
          (delete_edits ~at:(Ptime_clock.now ()) d ~observations ~photos))
@@ -144,18 +115,15 @@ let delete_part ~problem ~leave app (d : data) ~observations ~photos =
         | Ok _ ->
             leave (fun () -> Route.replace (Route.Tab W.Tab_bar.Collection)))
   in
-  ( [El.div ~at:[cls "edit-plant__footer"] [delete.el]; confirm],
+  ( [El.div ~at:[cls "edit-plant__footer"] [delete.el]; confirm.el],
     List.concat
       [
         [
-          Rb.act delete.click (fun () -> set_confirm true);
-          Rb.act keep.click (fun () -> set_confirm false);
-          Rb.act really.click do_delete;
-          Rb.class_ confirm "is-hidden" (React.S.map not confirm_shown);
+          Rb.act delete.click confirm.show;
+          Rb.act confirm.choice (function Delete -> do_delete () | Keep -> ());
         ];
         delete.bindings;
-        keep.bindings;
-        really.bindings;
+        confirm.bindings;
       ] )
 
 let render app mode (d : data) =
@@ -324,24 +292,20 @@ let notice text =
       ],
     Rb.act back.click Route.back :: back.bindings )
 
-type shown = Form of data | Gone | Unreadable
-
 let v app mode =
   (* Loaded once: the form does not follow saves made elsewhere while it is
-     open. [Rb.rlist] owns the rendering's bindings. *)
-  let content, handle = RList.create [] in
-  Fut.await
-    (load (App.db app) mode)
-    (function
-      | Error e ->
-          log_error "load" e;
-          RList.set handle [Unreadable]
-      | Ok None -> RList.set handle [Gone]
-      | Ok (Some d) -> RList.set handle [Form d]);
+     open. *)
   let el = El.div ~at:[cls "screen"; cls "edit-plant"] [] in
   let item = function
-    | Form d -> render app mode d
-    | Gone -> notice "Cette plante n'est plus dans l'herbier."
-    | Unreadable -> notice "La fiche n'a pas pu être lue."
+    | Some d -> render app mode d
+    | None -> notice "Cette plante n'est plus dans l'herbier."
   in
-  {Screen.el; bindings = [Rb.rlist el item content]}
+  {
+    Screen.el;
+    bindings =
+      Loaded.v ~what:"modifier la fiche"
+        ~failed:(fun () -> notice "La fiche n'a pas pu être lue.")
+        el
+        (fun () -> load (App.db app) mode)
+        item;
+  }

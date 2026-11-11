@@ -18,3 +18,19 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
+
+let v ~id ~at display_name =
+  {
+    id;
+    display_name;
+    aliases = [];
+    scientific_name = None;
+    authorship = None;
+    gbif_key = None;
+    notes = "";
+    notes_updated_at = None;
+    cover_photo_id = None;
+    created_at = at;
+    updated_at = at;
+    deleted_at = None;
+  }

@@ -1,0 +1,105 @@
+// 4h Observation, 4k À identifier and 5c Changer d'espèce
+// (app/ui/screens/observation.ml, resolve.ml).
+@use '../base'
+@use '../widgets'
+
+.observation__content, .resolve__content
+  display: flex
+  flex-direction: column
+  gap: 14px
+
+.observation__title, .resolve__title
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 2px
+
+// The touch area reaches 44 px; the negative margin keeps the header's
+// height.
+.observation__plant
+  +widgets.bare-button
+  +base.ui(15px, 800)
+  padding: 11px 8px
+  margin: -11px -8px
+  color: var(--moss)
+  &.observation__plant--to-identify
+    color: var(--ochre)
+
+.observation__line
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 12px
+
+.observation__value
+  +base.ui(16px, 700)
+
+.observation__date-input
+  +base.ui(16px, 600)
+  margin-top: 8px
+  padding: 10px 12px
+  border: 1.5px solid var(--moss)
+  border-radius: 12px
+  background: var(--paper)
+
+.observation .inline-text, .observation .inline-text__input
+  font-size: 18px
+
+.observation__problem
+  color: var(--danger)
+
+// Bordered action rows at the bottom of 4h.
+.observation__actions
+  display: flex
+  flex-direction: column
+  gap: 8px
+  margin-top: 6px
+
+.observation__action
+  +widgets.bare-button
+  +base.ui(15px, 700)
+  min-height: 52px
+  padding: 0 16px
+  border: 1px solid var(--line)
+  border-radius: 14px
+  &:active
+    background: var(--sand)
+  &.observation__action--danger
+    color: var(--danger)
+
+.resolve__ochre
+  color: var(--ochre)
+
+.resolve__subtitle
+  +base.ui(13px, 600)
+
+.resolve__obs-date
+  +base.ui(16px, 700)
+
+.resolve__note
+  +base.sci(16px)
+  margin-top: 4px
+
+.resolve__rows
+  display: flex
+  flex-direction: column
+  .is-current
+    opacity: .5
+    pointer-events: none
+
+.resolve__footer
+  display: grid
+  grid-template-columns: 1fr 1fr
+  gap: 10px
+  &:has(> :only-child)
+    grid-template-columns: 1fr
+
+.resolve .button[aria-disabled]
+  opacity: .5
+  cursor: default
+
+.resolve .button.is-inactive
+  opacity: .5
+
+.resolve__problem
+  color: var(--danger)

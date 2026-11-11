@@ -1,6 +1,7 @@
 open Brr
 module Tab_bar = Widgets.Tab_bar
 module Plant_id = Herbier_domain.Ids.Plant_id
+module Observation_id = Herbier_domain.Ids.Observation_id
 
 type modal =
   | Tags
@@ -8,6 +9,9 @@ type modal =
   | Plant of Plant_id.t
   | Edit_plant of Plant_id.t
   | New_plant
+  | Observation of Observation_id.t
+  | Change_species of Observation_id.t
+  | Identify of Observation_id.t
 
 type t = Tab of Tab_bar.tab | Modal of modal | Dev of string
 
@@ -30,9 +34,18 @@ let of_fragment = function
         | Some id -> Modal (k id)
         | None -> Tab Tab_bar.Collection
       in
+      let observation id k =
+        match Observation_id.of_string id with
+        | Some id -> Modal (k id)
+        | None -> Tab Tab_bar.Collection
+      in
       match String.split_on_char '/' f with
       | ["plante"; id] -> plant id (fun id -> Plant id)
       | ["plante"; id; "modifier"] -> plant id (fun id -> Edit_plant id)
+      | ["observation"; id] -> observation id (fun id -> Observation id)
+      | ["observation"; id; "espece"] ->
+          observation id (fun id -> Change_species id)
+      | ["a-identifier"; id] -> observation id (fun id -> Identify id)
       | _ -> Tab Tab_bar.Collection)
 
 let to_fragment = function
@@ -45,6 +58,10 @@ let to_fragment = function
   | Modal (Plant id) -> "plante/" ^ Plant_id.to_string id
   | Modal (Edit_plant id) -> "plante/" ^ Plant_id.to_string id ^ "/modifier"
   | Modal New_plant -> "plante/nouvelle"
+  | Modal (Observation id) -> "observation/" ^ Observation_id.to_string id
+  | Modal (Change_species id) ->
+      "observation/" ^ Observation_id.to_string id ^ "/espece"
+  | Modal (Identify id) -> "a-identifier/" ^ Observation_id.to_string id
   | Dev name -> dev_prefix ^ name
 
 let fragment () = Jstr.to_string (Uri.fragment (Window.location G.window))

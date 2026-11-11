@@ -19,3 +19,7 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;  (** [Some] = soft-deleted. *)
 }
+
+val v : id:id -> at:Ptime.t -> string -> t
+(** A free-name plant of that display name, created and updated [at], with no
+    alias, notes or cover. *)

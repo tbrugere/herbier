@@ -173,9 +173,12 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
-    plant_form.ml         pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    plant_form.ml, local_time.ml, to_identify.ml
+                          pure helpers of the screens; these and list_patch are tested natively in test/ui/
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     zone.ml               the phone's zone offset at an instant, for Fr_date
+    loaded.ml             a screen's content from store reads: rendered per load, or once over a signal
+                          that each reload sets (4f, 4h); the « Retour » notice of a missing record
     tag_usage.ml          live tags with their plants (4l, 5d), from Tags.list and Tags.links
     snap.ml               the sheet's snap points: nearest, clamp, release projection; pure, tested in test/ui/
     app.ml                wires services: after-save → outbox push + reference fetch, …
@@ -197,7 +200,7 @@ app/
                           stale-update check against a live control, heap per round; fixture.ml: the dev pages' State; hooks.ml:
                           herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
-    widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field,
+    widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)

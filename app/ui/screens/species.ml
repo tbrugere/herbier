@@ -9,7 +9,6 @@ module Observation_id = Herbier_domain.Ids.Observation_id
 module Plant = Herbier_domain.Plant
 module Tag = Herbier_domain.Tag
 module Tag_id = Herbier_domain.Ids.Tag_id
-module RList = ReactiveData.RList
 module W = Widgets
 
 let cls c = At.class' (Jstr.v c)
@@ -76,19 +75,29 @@ let observation_row (d : data) (o : Observation.t) =
         (match o.note with Some _ -> ["note"] | None -> []);
       ]
   in
-  El.li
-    ~at:[cls "species__obs"]
+  let el =
+    El.button
+      ~at:[At.type' (Jstr.v "button"); cls "species__obs"]
+      [
+        El.div ~at:[cls "species__obs-date"] [El.txt' when_];
+        El.div ~at:[cls "t-meta"] [El.txt' (String.concat " · " details)];
+      ]
+  in
+  let click, b = Rb.click el in
+  ( el,
     [
-      El.div ~at:[cls "species__obs-date"] [El.txt' when_];
-      El.div ~at:[cls "t-meta"] [El.txt' (String.concat " · " details)];
-    ]
+      b; Rb.act click (fun () -> Route.go (Route.Modal (Route.Observation o.id)));
+    ] )
 
 let observation_list (d : data) =
   match d.observations with
   | [] ->
-      [El.p ~at:[cls "t-meta"] [El.txt' "Aucune observation pour l'instant."]]
+      ( El.p ~at:[cls "t-meta"] [El.txt' "Aucune observation pour l'instant."],
+        [] )
   | obs ->
-      [El.ul ~at:[cls "species__obs-list"] (List.map (observation_row d) obs)]
+      let rows = List.map (observation_row d) obs in
+      ( El.div ~at:[cls "species__obs-list"] (List.map fst rows),
+        List.concat_map snd rows )
 
 let names (d : data) =
   let p = d.plant in
@@ -131,77 +140,30 @@ let section title extra children =
        (El.h2 ~at:[cls "t-section-label"] [El.txt' title] :: extra)
     :: children)
 
-(* The field is saved when it is left, and also when the fiche is torn down
-   while it is open: removing a focused element fires no [blur] (Android
-   back). *)
 let notes app ~problem data =
-  let notes =
-    React.S.map ~eq:String.equal (fun d -> d.plant.Plant.notes) data
-  in
-  let shown = button ["species__notes"; "t-notes"] [] in
-  let area =
-    El.textarea
-      ~at:[cls "species__notes-input"; cls "t-notes"; cls "is-hidden"]
-      []
-  in
-  (* style: [editing] tells whether the textarea is open, so that its blur
-     and the release do not both save; [draft] keeps the text of a save that
-     failed, offered again on the next tap. Both written from the listeners,
-     the release and the save's callback; the release may run inside the
-     router's update step, where a ref write is harmless. *)
-  let editing = ref false in
-  let draft = ref None in
-  let set_editing on =
-    editing := on;
-    El.set_class (Jstr.v "is-hidden") on shown;
-    El.set_class (Jstr.v "is-hidden") (not on) area;
-    match on with true -> El.set_has_focus true area | false -> ()
-  in
   let save text =
     let at = Ptime_clock.now () in
     let p = (React.S.value data).plant in
     let plant =
       {p with notes = text; notes_updated_at = Some at; updated_at = at}
     in
-    Fut.await
-      (App.save app [Plants.upsert plant])
+    Fut.map
       (function
         | Error e ->
             log_error "notes" e;
-            draft := Some text;
-            problem "La note n'a pas pu être enregistrée."
+            problem "La note n'a pas pu être enregistrée.";
+            false
         | Ok _ ->
-            draft := None;
-            problem "")
+            problem "";
+            true)
+      (App.save app [Plants.upsert plant])
   in
-  let commit () =
-    match !editing with
-    | false -> ()
-    | true -> (
-        set_editing false;
-        let text = String.trim (Jstr.to_string (El.prop El.Prop.value area)) in
-        match String.equal text (React.S.value notes) with
-        | true -> ()
-        | false -> save text)
+  let t =
+    W.Inline_text.v ~cls:"t-notes" ~label:"Mes notes"
+      ~placeholder:"Touchez pour écrire une note." ~save
+      (React.S.map ~eq:String.equal (fun d -> d.plant.Plant.notes) data)
   in
-  let open_ =
-    Rb.listen shown Ev.click (fun _ ->
-        let text = Option.value !draft ~default:(React.S.value notes) in
-        El.set_prop El.Prop.value (Jstr.v text) area;
-        set_editing true)
-  in
-  ( El.div [shown; area],
-    [
-      open_;
-      Rb.listen area Ev.blur (fun _ -> commit ());
-      Rb.on_release commit;
-      Rb.text shown
-        (React.S.map
-           (function "" -> "Touchez pour écrire une note." | n -> n)
-           notes);
-      Rb.class_ shown "species__notes--empty"
-        (React.S.map (String.equal "") notes);
-    ] )
+  (t.el, t.bindings)
 
 (* The fiche of a live plant. The parts [data] shows are updated in place on
    each reload, so an editor open on the fiche (the notes, « + tag ») stays
@@ -321,7 +283,7 @@ let render app (data : data React.signal) =
                  Printf.sprintf "Mes observations · %d"
                    (List.length d.observations))
                data);
-          Rb.children obs_list (React.S.map ~eq:( == ) observation_list data);
+          Rb.view obs_list observation_list data;
           (* An emptied note keeps its date in the row, not on screen. *)
           Rb.text modified
             (React.S.map
@@ -363,42 +325,15 @@ let notice text =
       ],
     [b; Rb.act click Route.back] )
 
-type shown = Fiche of data React.signal | Gone | Unreadable
-
 let v app id =
-  let content, handle = RList.create [] in
-  (* style: [update] sets the data of the fiche on screen, if one is: a reload
-     updates that fiche rather than rendering a new one. Written by the
-     loads' callbacks only. *)
-  let update = ref None in
-  let reload () =
-    Fut.await
-      (load (App.db app) id)
-      (function
-        | Error e -> (
-            log_error "load" e;
-            match !update with
-            | Some _ -> ()
-            | None -> RList.set handle [Unreadable])
-        | Ok None ->
-            update := None;
-            RList.set handle [Gone]
-        | Ok (Some d) -> (
-            match !update with
-            | Some set -> set d
-            | None ->
-                let data, set = React.S.create ~eq:( == ) d in
-                update := Some set;
-                RList.set handle [Fiche data]))
-  in
-  reload ();
   let el = El.div ~at:[cls "screen"; cls "species"] [] in
-  let item = function
-    | Fiche data -> render app data
-    | Gone -> notice "Cette plante n'est plus dans l'herbier."
-    | Unreadable -> notice "La fiche n'a pas pu être lue."
-  in
   {
     Screen.el;
-    bindings = [Rb.rlist el item content; Rb.act (App.saved app) reload];
+    bindings =
+      Loaded.live ~reload:(App.saved app) ~what:"fiche"
+        ~gone:(fun () -> notice "Cette plante n'est plus dans l'herbier.")
+        ~failed:(fun () -> notice "La fiche n'a pas pu être lue.")
+        el
+        (fun () -> load (App.db app) id)
+        (render app);
   }

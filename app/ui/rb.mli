@@ -54,6 +54,12 @@ val rlist :
     value. Releasing the binding also stops the list itself unless it is
     anchored (see {!release}). *)
 
+val view :
+  Brr.El.t -> ('a -> Brr.El.t * binding list) -> 'a React.signal -> binding
+(** [view el f s]: [el]'s only child is [f] of the signal's value, rendered
+    again on each change, the previous rendering's bindings released (an
+    {!rlist} of one item). *)
+
 val ev : Brr.El.t -> 'a Brr.Ev.type' -> 'a Brr.Ev.t React.event * binding
 (** [ev el type'] is an event fired by each DOM event [type'] on [el], outside
     any update step as long as the browser dispatches [type'] asynchronously.

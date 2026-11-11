@@ -1,8 +1,8 @@
 (** 4f / 4g Fiche espèce (modal), shown as 4g for every plant: a striped hero
     with ← and ✎ (→ 5a), the « local » badge, the latest observation's place and
     date, the name and the scientific name (or « nom libre — espèce non liée »);
-    the tags and « + tag »; « Mes observations · n », rows not interactive;
-    « Mes notes », edited in place and saved when the field is left or the fiche
+    the tags and « + tag »; « Mes observations · n », each row opening 4h; « Mes
+    notes », edited in place and saved when the field is left or the fiche
     closed; the reference block reduced to the 4g text, its button inert.
 
     « + tag » puts a tag of that name on the plant, creating it when no tag has

@@ -11,7 +11,8 @@
     confirmation, then soft-deletes, at one instant, the plant, its live
     observations, their photos and the plant's tag links
     ({!Herbier_store.Cascade.plant}), and replaces the route with Collection.
-    The originals stay in Google Photos; the outbox carries each deletion. *)
+    Originals sent to Google Drive stay there; the outbox carries each deletion.
+*)
 
 type mode = Edit of Herbier_domain.Ids.Plant_id.t | New
 

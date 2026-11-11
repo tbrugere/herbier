@@ -174,6 +174,10 @@ let rlist el f l =
   in
   make (List_items (e, items))
 
+let view el f s =
+  rlist el f
+    (RList.from_signal ~eq:( == ) (React.S.map ~eq:( == ) (fun v -> [v]) s))
+
 let ev el type' =
   let e, send = React.E.create () in
   let listener = Ev.listen type' send (El.as_target el) in

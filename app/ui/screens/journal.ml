@@ -53,7 +53,12 @@ let row names (o : Observation.t) =
         W.List_row.v ~thumb:W.List_row.Placeholder ~tone:W.List_row.To_identify
           ~title:"À identifier" ~meta ()
   in
-  (r.el, r.bindings)
+  let target =
+    match o.plant_id with
+    | Some _ -> Route.Observation o.id
+    | None -> Route.Identify o.id
+  in
+  (r.el, Rb.act r.click (fun () -> Route.go (Route.Modal target)) :: r.bindings)
 
 let day ~this_year names (d : Observation.t Journal_day.t) =
   let place =
