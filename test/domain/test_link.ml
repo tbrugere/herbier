@@ -258,6 +258,10 @@ let parsing_tests =
     case "wikipedia language with a hyphen"
       "https://zh-min-nan.wikipedia.org/wiki/Digitalis"
       (Link.Wikipedia {lang = "zh-min-nan"; title = "Digitalis"});
+    text_case "wikipedia language with a digit is text"
+      "https://abc1.wikipedia.org/wiki/Digitalis";
+    text_case "wikipedia language over 12 characters is text"
+      "https://abcdefghijklm.wikipedia.org/wiki/Digitalis";
     text_case "url with an empty host is text" "https:///species/5414463";
     text_case "www.wikipedia.org is not a language"
       "https://www.wikipedia.org/wiki/Digitalis";

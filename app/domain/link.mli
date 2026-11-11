@@ -35,9 +35,9 @@ type t =
           with underscores turned into spaces (["Digitalis purpurea"]). *)
   | Wikipedia of {lang : string; title : string}
       (** [<lang>.wikipedia.org/wiki/<title>] or [<lang>.m.wikipedia.org/…]
-          ([lang] starts with a letter and is not [www]): [title] is every
-          segment after [wiki] joined by [/], decoded, underscores turned into
-          spaces. *)
+          ([lang] passes {!valid_wikipedia_lang}): [title] is every segment
+          after [wiki] joined by [/], decoded, underscores turned into spaces.
+      *)
   | Inpn of int
       (** [inpn.mnhn.fr/espece/cd_nom/<cd_nom>] or [/explorer/especes/<cd_nom>]:
           the TaxRef [cd_nom]. *)
@@ -66,6 +66,11 @@ val classify : string -> t
     authorship, as in ["L."]. Without such a URL, or when no URL matches a
     pattern (a numeric id must parse as a positive [int]), the result is [Text]
     of the trimmed input. Never raises. *)
+
+val valid_wikipedia_lang : string -> bool
+(** A Wikipedia language code as a host label: 1–12 characters of [a-z] and
+    ['-'] starting with a letter (["fr"], ["zh-min-nan"], ["zh-classical"]), not
+    ["www"]. *)
 
 val equal : t -> t -> bool
 

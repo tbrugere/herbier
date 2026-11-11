@@ -28,14 +28,16 @@ val max_in_flight : int
 val default_timeout_ms : int
 (** Timeout of {!get} when none is given, in milliseconds. *)
 
-val get : ?timeout_ms:int -> Source.t -> string -> (string, error) result Fut.t
-(** [get source url] queues a GET of [url] for [source] and resolves with the
-    response body as text. It sends [Api-User-Agent: {!user_agent}] to the
-    Wikimedia sources ([Wikidata], [Wikipedia]) and no custom header to the
-    others (architecture §6). [timeout_ms] (default {!default_timeout_ms}) runs
-    from the moment the request starts, not from when it was queued; on expiry
-    the request is aborted and its slot freed. The result arrives after the slot
-    is freed and the next queued request started. Never raises. *)
+val get :
+  ?timeout_ms:int -> Herbier_refs.Request.t -> (string, error) result Fut.t
+(** [get request] queues a GET of [request.url] for [request.source] and
+    resolves with the response body as text. It sends
+    [Api-User-Agent: {!user_agent}] to the Wikimedia sources ([Wikidata],
+    [Wikipedia]) and no custom header to the others (architecture §6).
+    [timeout_ms] (default {!default_timeout_ms}) runs from the moment the
+    request starts, not from when it was queued; on expiry the request is
+    aborted and its slot freed. The result arrives after the slot is freed and
+    the next queued request started. Never raises. *)
 
 val in_flight : unit -> Source.t list
 (** The sources with a request started and not settled (at most one each), for

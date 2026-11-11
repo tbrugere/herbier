@@ -135,7 +135,8 @@ let fetch ~timeout_ms source url =
   Brr.G.stop_timer timer;
   result
 
-let get ?(timeout_ms = default_timeout_ms) source url =
+let get ?(timeout_ms = default_timeout_ms) (request : Herbier_refs.Request.t) =
+  let source = request.source and url = request.url in
   let fut, deliver = Fut.create () in
   let start () = fetch ~timeout_ms source url in
   waiting := !waiting @ [{source; start; deliver}];

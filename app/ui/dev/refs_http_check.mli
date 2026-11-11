@@ -5,7 +5,9 @@
     timed-out slot was freed). It logs each call when queued and when it
     settles, with the sources in flight at that moment, so the limits (one per
     source, at most three overall) can be read off the log, and ends with a
-    [done] line counting the results. Reached with the URL fragment
-    [#dev/refs-http]. *)
+    [done] line counting the results. Then it fetches each request description
+    of [Herbier_refs.Sources] once for Digitalis purpurea and logs
+    [<name>: decoded <summary>] or the error, ending with [decode done]. Reached
+    with the URL fragment [#dev/refs-http]. *)
 
 val el : unit -> Brr.El.t

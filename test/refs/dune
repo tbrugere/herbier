@@ -1,5 +1,16 @@
-; Decoders and projection over the recorded payloads in ../fixtures.
+; Request URLs and decoders over the recorded payloads in ../fixtures; URLs
+; checked against scripts/record-refs-fixtures.sh.
 (test
  (name test_refs)
+ (modules
+  test_refs
+  fixture
+  check
+  test_request
+  test_gbif
+  test_wikidata
+  test_wikipedia)
  (libraries herbier_refs herbier_domain yojson alcotest)
- (deps (glob_files %{project_root}/test/fixtures/*.json)))
+ (deps
+  (glob_files %{project_root}/test/fixtures/*.json)
+  %{project_root}/scripts/record-refs-fixtures.sh))

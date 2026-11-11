@@ -300,16 +300,19 @@ let inat = function
 let without_www host =
   Option.value ~default:host (strip_prefix ~prefix:"www." host)
 
-let starts_with_letter s =
-  match s with
-  | "" -> false
-  | _ -> ( match s.[0] with 'a' .. 'z' -> true | _ -> false)
+let valid_wikipedia_lang lang =
+  let n = String.length lang in
+  n >= 1
+  && n <= 12
+  && (match lang.[0] with 'a' .. 'z' -> true | _ -> false)
+  && String.for_all (function 'a' .. 'z' | '-' -> true | _ -> false) lang
+  && lang <> "www"
 
 (* "fr.wikipedia.org" | "fr.m.wikipedia.org" → Some "fr" *)
 let wikipedia_lang host =
   match String.split_on_char '.' host with
   | ([lang; "wikipedia"; "org"] | [lang; "m"; "wikipedia"; "org"])
-    when lang <> "www" && starts_with_letter lang ->
+    when valid_wikipedia_lang lang ->
       Some lang
   | _ -> None
 

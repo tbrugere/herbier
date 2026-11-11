@@ -12,6 +12,7 @@
   herbier_sync
   herbier_photos
   herbier_refs
+  yojson
   herbier_refs_io
   herbier_geo
   postgrest

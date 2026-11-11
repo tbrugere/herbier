@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Record the reference-source payloads of test/fixtures/ (gbif_*, wikidata_*,
+# wikipedia_*) from the live APIs. Each fetch line is exactly the file, the
+# Request.source and the Request.url of the request description it records
+# (test/refs checks it), except the lines preceded by a
+# "# not built by a request function:" comment.
+#
+#   scripts/record-refs-fixtures.sh [--force]
+#
+# An existing file is kept unless --force: fixtures are recorded once, never
+# edited. Needs curl >= 7.76 (--fail-with-body).
+set -euo pipefail
+root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+out="$root/test/fixtures"
+force=0
+case "$#:${1:-}" in
+  0:) ;;
+  1:--force) force=1 ;;
+  *) echo "usage: $0 [--force]" >&2; exit 2 ;;
+esac
+UA="Herbier/fixtures (https://github.com/tbrugere/herbier)"
+
+fetch() {
+  local file="$1" source="$2" url="$3"
+  local path="$out/$file"
+  if [ -e "$path" ] && [ "$force" = 0 ]; then
+    echo "skip $file"
+    return 0
+  fi
+  local args=(-sS --fail-with-body --compressed -A "$UA")
+  case "$source" in
+    wikidata) args+=(-H "Api-User-Agent: $UA") ;;
+    wikipedia) args+=(-L -H "Api-User-Agent: $UA") ;;
+    gbif) ;;
+    *) echo "unknown source $source" >&2; return 1 ;;
+  esac
+  curl "${args[@]}" -o "$path.tmp" "$url" || { rm -f "$path.tmp"; return 1; }
+  mv "$path.tmp" "$path"
+  echo "recorded $file"
+}
+
+fetch gbif_species_5414995.json gbif "https://api.gbif.org/v1/species/5414995"
+fetch gbif_species_5405976.json gbif "https://api.gbif.org/v1/species/5405976"
+fetch gbif_species_5334357.json gbif "https://api.gbif.org/v1/species/5334357"
+
+fetch gbif_match_digitalis_purpurea_l.json gbif "https://api.gbif.org/v1/species/match?name=Digitalis%20purpurea%20L.&kingdom=Plantae"
+fetch gbif_match_digitalis_purpurae.json gbif "https://api.gbif.org/v1/species/match?name=Digitalis%20purpurae&kingdom=Plantae"
+fetch gbif_match_fallopia_japonica.json gbif "https://api.gbif.org/v1/species/match?name=Fallopia%20japonica&kingdom=Plantae"
+fetch gbif_match_xyzzy_foo.json gbif "https://api.gbif.org/v1/species/match?name=Xyzzy%20foo&kingdom=Plantae"
+# not built by a request function: no kingdom, the only way to get matchType
+# NONE live.
+fetch gbif_match_none_zzzzqqq.json gbif "https://api.gbif.org/v1/species/match?name=zzzzqqq"
+
+fetch gbif_suggest_digitalis_purp.json gbif "https://api.gbif.org/v1/species/suggest?q=Digitalis%20purp&datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&rank=SPECIES&highertaxonKey=6&limit=10"
+fetch gbif_vernacular_search_digitale_pourpre.json gbif "https://api.gbif.org/v1/species/search?q=digitale%20pourpre&datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&highertaxonKey=6&qField=VERNACULAR&limit=20"
+
+fetch gbif_vernacular_names_5414995.json gbif "https://api.gbif.org/v1/species/5414995/vernacularNames?limit=1000"
+fetch gbif_vernacular_names_5405976.json gbif "https://api.gbif.org/v1/species/5405976/vernacularNames?limit=1000"
+fetch gbif_distributions_5414995.json gbif "https://api.gbif.org/v1/species/5414995/distributions?limit=1000"
+fetch gbif_distributions_5405976.json gbif "https://api.gbif.org/v1/species/5405976/distributions?limit=1000"
+fetch gbif_occurrence_count_5414995.json gbif "https://api.gbif.org/v1/occurrence/count?taxonKey=5414995"
+fetch gbif_occurrence_count_5405976.json gbif "https://api.gbif.org/v1/occurrence/count?taxonKey=5405976"
+fetch gbif_plantnet_media_5414995.json gbif "https://api.gbif.org/v1/occurrence/search?datasetKey=7a3679ef-5582-4aaa-81f0-8c2545cafc81&taxonKey=5414995&mediaType=StillImage&limit=50"
+fetch gbif_plantnet_media_5405976.json gbif "https://api.gbif.org/v1/occurrence/search?datasetKey=7a3679ef-5582-4aaa-81f0-8c2545cafc81&taxonKey=5405976&mediaType=StillImage&limit=50"
+
+fetch wikidata_search_p846_5414995.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P846%3D5414995%22&format=json&origin=%2A"
+fetch wikidata_search_p846_5405976.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P846%3D5405976%22&format=json&origin=%2A"
+fetch wikidata_search_p5037_802077-1.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P5037%3Durn%3Alsid%3Aipni.org%3Anames%3A802077-1%22&format=json&origin=%2A"
+fetch wikidata_search_p846_999999999.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P846%3D999999999%22&format=json&origin=%2A"
+
+fetch wikidata_entity_Q157555.json wikidata "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q157555&props=claims%7Csitelinks&sitefilter=frwiki%7Cenwiki%7Cdewiki%7Citwiki&format=json&origin=%2A"
+fetch wikidata_entity_Q207848.json wikidata "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q207848&props=claims%7Csitelinks&sitefilter=frwiki%7Cenwiki%7Cdewiki%7Citwiki&format=json&origin=%2A"
+# not built by a request function: Q0 is not a Qid.t.
+fetch wikidata_entity_Q0.json wikidata "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q0&props=claims%7Csitelinks&sitefilter=frwiki%7Cenwiki%7Cdewiki%7Citwiki&format=json&origin=%2A"
+
+fetch wikipedia_summary_fr_Digitalis_purpurea.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Digitalis_purpurea"
+fetch wikipedia_summary_fr_Arnica_montana.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Arnica_montana"
+fetch wikipedia_summary_en_Digitalis_purpurea.json wikipedia "https://en.wikipedia.org/api/rest_v1/page/summary/Digitalis_purpurea"
+fetch wikipedia_summary_fr_Lis.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Lis"

@@ -1,7 +1,17 @@
-Recorded payloads only: API responses (`gbif_<key>.json`,
-`wikidata_<key>.json`, `wikipedia_<title>.json`, later `tela_<nn>.json`,
+Recorded payloads only: API responses (`<source>_<endpoint>_<id>.json`, e.g.
+`gbif_species_5414995.json`, `wikidata_entity_Q157555.json`,
+`wikipedia_summary_fr_Digitalis_purpurea.json`; later `tela_<nn>.json`,
 `inpn_<cd_nom>.json`) and exifr output (`exifr_<name>.json`, below). Never app
 rows. Each API file is fetched once, committed, and never edited.
+
+`gbif_*`, `wikidata_*`, `wikipedia_*.json`: recorded by
+`scripts/record-refs-fixtures.sh` (`[--force]` to re-record), one file per
+request. The two reference species are **Digitalis purpurea** (GBIF 5414995,
+Q157555) and **Arnica montana** (GBIF 5405976, Q207848, a WCVP-poorer taxon),
+plus the edge payloads `Herbier_refs` decoders branch on (a synonym, a FUZZY
+and a HIGHERRANK match, a NONE match, an unknown Wikidata id (API error
+`no-such-entity`), a Wikipedia disambiguation page). See `test/refs/test_request.ml` for the exact request
+each file records.
 
 `exifr_<name>.json`: what `Herbier_bindings.Exifr.parse ~pick:Exif.tags`
 returns for one photo, never edited:

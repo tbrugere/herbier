@@ -148,6 +148,9 @@ app/
     jpeg.ml               pure: JPEG segment reading (is there an EXIF APP1)
     drive.ml (files.create, folders, trashed check)  upload_queue.ml  health.ml
   refs/                   §6–7 of architecture, pure part: domain + yojson, no Brr
+    request.ml            Request.t: source + URL of one GET; percent-encoding, URL assembly
+    decode.ml             decode error variant, JSON parsing, field helpers shared by sources/
+    qid.ml                Wikidata item id (Q<digits>)
     sources/              gbif.ml  wikidata.ml  wikipedia.ml: request descriptions + payload decoders
                           tela.ml  inpn.ml: later, once the region is decided
     projection.ml         reference rows → ReferenceSnapshot fields (4f), pure over JSON
@@ -191,7 +194,8 @@ app/
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
                           serialisation, park/delete); seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
-                          with the sources in flight; photo_check.ml (#dev/photos): gallery pick, then per photo
+                          with the sources in flight, then each refs/sources request for Digitalis
+                          purpurea fetched and decoded; photo_check.ml (#dev/photos): gallery pick, then per photo
                           exifr → Exif, sha256, Preview.make → dev/preview.jpg written, read back (sizes compared,
                           EXIF segment checked) and shown as a blob: URL; one GPS fix; rb_check.ml (#dev/rb):
                           self-checks every Rb binding, rlist's in-place patches, item bindings and anchors, then a
@@ -369,7 +373,8 @@ test/
                 responses compared to expected values
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
-  refs/         native, alcotest: payload decoders and projection over fixtures/
+  refs/         native, alcotest: request URLs, payload decoders and projection over fixtures/
+    jsoo/       js_of_ocaml build of the decoders run under node: GBIF occurrence keys above 2^31
   ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune)
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
                 the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
@@ -379,8 +384,9 @@ test/
                 exifr output in fixtures/exifr_*.json; preview_size; jpeg)
   geo/          native, alcotest: the pure modules of app/geo/ copied in (features, style over the
                 recorded web/map/positron.json)
-  fixtures/     recorded payloads only: API responses (gbif_<key>.json, wikidata_<key>.json,
-                tela_<nn>.json, inpn_<cd_nom>.json) and exifr output (exifr_<name>.json,
+  fixtures/     recorded payloads only: API responses (<source>_<endpoint>_<id>.json, e.g.
+                gbif_species_5414995.json, wikidata_entity_Q157555.json, recorded by
+                scripts/record-refs-fixtures.sh) and exifr output (exifr_<name>.json,
                 scripts/exifr-fixture.mjs); never app rows
   js/           browser-side tests; added only if the UI spike's leak check fails
 ```
@@ -412,7 +418,9 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   the Pillow JPEGs behind `test/fixtures/exifr_pil_*.json`) and
   `exifr-fixture.mjs` (exifr output of a photo into
   `test/fixtures/exifr_<name>.json`, with the options of
-  `app/bindings/exifr.ml` and `pick` = `Exif.tags`).
+  `app/bindings/exifr.ml` and `pick` = `Exif.tags`), `record-refs-fixtures.sh`
+  (curl of every reference-source fixture `test/fixtures/{gbif,wikidata,wikipedia}_*.json`
+  at the exact URL of its request description; skips existing files unless `--force`).
 - `ci.yml`: `dune build`, `dune test`, the formatting check (`dune build @fmt`,
   ocamlformat installed from opam on the runner), `dune build @web` and checks on
   its output. From M1.9: `dune test` also checks `app/store/tables.ml` against the catalog, and `schema-dump.py --check`,

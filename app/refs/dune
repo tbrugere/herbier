@@ -1,6 +1,9 @@
 ; Reference sources, pure part: request descriptions, payload decoders and
 ; the projection. domain + yojson only, so it builds natively and is tested
-; against test/fixtures/.
+; against test/fixtures/. Subdirectories are qualified modules:
+; Sources.Gbif, Sources.Wikidata, Sources.Wikipedia.
+(include_subdirs qualified)
+
 (library
  (name herbier_refs)
  (public_name herbier.refs)
