@@ -316,13 +316,16 @@ let wikipedia_lang host =
 let of_url {host; path} =
   match (without_www host, wikipedia_lang host) with
   | _, Some lang -> wikipedia lang path
-  | "gbif.org", None -> gbif path
+  | ("gbif.org" | "m.gbif.org"), None -> gbif path
   | "identify.plantnet.org", None -> plantnet path
-  | ("plantuse.plantnet.org" | "uses.plantnet.org"), None -> plantuse path
+  | ( ( "plantuse.plantnet.org" | "uses.plantnet.org"
+      | "uses.plantnet-project.org" ),
+      None ) ->
+      plantuse path
   | "inpn.mnhn.fr", None -> inpn path
   | "tela-botanica.org", None -> tela path
   | "powo.science.kew.org", None -> powo path
-  | "inaturalist.org", None -> inat path
+  | ("inaturalist.org" | "m.inaturalist.org"), None -> inat path
   | _, None -> None
 
 let classify_url url = Option.bind (parse_url url) of_url

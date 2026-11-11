@@ -7,9 +7,10 @@
     browser does) with empty segments dropped and each segment percent-decoded
     (["+"] stays a plus: it is a path, not a form; a segment that would decode
     to invalid UTF-8 is kept as written). Query and fragment are ignored. A
-    leading ["www."] is ignored on every host; ["m."] is accepted only on
-    Wikipedia. A name, title or id that is blank once decoded and trimmed
-    matches nothing.
+    leading ["www."] is ignored on every host, before any other prefix
+    (["www.m.gbif.org"] is ["m.gbif.org"]); any other host, a mobile ["m."] one
+    included, matches only where a constructor below names it. A name, title or
+    id that is blank once decoded and trimmed matches nothing.
 
     String payloads are decoded, untrusted text: they may contain [/], [?], [#]
     or control characters, so a caller re-encodes them as one path segment or
@@ -17,8 +18,9 @@
 
 type t =
   | Gbif of int
-      (** [www.gbif.org/species/<key>] or [/<lang>/species/<key>], with any
-          trailing segments ([/metrics], [/verbatim]). *)
+      (** [www.gbif.org/species/<key>] or [/<lang>/species/<key>] (also
+          [m.gbif.org]), with any trailing segments ([/metrics], [/verbatim]).
+      *)
   | Plantnet of string
       (** [identify.plantnet.org/…/species/<name>/…]: the decoded scientific
           name with its authorship, as in the path (["Digitalis purpurea L."]).
@@ -28,9 +30,9 @@ type t =
           names no species by itself. *)
   | Plantuse of string
       (** [plantuse.plantnet.org/<lang>/<Page_name>], exactly two segments (also
-          [uses.plantnet.org]), not [/w/…] nor a namespaced page (a [:] in the
-          name): the wiki page name with underscores turned into spaces
-          (["Digitalis purpurea"]). *)
+          [uses.plantnet.org] and the old [uses.plantnet-project.org]), not
+          [/w/…] nor a namespaced page (a [:] in the name): the wiki page name
+          with underscores turned into spaces (["Digitalis purpurea"]). *)
   | Wikipedia of {lang : string; title : string}
       (** [<lang>.wikipedia.org/wiki/<title>] or [<lang>.m.wikipedia.org/…]
           ([lang] starts with a letter and is not [www]): [title] is every
@@ -47,8 +49,8 @@ type t =
           ["urn:lsid:ipni.org:names:30000174-2"] (the form of Wikidata P5037).
       *)
   | Inat of int
-      (** [www.inaturalist.org/taxa/<id>] or [/taxa/<id>-<Name>]: the taxon id.
-      *)
+      (** [www.inaturalist.org/taxa/<id>] or [/taxa/<id>-<Name>] (also
+          [m.inaturalist.org]): the taxon id. *)
   | Text of string
       (** Anything else: the input, trimmed, for a free-text search. A text
           whose URLs match none of the patterns above is [Text] of the whole

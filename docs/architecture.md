@@ -362,14 +362,18 @@ gbif_key
 
 ## 7. Link interception and resolution
 
-Manifest `intent-filter`s (`VIEW` + `BROWSABLE`, `https`):
-`www.gbif.org/species/*` and `/{lang}/species/*`,
-`identify.plantnet.org/*/species/*` and `/*/observations/*`,
-`plantuse.plantnet.org/*` (the Pl@ntUse wiki, linked from Pl@ntNet species
-pages; host to verify, it may be `uses.plantnet.org`),
-`*.wikipedia.org/wiki/*`, `powo.science.kew.org/taxon/*`,
-`inpn.mnhn.fr/espece/cd_nom/*` and `/explorer/especes/*`,
-`www.tela-botanica.org/bdtfx-nn-*`, `www.inaturalist.org/taxa/*`.
+Manifest `intent-filter`s (`VIEW` + `BROWSABLE`, `https`), one per host
+below; the resolver classifies exactly the same hosts:
+`www.gbif.org` and `m.gbif.org`: `/species/*` and `/{lang}/species/*`;
+`identify.plantnet.org`: `/*/species/*` and `/*/observations/*`;
+`plantuse.plantnet.org`, `uses.plantnet.org` and the old
+`uses.plantnet-project.org`: `/*` (the Pl@ntUse wiki, linked from Pl@ntNet
+species pages; which host is current is to verify);
+`*.wikipedia.org` (and `*.m.wikipedia.org`): `/wiki/*`;
+`powo.science.kew.org`: `/taxon/*`;
+`inpn.mnhn.fr`: `/espece/cd_nom/*` and `/explorer/especes/*`;
+`www.tela-botanica.org`: `/bdtfx-nn-*`;
+`www.inaturalist.org` and `m.inaturalist.org`: `/taxa/*`.
 Plus `SEND text/plain` via the share-target plugin. On Android 12+ the user
 enables these once under "Ouvrir par défaut" (no Digital Asset Links since we
 do not own these domains); the share sheet path needs nothing. Both paths

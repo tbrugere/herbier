@@ -31,6 +31,14 @@ let gbif_tests =
       "https://www.gbif.org/species/99999999999999999999999";
     text_case "gbif url without species segment is text"
       "https://www.gbif.org/occurrence/123";
+    case "gbif mobile host" "https://m.gbif.org/species/5414463"
+      (Link.Gbif 5414463);
+    text_case "gbif mobile look-alike host is text"
+      "https://m.gbif.org.example.com/species/5414463";
+    text_case "gbif mobile prefix look-alike host is text"
+      "https://mm.gbif.org/species/5414463";
+    case "gbif mobile host behind www" "https://www.m.gbif.org/species/5414463"
+      (Link.Gbif 5414463);
   ]
 
 let plantnet_tests =
@@ -67,6 +75,13 @@ let plantuse_tests =
     case "plantuse on the uses.plantnet.org host"
       "https://uses.plantnet.org/en/Digitalis_purpurea"
       (Link.Plantuse "Digitalis purpurea");
+    case "plantuse on the old uses.plantnet-project.org host"
+      "https://uses.plantnet-project.org/fr/Digitalis_purpurea"
+      (Link.Plantuse "Digitalis purpurea");
+    text_case "plantuse old host look-alike is text"
+      "https://uses.plantnet-project.org.example.com/fr/Digitalis_purpurea";
+    text_case "plantuse old host prefix look-alike is text"
+      "https://xuses.plantnet-project.org/fr/Digitalis_purpurea";
     case "plantuse page with percent-encoded name"
       "https://plantuse.plantnet.org/fr/Digitalis%20purpurea"
       (Link.Plantuse "Digitalis purpurea");
@@ -156,6 +171,8 @@ let powo_tests =
     text_case "powo url without taxon is text"
       "https://powo.science.kew.org/results?q=digitalis";
     text_case "powo blank id is text" "https://powo.science.kew.org/taxon/%20";
+    text_case "powo mobile host is text"
+      "https://m.powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30000174-2";
   ]
 
 let inat_tests =
@@ -165,6 +182,14 @@ let inat_tests =
     case "inat taxa id with name suffix"
       "https://www.inaturalist.org/taxa/47604-Digitalis-purpurea"
       (Link.Inat 47604);
+    case "inat mobile host" "https://m.inaturalist.org/taxa/47604"
+      (Link.Inat 47604);
+    text_case "inat mobile look-alike host is text"
+      "https://m.inaturalist.org.example.com/taxa/47604";
+    text_case "inat mobile prefix look-alike host is text"
+      "https://mm.inaturalist.org/taxa/47604";
+    case "inat mobile host behind www"
+      "https://www.m.inaturalist.org/taxa/47604" (Link.Inat 47604);
     text_case "inat taxa with zero id is text"
       "https://www.inaturalist.org/taxa/0";
     text_case "inat taxa slug without id is text"
