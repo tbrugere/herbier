@@ -402,8 +402,14 @@ the classifier must accept both a bare URL and text containing one.
 ## 8. Map
 
 - MapLibre GL JS behind a JS facade (`map.js`, ~100 lines) exposing: create,
-  set style, set GeoJSON source, on click/moveend, getCenter, flyTo, add
-  metric circle. Bound from OCaml with Brr `Jv`.
+  set style (for the offline/online switch below), set GeoJSON source, on
+  click/moveend/idle/error, getCenter, getZoom, flyTo, fit bounds (capped at a
+  maximum zoom), rendered ids, resize, remove. Bound from OCaml with Brr `Jv`;
+  styles and GeoJSON
+  cross as JSON text. Herbier's sources and layers are merged into the style
+  JSON in OCaml (`Geo.Style.with_overlays`), so they survive `setStyle`.
+- MapLibre 6 is bundled by esbuild into the IIFE `vendor.js`; its worker is
+  served as the file `maplibre-gl-worker.js` and set with `setWorkerUrl`.
 - Sources: observations as a GeoJSON source with `cluster: true`; the 500 m
   semantics come from a **pre-clustering step in OCaml** (`Places.cluster`) at
   low zooms, MapLibre clustering only merges overlapping markers on screen.
@@ -411,8 +417,10 @@ the classifier must accept both a bare URL and text containing one.
   tile source swapped to `pmtiles://` pointing at `tiles/<region>.pmtiles`
   (Protomaps `@protomaps/basemaps` flavour `white`). Switch is automatic on
   connectivity change.
-- GPS accuracy: a metric circle layer (radius in metres, zoom-dependent
-  pixels), never a number in the UI (handoff 4h).
+- GPS accuracy: a metric circle, never a number in the UI (handoff 4h): a
+  GeoJSON polygon computed in OCaml (`Geo.Features.circle`, 64 vertices on
+  the sphere of `Places.distance_m`) in a source drawn by a fill and a line
+  layer, exact at every zoom and latitude.
 - Mini-map (observation screen): a non-interactive MapLibre instance, or a
   cached PNG rendered once from it.
 - Reverse geocoding for `place_derived`: Photon (or Géoplateforme in France),

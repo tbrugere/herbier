@@ -208,6 +208,30 @@ let d1 = obs ~id:8 ~at:7 ~deleted:true (Some o)
 let n1 = obs ~id:9 ~at:8 (Some {lat = Float.nan; lon = 5.})
 let i1 = obs ~id:10 ~at:9 (Some {lat = 45.; lon = Float.infinity})
 let unplaceable = [u1; d1; n1; i1]
+
+let position_point_live () =
+  Alcotest.(check (option point))
+    "a live observation with a position gives its point" (Some o)
+    (Places.position_point a1)
+
+let position_point_unplaceable () =
+  Alcotest.(check (option point))
+    "no position gives None" None (Places.position_point u1);
+  Alcotest.(check (option point))
+    "a deleted observation gives None" None (Places.position_point d1)
+
+let position_point_nonfinite () =
+  let neg_infinite_lon =
+    obs ~id:11 ~at:10 (Some {lat = 45.; lon = Float.neg_infinity})
+  in
+  Alcotest.(check (option point))
+    "a nan latitude gives None" None (Places.position_point n1);
+  Alcotest.(check (option point))
+    "an infinite longitude gives None" None (Places.position_point i1);
+  Alcotest.(check (option point))
+    "a negative infinite longitude gives None" None
+    (Places.position_point neg_infinite_lon)
+
 let base = [a1; a2; b1; a3; b2; c1; u1; d1; n1; i1]
 let base_reversed = List.rev base
 let base_shuffled = [c1; u1; a3; b1; n1; a1; i1; d1; b2; a2]
@@ -576,6 +600,15 @@ let tests =
       distance_paris_london );
     ("distance_m to a point 500 m north is 500", `Quick, distance_north_500);
     ("distance_m with a nan coordinate is nan", `Quick, distance_nan);
+    ( "position_point gives Some {lat; lon} for a live, placeable observation",
+      `Quick,
+      position_point_live );
+    ( "position_point gives None for no position or a deleted observation",
+      `Quick,
+      position_point_unplaceable );
+    ( "position_point gives None for a nan or infinite coordinate",
+      `Quick,
+      position_point_nonfinite );
     ("of_position drops accuracy_m", `Quick, of_position_drops_accuracy);
     ("radius_m is 500 and earth_radius_m is 6 371 000", `Quick, constants);
     ( "within is inclusive at 500 m and false beyond or on nan",

@@ -1,5 +1,6 @@
-; MapLibre facade, map style, geocoding. Offline tiles are v2.
+; MapLibre map over the facade binding, map style and GeoJSON (style and
+; features are pure, copied into test/geo).
 (library
  (name herbier_geo)
  (public_name herbier.geo)
- (libraries herbier_domain herbier_store herbier_bindings brr))
+ (libraries herbier_domain herbier_store herbier_bindings brr yojson))

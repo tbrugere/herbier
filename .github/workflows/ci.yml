@@ -57,6 +57,9 @@ jobs:
           grep -q 'shell__screen' app.js
           grep -q '\.shell' app.css
           grep -q 'app.js' index.html
+          test -f vendor.css && test -s maplibre-gl-worker.js && test -f map/positron.json
+          grep -q 'maplibregl-map' vendor.css
+          grep -q 'vendor.css' index.html
       # The app's JS in the release profile (what release.sh ships as
       # app.js) links no dev page and no herbierDev hook.
       - name: release app has no dev pages

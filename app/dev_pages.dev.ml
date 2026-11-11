@@ -25,4 +25,5 @@ let find db =
   | "sheet" -> Some (page D.Sheet_check.el)
   | "spike" -> Some (page (fun () -> D.Spike_check.el db))
   | "capture" -> Some (page D.Capture_check.el)
+  | "map" -> Some (page (fun () -> D.Map_check.el db))
   | _ -> None

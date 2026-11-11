@@ -1,6 +1,6 @@
 open Brr
 
-type map = {
+type map = Herbier_geo.Style.colours = {
   point : string;
   point_border : string;
   selected : string;

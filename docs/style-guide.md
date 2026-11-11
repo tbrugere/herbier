@@ -231,7 +231,8 @@ plugin, each with an `.mli` even when the implementation is three lines.
 
 10.2 The binding converts at the boundary: plain OCaml types and `result`
 in and out. **`Jv.t` never appears in a domain module's signature.**
-`Brr.El.t` is allowed in UI modules only.
+`Brr.El.t` is allowed in UI modules, in bindings, and in the service modules
+that host a DOM widget (`geo/map`, `photos/capture`).
 
 ## 11. Formatting
 

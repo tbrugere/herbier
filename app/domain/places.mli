@@ -15,6 +15,15 @@ type point = {lat : float; lon : float}
 val of_position : Observation.position -> point
 (** Drops [accuracy_m]. *)
 
+val position_point : Observation.t -> point option
+(** The placeable rule of {!cluster}: [Some {lat; lon}] for a live observation
+    ([deleted_at = None]) with [position = Some p] and finite [p.lat] and
+    [p.lon]; [None] otherwise. Never raises. *)
+
+val compare_obs : Observation.t -> Observation.t -> int
+(** The order of {!cluster} members: ascending [at], ties by
+    [Ids.Observation_id.compare] on [id]. *)
+
 val earth_radius_m : float
 (** Mean Earth radius used by [distance_m]: [6_371_000.]. *)
 

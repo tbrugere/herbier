@@ -17,3 +17,10 @@ returns for one photo, never edited:
 
 No real phone photo is recorded yet: a camera photo picked on the phone through
 `#dev/photos` belongs next to these as `exifr_phone_<model>.json`, with a test.
+
+`web/map/positron.json` (not in this directory: it is also the style the app
+ships) is a recorded payload, read by `test/geo` as the fixture of its
+`Style.with_overlays` tests; never hand-edited. It is re-recorded on demand
+with `curl -sS https://tiles.openfreemap.org/styles/positron | python3 -m
+json.tool > web/map/positron.json` (the server sends it minified; `json.tool`
+only indents it, keeping key order).

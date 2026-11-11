@@ -23,7 +23,14 @@
 # (java_home -v 21), HERBIER_AVD (herbier), HERBIER_AVD_IMAGE
 # (system-images;android-35;google_apis;arm64-v8a), HERBIER_AVD_DEVICE
 # (pixel_8), HERBIER_DEVTOOLS_PORT (9222), HERBIER_EMULATOR_LOG
-# ($TMPDIR/herbier-emulator.log).
+# ($TMPDIR/herbier-emulator.log), HERBIER_EMULATOR_PORT (unset: the emulator
+# picks its console port and the script drives the first emulator adb lists).
+#
+# Two checks at once (another worktree already on the first emulator): give
+# the second its own AVD, console port and devtools port, e.g.
+#   HERBIER_AVD=herbier-b HERBIER_EMULATOR_PORT=5560 HERBIER_DEVTOOLS_PORT=9224 \
+#     HERBIER_EMULATOR_LOG=$TMPDIR/herbier-b.log scripts/emulator.sh start
+# then the same variables on every later call.
 set -euo pipefail
 
 unset CDPATH
@@ -33,6 +40,10 @@ here="$(cd "$(dirname "$0")" && pwd)"
 unset NODE_OPTIONS
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
+# avdmanager follows XDG_CONFIG_HOME (~/.config/.android/avd) when it is set,
+# the emulator does not (~/.android/avd): pin one place for both, or a new
+# AVD is "created" where the emulator never finds it ("Unknown AVD name").
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 if [[ -z "${JAVA_HOME:-}" ]] && [[ -x /usr/libexec/java_home ]]; then
   JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
   export JAVA_HOME
@@ -46,6 +57,7 @@ image="${HERBIER_AVD_IMAGE:-system-images;android-35;google_apis;arm64-v8a}"
 device="${HERBIER_AVD_DEVICE:-pixel_8}"
 port="${HERBIER_DEVTOOLS_PORT:-9222}"
 log="${HERBIER_EMULATOR_LOG:-${TMPDIR:-/tmp}/herbier-emulator.log}"
+console_port="${HERBIER_EMULATOR_PORT:-}"
 
 die() { echo "emulator.sh: $*" >&2; exit 1; }
 
@@ -59,7 +71,11 @@ app_id() {
 }
 
 serial() {
-  adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ {print $1; exit}'
+  if [[ -n "$console_port" ]]; then
+    adb devices | awk -v s="emulator-$console_port" '$1 == s && $2 == "device" {print $1; exit}'
+  else
+    adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ {print $1; exit}'
+  fi
 }
 
 booted() {
@@ -84,9 +100,15 @@ cmd_start() {
     return
   fi
   echo "booting $avd (log: $log)"
-  nohup emulator -avd "$avd" -no-window -no-audio -no-boot-anim -no-snapshot-save \
-    -gpu swiftshader_indirect >"$log" 2>&1 &
-  adb wait-for-device
+  local port_args=()
+  [[ -n "$console_port" ]] && port_args=(-port "$console_port")
+  nohup emulator -avd "$avd" ${port_args[@]+"${port_args[@]}"} -no-window -no-audio \
+    -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect >"$log" 2>&1 &
+  if [[ -n "$console_port" ]]; then
+    adb -s "emulator-$console_port" wait-for-device
+  else
+    adb wait-for-device
+  fi
   local i
   for i in $(seq 1 180); do
     booted && break
@@ -225,9 +247,12 @@ cmd_env() {
   cat <<ENV
 export ANDROID_HOME="$ANDROID_HOME"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export ANDROID_AVD_HOME="$ANDROID_AVD_HOME"
 export JAVA_HOME="${JAVA_HOME:-}"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:\$PATH"
 ENV
+  # Plain adb then targets this emulator too.
+  if [[ -n "$console_port" ]]; then echo "export ANDROID_SERIAL=emulator-$console_port"; fi
 }
 
 case "${1:-}" in

@@ -14,6 +14,8 @@
   (source_tree js)
   (source_tree map)
   ../app/main.bc.js
-  %{project_root}/scripts/build-web.sh)
+  %{project_root}/scripts/build-web.sh
+  ; build-web.sh reads node_modules, outside dune's view: the lock stands in.
+  %{project_root}/package-lock.json)
  (action
   (run bash %{project_root}/scripts/build-web.sh %{project_root}/app/main.bc.js dist)))

@@ -71,6 +71,20 @@ with `python3 -m http.server 8765 -d _build/default/web/dist`, then
 
 ## Pitfalls
 
+- One emulator per check run. Another worktree may already drive the
+  default emulator (`ps -eo command | grep emulator.sh`): its `install`
+  replaces your APK under you (`dumpsys package re.bruge.herbier | grep
+  lastUpdateTime`), and `#dev/<page>` falls back to a tab when the page is
+  not in the installed build. Run your own with `HERBIER_AVD=herbier-b
+  HERBIER_EMULATOR_PORT=5560 HERBIER_DEVTOOLS_PORT=9224` (and its own
+  `HERBIER_EMULATOR_LOG`) on every call; `eval "$(scripts/emulator.sh env)"`
+  then sets `ANDROID_SERIAL` for plain adb.
+- `webview screenshot` does not capture the MapLibre WebGL canvas on the
+  emulator (it comes out blank); use `adb exec-out screencap -p > file.png`
+  for a map.
+- A previous run can leave airplane mode on: `adb shell cmd connectivity
+  airplane-mode disable` (then `airplane-mode` prints `disabled`).
+
 - SDK: `ANDROID_HOME` defaults to `~/Library/Android/sdk`. Homebrew's
   `avdmanager` resolves images against its own SDK root ("Package path is not
   valid"): the script puts `$ANDROID_HOME/cmdline-tools/latest/bin` first;

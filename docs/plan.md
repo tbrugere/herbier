@@ -74,7 +74,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 
 ## M5 — Map and places (spike 3; runnable: 4b, 5b, mini-map)
 
-40. `web/js/map.js` facade (create, setStyle, setData, click/moveend, getCenter, flyTo, metric circle), `bindings/maplibre.ml`, `geo/map.ml`, `geo/style.ml`, `web/map/positron.json`; point colours from `ui/theme.ml`. Done: OpenFreeMap positron shows the store's observations in the WebView (spike 3, online half).
+40. `web/js/map.js` facade (create, setStyle, setData, click/moveend, getCenter, flyTo, fitBounds, renderedIds), `bindings/maplibre.ml`, `geo/map.ml`, `geo/style.ml`, `geo/features.ml` (observation points; the metric circle as a polygon computed in OCaml), `web/map/positron.json`; point colours from `ui/theme.ml`. Done: OpenFreeMap positron shows the store's observations in the WebView (spike 3, online half).
 41. 4b `screens/map_tab.ml`: `places` pre-clustering + MapLibre clustering, point styles (ink / moss selected / ochre unidentified), filters, floating search, `my_location`, sheet with the place's observations and "Renommer" writing `place_label` on the cluster, tab bar inside the sheet. Done: tapping a cluster lists its observations; a rename persists.
 42. 4h mini-map with accuracy circle; 4c "◎" opens 4b centred. Done: both navigations work.
 43. `geo/geocode.ml` (Photon forward and reverse, Géoplateforme in France); `place_derived` filled once per observation when online, wired in `ui/app.ml`. Done: a 4c day header shows "Près de …" for an unlabelled observation.

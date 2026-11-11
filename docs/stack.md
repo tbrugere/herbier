@@ -259,7 +259,8 @@ blocked: nothing.
 ### Maps
 
 - **MapLibre GL JS 6** (WebGL2, ~150 KB gz), bound by hand from OCaml through a
-  ~100-line JS facade. Leaflet has opam bindings but 2.0 is alpha and raster is
+  ~100-line JS facade; bundled by esbuild into `vendor.js`, its worker copied
+  to dist and set with `setWorkerUrl`. Leaflet has opam bindings but 2.0 is alpha and raster is
   worse offline.
 - **Online tiles**: OpenFreeMap `positron` style (no key, no stated limits),
   with the design's CSS desaturation if wanted. Keyless fallbacks: VersaTiles,

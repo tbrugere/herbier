@@ -160,7 +160,10 @@ app/
     regional.ml           pluggable France layer (Tela, INPN), later
   geo/                    §8 of architecture
     map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …)
-    style.ml              online (OpenFreeMap) style; the offline (pmtiles://) switch is v2
+    style.ml              online (OpenFreeMap) style plus Herbier's overlay sources and layers, merged
+                          in OCaml; pure, tested in test/geo/; the offline (pmtiles://) switch is v2
+    features.ml           GeoJSON of the observations, their bounds, the metric accuracy circle; pure,
+                          tested in test/geo/
     tiles.ml              region extract download and storage (v2, with the offline map)
     geocode.ml            Photon / Géoplateforme forward and reverse
   ui/
@@ -199,7 +202,8 @@ app/
                           herbier db; sheet_check.ml (#dev/sheet): a 3-snap sheet and a dropped-frame meter;
                           spike_check.ml (#dev/spike): 4 rounds of 50 enter/leave cycles of 4a, binding count,
                           stale-update check against a live control, heap per round; capture_check.ml (#dev/capture):
-                          viewfinder, shutter and gallery → preview file; fixture.ml: the dev pages' State; hooks.ml:
+                          viewfinder, shutter and gallery → preview file; map_check.ml (#dev/map): the positron
+                          map over the herbier db (spike 3, online half); fixture.ml: the dev pages' State; hooks.ml:
                           herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
@@ -225,7 +229,8 @@ refs      ← domain, yojson               (no Brr)
 bindings  ← brr
 store     ← domain, bindings, postgrest, yojson, ptime, brr (for Fut)
 sync      ← domain, store, bindings, postgrest, brr (for Fut)
-photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs; photos also yojson, ptime
+photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs; photos also yojson, ptime;
+                           geo also yojson
                                          (siblings never import each other)
 ui        ← everything above + react, reactiveData
 main      ← ui, store, domain, brr      (main.ml opens the db, reads settings, builds State/App, starts the router)
@@ -267,9 +272,10 @@ Notes:
 ```
 web/
   dune                    @web alias: copy index.html, fonts/, img/, map/; sass sass/app.sass →
-                          dist/app.css; esbuild js/vendor.js → dist/vendor.js;
+                          dist/app.css; esbuild js/vendor.js → dist/vendor.js and dist/vendor.css
+                          (MapLibre's CSS); MapLibre's worker → dist/maplibre-gl-worker.js;
                           copy ../app/main.bc.js → dist/app.js
-  index.html              loads dist/app.css, dist/vendor.js then dist/app.js
+  index.html              loads dist/vendor.css, dist/app.css, dist/vendor.js then dist/app.js
   sass/                   indented Sass syntax (.sass), not SCSS
     app.sass              entry: @use the four partials, then every screens/*.sass
     _tokens.sass          custom properties on :root; the only source of design tokens
@@ -282,7 +288,8 @@ web/
   fonts/                  Manrope, Newsreader (variable woff2), Material Symbols subset
   js/
     vendor.js             esbuild entry: imports Capacitor plugins, maplibre-gl, pmtiles,
-                          exifr; exposes them on globalThis.herbier for the Jv bindings
+                          exifr; exposes them on globalThis.herbier for the Jv bindings, the
+                          map facade as globalThis.herbier.map
     map.js                the ~100-line MapLibre facade (architecture §8), imported by vendor.js
   map/
     positron.json         pinned OpenFreeMap style (offline.json with a pmtiles:// source: v2)
@@ -370,6 +377,8 @@ test/
                 (that is #dev/store)
   photos/       native, alcotest: the pure modules of app/photos/ copied in (exif, over recorded
                 exifr output in fixtures/exifr_*.json; preview_size; jpeg)
+  geo/          native, alcotest: the pure modules of app/geo/ copied in (features, style over the
+                recorded web/map/positron.json)
   fixtures/     recorded payloads only: API responses (gbif_<key>.json, wikidata_<key>.json,
                 tela_<nn>.json, inpn_<cd_nom>.json) and exifr output (exifr_<name>.json,
                 scripts/exifr-fixture.mjs); never app rows
@@ -385,7 +394,8 @@ values and never run them, so their SQL runs natively through the sqlite3
 CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the
 serialisation), and sync,
-photos (except the pure `exif`, `preview_size` and `jpeg`, tested in `test/photos/`), refs_io and geo, are thin over device-only plugins and have no unit
+photos (except the pure `exif`, `preview_size` and `jpeg`, tested in `test/photos/`), refs_io and geo
+(except the pure `features` and `style`, tested in `test/geo/`), are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 
 ## 7. `scripts/` and CI

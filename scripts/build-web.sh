@@ -20,4 +20,10 @@ rm -f "$out_abs/fonts/README.md" "$out_abs/fonts/icons.txt"
 (cd "$root" && npx --no-install sass --no-source-map "$web/sass/app.sass" "$out_abs/app.css")
 (cd "$root" && npx --no-install esbuild "$web/js/vendor.js" --bundle --format=iife \
   --target=es2020 --minify --outfile="$out_abs/vendor.js")
+# MapLibre 6's worker, set with setWorkerUrl in web/js/map.js. A .js name so
+# the WebView's local server serves it as JavaScript (module workers need it).
+worker="$root/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs"
+cp "$worker" "$out_abs/maplibre-gl-worker.js"
+test -s "$out_abs/maplibre-gl-worker.js"
+test -f "$out_abs/vendor.css"
 cp "$app_js" "$out_abs/app.js"

@@ -32,7 +32,7 @@ let compare_obs (a : Observation.t) (b : Observation.t) =
   | 0 -> Ids.Observation_id.compare a.id b.id
   | c -> c
 
-let placeable : Observation.t -> point option = function
+let position_point : Observation.t -> point option = function
   | {deleted_at = None; position = Some {lat; lon; accuracy_m = _}; _}
     when Float.is_finite lat && Float.is_finite lon ->
       Some {lat; lon}
@@ -87,7 +87,7 @@ let add groups (o, p) =
 
 let cluster observations =
   observations
-  |> List.filter_map (fun o -> Option.map (fun p -> (o, p)) (placeable o))
+  |> List.filter_map (fun o -> Option.map (fun p -> (o, p)) (position_point o))
   |> List.stable_sort (fun (a, _) (b, _) -> compare_obs a b)
   |> List.fold_left add []
   |> List.rev_map (fun g ->
@@ -146,6 +146,6 @@ let label observations =
       | Some s -> Some (Derived s)
       | None ->
           live
-          |> List.filter_map placeable
+          |> List.filter_map position_point
           |> mean
           |> Option.map (fun c -> Coordinates c))
