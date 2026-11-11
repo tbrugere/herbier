@@ -86,6 +86,14 @@ let leaving ~observations ~photos =
 
 type delete = Delete | Keep
 
+(* One tile of 5a « Photo de couverture ». *)
+type cover_tile = {
+  photo : Photo.t;
+  el : El.t;
+  click : unit React.event;
+  binding : Rb.binding;
+}
+
 (* Built for a stored plant only. *)
 let delete_part ~problem ~leave app (d : data) ~observations ~photos =
   let n = List.length observations in
@@ -128,7 +136,8 @@ let delete_part ~problem ~leave app (d : data) ~observations ~photos =
 
 let render app mode (d : data) =
   (* style: [form] is the form, written from click and [added] handlers only
-     (outside update steps), each write followed by [show]; the name lives in
+     (outside update steps), each write followed by [show] ([mark_cover] for
+     the cover); the name lives in
      its text field and is read back at save time. [saving] keeps a second tap
      on « Enregistrer » from saving again while [App.save] runs; [left] keeps a
      second tap, or a save ending after the screen closed, from moving the
@@ -181,6 +190,61 @@ let render app mode (d : data) =
       :: c.bindings )
   in
   show ();
+  (* 5a « Photo de couverture »: the chosen one bordered; none chosen is the
+     newest ({!Cover}). A tap on the tile already bordered changes nothing, so
+     that tapping the newest one does not pin it. *)
+  let photos = match d.origin with Fresh -> [] | Stored s -> s.photos in
+  let is_cover (photo : Photo.t) =
+    match Cover.choose !form.cover photos with
+    | Some p -> Herbier_domain.Ids.Photo_id.equal p.id photo.id
+    | None -> false
+  in
+  let covers =
+    List.map
+      (fun (photo : Photo.t) ->
+        let el =
+          El.button
+            ~at:
+              [
+                At.type' (Jstr.v "button");
+                cls "edit-plant__cover";
+                At.v (Jstr.v "aria-label")
+                  (Jstr.v
+                     ("Photo du "
+                     ^ Fr_date.day_month (Zone.date photo.taken_at)
+                     ^ ", choisir comme couverture"));
+              ]
+            [W.Preview_img.v ~cls:["edit-plant__cover-img"] photo.preview_path]
+        in
+        let click, binding = Rb.click el in
+        {photo; el; click; binding})
+      photos
+  in
+  let mark_cover () =
+    List.iter
+      (fun c ->
+        let on = is_cover c.photo in
+        El.set_class (Jstr.v "is-selected") on c.el;
+        El.set_at (Jstr.v "aria-pressed")
+          (Some (Jstr.v (match on with true -> "true" | false -> "false")))
+          c.el)
+      covers
+  in
+  mark_cover ();
+  let cover_bindings =
+    List.concat_map
+      (fun c ->
+        [
+          c.binding;
+          Rb.act c.click (fun () ->
+              match is_cover c.photo with
+              | true -> ()
+              | false ->
+                  form := {!form with cover = Some c.photo.id};
+                  mark_cover ());
+        ])
+      covers
+  in
   let add_alias = W.Adder.v ~label:"alias" ~placeholder:"Autre nom" () in
   let add_tag = W.Adder.v ~label:"tag" ~placeholder:"Nom du tag" () in
   let alias_list = El.span ~at:[cls "chip-row__items"] [] in
@@ -240,6 +304,18 @@ let render app mode (d : data) =
       field_card "Tags"
         [El.div ~at:[cls "edit-plant__chips"] [tag_list; add_tag.el]];
     ]
+    @
+    match covers with
+    | [] -> []
+    | _ :: _ ->
+        [
+          field_card "Photo de couverture"
+            [
+              El.div
+                ~at:[cls "edit-plant__covers"]
+                (List.map (fun c -> c.el) covers);
+            ];
+        ]
   in
   let delete_els, delete_bindings =
     match d.origin with
@@ -279,6 +355,7 @@ let render app mode (d : data) =
         name.bindings;
         add_alias.bindings;
         add_tag.bindings;
+        cover_bindings;
       ] )
 
 (* A plant that is not (or no longer) live, or a form that could not be

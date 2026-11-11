@@ -67,3 +67,7 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;  (** [Some] = soft-deleted. *)
 }
+
+val awaiting_drive : t -> bool
+(** Whether the original is bound for Drive and not there yet: [Pending], or
+    [Failed] and waiting for a retry (architecture §5). The « ↑ » badge. *)

@@ -19,6 +19,10 @@ val of_plant : Plant_id.t -> Photo.t Stmt.query
     descending then [id] descending (the 4f hero picks the cover, else the
     first). *)
 
+val live : Photo.t Stmt.query
+(** Every live photo of a live observation, ordered as {!of_plant}: the 4a
+    covers, grouped by the caller through the observations' plants. *)
+
 val input : Photo.t -> (Tables.Photos.t, [`Full]) Postgrest.Input.t
 (** Every column of [Tables.Photos], in its declaration order. The upsert's
     columns and the outbox payload. *)

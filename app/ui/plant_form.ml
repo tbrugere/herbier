@@ -3,13 +3,20 @@ module Tag_id = Herbier_domain.Ids.Tag_id
 module Plant = Herbier_domain.Plant
 
 type tag = Existing of Tag.t | Created of string
-type t = {name : string; aliases : string list; tags : tag list}
+
+type t = {
+  name : string;
+  aliases : string list;
+  tags : tag list;
+  cover : Herbier_domain.Ids.Photo_id.t option;
+}
 
 let of_plant (p : Plant.t) tags =
   {
     name = p.display_name;
     aliases = p.aliases;
     tags = List.map (fun t -> Existing t) tags;
+    cover = p.cover_photo_id;
   }
 
 let fold s = String.lowercase_ascii (String.trim s)
@@ -59,9 +66,18 @@ let diff ~(before : Plant.t) ~before_tags f =
     match
       String.equal name before.display_name
       && List.equal String.equal f.aliases before.aliases
+      && Option.equal Herbier_domain.Ids.Photo_id.equal f.cover
+           before.cover_photo_id
     with
     | true -> None
-    | false -> Some {before with display_name = name; aliases = f.aliases}
+    | false ->
+        Some
+          {
+            before with
+            display_name = name;
+            aliases = f.aliases;
+            cover_photo_id = f.cover;
+          }
   in
   let existing =
     List.filter_map

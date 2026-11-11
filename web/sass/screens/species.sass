@@ -27,6 +27,67 @@
     color: var(--ink)
     text-shadow: none
 
+// With photos: the pager under the buttons and names, cream type on the scrim.
+.species__hero--photo
+  color: var(--paper)
+  .t-hero-name, .t-hero-sci, .species__free-name, .species__provenance
+    color: var(--paper)
+  .species__badge
+    background: var(--veil)
+
+.species__pager
+  position: absolute
+  inset: 0
+  display: flex
+  overflow-x: auto
+  scroll-snap-type: x mandatory
+  scrollbar-width: none
+  &::-webkit-scrollbar
+    display: none
+
+.species__page
+  flex: none
+  width: 100%
+  height: 100%
+  scroll-snap-align: start
+
+.species__scrim
+  position: absolute
+  inset: 0
+  pointer-events: none
+  .species__hero--photo &
+    +base.photo-scrim
+
+.species__dots
+  position: absolute
+  right: 14px
+  top: 50%
+  transform: translateY(-50%)
+  display: flex
+  flex-direction: column
+  gap: 6px
+  pointer-events: none
+
+.species__dot
+  width: 8px
+  height: 8px
+  border-radius: 50%
+  background: var(--paper-dot)
+  &.is-active
+    background: var(--paper)
+
+// The parts rendered again on each reload, boxless.
+.species__hero-media, .species__photos
+  display: contents
+
+.species__hero-buttons, .species__hero-names
+  position: relative
+  pointer-events: none
+
+// Only the buttons take touches: a swipe on the names pages the hero.
+.species__hero-buttons > *
+  pointer-events: auto
+
 .species__hero-buttons
   display: flex
   justify-content: space-between
@@ -143,3 +204,25 @@
 
 .edit-plant__problem
   color: var(--danger)
+
+.edit-plant__covers
+  display: flex
+  gap: 8px
+  overflow-x: auto
+  // Room for the selected tile's outline, which the scroll box would clip.
+  padding: 5px
+
+.edit-plant__cover
+  +widgets.bare-button
+  flex: none
+  width: 56px
+  height: 56px
+  border-radius: 12px
+  overflow: hidden
+  &.is-selected
+    outline: 2.5px solid var(--moss)
+    outline-offset: 2px
+
+.edit-plant__cover-img
+  width: 100%
+  height: 100%

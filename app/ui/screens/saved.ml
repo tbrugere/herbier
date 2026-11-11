@@ -66,15 +66,9 @@ let render (d : data) =
         [El.txt' "Observation ajoutée à "; El.strong [El.txt' p.display_name]]
     | None -> [El.txt' "Observation à identifier"]
   in
-  let pending (p : Photo.t) =
-    match p.upload_state with
-    | Pending -> (
-        match p.original_target with Drive -> true | App_only -> false)
-    | Uploaded | Failed | Original_missing -> false
-  in
   let thumb (p : Photo.t) =
-    let box = W.Preview_img.v ~cls:"saved__thumb" p.preview_path in
-    (match pending p with
+    let box = W.Preview_img.v ~cls:["saved__thumb"] p.preview_path in
+    (match Photo.awaiting_drive p with
     | true ->
         El.append_children box
           [El.span ~at:[cls "badge-pending"] [El.txt' "↑ en attente"]]

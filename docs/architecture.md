@@ -125,7 +125,9 @@ the mean of the positions. Details in `app/domain/places.mli`.
   `Codec.decode ~json` before `Postgrest.Row`; `double precision` is `real`.
   Foreign keys and the position checks mirror the server, except
   `plants.cover_photo_id` (it would close a cycle with `photos` and break a
-  first pull). The four lookup tables (§2) exist locally too, with the same
+  first pull). A cover that points at a deleted or not yet pulled photo is
+  read as no cover: the plant's newest live photo stands in
+  (`app/ui/cover.ml`). The four lookup tables (§2) exist locally too, with the same
   values (no `description`) and the same foreign keys, so an unknown label
   is rejected on the device; a value added later is a new local migration
   inserting its row, and `test/store` checks each table holds the

@@ -1092,7 +1092,9 @@ let photos_lists () =
       Observations.upsert (observation 0x31 t1 ~plant:0x1);
       Observations.upsert (observation 0x32 t1 ~plant:0x1);
       Observations.upsert (observation 0x33 t1 ~plant:0x2);
+      Observations.upsert (observation 0x34 t1);
       Photos.upsert (photo 0xf2 ~observation:0x31 t2);
+      Photos.upsert (photo 0xf7 ~observation:0x34 t2);
       Photos.upsert (photo 0xf1 ~observation:0x31 t1);
       Photos.upsert (photo 0xf6 ~observation:0x31 t1);
       Photos.upsert (photo 0xf4 ~observation:0x31 t0 ~deleted_at:t3);
@@ -1108,6 +1110,11 @@ let photos_lists () =
     "of_plant: live photos of live observations, newest first, id descending"
     [uuid 0xf2; uuid 0xf6; uuid 0xf1]
     (photo_ids (all db (Photos.of_plant (plant_id 0x1))));
+  Alcotest.(check (list string))
+    "live: live photos of live observations, with or without a plant, newest \
+     first, id descending"
+    [uuid 0xf5; uuid 0xf7; uuid 0xf2; uuid 0xf6; uuid 0xf1]
+    (photo_ids (all db Photos.live));
   Alcotest.(check (list string))
     "of_observation of an observation without photos is []" []
     (photo_ids (all db (Photos.of_observation (observation_id 0x99))))

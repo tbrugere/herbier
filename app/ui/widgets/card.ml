@@ -1,6 +1,11 @@
 open Brr
 
-type cover = Photo of string | Loading of string | No_photo of string
+type cover =
+  | Photo of string
+  | Preview of string
+  | Loading of string
+  | No_photo of string
+
 type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
 
 let cls c = At.class' (Jstr.v c)
@@ -30,6 +35,13 @@ let plant ~name ~sci cover =
                   At.v (Jstr.v "loading") (Jstr.v "lazy");
                 ]
               ();
+            span "card-plant__scrim" [];
+            names ~name ~sci [];
+          ] )
+    | Preview path ->
+        ( "card-plant--photo",
+          [
+            Preview_img.v ~cls:["card-plant__preview"] path;
             span "card-plant__scrim" [];
             names ~name ~sci [];
           ] )

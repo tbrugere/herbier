@@ -76,7 +76,39 @@ let el () =
         (W.Card.No_photo "sans photo · 4 obs.");
       W.Card.plant ~name:"Plante du talus" ~sci:None
         (W.Card.No_photo "sans photo · 1 obs.");
+      W.Card.plant ~name:"Aperçu absent" ~sci:None
+        (W.Card.Preview "previews/absent.jpg");
     ]
+  in
+  (* Previews that do not exist, so each tile shows the striped state with the
+     badges of its pair. *)
+  let grid_photo original_target upload_state : Herbier_domain.Photo.t =
+    let t0 = Ptime.epoch in
+    {
+      id = Herbier_domain.Ids.Photo_id.fresh ();
+      observation_id = Herbier_domain.Ids.Observation_id.fresh ();
+      taken_at = t0;
+      width = 1;
+      height = 1;
+      sha256 = "";
+      preview_path = "previews/absent.jpg";
+      preview_bucket_key = None;
+      original_target;
+      drive_file_id = None;
+      upload_state;
+      created_at = t0;
+      updated_at = t0;
+      deleted_at = None;
+    }
+  in
+  let grid =
+    W.Photo_grid.v
+      [
+        grid_photo Drive Pending;
+        grid_photo Drive Uploaded;
+        grid_photo Drive Failed;
+        grid_photo App_only Pending;
+      ]
   in
   let rows =
     [
@@ -115,6 +147,8 @@ let el () =
           (fun i (c : W.Card.t) ->
             logged c.click (fun () -> Printf.sprintf "card %d" (i + 1)))
           cards;
+        grid.bindings;
+        [logged grid.tap (fun _ -> "photo tap")];
         List.concat_map (fun (r : W.List_row.t) -> r.bindings) rows;
         List.mapi
           (fun i (r : W.List_row.t) ->
@@ -188,6 +222,7 @@ let el () =
                 ];
             ];
         ];
+      entry "Photo_grid" [El.div ~at:[At.id (Jstr.v "photo-grid")] [grid.el]];
       entry "List_row"
         [
           El.div

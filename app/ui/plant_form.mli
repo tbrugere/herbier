@@ -7,7 +7,14 @@ module Tag_id := Herbier_domain.Ids.Tag_id
     (created on save). *)
 type tag = Existing of Herbier_domain.Tag.t | Created of string
 
-type t = {name : string; aliases : string list; tags : tag list}
+type t = {
+  name : string;
+  aliases : string list;
+  tags : tag list;
+  cover : Herbier_domain.Ids.Photo_id.t option;
+      (** 5a « Photo de couverture »: the chosen cover photo; [None]: none
+          chosen, the newest photo stands in ({!Cover.choose}). *)
+}
 
 val of_plant : Herbier_domain.Plant.t -> Herbier_domain.Tag.t list -> t
 (** The form as the plant is now, with its live tags. *)
@@ -45,4 +52,4 @@ val diff :
   t ->
   change
 (** What saving the form changes, the plant's [updated_at] left to the caller:
-    [plant] is [Some] when the trimmed name or the aliases differ. *)
+    [plant] is [Some] when the trimmed name, the aliases or the cover differ. *)

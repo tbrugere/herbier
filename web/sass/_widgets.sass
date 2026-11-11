@@ -620,3 +620,45 @@
   padding: 2px 8px
   background: var(--ochre)
   color: var(--paper)
+
+.card-plant__preview
+  position: absolute
+  inset: 0
+
+// Photo tiles (Photo_grid)
+.photo-grid
+  display: grid
+  grid-template-columns: repeat(4, 1fr)
+  gap: 6px
+
+.photo-grid__item
+  +bare-button
+  display: block
+
+.photo-tile
+  aspect-ratio: 1
+  border-radius: 10px
+
+.photo-badge-up
+  position: absolute
+  top: 4px
+  right: 4px
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 18px
+  height: 18px
+  border-radius: 50%
+  background: var(--ochre)
+  color: var(--paper)
+  +base.ui(11px, 800)
+
+.photo-badge-local
+  position: absolute
+  left: 4px
+  bottom: 4px
+  +pill
+  padding: 1px 6px
+  background: var(--veil)
+  color: var(--paper)
+  +base.ui(9px, 700)

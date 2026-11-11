@@ -57,6 +57,13 @@ let of_plant plant =
      ph.deleted_at is null order by ph.taken_at desc, ph.id desc"
     [Codec.param Tables.Observations.plant_id (Some plant)]
 
+let live =
+  query
+    "select ph.* from photos ph join observations o on o.id = \
+     ph.observation_id where o.deleted_at is null and ph.deleted_at is null \
+     order by ph.taken_at desc, ph.id desc"
+    []
+
 let input (p : Photo.t) : (Ph.t, [`Full]) Postgrest.Input.t =
   Postgrest.Input.
     {

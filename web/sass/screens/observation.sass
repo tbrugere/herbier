@@ -103,3 +103,54 @@
 
 .resolve__problem
   color: var(--danger)
+
+// 4h mosaic
+.observation__mosaic
+  display: grid
+  grid-template-columns: 2fr 1fr
+  gap: 8px
+  &.observation__mosaic--empty
+    grid-template-columns: 1fr
+    .observation__add
+      aspect-ratio: auto
+      height: 72px
+
+.observation__large
+  aspect-ratio: 4 / 3
+  border-radius: 14px
+
+.observation__column
+  display: grid
+  grid-template-rows: 1fr 1fr
+  gap: 8px
+
+.observation__small
+  border-radius: 12px
+  aspect-ratio: auto
+  height: 100%
+
+.observation__more
+  position: absolute
+  inset: 0
+  display: flex
+  align-items: center
+  justify-content: center
+  background: var(--veil)
+  color: var(--paper)
+  +base.ui(18px, 800)
+
+.observation__add
+  +widgets.bare-button
+  display: flex
+  align-items: center
+  justify-content: center
+  border: 1.5px dashed var(--hint)
+  border-radius: 12px
+  color: var(--muted)
+  &:active
+    background: var(--sand)
+  // Alone in the column (one photo): both rows.
+  &:only-child
+    grid-row: 1 / -1
+  &[aria-busy]
+    opacity: .6

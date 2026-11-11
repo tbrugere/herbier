@@ -3,5 +3,5 @@
     loaded or failed to decode. Until then (or when the file is missing) the box
     shows the striped loading state. *)
 
-val v : ?cls:string -> string -> Brr.El.t
-(** [v path]; [cls] is added to the wrapper. *)
+val v : ?cls:string list -> string -> Brr.El.t
+(** [v path]; [cls] are added to the wrapper. *)

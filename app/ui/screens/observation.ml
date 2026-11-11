@@ -170,6 +170,84 @@ let render app (data : data React.signal) =
         done_.el;
       ]
   in
+  (* [adding] keeps a second tap on « + » from picking again while a pick and
+     its save run, the picker's decoding included. *)
+  let adding, set_adding = React.S.create ~eq:Bool.equal false in
+  let add_photos () =
+    match React.S.value adding with
+    | true -> ()
+    | false ->
+        set_adding true;
+        Fut.await (Herbier_photos.Capture.pick ~limit:10) (function
+          | Error e ->
+              set_adding false;
+              Console.(
+                error
+                  [
+                    str "observation: gallery";
+                    str (Herbier_photos.Capture.error_to_string e);
+                  ]);
+              problem "Les photos n'ont pas pu être lues."
+          | Ok shots ->
+              Fut.await (App.save_photos app ~observation:!current shots)
+                (fun failed ->
+                  set_adding false;
+                  match failed with
+                  | [] -> problem ""
+                  | _ :: _ ->
+                      problem
+                        (Fr_text.plural (List.length failed)
+                           "photo non enregistrée" "photos non enregistrées")))
+  in
+  let mosaic (photos : Herbier_domain.Photo.t list) =
+    let add =
+      El.button
+        ~at:
+          [
+            At.type' (Jstr.v "button");
+            cls "observation__add";
+            At.v (Jstr.v "aria-label") (Jstr.v "Ajouter des photos");
+          ]
+        [W.Icon.el W.Icon.Add]
+    in
+    let add_click, b_add = Rb.click add in
+    let busy =
+      Rb.attr add "aria-busy"
+        (React.S.map (function true -> Some "true" | false -> None) adding)
+    in
+    let el =
+      match photos with
+      | [] ->
+          El.div
+            ~at:[cls "observation__mosaic"; cls "observation__mosaic--empty"]
+            [add]
+      | first :: rest ->
+          let more =
+            match rest with
+            | [] -> []
+            | second :: others ->
+                let t = W.Photo_grid.tile ~cls:"observation__small" second in
+                (match others with
+                | [] -> ()
+                | _ ->
+                    El.append_children t
+                      [
+                        El.span
+                          ~at:[cls "observation__more"]
+                          [El.txt' (Printf.sprintf "+%d" (List.length others))];
+                      ]);
+                [t]
+          in
+          El.div
+            ~at:[cls "observation__mosaic"]
+            [
+              W.Photo_grid.tile ~cls:"observation__large" first;
+              El.div ~at:[cls "observation__column"] (more @ [add]);
+            ]
+    in
+    (el, [b_add; busy; Rb.act add_click add_photos])
+  in
+  let mosaic_el = El.div [] in
   let modify = W.Button.text "Modifier" in
   let date_value = El.span ~at:[cls "observation__value"] [] in
   let date_input =
@@ -257,6 +335,7 @@ let render app (data : data React.signal) =
       [
         header;
         problem_el;
+        mosaic_el;
         date_card;
         card "Lieu" [place_el];
         card "Note de cette rencontre" [note.el];
@@ -272,6 +351,8 @@ let render app (data : data React.signal) =
         [
           b_current;
           b_back;
+          Rb.view mosaic_el mosaic
+            (React.S.map ~eq:( == ) (fun d -> d.photos) data);
           b_title;
           b_date;
           Rb.act back_click Route.back;

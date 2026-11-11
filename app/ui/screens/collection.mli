@@ -6,11 +6,12 @@
 
     Reads the store when entered and the plants again on every filter change;
     the counter is the whole collection, not the filtered grid, and the
-    observation counts are those read on entry. A failed read shows in the
-    counter (on entry) or in a line above the grid (on a filter change). With no
-    plant, 4n replaces the search, chips and grid. "Tags ›" opens 4l; a card
-    opens its fiche (4f). Covers are the "no photo" state; "Coller un lien" does
-    nothing; the first-plant button opens Noter (4d). *)
+    observation counts and covers are those read on entry. A failed read shows
+    in the counter (on entry) or in a line above the grid (on a filter change).
+    With no plant, 4n replaces the search, chips and grid. "Tags ›" opens 4l; a
+    card opens its fiche (4f). A card's cover is its plant's cover photo
+    ({!Cover}), else the "no photo" state; "Coller un lien" does nothing; the
+    first-plant button opens Noter (4d). *)
 
 val v : App.t -> Screen.t
 (** Reloads (counter, tags, grid) whenever {!App.saved} fires. *)

@@ -99,8 +99,65 @@ let observation_list (d : data) =
       ( El.div ~at:[cls "species__obs-list"] (List.map fst rows),
         List.concat_map snd rows )
 
+(* A column of more dots than this would run into the buttons and names of a
+   phone-sized hero; past it the hero shows none. *)
+let max_dots = 10
+
+(* Paging is CSS scroll-snap (species.sass). *)
+let hero_media (d : data) =
+  let ordered = Cover.ordered d.plant.cover_photo_id d.photos in
+  let pages =
+    List.map
+      (fun (ph : Herbier_domain.Photo.t) ->
+        W.Preview_img.v ~cls:["species__page"] ph.preview_path)
+      ordered
+  in
+  let pager = El.div ~at:[cls "species__pager"] pages in
+  let dots =
+    List.mapi
+      (fun i _ ->
+        El.span
+          ~at:
+            (cls "species__dot"
+            :: (match i with 0 -> [cls "is-active"] | _ -> []))
+          [])
+      ordered
+  in
+  let b_pager =
+    Rb.listen pager Ev.scroll (fun _ ->
+        let w = El.bound_w pager in
+        match w > 0. with
+        | false -> ()
+        | true ->
+            let i = Float.to_int (Float.round (El.scroll_x pager /. w)) in
+            List.iteri
+              (fun j dot -> El.set_class (Jstr.v "is-active") (i = j) dot)
+              dots)
+  in
+  ( El.div
+      ~at:[cls "species__hero-media"]
+      [
+        pager;
+        El.div ~at:[cls "species__scrim"] [];
+        El.div
+          ~at:[cls "species__dots"]
+          (let n = List.length dots in
+           match n >= 2 && n <= max_dots with true -> dots | false -> []);
+      ],
+    [b_pager] )
+
 let names (d : data) =
   let p = d.plant in
+  (* Where the cover's original is kept (original_target), whatever its
+     upload state. *)
+  let provenance =
+    match Cover.choose p.cover_photo_id d.photos with
+    | None -> "local"
+    | Some ph -> (
+        match ph.original_target with
+        | Drive -> "Google Drive"
+        | App_only -> "local")
+  in
   let where =
     match d.observations with
     | [] -> []
@@ -126,7 +183,7 @@ let names (d : data) =
   [
     El.p
       ~at:[cls "species__provenance"]
-      (El.span ~at:[cls "species__badge"] [El.txt' "local"]
+      (El.span ~at:[cls "species__badge"] [El.txt' provenance]
       :: List.map (fun w -> El.span [El.txt' w]) where);
     El.h1 ~at:[cls "t-hero-name"] [El.txt' p.display_name];
     sci;
@@ -181,11 +238,29 @@ let render app (data : data React.signal) =
   in
   let back_click, b_back = Rb.click back in
   let edit_click, b_edit = Rb.click edit in
+  let media = El.div ~at:[cls "species__hero-media"] [] in
   let hero_names = El.div ~at:[cls "species__hero-names"] [] in
   let hero =
     El.div
       ~at:[cls "species__hero"]
-      [El.div ~at:[cls "species__hero-buttons"] [back; edit]; hero_names]
+      [media; El.div ~at:[cls "species__hero-buttons"] [back; edit]; hero_names]
+  in
+  let photos = El.div ~at:[cls "species__photos"] [] in
+  let photos_section (d : data) =
+    match d.photos with
+    | [] -> (El.div ~at:[cls "species__photos"] [], [])
+    | _ :: _ ->
+        let grid =
+          W.Photo_grid.v (Cover.ordered d.plant.cover_photo_id d.photos)
+        in
+        ( El.div
+            ~at:[cls "species__photos"]
+            [
+              section
+                (Printf.sprintf "Mes photos · %d" (List.length d.photos))
+                [] [grid.el];
+            ],
+          grid.bindings )
   in
   let adder = W.Adder.v ~label:"tag" ~placeholder:"Nom du tag" () in
   (* style: [known] holds the tags this fiche put on the plant, so that a tag
@@ -254,6 +329,7 @@ let render app (data : data React.signal) =
           [
             problem_el;
             El.div ~at:[cls "species__tags"] [chips; adder.el];
+            photos;
             El.section
               ~at:[cls "species__section"]
               [El.div ~at:[cls "species__section-head"] [obs_title]; obs_list];
@@ -273,6 +349,10 @@ let render app (data : data React.signal) =
               Route.go (Route.Modal (Route.Edit_plant id)));
           Rb.act adder.added add_tag;
           Rb.children hero_names (React.S.map ~eq:( == ) names data);
+          Rb.view media hero_media data;
+          Rb.class_ hero "species__hero--photo"
+            (React.S.map (fun d -> not (List.is_empty d.photos)) data);
+          Rb.view photos photos_section data;
           Rb.children chips
             (React.S.map ~eq:( == )
                (fun d -> List.map (fun (t : Tag.t) -> W.Chip.tag t.name) d.tags)

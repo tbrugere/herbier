@@ -174,7 +174,7 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
-    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml
+    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml
                           pure helpers of the screens; these and list_patch are tested natively in test/ui/
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     zone.ml               the phone's zone offset at an instant, for Fr_date

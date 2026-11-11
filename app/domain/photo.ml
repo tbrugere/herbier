@@ -63,3 +63,10 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
+
+let awaiting_drive p =
+  match (p.original_target, p.upload_state) with
+  | Original_target.Drive, (Upload_state.Pending | Failed) -> true
+  | Drive, (Uploaded | Original_missing)
+  | App_only, (Pending | Uploaded | Failed | Original_missing) ->
+      false

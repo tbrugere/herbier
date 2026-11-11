@@ -4,6 +4,7 @@ module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Search = Herbier_store.Search
 module Observations = Herbier_store.Observations
+module Photos = Herbier_store.Photos
 module Plant = Herbier_domain.Plant
 module Tag = Herbier_domain.Tag
 module Plant_id = Herbier_domain.Ids.Plant_id
@@ -12,7 +13,7 @@ module RList = ReactiveData.RList
 module W = Widgets
 module Filter = Collection_filter
 
-type item = {plant : Plant.t; observations : int}
+type item = {plant : Plant.t; observations : int; cover_preview : string option}
 
 let same a b = Plant_id.equal a.plant.id b.plant.id
 
@@ -20,12 +21,18 @@ let equal a b =
   same a b
   && Ptime.equal a.plant.updated_at b.plant.updated_at
   && Int.equal a.observations b.observations
+  && Option.equal String.equal a.cover_preview b.cover_preview
 
 let card item =
   let mention = Printf.sprintf "sans photo · %d obs." item.observations in
+  let cover =
+    match item.cover_preview with
+    | Some path -> W.Card.Preview path
+    | None -> W.Card.No_photo mention
+  in
   let c =
     W.Card.plant ~name:item.plant.display_name ~sci:item.plant.scientific_name
-      (W.Card.No_photo mention)
+      cover
   in
   let open_ =
     Rb.act c.click (fun () ->
@@ -38,7 +45,7 @@ let log_error what e =
 
 (* The plants of the grid for a search text and a set of tags (all
    required), in the store's order. *)
-let visible db ~counts ~text ~tags =
+let visible db ~counts ~photos ~text ~tags =
   let open Fut.Result_syntax in
   let* plants = Db.all db (Search.plants_or_all text) in
   let+ links =
@@ -49,7 +56,14 @@ let visible db ~counts ~text ~tags =
     (fun (p : Plant.t) ->
       match Filter.has_all_tags ~tagged p.id with
       | false -> None
-      | true -> Some {plant = p; observations = Filter.count counts p.id})
+      | true ->
+          let cover_preview =
+            Option.map
+              (fun (ph : Herbier_domain.Photo.t) -> ph.preview_path)
+              (Cover.choose p.cover_photo_id (photos p.id))
+          in
+          Some
+            {plant = p; observations = Filter.count counts p.id; cover_preview})
     plants
 
 let apply handle =
@@ -94,16 +108,20 @@ let v app =
   in
   let chip_list = El.div ~at:[At.class' (Jstr.v "chip-row__items")] [] in
   (* style: [shown] is the grid's current content, [seq] the number of the
-     latest query and [counts] the observations per plant from the last load,
-     all read and written from future callbacks and [Rb.act] handlers only
-     (outside update steps); a reply to an older query is dropped. *)
-  let shown = ref [] and seq = ref 0 and counts = ref (Filter.counts []) in
+     latest query, [counts] the observations per plant and [photos] the photos
+     per plant from the last load, all read and written from future callbacks
+     and [Rb.act] handlers only (outside update steps); a reply to an older
+     query is dropped. *)
+  let shown = ref []
+  and seq = ref 0
+  and counts = ref (Filter.counts [])
+  and photos = ref (fun _ -> []) in
   let refresh () =
     incr seq;
     let mine = !seq in
     let text = React.S.value search.value in
     let tags = React.S.value active_tags in
-    Fut.await (visible db ~counts:!counts ~text ~tags) (function
+    Fut.await (visible db ~counts:!counts ~photos:!photos ~text ~tags) (function
       | Error e when mine = !seq ->
           log_error "query" e;
           set_failure
@@ -121,8 +139,9 @@ let v app =
     | Error e ->
         log_error "load" e;
         set_counter "Lecture impossible"
-    | Ok (observations, plants, all_tags) ->
+    | Ok (observations, plants, all_photos, all_tags) ->
         counts := Filter.counts observations;
+        photos := Cover.by_plant observations all_photos;
         set_empty (match plants with [] -> true | _ :: _ -> false);
         set_counter
           (Fr_text.plural (List.length plants) "plante" "plantes"
@@ -134,11 +153,23 @@ let v app =
   in
   let load () =
     let open Fut.Result_syntax in
+    (* Covers are decoration: a failed photo read leaves the cards without
+       them, not the whole screen empty. *)
+    let covers =
+      Fut.map
+        (function
+          | Ok l -> l
+          | Error e ->
+              log_error "covers" e;
+              [])
+        (Db.all db Photos.live)
+    in
     let fut =
       let* observations = Db.all db Observations.list in
       let* plants = Db.all db Plants.list in
+      let* all_photos = Fut.map Result.ok covers in
       let+ all_tags = Db.all db Tags.list in
-      (observations, plants, all_tags)
+      (observations, plants, all_photos, all_tags)
     in
     Fut.await fut send_loaded
   in

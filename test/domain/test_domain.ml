@@ -27,6 +27,7 @@ let () =
       ("version", version_tests);
       ("ids", Test_ids.tests);
       ("enums", Test_enums.tests);
+      ("photo", Test_photo.tests);
       ("places", Test_places.tests);
       ("link", Test_link.tests);
       ("schema dump", Test_schema_dump.tests);
