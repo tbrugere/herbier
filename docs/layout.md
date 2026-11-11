@@ -109,6 +109,7 @@ app/
     js_date.ml            JavaScript Date: the device's UTC offset at a local wall-clock time (EXIF dates without
                           offset) or at an instant (the Journal's local days)
     web_path.ml           fetch of a plugin's webPath as a Blob, a non-ok status as an error
+    camera_stream.ml      getUserMedia back camera, <video> attach, ImageCapture.takePhoto, a video frame as JPEG
     cap_error.ml          binding-level error (plugin unavailable, rejected, unexpected result, invalid path), shared by the cap_*
     cap_call.ml           private: plugin lookup on globalThis.herbier, promise → Fut with errors mapped to Cap_error
     css_var.ml            custom properties: getPropertyValue on the computed style (Brr's computed_style
@@ -197,7 +198,8 @@ app/
                           widget and state, with an event log; collection_check.ml (#dev/collection): 4a over the
                           herbier db; sheet_check.ml (#dev/sheet): a 3-snap sheet and a dropped-frame meter;
                           spike_check.ml (#dev/spike): 4 rounds of 50 enter/leave cycles of 4a, binding count,
-                          stale-update check against a live control, heap per round; fixture.ml: the dev pages' State; hooks.ml:
+                          stale-update check against a live control, heap per round; capture_check.ml (#dev/capture):
+                          viewfinder, shutter and gallery → preview file; fixture.ml: the dev pages' State; hooks.ml:
                           herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
