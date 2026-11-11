@@ -200,7 +200,7 @@ app/
                           stale-update check against a live control, heap per round; fixture.ml: the dev pages' State; hooks.ml:
                           herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
-    widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text,
+    widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)

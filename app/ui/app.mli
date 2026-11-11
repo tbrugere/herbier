@@ -1,5 +1,6 @@
 (** The running app: the open database, the global {!State}, and the one place
-    screens save through. *)
+    screens save synced rows through (local settings use
+    {!Herbier_store.Db.write}). *)
 
 type t
 

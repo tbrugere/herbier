@@ -24,6 +24,7 @@ type account = {
   storage : Herbier_domain.Photo.Original_target.t;
       (** the Settings choice, kept while signed out: Drive asks for the sign-in
           at the first photo to upload *)
+  wifi_only : bool;  (** the Settings « Envoyer seulement en Wi-Fi » *)
 }
 
 type t

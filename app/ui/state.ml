@@ -19,11 +19,16 @@ type network = {online : bool; pending_uploads : int}
 let equal_network a b =
   Bool.equal a.online b.online && Int.equal a.pending_uploads b.pending_uploads
 
-type account = {google_signed_in : bool; storage : Original_target.t}
+type account = {
+  google_signed_in : bool;
+  storage : Original_target.t;
+  wifi_only : bool;
+}
 
 let equal_account a b =
   Bool.equal a.google_signed_in b.google_signed_in
   && Original_target.equal a.storage b.storage
+  && Bool.equal a.wifi_only b.wifi_only
 
 type 'a cell = {signal : 'a React.signal; set : ?step:React.step -> 'a -> unit}
 

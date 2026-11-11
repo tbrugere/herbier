@@ -11,19 +11,28 @@ let root () =
       El.append_children (Document.body G.document) [root];
       root
 
-(* A stored value that does not parse is unset too (Settings.get). *)
-let storage db =
+(* A setting as the app starts with it: unset, or a stored value that does
+   not parse (Settings.get), is the default given here. *)
+let setting db key default =
   Fut.map
     (function
-      | Ok (Some t) -> Ok t
-      | Ok None | Error (Db.Decode _) -> Ok Original_target.App_only
+      | Ok (Some v) -> Ok v
+      | Ok None | Error (Db.Decode _) -> Ok default
       | Error e -> Error e)
-    (Db.find db (Settings.get Settings.Storage_target))
+    (Db.find db (Settings.get key))
+
+let settings db =
+  let open Fut.Syntax in
+  let* storage = setting db Settings.Storage_target Original_target.App_only in
+  let+ wifi_only = setting db Settings.Wifi_only false in
+  Result.bind storage (fun storage ->
+      Result.map (fun wifi_only -> (storage, wifi_only)) wifi_only)
 
 let tab app = function
   | Herbier_ui.Widgets.Tab_bar.Collection -> Herbier_ui.Screens.Collection.v app
   | Journal -> Herbier_ui.Screens.Journal.v app
-  | (Map | Settings) as t -> Herbier_ui.Screens.Placeholder.v t
+  | Settings -> Herbier_ui.Screens.Settings.v app
+  | Map as t -> Herbier_ui.Screens.Placeholder.v t
 
 let modal app = function
   | Herbier_ui.Route.Tags -> Herbier_ui.Screens.Tags.v app
@@ -41,11 +50,11 @@ let modal app = function
       Herbier_ui.Screens.Edit_plant.v app Herbier_ui.Screens.Edit_plant.New
 
 (* [online] is read once, here: no online or offline listener updates it. *)
-let create_app db storage =
+let create_app db (storage, wifi_only) =
   let state =
     Herbier_ui.State.create
       ~network:{online = Navigator.online G.navigator; pending_uploads = 0}
-      ~account:{google_signed_in = false; storage}
+      ~account:{google_signed_in = false; storage; wifi_only}
   in
   Herbier_ui.App.create ~db ~state
 
@@ -60,12 +69,12 @@ let start () =
       let msg = Db.error_to_string e in
       Fut.return (Error msg, Error msg)
   | Ok db ->
-      let+ storage = storage db in
+      let+ settings = settings db in
       let app =
-        match storage with
+        match settings with
         | Error e -> Error (Db.error_to_string e)
-        | Ok storage -> (
-            match create_app db storage with
+        | Ok settings -> (
+            match create_app db settings with
             | app -> Ok app
             | exception ((Out_of_memory | Stack_overflow) as e) -> raise e
             | exception e -> Error (Printexc.to_string e))

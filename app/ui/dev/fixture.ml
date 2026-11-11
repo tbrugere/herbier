@@ -5,4 +5,5 @@ let state () =
       {
         google_signed_in = false;
         storage = Herbier_domain.Photo.Original_target.App_only;
+        wifi_only = false;
       }

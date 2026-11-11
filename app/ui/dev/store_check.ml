@@ -328,17 +328,22 @@ let check_search log db =
     ~detail:(fun names -> Some (print_names names))
     (expect print_names ["Digitale pourpre"; "Digitalis"] found)
 
+let check_wifi_only log db expected =
+  step log
+    ("settings: wifi_only = " ^ string_of_bool expected)
+    ~detail:no_detail
+    (expect
+       (function None -> "none" | Some b -> string_of_bool b)
+       (Some expected)
+       (Db.find db (Settings.get Wifi_only)))
+
 let check_settings log db =
   let open Fut.Result_syntax in
   let* (_ : int) =
     step log "settings: wifi_only := true" ~detail:no_detail
       (expect_changed (Db.write db (Settings.set Wifi_only true)))
   in
-  step log "settings: wifi_only = true" ~detail:no_detail
-    (expect
-       (function None -> "none" | Some b -> string_of_bool b)
-       (Some true)
-       (Db.find db (Settings.get Wifi_only)))
+  check_wifi_only log db true
 
 type count
 
@@ -530,10 +535,13 @@ let reopen log db database =
   let* db =
     step log "open again" ~detail:no_detail (store (Db.open_ ~database))
   in
-  let* (_ : int list) =
+  let* (_ : bool option) =
     closing_on_error db (fun db ->
         let* (_ : int) = check_version log db in
-        check_count log db)
+        let* (_ : int list) = check_count log db in
+        (* The last setting written before the close (the outbox group's
+           overlapping write) survives it. *)
+        check_wifi_only log db false)
   in
   step log "close" ~detail:no_detail (store (Db.close db))
 

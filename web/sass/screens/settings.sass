@@ -1,0 +1,81 @@
+// 4m Réglages (app/ui/screens/settings.ml).
+@use '../base'
+@use '../widgets'
+
+.settings
+  gap: 22px
+  padding-bottom: 40px
+
+.settings__section
+  display: flex
+  flex-direction: column
+  gap: 10px
+
+.settings__account
+  display: flex
+  align-items: center
+  gap: 14px
+
+.settings__avatar
+  flex: none
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 44px
+  height: 44px
+  border-radius: 50%
+  background: var(--moss)
+  color: var(--paper)
+  +base.ui(18px, 800)
+
+.settings__row
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 14px
+  min-height: 60px
+  padding: 10px 16px
+  .text-button[aria-disabled]
+    opacity: .5
+
+.radio-row
+  +widgets.bare-button
+  display: flex
+  align-items: flex-start
+  gap: 14px
+  width: 100%
+  padding: 14px 16px
+  &:active
+    background: var(--sand-deep)
+
+.radio-row__dot
+  flex: none
+  width: 22px
+  height: 22px
+  margin-top: 1px
+  border-radius: 50%
+  border: 2px solid var(--muted)
+  .radio-row--on &
+    border: 7px solid var(--moss)
+
+.radio-row__text, .settings__text
+  display: flex
+  flex-direction: column
+  gap: 2px
+
+.radio-row__title, .settings__title
+  +base.ui(15px, 700)
+
+// A sand card of rows separated by 1 px lines (last: the rows reset borders).
+.settings__card
+  border-radius: 16px
+  background: var(--sand)
+  > * + *
+    border-top: 1px solid var(--line)
+  // A pressed first or last row keeps the card's corners.
+  > :first-child
+    border-top-left-radius: inherit
+    border-top-right-radius: inherit
+  > :last-child
+    border-bottom-left-radius: inherit
+    border-bottom-right-radius: inherit
