@@ -28,16 +28,16 @@ let error_to_string = function
 type t = {jpeg : Brr.Blob.t; width : int; height : int}
 
 let map_error f fut = Fut.map (Result.map_error f) fut
-let jpeg = "image/jpeg"
+let mime = "image/jpeg"
 
 let encode canvas =
   Fut.map
     (function
       | Ok blob ->
           let type' = Jstr.to_string (Brr.Blob.type' blob) in
-          if String.equal type' jpeg then Ok blob else Error (Not_jpeg type')
+          if String.equal type' mime then Ok blob else Error (Not_jpeg type')
       | Error e -> Error (Encode e))
-    (Herbier_bindings.Canvas_blob.to_blob canvas ~type':jpeg
+    (Herbier_bindings.Canvas_blob.to_blob canvas ~type':mime
        ~quality:Preview_size.quality)
 
 (* White under the image: JPEG has no alpha, and the encoder composites
@@ -131,10 +131,12 @@ let write db photo (preview : t) =
             | Ok (_ : int) -> Fut.return (Ok photo)
             | Error e -> delete_then photo.preview_path (Store e)))
 
-let save db ~observation_id ~taken_at ~original_target original =
+let save db ?preview ~observation_id ~taken_at ~original_target original =
   let open Fut.Result_syntax in
   let* sha256 = sha256_hex original in
-  let* preview = make original in
+  let* preview =
+    match preview with Some p -> Fut.ok p | None -> make original
+  in
   let id = Photo_id.fresh () in
   write db
     (photo ~id ~observation_id ~taken_at ~original_target ~sha256 preview)

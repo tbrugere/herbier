@@ -10,7 +10,7 @@
     counter (on entry) or in a line above the grid (on a filter change). With no
     plant, 4n replaces the search, chips and grid. "Tags ›" opens 4l; a card
     opens its fiche (4f). Covers are the "no photo" state; "Coller un lien" does
-    nothing, and the first-plant button opens 5a's new-plant form. *)
+    nothing; the first-plant button opens Noter (4d). *)
 
 val v : App.t -> Screen.t
 (** Reloads (counter, tags, grid) whenever {!App.saved} fires. *)

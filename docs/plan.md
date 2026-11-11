@@ -109,7 +109,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 | 4b Carte | M5 | v2 offline tiles |
 | 4c Journal | M2 | M5 day place from geocoding |
 | 4d Noter | M3 | — |
-| 4e Enregistré | M3 | M7 Drive card |
+| 4e Enregistré | M3 | M5 « Corriger la position » (5b), M7 Drive card (live upload state) |
 | 4f Fiche espèce | M2 (my data) | M3 photos, M4 reference block |
 | 4g Fiche sans référence | M2 | M4 "Lier" |
 | 4h Observation | M2 | M3 mosaic, M5 mini-map |

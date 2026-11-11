@@ -12,6 +12,8 @@ type modal =
   | Observation of Observation_id.t
   | Change_species of Observation_id.t
   | Identify of Observation_id.t
+  | Record
+  | Saved of Observation_id.t
 
 type t = Tab of Tab_bar.tab | Modal of modal | Dev of string
 
@@ -25,6 +27,7 @@ let of_fragment = function
   | "tags" -> Modal Tags
   | "tags/gerer" -> Modal Manage_tags
   | "plante/nouvelle" -> Modal New_plant
+  | "noter" -> Modal Record
   | f when String.starts_with ~prefix:dev_prefix f ->
       let n = String.length dev_prefix in
       Dev (String.sub f n (String.length f - n))
@@ -46,6 +49,7 @@ let of_fragment = function
       | ["observation"; id; "espece"] ->
           observation id (fun id -> Change_species id)
       | ["a-identifier"; id] -> observation id (fun id -> Identify id)
+      | ["noter"; "enregistre"; id] -> observation id (fun id -> Saved id)
       | _ -> Tab Tab_bar.Collection)
 
 let to_fragment = function
@@ -62,6 +66,8 @@ let to_fragment = function
   | Modal (Change_species id) ->
       "observation/" ^ Observation_id.to_string id ^ "/espece"
   | Modal (Identify id) -> "a-identifier/" ^ Observation_id.to_string id
+  | Modal Record -> "noter"
+  | Modal (Saved id) -> "noter/enregistre/" ^ Observation_id.to_string id
   | Dev name -> dev_prefix ^ name
 
 let fragment () = Jstr.to_string (Uri.fragment (Window.location G.window))

@@ -79,7 +79,7 @@ let check_preview log original =
   let* sha = preview (Preview.sha256_hex original) in
   let* p = preview (Preview.make original) in
   let* () = file (Files.write_blob ~path:preview_path p.jpeg) in
-  let* back = file (Files.read_blob ~path:preview_path ~type':"image/jpeg") in
+  let* back = file (Files.read_blob ~path:preview_path ~type':Preview.mime) in
   let+ back_bytes =
     Fut.map
       (Result.map_error (fun e -> Jstr.to_string (Jv.Error.message e)))

@@ -33,8 +33,13 @@ val error_to_string : error -> string
 
 type viewfinder
 
-val open_viewfinder : video:Brr.El.t -> (viewfinder, error) result Fut.t
-(** Starts the back camera and shows it in [video] (a [<video>]). *)
+val open_viewfinder :
+  ?facing:Herbier_bindings.Camera_stream.facing ->
+  video:Brr.El.t ->
+  unit ->
+  (viewfinder, error) result Fut.t
+(** Starts the [facing] camera (default [Back]) and shows it in [video] (a
+    [<video>]). *)
 
 val shutter : viewfinder -> (shot, error) result Fut.t
 (** A still from the camera and its preview: [ImageCapture]'s photo at the

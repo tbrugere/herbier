@@ -115,9 +115,9 @@ let start ~root ~tab ~modal ~dev =
       Rb.on (React.S.changes shown) mount;
       Rb.on (React.S.diff (fun _ prev -> prev) shown) leave;
       (* A tab switch replaces the history entry: Android back does not
-         walk the tabs visited, it leaves the app (or closes the modal the
-         tabs were left for). *)
+         walk the tabs visited, it leaves the app. *)
       Rb.on bar.select (fun t -> Route.replace (Route.Tab t));
+      Rb.on bar.record (fun () -> Route.go (Route.Modal Route.Record));
     ]
   in
   (* react's dependents are weak on js_of_ocaml 6 (see rb.mli): [root] holds

@@ -18,3 +18,16 @@ val save :
 
 val saved : t -> unit React.event
 (** Something was saved: screens showing store data reload on it. *)
+
+val save_photos :
+  t ->
+  observation:Herbier_domain.Observation.t ->
+  Herbier_photos.Capture.shot list ->
+  Herbier_photos.Capture.shot list Fut.t
+(** Saves each shot's preview file and [pending] row
+    ({!Herbier_photos.Preview.save}, with the preview made at capture and the
+    storage setting of {!State.account}), one after the other, dated by its EXIF
+    date or else now (a shutter shot is taken just before). Resolves to the
+    shots that were not saved, in order, each failure logged; fires {!saved}
+    once after the last when at least one was saved. The observation must
+    already be stored. *)

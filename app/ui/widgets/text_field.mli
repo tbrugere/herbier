@@ -7,6 +7,9 @@ type t = {
   input : Brr.El.t;  (** the [input] itself, to focus it *)
   value : string React.signal;  (** the text, updated on each [input] event *)
   action : unit React.event;  (** the trailing action; never without one *)
+  set : string -> unit;
+      (** replaces the text (a tapped suggestion); call it outside update steps
+      *)
   bindings : Rb.binding list;
 }
 

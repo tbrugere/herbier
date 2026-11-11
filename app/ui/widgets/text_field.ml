@@ -5,6 +5,7 @@ type t = {
   input : El.t;
   value : string React.signal;
   action : unit React.event;
+  set : string -> unit;
   bindings : Rb.binding list;
 }
 
@@ -25,7 +26,15 @@ let v ?icon ?action ?(value = "") ~placeholder () =
   in
   let inputs, bi = Rb.ev input Ev.input in
   let read _ = Jstr.to_string (El.prop El.Prop.value input) in
-  let typed = React.S.hold ~eq:String.equal value (React.E.map read inputs) in
+  let sets, send = React.E.create () in
+  let typed =
+    React.S.hold ~eq:String.equal value
+      (React.E.select [React.E.map read inputs; sets])
+  in
+  let set text =
+    El.set_prop El.Prop.value (Jstr.v text) input;
+    send text
+  in
   let lead = match icon with None -> [] | Some i -> [Icon.el ~size:20 i] in
   let pressed, trail, ba =
     match action with
@@ -44,5 +53,6 @@ let v ?icon ?action ?(value = "") ~placeholder () =
     input;
     value = typed;
     action = pressed;
+    set;
     bindings = bi :: ba;
   }

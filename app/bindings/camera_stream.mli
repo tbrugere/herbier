@@ -1,16 +1,20 @@
 (** The in-app viewfinder's camera (architecture §5, 4d): [getUserMedia] on the
-    back camera, shown in a [<video>], [ImageCapture.takePhoto] and a frame of
-    the [<video>]. Which still the shutter takes is the caller's choice. *)
+    back or front camera, shown in a [<video>], [ImageCapture.takePhoto] and a
+    frame of the [<video>]. Which still the shutter takes is the caller's
+    choice. *)
 
 type t
 (** A live [MediaStream]. *)
 
-val start : unit -> (t, Cap_error.t) result Fut.t
-(** [navigator.mediaDevices.getUserMedia] for video only, preferring the back
-    camera ([facingMode: "environment"]) and the largest frame it offers (ideal
-    4096 × 3072). No camera, no [mediaDevices] (an insecure origin) or the
-    permission refused is [Error (Rejected _)] with the [DOMException]'s name as
-    [code] (["NotAllowedError"], ["NotFoundError"], ["NotSupportedError"]). *)
+type facing = Back | Front
+
+val start : ?facing:facing -> unit -> (t, Cap_error.t) result Fut.t
+(** [navigator.mediaDevices.getUserMedia] for video only, preferring the
+    [facing] camera (default [Back]: [facingMode: "environment"]) and the
+    largest frame it offers (ideal 4096 × 3072). No camera, no [mediaDevices]
+    (an insecure origin) or the permission refused is [Error (Rejected _)] with
+    the [DOMException]'s name as [code] (["NotAllowedError"], ["NotFoundError"],
+    ["NotSupportedError"]). *)
 
 val attach : t -> Brr.El.t -> unit
 (** Shows the stream in a [<video>] element: sets [srcObject], [muted],

@@ -25,6 +25,9 @@ type error =
 
 val error_to_string : error -> string
 
+val mime : string
+(** ["image/jpeg"]: the type of every preview. *)
+
 type t = {jpeg : Brr.Blob.t; width : int; height : int}
 
 val make : Brr.Blob.t -> (t, error) result Fut.t
@@ -35,15 +38,18 @@ val sha256_hex : Brr.Blob.t -> (string, error) result Fut.t
 
 val save :
   Herbier_store.Db.t ->
+  ?preview:t ->
   observation_id:Observation_id.t ->
   taken_at:Ptime.t ->
   original_target:Photo.Original_target.t ->
   Brr.Blob.t ->
   (Photo.t, error) result Fut.t
 (** [save db ~observation_id ~taken_at ~original_target original] hashes the
-    original, makes its preview, writes it to [Files.preview id] and inserts the
-    photo row ([upload_state = Pending], through [Db.edit], so with its outbox
-    entry). The file is written before the row, so a row never points to a
-    missing preview; when the write or the row fails the file is deleted again
-    (a failure of that delete is ignored: an orphan preview is harmless). The
-    observation row must exist (foreign key). *)
+    original, makes its preview unless [preview] is given (made earlier from the
+    same original by {!make}, which saves re-encoding it), writes it to
+    [Files.preview id] and inserts the photo row ([upload_state = Pending])
+    through [Db.edit], so with its outbox entry. The file is written before the
+    row, so a row never points to a missing preview; when the write or the row
+    fails the file is deleted again (a failure of that delete is ignored: an
+    orphan preview is harmless). The observation row must exist (foreign key).
+*)

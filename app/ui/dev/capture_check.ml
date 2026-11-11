@@ -18,7 +18,7 @@ let show log count (s : Capture.shot) =
   let open Fut.Result_syntax in
   let fut =
     let* () = Files.write_blob ~path s.preview.jpeg in
-    let* back = Files.read_blob ~path ~type':"image/jpeg" in
+    let* back = Files.read_blob ~path ~type':Herbier_photos.Preview.mime in
     let+ uri =
       Fut.map
         (Result.map_error (fun e ->
@@ -58,7 +58,7 @@ let el () =
     | Opening | On _ -> append log "viewfinder already on"
     | Off ->
         camera := Opening;
-        Fut.await (Capture.open_viewfinder ~video) (fun r ->
+        Fut.await (Capture.open_viewfinder ~video ()) (fun r ->
             match (r, !camera) with
             | Error e, _ ->
                 camera := Off;

@@ -96,9 +96,10 @@ val act : 'a React.event -> ('a -> unit) -> binding
 val on_release : (unit -> unit) -> binding
 (** [on_release f] calls [f] once, when the binding is released: for work a
     screen must finish when it is torn down, such as saving a field still being
-    edited (removing a focused element fires no [blur]). [f] may run inside an
-    update step (the router releases a screen from one), so the rules of {!on}
-    apply: no primitive signal set, no event sent, no exception. *)
+    edited (removing a focused element fires no [blur]), or a resource it holds
+    outside the DOM (a camera stream). [f] may run inside an update step (the
+    router releases a screen from one), so the rules of {!on} apply: no
+    primitive signal set, no event sent, no exception. *)
 
 val hold : Brr.El.t -> binding list -> unit
 (** [hold el bs] keeps [bs] reachable for as long as [el] is (see the module

@@ -221,8 +221,7 @@ let v app =
           Rb.class_ empty_el "is-hidden" (React.S.map not empty);
           Rb.class_ filled "is-hidden" empty;
           Rb.act tags_link.click (fun () -> Route.go (Route.Modal Route.Tags));
-          (* The first plant is a free name typed in 5a. *)
-          Rb.act first.click (fun () -> Route.go (Route.Modal Route.New_plant));
+          Rb.act first.click (fun () -> Route.go (Route.Modal Route.Record));
         ];
         search.bindings;
         first.bindings;

@@ -1,6 +1,7 @@
 type t = Jv.t
+type facing = Back | Front
 
-let constraints () =
+let constraints facing =
   let ideal v = Jv.obj [|("ideal", v)|] in
   Jv.obj
     [|
@@ -8,7 +9,11 @@ let constraints () =
       ( "video",
         Jv.obj
           [|
-            ("facingMode", ideal (Jv.of_string "environment"));
+            ( "facingMode",
+              ideal
+                (Jv.of_string
+                   (match facing with Back -> "environment" | Front -> "user"))
+            );
             ("width", ideal (Jv.of_int 4096));
             ("height", ideal (Jv.of_int 3072));
           |] );
@@ -42,11 +47,11 @@ let promise o meth args ~ok =
   | p -> Fut.of_promise' ~ok ~error:rejected p
   | exception Jv.Error e -> Fut.return (Error (rejected (Jv.of_error e)))
 
-let start () =
+let start ?(facing = Back) () =
   let devices = Jv.get (Jv.get Jv.global "navigator") "mediaDevices" in
   match Jv.is_none devices with
   | true -> not_supported "no mediaDevices"
-  | false -> promise devices "getUserMedia" [|constraints ()|] ~ok:Fun.id
+  | false -> promise devices "getUserMedia" [|constraints facing|] ~ok:Fun.id
 
 let attach stream video =
   let v = Brr.El.to_jv video in

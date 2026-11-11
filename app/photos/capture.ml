@@ -35,9 +35,11 @@ let shot ~source ~exif original =
 
 type viewfinder = {stream : Camera_stream.t; video : Brr.El.t}
 
-let open_viewfinder ~video =
+let open_viewfinder ?facing ~video () =
   let open Fut.Result_syntax in
-  let* stream = map_error (fun e -> Camera e) (Camera_stream.start ()) in
+  let* stream =
+    map_error (fun e -> Camera e) (Camera_stream.start ?facing ())
+  in
   Camera_stream.attach stream video;
   Fut.ok {stream; video}
 
