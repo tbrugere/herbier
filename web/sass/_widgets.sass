@@ -376,6 +376,8 @@
   white-space: nowrap
   &:active
     opacity: .6
+  &[aria-disabled]
+    opacity: .4
 
 .text-button--moss
   color: var(--moss)
@@ -392,6 +394,9 @@
   min-height: 44px
   > :last-child
     justify-self: end
+  // A header holding only ← or « Annuler » keeps it on the left.
+  > :only-child
+    justify-self: start
   // A back arrow lines its glyph up with the content's left edge.
   > .icon-button:first-child
     margin-left: -10px
@@ -408,3 +413,113 @@
   width: 44px
   height: 44px
   color: var(--ink)
+
+// 4f hero buttons.
+.round-button
+  +bare-button
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 40px
+  height: 40px
+  border-radius: 50%
+  background: var(--paper-veil)
+  color: var(--ink)
+  &:active
+    background: var(--sand)
+
+// 4f tags: bordered, inert.
+.chip-tag
+  +pill
+  +base.ui(13px, 600)
+  display: inline-flex
+  align-items: center
+  min-height: 32px
+  padding: 4px 12px
+  border: 1.5px solid var(--ink)
+
+// 5a pills with ✕.
+.chip-removable
+  +pill
+  +base.ui(13px, 600)
+  display: inline-flex
+  align-items: center
+  gap: 2px
+  min-height: 32px
+  padding: 0 4px 0 12px
+
+.chip-removable--paper
+  background: var(--paper)
+
+.chip-removable--outline
+  border: 1.5px solid var(--ink)
+
+// A 32 px ✕ whose touch area is 44 px (handoff: « cible tactile minimale
+// 44 »). It spills 6 px around: the chip rows keep 12 px between lines and
+// 8 px between chips, so two areas never overlap.
+.chip-removable__x
+  +bare-button
+  position: relative
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 32px
+  height: 32px
+  color: var(--muted)
+  &::before
+    content: ''
+    position: absolute
+    inset: -6px
+
+// « + tag », « + alias »: dashed hint pill, then a small input.
+.adder
+  display: inline-flex
+
+.adder__pill
+  +bare-button
+  +pill
+  +base.ui(13px, 600)
+  position: relative
+  min-height: 32px
+  padding: 4px 12px
+  border: 1.5px dashed var(--hint)
+  color: var(--muted)
+  &:active
+    background: var(--sand)
+  // 44 px high to the touch, like the ✕.
+  &::before
+    content: ''
+    position: absolute
+    inset: -6px 0
+
+.adder__input
+  +pill
+  +base.ui(13px, 600)
+  min-height: 32px
+  width: 10em
+  padding: 4px 12px
+  border: 1.5px solid var(--moss)
+  background: var(--paper)
+  outline: none
+
+// 5a delete confirmation: a centred box over a veil.
+.confirm
+  position: fixed
+  inset: 0
+  z-index: 20
+  display: flex
+  align-items: center
+  justify-content: center
+  padding: 20px
+  background: var(--veil)
+
+.confirm__box
+  display: flex
+  flex-direction: column
+  gap: 14px
+  width: 100%
+  max-width: 360px
+  padding: 22px
+  border-radius: 20px
+  background: var(--paper)
+  +shadow-card

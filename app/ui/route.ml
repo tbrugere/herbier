@@ -1,7 +1,14 @@
 open Brr
 module Tab_bar = Widgets.Tab_bar
+module Plant_id = Herbier_domain.Ids.Plant_id
 
-type modal = Tags | Manage_tags
+type modal =
+  | Tags
+  | Manage_tags
+  | Plant of Plant_id.t
+  | Edit_plant of Plant_id.t
+  | New_plant
+
 type t = Tab of Tab_bar.tab | Modal of modal | Dev of string
 
 let dev_prefix = "dev/"
@@ -13,10 +20,20 @@ let of_fragment = function
   | "reglages" -> Tab Tab_bar.Settings
   | "tags" -> Modal Tags
   | "tags/gerer" -> Modal Manage_tags
+  | "plante/nouvelle" -> Modal New_plant
   | f when String.starts_with ~prefix:dev_prefix f ->
       let n = String.length dev_prefix in
       Dev (String.sub f n (String.length f - n))
-  | _ -> Tab Tab_bar.Collection
+  | f -> (
+      let plant id k =
+        match Plant_id.of_string id with
+        | Some id -> Modal (k id)
+        | None -> Tab Tab_bar.Collection
+      in
+      match String.split_on_char '/' f with
+      | ["plante"; id] -> plant id (fun id -> Plant id)
+      | ["plante"; id; "modifier"] -> plant id (fun id -> Edit_plant id)
+      | _ -> Tab Tab_bar.Collection)
 
 let to_fragment = function
   | Tab Tab_bar.Collection -> "collection"
@@ -25,6 +42,9 @@ let to_fragment = function
   | Tab Tab_bar.Settings -> "reglages"
   | Modal Tags -> "tags"
   | Modal Manage_tags -> "tags/gerer"
+  | Modal (Plant id) -> "plante/" ^ Plant_id.to_string id
+  | Modal (Edit_plant id) -> "plante/" ^ Plant_id.to_string id ^ "/modifier"
+  | Modal New_plant -> "plante/nouvelle"
   | Dev name -> dev_prefix ^ name
 
 let fragment () = Jstr.to_string (Uri.fragment (Window.location G.window))

@@ -15,3 +15,9 @@ val time : tz_offset_s:int -> Ptime.t -> string
 
 val year : tz_offset_s:int -> Ptime.t -> int
 (** The wall-clock year of the instant in that zone. *)
+
+val day_month : Ptime.date -> string
+(** ["12 juin"], ["1 mars"]: the 4f hero's date and « modifié le … ». *)
+
+val full_date : Ptime.date -> string
+(** ["12 juin 2026"]: the 4f observation rows. *)

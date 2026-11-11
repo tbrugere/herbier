@@ -28,6 +28,12 @@ let tab app = function
 let modal app = function
   | Herbier_ui.Route.Tags -> Herbier_ui.Screens.Tags.v app
   | Herbier_ui.Route.Manage_tags -> Herbier_ui.Screens.Manage_tags.v app
+  | Herbier_ui.Route.Plant id -> Herbier_ui.Screens.Species.v app id
+  | Herbier_ui.Route.Edit_plant id ->
+      Herbier_ui.Screens.Edit_plant.v app
+        (Herbier_ui.Screens.Edit_plant.Edit id)
+  | Herbier_ui.Route.New_plant ->
+      Herbier_ui.Screens.Edit_plant.v app Herbier_ui.Screens.Edit_plant.New
 
 (* [online] is read once, here: no online or offline listener updates it. *)
 let create_app db storage =

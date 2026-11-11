@@ -17,3 +17,14 @@ val filter : ?tone:tone -> label:string -> active:bool React.signal -> unit -> t
 
 val link : string -> t
 (** Text in [moss], no border: ["Tags ›"]. *)
+
+val tag : string -> Brr.El.t
+(** A tag on the fiche (4f): bordered, not interactive. *)
+
+(** How a removable pill is drawn: [Outline] for tags, [Paper] (filled [paper]
+    on the [sand] card) for aliases. *)
+type fill = Outline | Paper
+
+val removable : ?fill:fill -> string -> t
+(** A pill with a trailing ✕ (5a). Default [fill] is [Outline]. [click] is the
+    ✕'s. *)

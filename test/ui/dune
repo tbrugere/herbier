@@ -1,5 +1,5 @@
 ; Native checks of the pure modules of app/ui/ (no Brr, no React).
-(copy_files# ../../app/ui/{list_patch,collection_filter,fr_date,fr_text,journal_day,journal_filter,tag_edits,snap}.{ml,mli})
+(copy_files# ../../app/ui/{list_patch,collection_filter,fr_date,fr_text,journal_day,journal_filter,tag_edits,plant_form,snap}.{ml,mli})
 
 (test
  (name test_ui)

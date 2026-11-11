@@ -12,18 +12,13 @@ module RList = ReactiveData.RList
 module W = Widgets
 
 let cls c = At.class' (Jstr.v c)
-
-let offset (o : Observation.t) =
-  Herbier_bindings.Js_date.offset_at_s (Ptime.to_float_s o.at)
-
-let date (o : Observation.t) = Fr_date.local_date ~tz_offset_s:(offset o) o.at
+let offset (o : Observation.t) = Zone.offset_s o.at
+let date (o : Observation.t) = Zone.date o.at
 let year (o : Observation.t) = Fr_date.year ~tz_offset_s:(offset o) o.at
 
 let year_now () =
   let now = Ptime_clock.now () in
-  Fr_date.year
-    ~tz_offset_s:(Herbier_bindings.Js_date.offset_at_s (Ptime.to_float_s now))
-    now
+  Fr_date.year ~tz_offset_s:(Zone.offset_s now) now
 
 (* What the list is built from, loaded on entry and after each save. *)
 type data = {
@@ -95,9 +90,8 @@ let v app =
   let empty_text, set_empty_text = React.S.create "" in
   let filters = State.filters state in
   let update f = State.set_filters state (f (React.S.value filters)) in
-  (* style: the loaded data, written only outside update steps ([Rb.act]
-     handlers, future callbacks) before [render] sets the days; the day
-     builder of [Rb.rlist] reads its names. *)
+  (* style: the loaded data, read and written only outside update steps
+     ([Rb.act] handlers, future callbacks). *)
   let data = ref {observations = []; names = []; tags = []; links = []} in
   let render () =
     let f = React.S.value filters and d = !data in

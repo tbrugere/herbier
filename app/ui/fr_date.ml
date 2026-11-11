@@ -32,3 +32,6 @@ let time ~tz_offset_s t =
 let year ~tz_offset_s t =
   let (y, _, _), _ = Ptime.to_date_time ~tz_offset_s t in
   y
+
+let day_month (_, m, d) = Printf.sprintf "%d %s" d months.(m - 1)
+let full_date ((y, _, _) as date) = Printf.sprintf "%s %d" (day_month date) y

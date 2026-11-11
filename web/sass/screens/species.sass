@@ -1,0 +1,160 @@
+// 4f / 4g Fiche espèce and 5a Modifier la fiche (app/ui/screens/species.ml,
+// edit_plant.ml).
+@use '../base'
+@use '../widgets'
+
+.species
+  padding: 0 0 32px
+  gap: 0
+
+.species__content
+  display: flex
+  flex-direction: column
+
+// The 3:4 hero is the striped placeholder; names in ink.
+.species__hero
+  position: relative
+  aspect-ratio: 3 / 4
+  max-height: 70vh
+  display: flex
+  flex-direction: column
+  justify-content: space-between
+  padding: calc(14px + env(safe-area-inset-top)) 20px 22px
+  +widgets.striped
+
+  // The hero type is cream for photos (5f); on the stripes it is ink.
+  .t-hero-name, .t-hero-sci, .species__free-name, .species__provenance
+    color: var(--ink)
+    text-shadow: none
+
+.species__hero-buttons
+  display: flex
+  justify-content: space-between
+
+.species__hero-names
+  display: flex
+  flex-direction: column
+  gap: 4px
+
+.species__provenance
+  display: flex
+  align-items: center
+  gap: 8px
+  +base.ui(11px, 700)
+  text-transform: uppercase
+  letter-spacing: .06em
+
+.species__badge
+  +widgets.pill
+  padding: 2px 8px
+  background: var(--paper)
+
+.species__free-name
+  +base.sci(19px)
+  font-style: italic
+  opacity: .8
+
+.species__body
+  display: flex
+  flex-direction: column
+  gap: 26px
+  padding: 20px 20px 0
+
+.species__tags
+  display: flex
+  flex-wrap: wrap
+  gap: 12px 8px
+
+// The chips wrap with the adder that follows them.
+.species__chips
+  display: contents
+
+.species__problem
+  color: var(--danger)
+
+.species__section
+  display: flex
+  flex-direction: column
+  gap: 10px
+
+.species__section-head
+  display: flex
+  align-items: baseline
+  justify-content: space-between
+  gap: 12px
+
+.species__obs-list
+  display: flex
+  flex-direction: column
+  gap: 8px
+
+.species__obs
+  padding: 12px 14px
+  border: 1px solid var(--line)
+  border-radius: 14px
+
+.species__obs-date
+  +base.ui(15px, 700)
+
+// Line breaks typed in the textarea stay in the text.
+.species__notes
+  +widgets.bare-button
+  width: 100%
+  white-space: pre-wrap
+  overflow-wrap: anywhere
+  &.species__notes--empty
+    color: var(--hint)
+
+.species__notes-input
+  width: 100%
+  min-height: 6em
+  padding: 10px 12px
+  border: 1.5px solid var(--moss)
+  border-radius: 12px
+  background: var(--paper)
+  resize: vertical
+  outline: none
+
+.species__reference
+  display: flex
+  flex-direction: column
+  gap: 12px
+  margin-top: 26px
+  padding: 20px
+  background: var(--sand)
+
+// Inert; faded while offline (4g).
+.species__reference .button[aria-disabled]
+  cursor: default
+  &.is-offline
+    opacity: .5
+
+.species__gone
+  padding: calc(16px + env(safe-area-inset-top)) 20px 20px
+
+// 5a
+
+.edit-plant
+  padding-bottom: 40px
+
+.edit-plant__content
+  display: flex
+  flex-direction: column
+  gap: 14px
+
+.edit-plant__name
+  background: var(--paper)
+  .text-field__input
+    +base.ui(18px, 800)
+
+.edit-plant__chips
+  display: flex
+  flex-wrap: wrap
+  gap: 12px 8px
+  margin-top: 10px
+
+.edit-plant__footer
+  margin-top: 12px
+
+.edit-plant__problem
+  color: var(--danger)

@@ -27,7 +27,11 @@ let card item =
     W.Card.plant ~name:item.plant.display_name ~sci:item.plant.scientific_name
       (W.Card.No_photo mention)
   in
-  (c.el, c.bindings)
+  let open_ =
+    Rb.act c.click (fun () ->
+        Route.go (Route.Modal (Route.Plant item.plant.id)))
+  in
+  (c.el, open_ :: c.bindings)
 
 let log_error what e =
   Console.(error [str ("collection: " ^ what); str (Db.error_to_string e)])
@@ -220,6 +224,8 @@ let v app =
           Rb.class_ empty_el "is-hidden" (React.S.map not empty);
           Rb.class_ filled "is-hidden" empty;
           Rb.act tags_link.click (fun () -> Route.go (Route.Modal Route.Tags));
+          (* The first plant is a free name typed in 5a. *)
+          Rb.act first.click (fun () -> Route.go (Route.Modal Route.New_plant));
         ];
         search.bindings;
         first.bindings;

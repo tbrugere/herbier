@@ -7,6 +7,7 @@ type node =
   | Listener : Ev.listener * 'a React.event -> node
   | List_items : unit React.event * (El.t * binding list) array ref -> node
   | Dom_listener : Ev.listener -> node
+  | On_release : (unit -> unit) -> node
 
 (* style: [live] is mutated by [release] only and makes a double release
    harmless. [count] is a global counter because the leak check needs the
@@ -47,6 +48,7 @@ let rec stop = function
       Ev.unlisten l;
       React.E.stop ~strong:true e
   | Dom_listener l -> Ev.unlisten l
+  | On_release f -> f ()
   | List_items (e, items) ->
       React.E.stop ~strong:true e;
       release_all !items;
@@ -199,6 +201,7 @@ let act e f =
   self := Some b;
   b
 
+let on_release f = make (On_release f)
 let hold el bs = Herbier_bindings.Keep.on el bs
 
 type anchor = Anchor : 'a React.event -> anchor

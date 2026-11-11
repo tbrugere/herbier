@@ -130,6 +130,7 @@ app/
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
     outbox.ml  sync_state.ml  settings.ml   local-only tables, columns declared next to their queries;
                           outbox.ml also holds `edit`, the value every synced write is (statement, read-back, payload)
+    cascade.ml            soft deletes that take a plant's or an observation's dependents with it
     search.ml             FTS5 query text (folding, endings) and the plant search query
     dev_seed.ml           fixed development rows for M2, applied only by ui/dev/seed_check.ml
     files.ml              paths under Directory.Data (previews/, refthumbs/, tiles/); blob write, read, delete
@@ -168,11 +169,13 @@ app/
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
                           the shell holds the tab bar
     screen.ml             a screen's root element + its bindings, as the router takes them
-    route.ml              route = parsed URL fragment (tabs, modals, dev pages); go / back
+    route.ml              route = parsed URL fragment (tabs, modals, dev pages); go / replace / back
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
-    collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml
-                          pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
+    plant_form.ml         pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
+    zone.ml               the phone's zone offset at an instant, for Fr_date
     tag_usage.ml          live tags with their plants (4l, 5d), from Tags.list and Tags.links
     snap.ml               the sheet's snap points: nearest, clamp, release projection; pure, tested in test/ui/
     app.ml                wires services: after-save → outbox push + reference fetch, …
@@ -194,7 +197,7 @@ app/
                           stale-update check against a live control, heap per round; fixture.ml: the dev pages' State; hooks.ml:
                           herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
-    widgets/              button, chip, card, list_row, tab_bar, sheet, dialog, text_field,
+    widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field,
                           month_grid, photo_grid, icon, viewer_zoom (imperative)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)

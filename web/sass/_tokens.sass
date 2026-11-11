@@ -6,11 +6,12 @@
 // (app/ui/theme.ml).
 @use 'sass:color'
 
+$paper: #f6f1e7
 $moss: #4f6b3a
 $dark: #1d1a14
 
 \:root
-  --paper: #f6f1e7
+  --paper: #{$paper}
   --sand: #ece5d6
   --sand-deep: #e2dbcb
   --line: #cfc6b3
@@ -30,6 +31,8 @@ $dark: #1d1a14
   --veil: #{color.change($dark, $alpha: .6)}
   --scrim: #{color.change($dark, $alpha: .92)}
   --scrim-mid: #{color.change($dark, $alpha: .35)}
+  // The 4f round buttons over the hero.
+  --paper-veil: #{color.change($paper, $alpha: .9)}
 
   // Map (4b, 4h mini-map). Read by Theme for MapLibre, which cannot see CSS.
   --map-point: var(--ink)

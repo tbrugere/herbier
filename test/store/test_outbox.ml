@@ -939,6 +939,87 @@ let input_covers_table () =
              }) );
     ]
 
+(* ---------- cascades ---------- *)
+
+let live db table where =
+  Cli.count db
+    (Printf.sprintf
+       "select count(*) as n from %s where %s and deleted_at is null;\n" table
+       where)
+
+let is_ s = Printf.sprintf "'%s'" s
+let pid n = is_ (Ids.Plant_id.to_string (plant_id n))
+let oid n = is_ (Ids.Observation_id.to_string (observation_id n))
+
+let cascades () =
+  let db = Cli.migrated_db () in
+  let thym = plant 0xa "Thym" and sauge = plant 0xb "Sauge" in
+  let forest = tag 0xc1 "Forêt" and toxic = tag 0xc2 "Toxique" in
+  let o1 = observation ~plant:0xa 0x31 t1
+  and o2 = observation ~plant:0xa 0x32 t2
+  and o3 = observation ~plant:0xb 0x33 t1 in
+  let ph1 = photo 0xf1 ~observation:0x31 t1
+  and ph2 = photo 0xf2 ~observation:0x32 t2
+  and ph3 = photo 0xf3 ~observation:0x33 t1 in
+  let (_ : int) =
+    Cli.edit_ok "fixtures" db
+      [
+        Plants.upsert thym;
+        Plants.upsert sauge;
+        Tags.upsert forest;
+        Tags.upsert toxic;
+        Observations.upsert o1;
+        Observations.upsert o2;
+        Observations.upsert o3;
+        Photos.upsert ph1;
+        Photos.upsert ph2;
+        Photos.upsert ph3;
+        Tags.tag ~plant:thym.id ~tag:forest.id ~at:t1;
+        Tags.tag ~plant:thym.id ~tag:toxic.id ~at:t1;
+        Tags.tag ~plant:sauge.id ~tag:forest.id ~at:t1;
+      ]
+  in
+  let thym_cascade =
+    Cascade.plant ~at:t3 ~photos:[ph1.id; ph2.id] ~observations:[o1.id; o2.id]
+      ~tags:[forest.id; toxic.id] thym.id
+  in
+  check_edit "the plant cascade appends one entry per row" 7 db thym_cascade;
+  Alcotest.(check int)
+    "the plant is deleted" 0
+    (live db "plants" ("id = " ^ pid 0xa));
+  Alcotest.(check int)
+    "its observations are deleted" 0
+    (live db "observations" ("plant_id = " ^ pid 0xa));
+  Alcotest.(check int)
+    "their photos are deleted" 0
+    (live db "photos"
+       (Printf.sprintf "observation_id in (%s, %s)" (oid 0x31) (oid 0x32)));
+  Alcotest.(check int)
+    "its tag links are deleted" 0
+    (live db "plant_tags" ("plant_id = " ^ pid 0xa));
+  Alcotest.(check int) "the tags stay" 2 (live db "tags" "1 = 1");
+  Alcotest.(check int)
+    "the other plant's observation stays" 1
+    (live db "observations" ("plant_id = " ^ pid 0xb));
+  Alcotest.(check int)
+    "the other plant's photo stays" 1
+    (live db "photos" ("observation_id = " ^ oid 0x33));
+  Alcotest.(check int)
+    "the other plant's link stays" 1
+    (live db "plant_tags" ("plant_id = " ^ pid 0xb));
+  check_edit "the plant cascade again appends nothing" 0 db thym_cascade;
+  check_edit "the observation cascade appends one entry per row" 2 db
+    (Cascade.observation ~at:t3 ~photos:[ph3.id] o3.id);
+  Alcotest.(check int)
+    "the observation is deleted" 0
+    (live db "observations" ("id = " ^ oid 0x33));
+  Alcotest.(check int)
+    "its photo is deleted" 0
+    (live db "photos" ("observation_id = " ^ oid 0x33));
+  Alcotest.(check int)
+    "its plant stays" 1
+    (live db "plants" ("id = " ^ pid 0xb))
+
 (* ---------- run ---------- *)
 
 let () =
@@ -965,6 +1046,8 @@ let () =
           case "edits stop at the first failing one" stops_at_first_failure;
           case "several edits append in the order given" several_edits_in_order;
           case "Dev_seed.statements append nothing" dev_seed_appends_nothing;
+          case "Cascade deletes the dependents of a plant, an observation"
+            cascades;
         ] );
       ( "Outbox.next park delete",
         [

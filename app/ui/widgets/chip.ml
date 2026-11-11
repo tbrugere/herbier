@@ -31,3 +31,31 @@ let link label =
   let el = button ["chip"; "chip--link"] label in
   let click, b = Rb.click el in
   {el; click; bindings = [b]}
+
+let tag label = El.span ~at:[At.class' (Jstr.v "chip-tag")] [El.txt' label]
+
+type fill = Outline | Paper
+
+let removable ?(fill = Outline) label =
+  let x =
+    El.button
+      ~at:
+        [
+          At.type' (Jstr.v "button");
+          At.class' (Jstr.v "chip-removable__x");
+          At.v (Jstr.v "aria-label") (Jstr.v ("Retirer " ^ label));
+        ]
+      [Icon.el ~size:16 Icon.Close]
+  in
+  let fill =
+    match fill with
+    | Outline -> "chip-removable--outline"
+    | Paper -> "chip-removable--paper"
+  in
+  let el =
+    El.span
+      ~at:[At.class' (Jstr.v "chip-removable"); At.class' (Jstr.v fill)]
+      [El.span [El.txt' label]; x]
+  in
+  let click, b = Rb.click x in
+  {el; click; bindings = [b]}

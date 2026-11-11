@@ -7,7 +7,7 @@
 ; dependency: the build fails without it, and the suite fails rather than
 ; skipping the SQL checks when this sqlite3 has no FTS5.
 
-(copy_files# ../../app/store/{codec,schema,stmt,outbox,plants,observations,tags,photos,settings,search,dev_seed}.{ml,mli})
+(copy_files# ../../app/store/{codec,schema,stmt,outbox,plants,observations,tags,photos,cascade,settings,search,dev_seed}.{ml,mli})
 
 (copy_files# ../../app/store/tables.ml)
 

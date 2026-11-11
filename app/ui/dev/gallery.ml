@@ -59,6 +59,13 @@ let el () =
       ]
   in
   let tags = W.Chip.link "Tags ›" in
+  let removables =
+    [
+      W.Chip.removable "Forêt";
+      W.Chip.removable ~fill:W.Chip.Paper "gant de Notre-Dame";
+    ]
+  in
+  let adder = W.Adder.v ~label:"tag" ~placeholder:"Nom du tag" () in
   let cards =
     [
       W.Card.plant ~name:"Digitale pourpre" ~sci:(Some "Digitalis purpurea")
@@ -96,6 +103,13 @@ let el () =
         List.concat_map (fun ((c : W.Chip.t), bs) -> bs @ c.bindings) chips;
         tags.bindings;
         [logged tags.click (fun () -> "link Tags")];
+        List.concat_map (fun (c : W.Chip.t) -> c.bindings) removables;
+        List.mapi
+          (fun i (c : W.Chip.t) ->
+            logged c.click (fun () -> Printf.sprintf "remove %d" (i + 1)))
+          removables;
+        adder.bindings;
+        [logged adder.added (fun t -> "added " ^ t)];
         List.concat_map (fun (c : W.Card.t) -> c.bindings) cards;
         List.mapi
           (fun i (c : W.Card.t) ->
@@ -148,7 +162,17 @@ let el () =
           El.div
             ~at:[cls "chip-row"; At.id (Jstr.v "chips")]
             (List.map (fun ((c : W.Chip.t), _) -> c.el) chips @ [tags.el]);
+          El.div
+            ~at:
+              [
+                cls "chip-row";
+                At.id (Jstr.v "tag-chips");
+                At.style (Jstr.v "margin-top:10px");
+              ]
+            (W.Chip.tag "Toxique"
+            :: List.map (fun (c : W.Chip.t) -> c.el) removables);
         ];
+      entry "Adder" [El.div ~at:[At.id (Jstr.v "adder")] [adder.el]];
       entry "Card"
         [
           El.div
