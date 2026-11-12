@@ -1405,9 +1405,12 @@ let journal_day =
         Alcotest.check place "derived" (Some "Près de Colmar")
           (Journal_day.place
              [obs ~pos:(48.1, 7.2) (); obs ~derived:"Près de Colmar" ()]);
-        Alcotest.check place "coords" (Some "48.0633, 7.0081")
+        Alcotest.check place "no name, positioned: Lieu inconnu"
+          (Some "Lieu inconnu")
           (Journal_day.place [obs (); obs ~pos:(48.0633, 7.0081) ()]);
-        Alcotest.check place "mean of the positions" (Some "48.2000, 7.1000")
+        Alcotest.check place
+          "no name, two different positions: still Lieu inconnu"
+          (Some "Lieu inconnu")
           (Journal_day.place
              [obs ~hour:15 ~pos:(48.1, 7.0) (); obs ~hour:9 ~pos:(48.3, 7.2) ()]);
         Alcotest.check place "a nan position is not placeable" None
@@ -1627,14 +1630,8 @@ let map_sheet_title () =
   Alcotest.check str "derived only" "Près de Y"
     (Map_sheet.title (cluster_of [obs ~derived:"Près de Y" ()]));
   let positioned = cluster_of [obs ~pos:(48.1, 7.2) ()] in
-  let expected_coords =
-    match Journal_day.place positioned.members with
-    | Some s -> s
-    | None ->
-        Alcotest.fail "expected a coordinate string from Journal_day.place"
-  in
-  Alcotest.check str "neither label: Journal_day.place's coordinate text"
-    expected_coords
+  Alcotest.check str "neither label nor derived, but positioned: Lieu inconnu"
+    "Lieu inconnu"
     (Map_sheet.title positioned);
   Alcotest.check str "no label and no position falls back to \"Lieu\"" "Lieu"
     (Map_sheet.title (cluster_of [obs ()]))

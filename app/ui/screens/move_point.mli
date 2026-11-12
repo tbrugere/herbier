@@ -15,8 +15,12 @@
     Drawer: {!Move_plan.title} (20/800) and {!Move_plan.meta}, both following
     the camera after each [moveend]; the « Chercher un lieu » field, whose
     submit (Enter or its « OK ») runs {!Herbier_geo.Geocoder.search}
-    [~near:centre] — only the latest query's reply is shown; offline
-    ({!State.network}) it shows « Hors ligne : la recherche attend le réseau. »
+    [~near:centre] — only the latest query's reply is shown; when « Photon en
+    ligne » is off ([Place_name.can_search] of {!State.place_sources}) it shows
+    « Activez « Photon en ligne » dans Réglages pour chercher un lieu. » without
+    a request (checked before the network, and again as [~allow] when the
+    request leaves the geocoder's queue: a refused one shows the same line);
+    offline ({!State.network}) « Hors ligne : la recherche attend le réseau. »
     without a request; a {!Herbier_geo.Geocoder.transient} error « Réseau
     indisponible, réessayez. », any other « Recherche impossible » (both
     logged); no result « Aucun lieu trouvé »; each result is a row (name, then

@@ -187,15 +187,21 @@ app/
                           decoding); pure, tested in test/geo/
     tiles.ml              region extract download and storage (v2, with the offline map)
     geocode.ml            Photon forward and reverse, Géoplateforme reverse in France: request URLs,
-                          decoders, the « Près de … » phrase and the reverse rule as a program; pure,
+                          decoders, the « Près de … » phrase and one reverse program per source
+                          (reverse_ign, reverse_photon, chained by or_else); pure, tested in test/geo/
+    place_name.ml         where a point's name comes from (M5.57): own labelled places, then the
+                          place-name sources turned on in 4m, in order; the gate as a program; pure,
                           tested in test/geo/
     geocoder.ml           runs geocode programs: fetch with timeout, one request in flight, ≥ 1 s between
-                          two starts to the same provider; reverse, search
+                          two starts to the same provider; search; logs every request it starts
+                          (console, and observers: the dev hook); reads no setting
   ui/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
     theme.ml              reads the custom properties OCaml needs (map colours, status bar) once at startup
     state.ml              global signals: filters, network, account, 4b's camera and selected place,
-                          and a one-shot framing asked by 4c/4h (handoff « État »)
+                          a one-shot framing asked by 4c/4h (handoff « État »), the place-name sources
+    location_notice.ml    the one-time dialog of first opening on location use (M5.57), mounted on
+                          body by main.ml
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
                           the shell holds the tab bar
     screen.ml             a screen's root element + its bindings, as the router takes them
@@ -243,9 +249,12 @@ app/
                           binding count, stale-update check against a live control, heap per round; capture_check.ml
                           (#dev/capture): viewfinder, shutter and gallery → preview file; map_check.ml (#dev/map):
                           the positron map over the herbier db (spike 3, online half); geocode_check.ml
-                          (#dev/geocode): reverse of five points with request start times, Photon search;
+                          (#dev/geocode): Place_name.resolve of five points with both sources on and request
+                          start times, Photon search, and « Noms de lieux »: the switches, the request count,
+                          observations saved through App with their place_derived and the requests since;
                           fixture.ml: the dev pages'
-                          State; hooks.ml: herbierDev.live(), the leak count; linked only outside the release profile
+                          State; hooks.ml: herbierDev.live(), the leak count, and
+                          herbierDev.geocodeRequests(); linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
@@ -433,7 +442,8 @@ test/
   photos/       native, alcotest: the pure modules of app/photos/ copied in (exif, over recorded
                 exifr output in fixtures/exifr_*.json; preview_size; jpeg)
   geo/          native, alcotest: the pure modules of app/geo/ copied in (features, style over the
-                recorded web/map/positron.json; geocode over fixtures/{photon,geoplateforme}_*.json)
+                recorded web/map/positron.json; geocode and place_name over
+                fixtures/{photon,geoplateforme}_*.json)
   fixtures/     recorded payloads only: API responses (<source>_<endpoint>_<id>.json, e.g.
                 gbif_species_5414995.json, wikidata_entity_Q157555.json, recorded by
                 scripts/record-refs-fixtures.sh; photon_* and geoplateforme_* by
@@ -452,7 +462,7 @@ CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the
 serialisation), and sync,
 photos (except the pure `exif`, `preview_size` and `jpeg`, tested in `test/photos/`), refs_io and geo
-(except the pure `features`, `style` and `geocode`, tested in `test/geo/`), are thin over device-only plugins and have no unit
+(except the pure `features`, `style`, `geocode` and `place_name`, tested in `test/geo/`), are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 
 ## 7. `scripts/` and CI

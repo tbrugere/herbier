@@ -36,7 +36,7 @@ let render (d : data) =
   let where =
     List.concat
       [
-        Option.to_list (Herbier_domain.Places.place_name o);
+        Option.to_list (Herbier_domain.Places.display_name o);
         Option.to_list
           (Option.map
              (fun p -> Herbier_domain.Places.(point_text (of_position p)))

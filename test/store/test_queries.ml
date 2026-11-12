@@ -867,6 +867,11 @@ let observations_to_geocode () =
       (time "2026-10-29T06:00:00Z")
       ~position:positioned ~place_label:"Lac Blanc"
   in
+  let blank_label =
+    observation 0x37
+      (time "2026-10-29T07:00:00Z")
+      ~position:positioned ~place_label:"   "
+  in
   writes "observations" db
     (List.map Observations.upsert
        [
@@ -876,14 +881,51 @@ let observations_to_geocode () =
          deleted;
          no_position;
          with_label;
+         blank_label;
        ]);
   Alcotest.(check (list string))
-    "no/blank place_derived, with a position, live; place_label does not \
-     exclude; newest first"
-    [uuid 0x36; uuid 0x32; uuid 0x31]
+    "no/blank place_derived, no/blank place_label, with a position, live; \
+     newest first"
+    [uuid 0x37; uuid 0x32; uuid 0x31]
     (List.map
        (fun (o : Observation.t) -> Ids.Observation_id.to_string o.id)
        (all db Observations.to_geocode))
+
+let observations_labelled () =
+  let db = Cli.migrated_db () in
+  let positioned : Observation.position =
+    {lat = 48.0625; lon = 7.0625; accuracy_m = None}
+  in
+  let live_labelled =
+    observation 0x31 t1 ~position:positioned ~place_label:"Jardin"
+  in
+  let no_position_labelled = observation 0x32 t1 ~place_label:"Bois" in
+  let deleted_labelled =
+    observation 0x33 t1 ~position:positioned ~place_label:"Lac" ~deleted_at:t1
+  in
+  let blank_label =
+    observation 0x34 t1 ~position:positioned ~place_label:"   "
+  in
+  let no_label = observation 0x35 t1 ~position:positioned in
+  let second_live_labelled =
+    observation 0x36 t2 ~position:positioned ~place_label:"  Col  "
+  in
+  writes "observations" db
+    (List.map Observations.upsert
+       [
+         live_labelled;
+         no_position_labelled;
+         deleted_labelled;
+         blank_label;
+         no_label;
+         second_live_labelled;
+       ]);
+  Alcotest.(check (list string))
+    "live, positioned, non-blank place_label only (padding kept), newest first"
+    [uuid 0x36; uuid 0x31]
+    (List.map
+       (fun (o : Observation.t) -> Ids.Observation_id.to_string o.id)
+       (all db Observations.labelled))
 
 let observations_set_place_derived () =
   let db = Cli.migrated_db () in
@@ -1315,6 +1357,64 @@ let settings_storage_target () =
   Alcotest.(check (option bool))
     "setting Storage_target leaves Wifi_only unset" None
     (find db (Settings.get Settings.Wifi_only))
+
+let place_source_keys =
+  [
+    ("place_source_ign_online", Settings.Place_source_ign_online);
+    ("place_source_photon_online", Settings.Place_source_photon_online);
+    ("location_notice_seen", Settings.Location_notice_seen);
+  ]
+
+let settings_place_source_names () =
+  List.iter
+    (fun (name, key) ->
+      Alcotest.(check string) (name ^ ": name") name (Settings.name key))
+    place_source_keys
+
+let settings_place_source_round_trip () =
+  List.iter
+    (fun (name, key) ->
+      let db = Cli.migrated_db () in
+      Alcotest.(check (option bool))
+        (name ^ ": never set is None")
+        None
+        (find db (Settings.get key));
+      check_changes
+        (name ^ ": set true changes 1 row")
+        1 db (Settings.set key true);
+      Alcotest.(check (option bool))
+        (name ^ ": get is Some true")
+        (Some true)
+        (find db (Settings.get key));
+      Alcotest.(check (option string))
+        (name ^ ": true is stored as \"true\"")
+        (Some "true") (stored_value db name);
+      check_changes
+        (name ^ ": set false changes 1 row")
+        1 db (Settings.set key false);
+      Alcotest.(check (option bool))
+        (name ^ ": the second set replaces the value")
+        (Some false)
+        (find db (Settings.get key));
+      Alcotest.(check (option string))
+        (name ^ ": false is stored as \"false\"")
+        (Some "false") (stored_value db name))
+    place_source_keys
+
+let settings_place_source_bad_value () =
+  List.iter
+    (fun (name, key) ->
+      let db = Cli.migrated_db () in
+      Cli.exec_ok
+        (name ^ ": bad settings row")
+        db
+        (Printf.sprintf
+           "insert into settings (key, value) values ('%s', 'yes');\n" name);
+      Alcotest.(check (result (option bool) Cli.codec_error))
+        (name ^ " holding \"yes\" is Row WrongType")
+        (Error (Row `WrongType))
+        (Cli.find_result db (Settings.get key)))
+    place_source_keys
 
 let settings_bad_value () =
   let db = Cli.migrated_db () in
@@ -2037,8 +2137,12 @@ let () =
           case "soft_delete gives 1 then 0" observations_soft_delete;
           case
             "to_geocode is live, positioned observations without a derived \
-             name, newest first"
+             name or a label, newest first"
             observations_to_geocode;
+          case
+            "labelled is live, positioned observations with a non-blank \
+             place_label, newest first"
+            observations_labelled;
           case
             "set_place_derived changes 1 row when live, unnamed and at the \
              given position, else 0"
@@ -2083,6 +2187,15 @@ let () =
           case "Storage_target round-trips as its enum label"
             settings_storage_target;
           case "an unparsable stored value is Row WrongType" settings_bad_value;
+          case
+            "the place-source and notice keys are named \
+             place_source_ign_online, place_source_photon_online, \
+             location_notice_seen"
+            settings_place_source_names;
+          case "each place-source / notice key round-trips as true and false"
+            settings_place_source_round_trip;
+          case "each place-source / notice key holding \"yes\" is Row WrongType"
+            settings_place_source_bad_value;
         ] );
       ( "Search.match_expression",
         [

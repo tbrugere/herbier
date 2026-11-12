@@ -1,6 +1,6 @@
 (** Geocoding requests and payloads (architecture §8, stack.md « Geocoding »):
     Photon (komoot) forward and reverse, IGN Géoplateforme reverse for points in
-    France. Pure: URLs, decoders and the reverse program; run by [Geocoder] on
+    France. Pure: URLs, decoders and the reverse programs; run by [Geocoder] on
     the device and by a function standing for the network in tests. Nothing here
     raises. *)
 
@@ -15,6 +15,14 @@ val provider_to_string : provider -> string
 type request = private {provider : provider; url : string}
 
 val equal_request : request -> request -> bool
+
+val request_to_string : request -> string
+(** ["<provider> <url>"], the whole URL: the dev log and hook. *)
+
+val request_endpoint : request -> string
+(** ["<provider> <url before ?>"], e.g.
+    ["photon https://photon.komoot.io/reverse"]: no coordinates and no query,
+    for the console. *)
 
 val encode : string -> string
 (** Percent-encoding of a query key or value: every byte except the RFC 3986
@@ -118,21 +126,36 @@ val photon_places : Yojson.Safe.t -> (place list, error) result
     or without two finite numbers (int or float JSON) in [geometry.coordinates]
     is skipped (style §8.4), never an error. *)
 
-(** {1 The reverse rule} *)
+(** {1 The reverse programs}
+
+    Which of them run, and in which order, is [Place_name.resolve]'s rule. *)
 
 (* style: transparent: Geocoder.run and the tests match on it. A transport
    failure never reaches a continuation: the runner stops with its own
    error. *)
 type 'a program = Done of 'a | Get of request * (Yojson.Safe.t -> 'a program)
 
-val reverse : Places.point -> (string option, error) result program
-(** The [place_derived] of a point:
-    - {!in_france}: [geoplateforme_lieu_dit] → a name → [Done (Ok (near name))];
-      none → [geoplateforme_commune] → a name → [Done (Ok (near name))]; none →
-      the Photon step below;
-    - otherwise (or after both empty answers): [photon_reverse] → a name →
-      [Done (Ok (near name))]; none → [Done (Ok None)].
+val map : ('a -> 'b) -> 'a program -> 'b program
+(** Applies [f] to the [Done] value; the requests are those of the program, in
+    order. *)
 
-    A payload that does not decode ends the program at once with
-    [Done (Error e)] (no fallback to the next provider: a later run retries). A
-    name that [near] rejects (blank) counts as none. *)
+val or_else :
+  ('a option, error) result program ->
+  (unit -> ('a option, error) result program) ->
+  ('a option, error) result program
+(** [or_else p next]: runs [p]; [Done (Ok None)] → [next ()];
+    [Done (Ok (Some _))] and [Done (Error _)] end there ([next] is not called,
+    no request of [next] is issued). *)
+
+val reverse_ign : Places.point -> (string option, error) result program
+(** « IGN en ligne »: when {!in_france}: [geoplateforme_lieu_dit] → a name →
+    [Done (Ok (near name))]; none → [geoplateforme_commune] → a name →
+    [Done (Ok (near name))]; none → [Done (Ok None)]. Outside the box:
+    [Done (Ok None)] with no request. A payload that does not decode →
+    [Done (Error e)] at once (no commune request after a bad lieu-dit payload).
+    A name that [near] rejects counts as none. *)
+
+val reverse_photon : Places.point -> (string option, error) result program
+(** « Photon en ligne »: [photon_reverse] → {!photon_name} → a name →
+    [Done (Ok (near name))]; none → [Done (Ok None)]; bad payload →
+    [Done (Error e)]. One request, anywhere in the world. *)

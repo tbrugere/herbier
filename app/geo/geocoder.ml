@@ -3,6 +3,7 @@ type error =
   | Timeout
   | Status of {provider : Geocode.provider; status : int}
   | Payload of Geocode.error
+  | Refused of Geocode.provider
 
 let error_to_string = function
   | Network m -> "network: " ^ m
@@ -10,12 +11,14 @@ let error_to_string = function
   | Status {provider; status} ->
       Printf.sprintf "%s: HTTP %d" (Geocode.provider_to_string provider) status
   | Payload e -> Geocode.error_to_string e
+  | Refused provider ->
+      Geocode.provider_to_string provider ^ ": refused, not sent"
 
 let transient = function
   | Network _ | Timeout -> true
   | Status {status; provider = _} ->
       Int.equal status 429 || (500 <= status && status <= 599)
-  | Payload _ -> false
+  | Payload _ | Refused _ -> false
 
 let spacing_ms = 1000
 let default_timeout_ms = 10_000
@@ -110,35 +113,49 @@ let fetch ~timeout_ms provider url =
   Brr.G.stop_timer timer;
   result
 
-let get ~timeout_ms ~on_start ({provider; url} as request : Geocode.request) =
+(* style: module-level, as the queue: every request start goes to them;
+   only the dev hook registers one, so a release build keeps nothing. *)
+let observers : (Geocode.request -> unit) list ref = ref []
+let observe f = observers := !observers @ [f]
+
+let log request =
+  List.iter (fun f -> f request) !observers;
+  Brr.Console.(log [str ("geocode: GET " ^ Geocode.request_endpoint request)])
+
+let get ~timeout_ms ~on_start ~allow
+    ({provider; url} as request : Geocode.request) =
   let fut, deliver = Fut.create () in
+  (* Asked when the request leaves the queue, not when it joins it: a source
+     turned off meanwhile stops it. *)
   let start () =
-    on_start request;
-    fetch ~timeout_ms provider url
+    match allow request with
+    | false -> Fut.return (Error (Refused provider))
+    | true ->
+        log request;
+        on_start request;
+        fetch ~timeout_ms provider url
   in
   waiting := !waiting @ [{provider; start; deliver}];
   pump ();
   fut
 
-let rec run ?(timeout_ms = default_timeout_ms) ?(on_start = ignore) = function
+let rec run ?(timeout_ms = default_timeout_ms) ?(on_start = ignore)
+    ?(allow = fun (_ : Geocode.request) -> true) = function
   | Geocode.Done (Ok x) -> Fut.return (Ok x)
   | Geocode.Done (Error e) -> Fut.return (Error (Payload e))
   | Geocode.Get (request, k) ->
-      Fut.bind (get ~timeout_ms ~on_start request) (function
+      Fut.bind (get ~timeout_ms ~on_start ~allow request) (function
         | Error e -> Fut.return (Error e)
         | Ok body -> (
             match Geocode.json_of_string body with
             | Error e -> Fut.return (Error (Payload e))
-            | Ok json -> run ~timeout_ms ~on_start (k json)))
+            | Ok json -> run ~timeout_ms ~on_start ~allow (k json)))
 
-let reverse ?timeout_ms ?on_start p =
-  run ?timeout_ms ?on_start (Geocode.reverse p)
-
-let search ?timeout_ms ?on_start ?near q =
+let search ?timeout_ms ?on_start ?allow ?near q =
   match String.trim q with
   | "" -> Fut.return (Ok [])
   | _ ->
-      run ?timeout_ms ?on_start
+      run ?timeout_ms ?on_start ?allow
         (Geocode.Get
            ( Geocode.photon_search ?near q,
              fun json -> Geocode.Done (Geocode.photon_places json) ))

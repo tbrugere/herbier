@@ -40,22 +40,14 @@ let day_time t = Fr_date.day_time ~tz_offset_s:(Zone.offset_s t) t
 let coordinates p = Herbier_domain.Places.(point_text (of_position p))
 
 let place (o : Observation.t) =
-  let name = Herbier_domain.Places.place_name o in
-  match (name, o.position) with
-  | None, None ->
-      [El.p ~at:[cls "t-meta"] [El.txt' "Pas de position enregistrée."]]
-  | _ ->
-      List.concat
-        [
-          Option.to_list
-            (Option.map
-               (fun n -> El.p ~at:[cls "observation__value"] [El.txt' n])
-               name);
-          Option.to_list
-            (Option.map
-               (fun p -> El.p ~at:[cls "t-meta"] [El.txt' (coordinates p)])
-               o.position);
-        ]
+  match Herbier_domain.Places.display_name o with
+  | None -> [El.p ~at:[cls "t-meta"] [El.txt' "Pas de position enregistrée."]]
+  | Some n ->
+      El.p ~at:[cls "observation__value"] [El.txt' n]
+      :: Option.to_list
+           (Option.map
+              (fun p -> El.p ~at:[cls "t-meta"] [El.txt' (coordinates p)])
+              o.position)
 
 (* The plant's name and where tapping it goes. *)
 let title (d : data) =

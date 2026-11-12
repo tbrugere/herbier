@@ -21,12 +21,29 @@ let setting db key default =
       | Error e -> Error e)
     (Db.find db (Settings.get key))
 
+type settings = {
+  storage : Original_target.t;
+  wifi_only : bool;
+  place_sources : Herbier_geo.Place_name.sources;
+}
+
+let place_sources db =
+  let module Place_name = Herbier_geo.Place_name in
+  let open Fut.Result_syntax in
+  List.fold_left
+    (fun acc source ->
+      let* sources = acc in
+      let+ on = setting db (Herbier_ui.App.settings_key source) false in
+      Place_name.set sources source on)
+    (Fut.return (Ok Place_name.none))
+    Place_name.order
+
 let settings db =
-  let open Fut.Syntax in
+  let open Fut.Result_syntax in
   let* storage = setting db Settings.Storage_target Original_target.App_only in
-  let+ wifi_only = setting db Settings.Wifi_only false in
-  Result.bind storage (fun storage ->
-      Result.map (fun wifi_only -> (storage, wifi_only)) wifi_only)
+  let* wifi_only = setting db Settings.Wifi_only false in
+  let+ place_sources = place_sources db in
+  {storage; wifi_only; place_sources}
 
 let tab app = function
   | Herbier_ui.Widgets.Tab_bar.Collection -> Herbier_ui.Screens.Collection.v app
@@ -60,17 +77,19 @@ let modal app = function
 
 (* The theme is read once, here: app.css is loaded by now. [online] starts
    from the navigator and {!watch_network} keeps it current. *)
-let create_app db (storage, wifi_only) =
+let create_app db {storage; wifi_only; place_sources} =
   let state =
     Herbier_ui.State.create
       ~network:{online = Navigator.online G.navigator; pending_uploads = 0}
       ~account:{google_signed_in = false; storage; wifi_only}
+      ~place_sources
   in
   Herbier_ui.App.create ~db ~state ~theme:(Herbier_ui.Theme.load ())
 
 (* The window's online and offline events update [State.network]; coming
-   back online geocodes what was saved meanwhile (architecture §8). The
-   window holds the listeners for the app's lifetime. *)
+   back online asks the enabled place-name sources for what was saved
+   meanwhile (architecture §8). The window holds the listeners for the app's
+   lifetime. *)
 let watch_network app =
   let state = Herbier_ui.App.state app in
   let set online (_ : Ev.Type.void Ev.t) =
@@ -132,9 +151,14 @@ let () =
     [El.p ~at:[At.class' (Jstr.v "screen")] [El.txt' "Chargement…"]];
   Fut.await (start ()) (fun (db, app) ->
       (match app with
-      | Ok app ->
+      | Ok app -> (
           watch_network app;
-          Herbier_ui.App.geocode_pending app
+          Herbier_ui.App.geocode_pending app;
+          (* A veil over a dev page would cover the emulator's checks; the
+             notice shows at the next start on an app route. *)
+          match Herbier_ui.Route.current () with
+          | Dev _ -> ()
+          | Tab _ | Modal _ -> Herbier_ui.Location_notice.show_once app)
       | Error reason -> Console.(error [str "herbier: startup"; str reason]));
       Herbier_ui.Router.start ~root ~tab:(or_unavailable tab app)
         ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db app))

@@ -2,6 +2,7 @@ open Brr
 module Db = Herbier_store.Db
 module Settings = Herbier_store.Settings
 module Original_target = Herbier_domain.Photo.Original_target
+module Place_name = Herbier_geo.Place_name
 module W = Widgets
 
 let cls c = At.class' (Jstr.v c)
@@ -121,6 +122,33 @@ let v app =
       (React.S.const true) ()
   in
   let wifi_switch = W.Switch.v ~label:"Envoyer seulement en Wi-Fi" wifi () in
+  let source_switches =
+    List.map
+      (fun src ->
+        let on =
+          React.S.map ~eq:Bool.equal
+            (fun s -> Place_name.enabled s src)
+            (State.place_sources state)
+        in
+        let switch =
+          W.Switch.v ~label:(Place_name.label src)
+            ~detail:(Place_name.detail src) on ()
+        in
+        ( switch,
+          Rb.act switch.toggle (fun () ->
+              App.set_place_source app src (not (React.S.value on))) ))
+      Place_name.order
+  in
+  let source_error =
+    El.p
+      ~at:
+        [
+          cls "t-meta";
+          cls "settings__intro";
+          At.v (Jstr.v "role") (Jstr.v "status");
+        ]
+      []
+  in
   let free = W.Button.text "Libérer" in
   let send = W.Button.text "Envoyer maintenant" in
   El.set_at (Jstr.v "aria-disabled") (Some (Jstr.v "true")) free.el;
@@ -166,6 +194,21 @@ let v app =
                   ];
               ];
           ];
+        section "Noms de lieux"
+          [
+            El.div
+              ~at:[cls "settings__card"]
+              (El.p
+                 ~at:[cls "t-meta"; cls "settings__intro"]
+                 [
+                   El.txt'
+                     "Vos lieux renommés nomment d’abord les observations à \
+                      moins de 500 m, sans réseau ; sinon les sources activées \
+                      ci-dessous ; sinon « Lieu inconnu ».";
+                 ]
+               :: List.map (fun ((s : W.Switch.t), _) -> s.el) source_switches
+              @ [source_error]);
+          ];
         section "File d'envoi"
           [
             El.div
@@ -198,6 +241,12 @@ let v app =
             Rb.act drive_click (fun () -> set_storage Original_target.Drive);
             Rb.act local_click (fun () -> set_storage Original_target.App_only);
             Rb.act wifi_switch.toggle toggle_wifi;
+            Rb.text source_error
+              (React.S.map (Option.value ~default:"") (App.place_error app));
+            Rb.attr source_error "hidden"
+              (React.S.map
+                 (function None -> Some "" | Some (_ : string) -> None)
+                 (App.place_error app));
             Rb.text pending
               (React.S.map
                  (fun (n : State.network) ->
@@ -209,6 +258,9 @@ let v app =
           ];
           compressed.bindings;
           wifi_switch.bindings;
+          List.concat_map
+            (fun ((s : W.Switch.t), act) -> act :: s.bindings)
+            source_switches;
           free.bindings;
           send.bindings;
         ];

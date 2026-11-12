@@ -274,7 +274,9 @@ blocked: nothing.
   (flaky in the Android WebView). Never cache `tile.openstreetmap.org`.
 - **Geocoding**: forward search with **Photon** (komoot; autocomplete allowed);
   reverse with Photon too, or **IGN Géoplateforme** when in France (keyless,
-  better rural place names). Nominatim excluded by its usage policy.
+  better rural place names). Nominatim excluded by its usage policy. Every
+  remote source is off by default, opt-in per source in 4m (M5.57); the
+  user's own labelled places name nearby points with no network.
 
 ## Cost
 

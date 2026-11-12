@@ -7,3 +7,4 @@ let state () =
         storage = Herbier_domain.Photo.Original_target.App_only;
         wifi_only = false;
       }
+    ~place_sources:Herbier_geo.Place_name.none

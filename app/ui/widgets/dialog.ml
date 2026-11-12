@@ -8,7 +8,15 @@ type 'a t = {
   bindings : Rb.binding list;
 }
 
-let v ~title ?text actions =
+(* style: module-level counter for unique ids; nothing else reads it. *)
+let count = ref 0
+
+let fresh_id () =
+  incr count;
+  Printf.sprintf "dialog-text-%d" !count
+
+let v ~title ?text ?(body = []) actions =
+  let text = Option.map (fun t -> (fresh_id (), t)) text in
   let buttons =
     List.map (fun (kind, label, value) -> (Button.v ~kind label, value)) actions
   in
@@ -18,17 +26,27 @@ let v ~title ?text actions =
       [
         El.div
           ~at:
-            [
-              At.class' (Jstr.v "confirm__box");
-              At.v (Jstr.v "role") (Jstr.v "dialog");
-              At.v (Jstr.v "aria-modal") (Jstr.v "true");
-              At.v (Jstr.v "aria-label") (Jstr.v title);
-            ]
+            ([
+               At.class' (Jstr.v "confirm__box");
+               At.v (Jstr.v "role") (Jstr.v "dialog");
+               At.v (Jstr.v "aria-modal") (Jstr.v "true");
+               At.v (Jstr.v "aria-label") (Jstr.v title);
+             ]
+            @ Option.to_list
+                (Option.map
+                   (fun (id, _) -> At.v (Jstr.v "aria-describedby") (Jstr.v id))
+                   text))
           (El.h2 ~at:[At.class' (Jstr.v "t-sheet-title")] [El.txt' title]
            ::
            (match text with
            | None -> []
-           | Some t -> [El.p ~at:[At.class' (Jstr.v "t-body")] [El.txt' t]])
+           | Some (id, t) ->
+               [
+                 El.p
+                   ~at:[At.id (Jstr.v id); At.class' (Jstr.v "t-body")]
+                   [El.txt' t];
+               ])
+          @ body
           @ List.map (fun ((b : Button.t), _) -> b.el) buttons);
       ]
   in

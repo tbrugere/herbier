@@ -2,4 +2,4 @@
 
 val state : unit -> State.t
 (** A fresh {!State.t}: no filter, online with nothing to upload, signed out,
-    originals kept in the app. *)
+    originals kept in the app, every place-name source off. *)

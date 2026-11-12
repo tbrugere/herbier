@@ -10,6 +10,15 @@ type 'a t = {
   bindings : Rb.binding list;
 }
 
-val v : title:string -> ?text:string -> (Button.kind * string * 'a) list -> 'a t
+val v :
+  title:string ->
+  ?text:string ->
+  ?body:Brr.El.t list ->
+  (Button.kind * string * 'a) list ->
+  'a t
 (** Buttons stacked in the list's order, each with the value {!t.choice} gives
-    when it is pressed; [text] is a line under the title. *)
+    when it is pressed; [text] is a line under the title, the dialog's
+    [aria-describedby] (a fresh id); [body]: elements placed after [text] and
+    before the buttons (default [[]]), not part of the description, so its lists
+    and paragraphs stay navigable. The box scrolls when taller than the
+    viewport. *)

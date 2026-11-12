@@ -101,6 +101,14 @@ let place_name (o : Observation.t) =
   | Some l -> Some l
   | None -> Option.bind o.place_derived present
 
+let unknown_name = "Lieu inconnu"
+
+let display_name (o : Observation.t) =
+  match (place_name o, o.position) with
+  | Some s, _ -> Some s
+  | None, Some _ -> Some unknown_name
+  | None, None -> None
+
 let point_text {lat; lon} = Printf.sprintf "%.4f, %.4f" lat lon
 
 (* [labels] in time order. Counts are keyed by label with the rank of the

@@ -511,7 +511,9 @@ the classifier must accept both a bare URL and text containing one.
 - Moving a point (5b): an interactive map under a fixed DOM pin whose foot
   is the map's centre (the map is laid out above the drawer); the stored
   position is a grey ghost layer (`Geo.Style.origin_layer`). « Chercher un
-  lieu » is a Photon search on submit, biased to the centre; title and
+  lieu » is a Photon search on submit, biased to the centre, run only when
+  « Photon en ligne » is on in 4m (M5.57; otherwise a line says so and no
+  request leaves); title and
   « déplacé de N m » follow the camera on `moveend`; a picked result's name
   only titles the drawer, it is never stored. « Valider » (disabled while the
   camera moves, so it saves what the drawer shows) writes the
@@ -519,31 +521,71 @@ the classifier must accept both a bare URL and text containing one.
   with `accuracy_m` and `place_derived` cleared, `place_label` kept only
   within 500 m of the old point, through `Observations.upsert`; `App.save`
   then runs the reverse geocoding below for the new point (`Move_plan`).
-- Reverse geocoding for `place_derived`: Photon (or Géoplateforme in France),
-  called once per observation when online, cached in the row
-  (`Geo.Geocode.reverse`, run by `Geo.Geocoder`, triggered by `App`):
-  - inside a coarse box of metropolitan France and Corsica, the nearest
+- Place names for `place_derived` (M5.57: positions stay on the phone
+  unless the user turns a source on). `Geo.Place_name.resolve` (pure) names
+  a point, in order:
+  1. the user's own places: the nearest live observation with a non-blank
+     `place_label` within 500 m (`Observations.labelled`), with no network;
+     its trimmed label is stored verbatim (no « Près de »). The nearest
+     labelled observation, not the majority name of the place 4b groups it
+     into: it may differ from that name when two named places lie within
+     500 m, and clusters change as observations are added while the stored
+     name does not. The copy is a snapshot: renaming, clearing, deleting or
+     moving the labelled place does not update it, and a source turned on
+     later does not replace it (the row is no longer unnamed); giving the
+     observation its own label overrides it. A labelled observation is not
+     named at all (`Observations.to_geocode` leaves it out: its label is its
+     name), so it never reaches a remote source; clearing its label makes it
+     pending again;
+  2. each place-name source the user turned on in 4m « Noms de lieux », in
+     order « IGN en ligne » (Géoplateforme, `Geo.Geocode.reverse_ign`) then
+     « Photon en ligne » (`Geo.Geocode.reverse_photon`). Both are **off by
+     default** (local `settings` keys `place_source_ign_online`,
+     `place_source_photon_online`; unset or unreadable = off), mirrored in
+     `State.place_sources`. « IGN hors-ligne » (M5.58) comes first;
+  3. else nothing is stored, and 4c, 4b's sheet, 4h and 4e print
+     « Lieu inconnu » (`Places.unknown_name`, never stored: a stored
+     placeholder would sync as a fake name and stop later sources).
+
+  With a source on but the phone offline the outcome is `Deferred`: no
+  request, asked again on the `online` event. Rules of the sources:
+  - IGN: inside a coarse box of metropolitan France and Corsica, the nearest
     Géoplateforme lieu-dit (habité or not) within 500 m, else the commune
-    containing the point, else Photon; outside the box, Photon only. Photon's
-    name counts only when it is an OSM `place` (city … islet), else its
-    district, else its city;
+    containing the point; outside the box, no request. Photon's name counts
+    only when it is an OSM `place` (city … islet), else its district, else
+    its city. With both on, the chain is M5.43's (IGN, then Photon);
   - the row stores the phrase « Près de … » with the French contraction
     (du, des, de la, de l’, d’), which 4c, 4e and 4h print as is;
   - written by a conditional `Observations.set_place_derived` (live, same
     position, still unnamed) through `App` with its outbox entry, so a late
     answer never overwrites a move or a newer name;
-  - triggered at startup, when the window comes back online (main.ml's
-    `online`/`offline` listener keeps `State.network` current), and after
-    every `App.save` that changed rows, when `State.network` says online,
-    newest observation first, one at a time;
-  - a miss, or a payload or HTTP error, is not retried in the same session;
-    the next app start asks again (up to three requests per unnamed point in
-    France; the providers' data also changes over time). A transient error
-    (network, timeout, 429, 5xx) stops the run and leaves the observation to
-    the next trigger;
+  - `App.geocode_pending` runs online or offline (own places need no
+    network): at startup, when the window comes back online (main.ml's
+    `online`/`offline` listener keeps `State.network` current), after every
+    `App.save` that changed rows, and when a 4m switch is turned on; newest
+    observation first, one at a time;
+  - a remote miss, or a payload or HTTP error, is not asked again in the same
+    session (the own-place lookup still runs); the next app start, or
+    turning a source on (once its setting is saved, which clears that list),
+    asks again. A switch whose write fails falls back to the stored value,
+    except an opt-out, which stays off for the session; 4m says so. A
+    transient error (network, timeout, 429, 5xx) stops the run and leaves
+    the observation to the next trigger;
   - one request in flight, at least 1 s between two starts to the same
     provider, coordinates sent with 5 decimals (about 1 m, no coarser than a
-    phone fix), names over 200 bytes dropped.
+    phone fix), names over 200 bytes dropped. `Geo.Geocoder` reads no
+    setting: callers gate, and pass an `allow` predicate (`Place_name.allows`
+    of the current switches, 5b's `can_search`) asked again when a request
+    leaves the queue, so a source turned off while a request waits sends
+    nothing (one already sent cannot be withdrawn). It logs every request it
+    starts, on the console as `geocode: GET <provider> <endpoint>` (no query
+    string: no coordinates or search text in logcat) and, in dev builds only,
+    in the list behind the dev hook `herbierDev.geocodeRequests()` (whole
+    URLs), so "no request left the phone" is checkable;
+  - a one-time dialog at first opening (`Ui.Location_notice`, flag
+    `location_notice_seen`) says positions stay on the phone, lists each
+    source with what it sends to whom, and that the map's background tiles
+    come from OpenFreeMap for the area shown.
 
 ## 9. Repository layout (sketch; `layout.md` is the decided version)
 

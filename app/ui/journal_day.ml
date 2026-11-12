@@ -25,7 +25,7 @@ let place obs =
   Option.map
     (function
       | Places.Named s | Places.Derived s -> s
-      | Places.Coordinates p -> Places.point_text p)
+      | Places.Coordinates _ -> Places.unknown_name)
     (Places.label obs)
 
 let plant_name names id =

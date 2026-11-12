@@ -1,11 +1,19 @@
 module Col = Postgrest.Col
 module Original_target = Herbier_domain.Photo.Original_target
 
-type _ key = Storage_target : Original_target.t key | Wifi_only : bool key
+type _ key =
+  | Storage_target : Original_target.t key
+  | Wifi_only : bool key
+  | Place_source_ign_online : bool key
+  | Place_source_photon_online : bool key
+  | Location_notice_seen : bool key
 
 let name : type a. a key -> string = function
   | Storage_target -> "storage_target"
   | Wifi_only -> "wifi_only"
+  | Place_source_ign_online -> "place_source_ign_online"
+  | Place_source_photon_online -> "place_source_photon_online"
+  | Location_notice_seen -> "location_notice_seen"
 
 (* A local-only table: its columns live next to its queries (layout §2), not
    in Tables. *)
@@ -23,6 +31,9 @@ let bool_text : bool Col.custom =
 let codec : type a. a key -> a Col.custom = function
   | Storage_target -> Tables.photo_original_target
   | Wifi_only -> bool_text
+  | Place_source_ign_online -> bool_text
+  | Place_source_photon_online -> bool_text
+  | Location_notice_seen -> bool_text
 
 let value_column key : (settings, _, [`Mandatory]) Col.t =
   {ty = Not_Null (Custom (codec key)); name = "value"}

@@ -6,9 +6,17 @@ type _ key =
       (** 4m « Où vont mes photos »; stored as the enum label. *)
   | Wifi_only : bool key
       (** 4m « Envoyer seulement en Wi-Fi »; stored as ["true"] / ["false"]. *)
+  | Place_source_ign_online : bool key
+      (** 4m « IGN en ligne »; ["true"] / ["false"]; unset = off. *)
+  | Place_source_photon_online : bool key
+      (** 4m « Photon en ligne »; unset = off. *)
+  | Location_notice_seen : bool key
+      (** The first-opening dialog was answered; unset = show it. *)
 
 val name : _ key -> string
-(** The stored key: ["storage_target"], ["wifi_only"]. *)
+(** The stored key: ["storage_target"], ["wifi_only"],
+    ["place_source_ign_online"], ["place_source_photon_online"],
+    ["location_notice_seen"]. *)
 
 val get : 'a key -> 'a Stmt.query
 (** 0 or 1 row: run it with [Db.find]. [None] means the key was never set, and

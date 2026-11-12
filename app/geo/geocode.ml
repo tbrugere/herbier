@@ -16,6 +16,16 @@ let equal_provider a b =
 let equal_request a b =
   equal_provider a.provider b.provider && String.equal a.url b.url
 
+let request_to_string {provider; url} = provider_to_string provider ^ " " ^ url
+
+let request_endpoint {provider; url} =
+  let base =
+    match String.index_opt url '?' with
+    | Some i -> String.sub url 0 i
+    | None -> url
+  in
+  provider_to_string provider ^ " " ^ base
+
 (* style: [unreserved] and [encode] are Herbier_refs.Request's: geo does not
    depend on refs (layout.md, known copies). *)
 let unreserved = function
@@ -302,12 +312,22 @@ let step request decode next =
         | Ok (Some phrase) -> Done (Ok (Some phrase))
         | Ok None -> next () )
 
-let reverse p =
-  let photon () =
-    step (photon_reverse p) photon_name (fun () -> Done (Ok None))
-  in
+let rec map f = function
+  | Done x -> Done (f x)
+  | Get (request, k) -> Get (request, fun json -> map f (k json))
+
+let rec or_else p next =
+  match p with
+  | Done (Ok None) -> next ()
+  | Done (Ok (Some _) | Error _) -> p
+  | Get (request, k) -> Get (request, fun json -> or_else (k json) next)
+
+let none () = Done (Ok None)
+let reverse_photon p = step (photon_reverse p) photon_name none
+
+let reverse_ign p =
   match in_france p with
-  | false -> photon ()
+  | false -> none ()
   | true ->
       step (geoplateforme_lieu_dit p) geoplateforme_name (fun () ->
-          step (geoplateforme_commune p) geoplateforme_name photon)
+          step (geoplateforme_commune p) geoplateforme_name none)

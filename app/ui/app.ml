@@ -6,6 +6,7 @@ module Source = Herbier_domain.Reference.Source
 module Observations = Herbier_store.Observations
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Places = Herbier_domain.Places
+module Place_name = Herbier_geo.Place_name
 
 type geocode_run =
   | Idle
@@ -40,6 +41,19 @@ type t = {
   geocode_run : geocode_run ref;
       (* style: mutable for the same reason: whether a run is going, and
          whether a trigger came during it. *)
+  place_stored : Place_name.sources ref;
+      (* style: mutable because a switch's write settles in a future's
+         callback: the switches as last written to the settings table, what
+         a failed write falls back to. *)
+  place_writes : int ref;
+  place_latest : (Place_name.source * int) list ref;
+      (* style: mutable for the same reason: a write counter and the latest
+         write per source; only the latest one's failure is shown. *)
+  place_error : string option React.signal;
+  set_place_error : string option -> unit;
+  place_error_source : Place_name.source option ref;
+      (* style: mutable for the same reason: the source whose failure
+         {!place_error} shows, so another source's success keeps it. *)
   thumbs : (Plant_id.t * thumb_sync) list ref;
       (* style: mutable for the same reason: a thumbnail sync settles in a
          future's callback. The plants with a sync running. *)
@@ -49,6 +63,9 @@ let create ~db ~state ~theme =
   let saved, send = React.E.create () in
   let fetching, set_fetching =
     React.S.create ~eq:(List.equal Plant_id.equal) []
+  in
+  let place_error, set_place_error =
+    React.S.create ~eq:(Option.equal String.equal) None
   in
   {
     db;
@@ -62,6 +79,12 @@ let create ~db ~state ~theme =
     set_fetching = (fun ids -> set_fetching ids);
     geocode_tried = ref [];
     geocode_run = ref Idle;
+    place_stored = ref (React.S.value (State.place_sources state));
+    place_writes = ref 0;
+    place_latest = ref [];
+    place_error;
+    set_place_error = (fun e -> set_place_error e);
+    place_error_source = ref None;
     thumbs = ref [];
   }
 
@@ -84,7 +107,7 @@ let online t = (React.S.value (State.network t.state)).online
 
 (* Place names (architecture §8). *)
 
-let geocode_error parts = Brr.Console.(error [str (String.concat " " parts)])
+let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
 
 let tried t (o : Herbier_domain.Observation.t) p =
   List.exists
@@ -94,23 +117,25 @@ let tried t (o : Herbier_domain.Observation.t) p =
 let mark_tried t (o : Herbier_domain.Observation.t) p =
   t.geocode_tried := (o.id, p) :: !(t.geocode_tried)
 
-let pending t (o : Herbier_domain.Observation.t) =
-  Option.bind o.position (fun pos ->
-      let p = Places.of_position pos in
-      match tried t o p with true -> None | false -> Some (o, p))
+let pending (o : Herbier_domain.Observation.t) =
+  Option.map (fun pos -> (o, Places.of_position pos)) o.position
 
 let rec geocode_pending t =
-  match (online t, !(t.geocode_run)) with
-  | false, _ -> ()
-  | true, (Geocoding | Geocoding_again) -> t.geocode_run := Geocoding_again
-  | true, Idle ->
+  match !(t.geocode_run) with
+  | Geocoding | Geocoding_again -> t.geocode_run := Geocoding_again
+  | Idle ->
       t.geocode_run := Geocoding;
-      Fut.await (Db.all t.db Observations.to_geocode) (function
-        | Error e ->
-            geocode_error ["geocode: read"; Db.error_to_string e];
-            geocode_end t
-        | Ok observations ->
-            geocode_each t (List.filter_map (pending t) observations))
+      let open Fut.Result_syntax in
+      Fut.await
+        (let* observations = Db.all t.db Observations.to_geocode in
+         let+ labelled = Db.all t.db Observations.labelled in
+         (observations, labelled))
+        (function
+          | Error e ->
+              log_error ["geocode: read"; Db.error_to_string e];
+              geocode_end t
+          | Ok (observations, labelled) ->
+              geocode_each t ~labelled (List.filter_map pending observations))
 
 and geocode_end t =
   let again = !(t.geocode_run) in
@@ -119,44 +144,139 @@ and geocode_end t =
   | Geocoding_again -> geocode_pending t
   | Idle | Geocoding -> ()
 
-and geocode_each t = function
+and geocode_each t ~labelled = function
   | [] -> geocode_end t
-  | _ :: _ when not (online t) -> geocode_end t
   | ((o : Herbier_domain.Observation.t), (p : Places.point)) :: rest ->
       let id = Observation_id.to_string o.id in
-      Fut.await (Herbier_geo.Geocoder.reverse p) (function
-        | Error e ->
-            (* A transient error leaves the observation to the next
-               trigger; any other would fail the same way again. *)
-            (match Herbier_geo.Geocoder.transient e with
-            | true -> ()
-            | false -> mark_tried t o p);
-            geocode_error
-              ["geocode:"; id; Herbier_geo.Geocoder.error_to_string e];
-            geocode_end t
-        | Ok None ->
-            mark_tried t o p;
-            log ["geocode:"; id; "no place"];
-            geocode_each t rest
-        | Ok (Some name) ->
-            let edit =
-              Observations.set_place_derived o.id ~lat:p.lat ~lon:p.lon name
-                ~at:(Ptime_clock.now ())
-            in
-            Fut.await (commit t [edit]) (function
+      (* A point already asked at this position keeps its own-place lookup
+         (free, and a place labelled since may name it) but its remote
+         sources are not asked again until a source is turned on. *)
+      let sources =
+        match tried t o p with
+        | true -> Place_name.none
+        | false -> React.S.value (State.place_sources t.state)
+      in
+      let online = online t in
+      let asked = Place_name.any_online sources && online in
+      let allow (r : Herbier_geo.Geocode.request) =
+        Place_name.allows
+          (React.S.value (State.place_sources t.state))
+          r.provider
+      in
+      Fut.await
+        (Herbier_geo.Geocoder.run ~allow
+           (Place_name.resolve ~sources ~online ~labelled p))
+        (function
+          | Error (Herbier_geo.Geocoder.Refused _) ->
+              (* Its source was turned off while the request waited: not a
+                 miss, so the point is asked again if it comes back on. *)
+              log ["geocode:"; id; "refused"];
+              geocode_each t ~labelled rest
+          | Error e ->
+              (* A transient error leaves the observation to the next
+                 trigger; any other would fail the same way again. *)
+              (match Herbier_geo.Geocoder.transient e with
+              | true -> ()
+              | false -> mark_tried t o p);
+              log_error ["geocode:"; id; Herbier_geo.Geocoder.error_to_string e];
+              geocode_end t
+          | Ok Place_name.Deferred -> geocode_each t ~labelled rest
+          | Ok Place_name.Unknown ->
+              (match asked with
+              | true ->
+                  mark_tried t o p;
+                  log ["geocode:"; id; "unknown"]
+              | false -> ());
+              geocode_each t ~labelled rest
+          | Ok (Place_name.Named name) -> (
+              let edit =
+                Observations.set_place_derived o.id ~lat:p.lat ~lon:p.lon name
+                  ~at:(Ptime_clock.now ())
+              in
+              Fut.await (commit t [edit]) @@ function
               | Error e ->
                   mark_tried t o p;
-                  geocode_error ["geocode: save"; id; Db.error_to_string e];
+                  log_error ["geocode: save"; id; Db.error_to_string e];
                   geocode_end t
               | Ok 0 ->
                   (* Moved, named or deleted meanwhile: nothing to retry at
                      this position. *)
                   mark_tried t o p;
                   log ["geocode:"; id; "unchanged"];
-                  geocode_each t rest
+                  geocode_each t ~labelled rest
               | Ok (_ : int) ->
                   log ["geocode:"; id; "named"];
-                  geocode_each t rest))
+                  geocode_each t ~labelled rest))
+
+let settings_key = function
+  | Place_name.Ign_online -> Herbier_store.Settings.Place_source_ign_online
+  | Place_name.Photon_online ->
+      Herbier_store.Settings.Place_source_photon_online
+
+let place_error t = t.place_error
+
+let place_error_text source ~shown ~stored =
+  let name = Place_name.label source in
+  match (shown, stored) with
+  | false, true ->
+      Printf.sprintf
+        "« %s » : réglage non enregistré. Désactivé jusqu’à la fermeture \
+         d’Herbier, il sera de nouveau actif au prochain démarrage. Réessayez."
+        name
+  | true, _ | false, false ->
+      Printf.sprintf "« %s » : réglage non enregistré. Réessayez." name
+
+let set_place_source t source value =
+  let show v =
+    State.set_place_sources t.state
+      (Place_name.set (React.S.value (State.place_sources t.state)) source v)
+  in
+  incr t.place_writes;
+  let mine = !(t.place_writes) in
+  let others =
+    List.filter
+      (fun (s, _) -> not (Place_name.equal_source s source))
+      !(t.place_latest)
+  in
+  t.place_latest := (source, mine) :: others;
+  let latest () =
+    List.exists
+      (fun (s, n) -> Place_name.equal_source s source && Int.equal n mine)
+      !(t.place_latest)
+  in
+  show value;
+  Fut.await
+    (Db.write t.db (Herbier_store.Settings.set (settings_key source) value))
+    (function
+      | Error e -> (
+          log_error
+            [
+              "réglages: noms de lieux";
+              Place_name.label source;
+              Db.error_to_string e;
+            ];
+          match latest () with
+          | false -> ()
+          | true ->
+              (* A failed opt-out stays off for the session: falling back to
+                 the stored "on" would send positions the user refused. *)
+              let stored = Place_name.enabled !(t.place_stored) source in
+              let shown = value && stored in
+              show shown;
+              t.place_error_source := Some source;
+              t.set_place_error (Some (place_error_text source ~shown ~stored)))
+      | Ok (_ : int) -> (
+          t.place_stored := Place_name.set !(t.place_stored) source value;
+          (match (latest (), !(t.place_error_source)) with
+          | true, Some s when Place_name.equal_source s source ->
+              t.place_error_source := None;
+              t.set_place_error None
+          | _ -> ());
+          match value with
+          | true ->
+              t.geocode_tried := [];
+              geocode_pending t
+          | false -> ()))
 
 let save t edits =
   let r = commit t edits in

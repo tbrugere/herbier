@@ -555,9 +555,9 @@ let observations_move_clears_accuracy_and_derived () =
         "updated_at is the move's time" true
         (Ptime.equal t2 g.updated_at));
   Alcotest.(check (list string))
-    "Observations.to_geocode lists the moved observation (place_derived is \
-     null again)"
-    [uuid 0x31]
+    "Observations.to_geocode leaves the moved observation out: the label it \
+     kept names it"
+    []
     (List.map
        (fun (r : Observation.t) -> Ids.Observation_id.to_string r.id)
        (Cli.all db Observations.to_geocode))

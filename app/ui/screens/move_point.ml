@@ -23,6 +23,7 @@ type map_state = Creating | Ready of Geo_map.t | Failed | Released
 type search =
   | Idle
   | Searching
+  | Search_disabled
   | Offline
   | Search_failed
   | Network_failed
@@ -67,6 +68,9 @@ let result_row pick (p : Geocode.place) =
 let search_view pick = function
   | Idle -> (El.div [], [])
   | Searching -> search_line "Recherche…"
+  | Search_disabled ->
+      search_line
+        "Activez « Photon en ligne » dans Réglages pour chercher un lieu."
   | Offline -> search_line "Hors ligne : la recherche attend le réseau."
   | Search_failed -> search_line "Recherche impossible"
   | Network_failed -> search_line "Réseau indisponible, réessayez."
@@ -152,18 +156,31 @@ let render app (o : Observation.t) =
     let text = React.S.value field.value in
     incr search_seq;
     let mine = !search_seq in
-    match (String.trim text, (React.S.value (State.network state)).online) with
-    | "", _ -> set_search Idle
-    | _, false -> set_search Offline
-    | _, true ->
+    (* The query and the map centre go to Photon: only with its source on. *)
+    match
+      ( String.trim text,
+        Herbier_geo.Place_name.can_search
+          (React.S.value (State.place_sources state)),
+        (React.S.value (State.network state)).online )
+    with
+    | "", _, _ -> set_search Idle
+    | _, false, _ -> set_search Search_disabled
+    | _, true, false -> set_search Offline
+    | _, true, true ->
         set_search Searching;
-        Fut.await (Geocoder.search ~near:(React.S.value camera).center text)
+        let allow (_ : Geocode.request) =
+          Herbier_geo.Place_name.can_search
+            (React.S.value (State.place_sources state))
+        in
+        Fut.await
+          (Geocoder.search ~allow ~near:(React.S.value camera).center text)
           (fun reply ->
             (match reply with
             | Error e -> log_error "recherche" (Geocoder.error_to_string e)
             | Ok (_ : Geocode.place list) -> ());
             match (alive () && mine = !search_seq, reply) with
             | false, _ -> ()
+            | true, Error (Geocoder.Refused _) -> set_search Search_disabled
             | true, Error e when Geocoder.transient e ->
                 set_search Network_failed
             | true, Error _ -> set_search Search_failed

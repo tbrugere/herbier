@@ -119,7 +119,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 | 4j Lien intercepté | M4 | — |
 | 4k À identifier → lier | M2 (collection) | M4 reference "+" |
 | 4l Tags | M2 | M3 cover photos |
-| 4m Réglages | M2 (switches) | M6 account, M7 upload queue, M8 pause/free; v2 offline data |
+| 4m Réglages | M2 (switches) | M5 « Noms de lieux » (M5.57 source switches, M5.58 IGN download), M6 account, M7 upload queue, M8 pause/free; v2 offline data |
 | 4n Premier lancement | M2 | M8 illustration |
 | 5a Modifier la fiche | M2 | M3 cover row, M4 reference links |
 | 5b Déplacer le point | M5 | — |

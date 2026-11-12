@@ -8,9 +8,10 @@ val group : date:('a -> Ptime.date) -> 'a list -> 'a t list
     (the store gives observations newest first, so days come newest first). *)
 
 val place : Herbier_domain.Observation.t list -> string option
-(** The day's place (handoff 4c), by {!Herbier_domain.Places.label}: its label,
-    or the mean position as ["48.0633, 7.0081"]. [None] when the day has no
-    label and no position. *)
+(** The day's place (handoff 4c), by {!Herbier_domain.Places.label}: its label
+    (user-given or derived), or « Lieu inconnu »
+    ({!Herbier_domain.Places.unknown_name}) when the day has a position but no
+    name. [None] when the day has no label and no position. *)
 
 val plant_name :
   (Herbier_domain.Ids.Plant_id.t * string) list ->

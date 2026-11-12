@@ -152,6 +152,21 @@ let url_tests =
           "landes"
           "https://data.geopf.fr/geocodage/reverse?index=poi&lon=-0.85000&lat=44.25000&limit=1&category=commune&searchgeom=%7B%22type%22%3A%22Point%22%2C%22coordinates%22%3A%5B-0.85000%2C44.25000%5D%7D"
           (Geocode.geoplateforme_commune landes).url );
+    ( "request_to_string is the provider and the whole URL; request_endpoint \
+       drops the query",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "to_string"
+          "photon https://photon.komoot.io/api?q=lac&lang=fr&limit=8"
+          (Geocode.request_to_string (Geocode.photon_search "lac"));
+        Alcotest.(check string)
+          "endpoint, photon" "photon https://photon.komoot.io/reverse"
+          (Geocode.request_endpoint (Geocode.photon_reverse schlucht));
+        Alcotest.(check string)
+          "endpoint, geoplateforme"
+          "geoplateforme https://data.geopf.fr/geocodage/reverse"
+          (Geocode.request_endpoint (Geocode.geoplateforme_commune landes)) );
     ( "photon_search: default limit 8, no near",
       `Quick,
       fun () ->
@@ -663,7 +678,8 @@ let json_of_string_tests =
         | Ok _ -> Alcotest.fail "expected Error, got Ok" );
   ]
 
-(* ---------- the reverse program, run against the recorded fixtures ---------- *)
+(* ---------- the reverse_ign / reverse_photon programs, against the
+   recorded fixtures ---------- *)
 
 (* The result and every request the program issued. With
    [answer_from_fixtures], each is answered by looking up its exact URL among
@@ -689,13 +705,14 @@ let answer_from_fixtures (req : Geocode.request) =
   | Some (file, _) -> json_fixture file
   | None -> Alcotest.failf "no recorded fixture matches url %s" req.url
 
-let reverse_tests =
+let reverse_ign_tests =
   [
     ( "Schlucht: found at the lieu-dit step, no other request made",
       `Quick,
       fun () ->
         let result, reqs =
-          run_program ~answer:answer_from_fixtures (Geocode.reverse schlucht)
+          run_program ~answer:answer_from_fixtures
+            (Geocode.reverse_ign schlucht)
         in
         Alcotest.(check name_opt_result)
           "result" (Ok (Some "Près du Rain des Aulx")) result;
@@ -707,7 +724,7 @@ let reverse_tests =
       `Quick,
       fun () ->
         let result, reqs =
-          run_program ~answer:answer_from_fixtures (Geocode.reverse landes)
+          run_program ~answer:answer_from_fixtures (Geocode.reverse_ign landes)
         in
         Alcotest.(check name_opt_result)
           "result" (Ok (Some "Près de Commensacq")) result;
@@ -718,56 +735,51 @@ let reverse_tests =
             request_line (Geocode.geoplateforme_commune landes);
           ]
           (List.map request_line reqs) );
-    ( "Lausanne: in the coarse box but outside France, falls through to Photon",
+    ( "Lausanne: in the coarse box, lieu-dit and commune both empty",
       `Quick,
       fun () ->
         let result, reqs =
-          run_program ~answer:answer_from_fixtures (Geocode.reverse lausanne)
-        in
-        Alcotest.(check name_opt_result)
-          "result" (Ok (Some "Près de Lausanne")) result;
-        Alcotest.(check (list string))
-          "requests"
-          [
-            request_line (Geocode.geoplateforme_lieu_dit lausanne);
-            request_line (Geocode.geoplateforme_commune lausanne);
-            request_line (Geocode.photon_reverse lausanne);
-          ]
-          (List.map request_line reqs) );
-    ( "Kew: outside the box, only Photon is asked",
-      `Quick,
-      fun () ->
-        let result, reqs =
-          run_program ~answer:answer_from_fixtures (Geocode.reverse kew)
-        in
-        Alcotest.(check name_opt_result)
-          "result" (Ok (Some "Près de Kew")) result;
-        Alcotest.(check (list string))
-          "requests"
-          [request_line (Geocode.photon_reverse kew)]
-          (List.map request_line reqs) );
-    ( "Atlantic: in the box, in France's neighbourhood, all three empty",
-      `Quick,
-      fun () ->
-        let result, reqs =
-          run_program ~answer:answer_from_fixtures (Geocode.reverse atlantic)
+          run_program ~answer:answer_from_fixtures
+            (Geocode.reverse_ign lausanne)
         in
         Alcotest.(check name_opt_result) "result" (Ok None) result;
         Alcotest.(check (list string))
-          "requests"
+          "requests, no Photon"
+          [
+            request_line (Geocode.geoplateforme_lieu_dit lausanne);
+            request_line (Geocode.geoplateforme_commune lausanne);
+          ]
+          (List.map request_line reqs) );
+    ( "Atlantic: in the box, lieu-dit and commune both empty",
+      `Quick,
+      fun () ->
+        let result, reqs =
+          run_program ~answer:answer_from_fixtures
+            (Geocode.reverse_ign atlantic)
+        in
+        Alcotest.(check name_opt_result) "result" (Ok None) result;
+        Alcotest.(check (list string))
+          "requests, no Photon"
           [
             request_line (Geocode.geoplateforme_lieu_dit atlantic);
             request_line (Geocode.geoplateforme_commune atlantic);
-            request_line (Geocode.photon_reverse atlantic);
           ]
           (List.map request_line reqs) );
-    ( "a payload the decoder rejects stops the program with no further request",
+    ( "Kew: outside the box, no request at all",
+      `Quick,
+      fun () ->
+        let result, reqs =
+          run_program ~answer:answer_from_fixtures (Geocode.reverse_ign kew)
+        in
+        Alcotest.(check name_opt_result) "result" (Ok None) result;
+        Alcotest.(check int) "no request" 0 (List.length reqs) );
+    ( "a payload rejected at the lieu-dit step stops with no further request",
       `Quick,
       fun () ->
         let result, reqs =
           run_program
             ~answer:(fun _ -> `Assoc [("features", `Int 3)])
-            (Geocode.reverse schlucht)
+            (Geocode.reverse_ign schlucht)
         in
         Alcotest.(check name_opt_result)
           "result"
@@ -775,7 +787,7 @@ let reverse_tests =
           result;
         Alcotest.(check int) "exactly one request was made" 1 (List.length reqs)
     );
-    ( "a payload rejected at the commune step stops before Photon",
+    ( "a payload rejected at the commune step is an error, two requests",
       `Quick,
       fun () ->
         let lieu_dit = Geocode.geoplateforme_lieu_dit landes in
@@ -785,7 +797,7 @@ let reverse_tests =
               match Geocode.equal_request req lieu_dit with
               | true -> answer_from_fixtures req
               | false -> `Assoc [("features", `Int 3)])
-            (Geocode.reverse landes)
+            (Geocode.reverse_ign landes)
         in
         Alcotest.(check name_opt_result)
           "result"
@@ -798,13 +810,72 @@ let reverse_tests =
             request_line (Geocode.geoplateforme_commune landes);
           ]
           (List.map request_line reqs) );
-    ( "a payload rejected at the Photon step is an error, not None",
+  ]
+
+let reverse_photon_tests =
+  [
+    ( "Kew: one request, found",
+      `Quick,
+      fun () ->
+        let result, reqs =
+          run_program ~answer:answer_from_fixtures (Geocode.reverse_photon kew)
+        in
+        Alcotest.(check name_opt_result)
+          "result" (Ok (Some "Près de Kew")) result;
+        Alcotest.(check (list string))
+          "requests"
+          [request_line (Geocode.photon_reverse kew)]
+          (List.map request_line reqs) );
+    ( "Lausanne: found, no Géoplateforme request at all",
+      `Quick,
+      fun () ->
+        let result, reqs =
+          run_program ~answer:answer_from_fixtures
+            (Geocode.reverse_photon lausanne)
+        in
+        Alcotest.(check name_opt_result)
+          "result" (Ok (Some "Près de Lausanne")) result;
+        Alcotest.(check (list string))
+          "requests"
+          [request_line (Geocode.photon_reverse lausanne)]
+          (List.map request_line reqs) );
+    ( "Atlantic: no feature, one request",
+      `Quick,
+      fun () ->
+        let result, reqs =
+          run_program ~answer:answer_from_fixtures
+            (Geocode.reverse_photon atlantic)
+        in
+        Alcotest.(check name_opt_result) "result" (Ok None) result;
+        Alcotest.(check int) "one request" 1 (List.length reqs) );
+    ( "Schlucht: the expected name is computed from the fixture through the \
+       decoder and near, never hand-written",
+      `Quick,
+      fun () ->
+        let expected =
+          match
+            Geocode.photon_name (json_fixture "photon_reverse_schlucht.json")
+          with
+          | Error e -> Error e
+          | Ok None -> Ok None
+          | Ok (Some name) -> Ok (Geocode.near name)
+        in
+        let result, reqs =
+          run_program ~answer:answer_from_fixtures
+            (Geocode.reverse_photon schlucht)
+        in
+        Alcotest.(check name_opt_result) "result" expected result;
+        Alcotest.(check (list string))
+          "one request, provider Photon"
+          [request_line (Geocode.photon_reverse schlucht)]
+          (List.map request_line reqs) );
+    ( "a bad payload is an error, one request",
       `Quick,
       fun () ->
         let result, reqs =
           run_program
             ~answer:(fun _ -> `Assoc [("features", `Int 3)])
-            (Geocode.reverse kew)
+            (Geocode.reverse_photon kew)
         in
         Alcotest.(check name_opt_result)
           "result"
@@ -814,6 +885,82 @@ let reverse_tests =
           "requests"
           [request_line (Geocode.photon_reverse kew)]
           (List.map request_line reqs) );
+  ]
+
+(* ---------- map, or_else ---------- *)
+
+let map_tests =
+  [
+    ( "map (Done x) = Done (f x)",
+      `Quick,
+      fun () ->
+        match Geocode.map (fun n -> n + 1) (Geocode.Done 41) with
+        | Geocode.Done 42 -> ()
+        | Geocode.Done n -> Alcotest.failf "expected Done 42, got Done %d" n
+        | Geocode.Get _ -> Alcotest.fail "expected Done, got Get" );
+    ( "map over a program with requests keeps the same requests, in order, and \
+       applies f to the result",
+      `Quick,
+      fun () ->
+        let base = Geocode.reverse_ign landes in
+        let mapped = Geocode.map (Result.map Option.is_some) base in
+        let base_result, base_reqs =
+          run_program ~answer:answer_from_fixtures base
+        in
+        let mapped_result, mapped_reqs =
+          run_program ~answer:answer_from_fixtures mapped
+        in
+        Alcotest.(check (list string))
+          "same requests, same order"
+          (List.map request_line base_reqs)
+          (List.map request_line mapped_reqs);
+        Alcotest.(check (result bool error))
+          "mapped result is f applied to the base result"
+          (Result.map Option.is_some base_result)
+          mapped_result );
+  ]
+
+let or_else_tests =
+  [
+    ( "Done (Ok None): next is run",
+      `Quick,
+      fun () ->
+        let next_called = ref false in
+        let next () =
+          next_called := true;
+          Geocode.Done (Ok (Some "next"))
+        in
+        match Geocode.or_else (Geocode.Done (Ok None)) next with
+        | Geocode.Done (Ok (Some "next")) ->
+            Alcotest.(check bool) "next was called" true !next_called
+        | Geocode.Done (Ok None) -> Alcotest.fail "next's result was dropped"
+        | Geocode.Done (Error _) -> Alcotest.fail "unexpected error"
+        | Geocode.Get _ -> Alcotest.fail "unexpected Get"
+        | Geocode.Done (Ok (Some s)) ->
+            Alcotest.failf "expected \"next\", got %S" s );
+    ( "Done (Ok (Some _)): next is never called, no request of next is issued",
+      `Quick,
+      fun () ->
+        let next () : (string option, Geocode.error) result Geocode.program =
+          Alcotest.fail "next must not be called"
+        in
+        match Geocode.or_else (Geocode.Done (Ok (Some "found"))) next with
+        | Geocode.Done (Ok (Some "found")) -> ()
+        | Geocode.Done (Ok _) -> Alcotest.fail "result changed"
+        | Geocode.Done (Error _) -> Alcotest.fail "unexpected error"
+        | Geocode.Get _ -> Alcotest.fail "unexpected Get" );
+    ( "Done (Error _): next is never called",
+      `Quick,
+      fun () ->
+        let err = Geocode.Unexpected {path = "/x"; expected = "y"} in
+        let next () : (string option, Geocode.error) result Geocode.program =
+          Alcotest.fail "next must not be called"
+        in
+        match Geocode.or_else (Geocode.Done (Error err)) next with
+        | Geocode.Done (Error e) ->
+            Alcotest.(check bool) "same error" true (Geocode.equal_error e err)
+        | Geocode.Done (Ok _) -> Alcotest.fail "expected Error"
+        | Geocode.Get _ -> Alcotest.fail "unexpected Get" );
   ]
 
 let () =
@@ -827,5 +974,8 @@ let () =
       ("geoplateforme_name", geoplateforme_name_tests);
       ("photon_places", photon_places_tests);
       ("json_of_string", json_of_string_tests);
-      ("reverse", reverse_tests);
+      ("reverse_ign", reverse_ign_tests);
+      ("reverse_photon", reverse_photon_tests);
+      ("map", map_tests);
+      ("or_else", or_else_tests);
     ]

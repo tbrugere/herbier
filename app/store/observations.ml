@@ -58,7 +58,13 @@ let between ~from ~until =
 let to_geocode =
   query
     " and lat is not null and lon is not null and (place_derived is null or \
-     trim(place_derived) = '')"
+     trim(place_derived) = '') and trim(coalesce(place_label, '')) = ''"
+    []
+
+let labelled =
+  query
+    " and lat is not null and lon is not null and trim(coalesce(place_label, \
+     '')) <> ''"
     []
 
 let input (o : Observation.t) : (O.t, [`Full]) Postgrest.Input.t =

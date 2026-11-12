@@ -744,6 +744,45 @@ let point_text () =
     "four decimals, comma-separated" "48.0633, -7.0081"
     (Places.point_text {lat = 48.06331; lon = -7.00812})
 
+(* unknown_name, display_name *)
+
+let unknown_name_literal () =
+  Alcotest.(check string) "unknown_name" "Lieu inconnu" Places.unknown_name
+
+let display_name_label_wins_trimmed () =
+  Alcotest.(check (option string))
+    "a non-blank label wins over a non-blank derived name, both trimmed"
+    (Some "Col")
+    (Places.display_name
+       (at_o ~label:"  Col  " ~derived:"Près de X" ~id:1 ~at:0 ()))
+
+let display_name_derived_only () =
+  Alcotest.(check (option string))
+    "only a derived name: the derived name, trimmed" (Some "Près de X")
+    (Places.display_name (at_o ~derived:"  Près de X  " ~id:1 ~at:0 ()))
+
+let display_name_unnamed_positioned () =
+  Alcotest.(check (option string))
+    "neither name, a position: unknown_name" (Some Places.unknown_name)
+    (Places.display_name (at_o ~id:1 ~at:0 ()))
+
+let display_name_unnamed_unpositioned () =
+  Alcotest.(check (option string))
+    "neither name, no position: None" None
+    (Places.display_name (obs ~id:1 ~at:0 None))
+
+let display_name_nan_position () =
+  Alcotest.(check (option string))
+    "neither name, a nan latitude: still unknown_name"
+    (Some Places.unknown_name)
+    (Places.display_name (obs ~id:1 ~at:0 (Some {o with lat = Float.nan})))
+
+let display_name_blank_label_and_derived_positioned () =
+  Alcotest.(check (option string))
+    "blank label, blank derived, a position: unknown_name"
+    (Some Places.unknown_name)
+    (Places.display_name (at_o ~label:"  " ~derived:"  " ~id:1 ~at:0 ()))
+
 let tests =
   [
     ( "equal_point compares both coordinates with Float.equal",
@@ -854,4 +893,23 @@ let tests =
       rename_result_names_the_place );
     ("place_name", `Quick, place_name);
     ("point_text", `Quick, point_text);
+    ("unknown_name is \"Lieu inconnu\"", `Quick, unknown_name_literal);
+    ( "display_name: a label wins over a derived name, both trimmed",
+      `Quick,
+      display_name_label_wins_trimmed );
+    ( "display_name: only a derived name, trimmed",
+      `Quick,
+      display_name_derived_only );
+    ( "display_name: no name but a position gives unknown_name",
+      `Quick,
+      display_name_unnamed_positioned );
+    ( "display_name: no name and a nan position gives unknown_name",
+      `Quick,
+      display_name_nan_position );
+    ( "display_name: no name and no position gives None",
+      `Quick,
+      display_name_unnamed_unpositioned );
+    ( "display_name: blank label and derived with a position gives unknown_name",
+      `Quick,
+      display_name_blank_label_and_derived_positioned );
   ]

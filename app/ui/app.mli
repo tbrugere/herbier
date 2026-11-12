@@ -114,18 +114,59 @@ val fetching : t -> Herbier_domain.Ids.Plant_id.t list React.signal
 (** {1 Place names} *)
 
 val geocode_pending : t -> unit
-(** Fills [place_derived] in the background (architecture §8): when
-    {!State.network} says online and no run is going, reads
-    [Observations.to_geocode], drops the observations already tried at their
-    current position in this session, and for each in order: [Geocoder.reverse]
-    of its position → [Ok (Some s)] → one
-    [Observations.set_place_derived ~at:now] commit ({!saved} fires when it
-    changed the row; a commit that changed nothing marks it tried; a failed
-    commit is logged, marks it tried and stops the run); [Ok None] → nothing
-    written, the observation is not tried again this session (the next app start
-    asks again); [Error e] → logged ([geocode: …] on the console) and the run
-    stops (the rest wait for the next trigger); the observation is not tried
-    again this session unless the error is [Geocoder.transient]. Triggers: the
-    app's start and the window's [online] event (main.ml), and {!save} after a
-    commit that changed rows. A call while a run is going makes that run read
-    the list again when it ends. Never raises; nothing awaits it. *)
+(** Fills [place_derived] in the background (architecture §8), online or not.
+    When no run is going: reads [Observations.to_geocode] then
+    [Observations.labelled] (a read error is logged, [geocode: read …], and ends
+    the run), and for each pending observation in order (newest first), reading
+    {!State.place_sources} and {!State.network} at that moment: runs
+    [Place_name.resolve ~sources ~online ~labelled p] through [Geocoder.run],
+    where [sources] is [Place_name.none] for an observation already tried at its
+    current position this session (its own-place lookup still runs, its remote
+    sources are not asked again);
+    - [Ok (Named s)] → one [Observations.set_place_derived ~at:now] commit
+      ({!saved} fires when it changed the row; unchanged → marked tried; a
+      failed commit is logged, marks it tried and stops the run);
+    - [Ok Unknown] → nothing written; when some online source was asked (i.e.
+      [sources] had one on and [online]), marked tried and logged
+      [geocode: <id> unknown] (a point no source was asked for logs nothing:
+      with every source off that is every unnamed point, at every trigger);
+    - [Ok Deferred] → nothing written, not marked; next observation;
+    - [Error (Geocoder.Refused _)] (the request's source was turned off while it
+      waited: [~allow] reads {!State.place_sources} when each request leaves the
+      queue) → logged, not marked; next observation;
+    - [Error e] → logged, the run stops; marked tried unless
+      [Geocoder.transient e].
+
+    Triggers: the app's start and the window's [online] event (main.ml), {!save}
+    after a commit that changed rows, and {!set_place_source} turning a source
+    on. A call during a run makes it read the lists again when it ends. No
+    remote request is ever made for a source that is off. Never raises; nothing
+    awaits it. *)
+
+val settings_key :
+  Herbier_geo.Place_name.source -> bool Herbier_store.Settings.key
+(** The local setting of each source: [Place_source_ign_online],
+    [Place_source_photon_online]. main.ml reads them at startup through it. *)
+
+val set_place_source : t -> Herbier_geo.Place_name.source -> bool -> unit
+(** A 4m switch: sets {!State.place_sources} at once (so a second tap while the
+    write runs flips it back), then [Db.write] of its {!settings_key}.
+    - Write ok → remembered as stored; clears {!place_error} when it is the
+      source's latest write and the error shown is this source's (another
+      source's success keeps it); when the value is [true], the session's tried
+      list is cleared (a newly enabled source asks again for points tried with
+      other sources) and {!geocode_pending} runs.
+    - Write error → logged ([réglages: noms de lieux …]); when it is the
+      source's latest write (an earlier one failing while a later one is queued
+      changes nothing), State takes the stored value back, except that a failed
+      [false] stays [false] for the session (an opt-out never fails open), and
+      {!place_error} says so.
+
+    Never raises. *)
+
+val place_error : t -> string option React.signal
+(** The last failed 4m source write, for 4m: « « <label> » : réglage non
+    enregistré. Réessayez. », or, when a failed opt-out leaves the source off
+    for the session while the stored value is still on, a text saying it will be
+    on again at the next start. [None] after that source's next successful
+    latest write; another source's success keeps it. A primitive signal. *)

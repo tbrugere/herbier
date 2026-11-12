@@ -27,10 +27,16 @@ val between : from:Ptime.t -> until:Ptime.t -> Observation.t Stmt.query
     passes the UTC instants of local midnight. Empty when [until <= from]. *)
 
 val to_geocode : Observation.t Stmt.query
-(** Live observations with [lat] and [lon] set and [place_derived] null or blank
-    after trimming ([trim(place_derived) = '']); same order as every list here
-    (the newest, usually the one just recorded, first). Whether [place_label] is
-    set does not matter. *)
+(** Live observations with [lat] and [lon] set, [place_derived] null or blank
+    after trimming ([trim(place_derived) = '']) and [place_label] null or blank
+    (a labelled observation is named by its label, and never reaches a remote
+    source; clearing the label makes it pending again); same order as every list
+    here (the newest, usually the one just recorded, first). *)
+
+val labelled : Observation.t Stmt.query
+(** The user's own places: live observations with [lat] and [lon] set and
+    [trim(place_label) <> ''] (null and blank labels excluded); same order as
+    every list here. *)
 
 val input : Observation.t -> (Tables.Observations.t, [`Full]) Postgrest.Input.t
 (** Every column of [Tables.Observations], in its declaration order;

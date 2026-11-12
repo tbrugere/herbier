@@ -47,14 +47,22 @@ val no_map_view : map_view
 
 type t
 
-val create : network:network -> account:account -> t
-(** Filters start empty; [network] and [account] are what the platform and the
-    settings say at startup. *)
+val create :
+  network:network ->
+  account:account ->
+  place_sources:Herbier_geo.Place_name.sources ->
+  t
+(** Filters start empty; [network], [account] and [place_sources] are what the
+    platform and the settings say at startup. *)
 
 val filters : t -> filters React.signal
 val network : t -> network React.signal
 val account : t -> account React.signal
 val map_view : t -> map_view React.signal
+
+val place_sources : t -> Herbier_geo.Place_name.sources React.signal
+(** The 4m « Noms de lieux » switches; [eq] = [Place_name.equal_sources].
+    Written through [App.set_place_source]. *)
 
 val set_filters : t -> ?step:React.step -> filters -> unit
 (** [step] groups this change with other setters in one update step (style guide
@@ -63,6 +71,9 @@ val set_filters : t -> ?step:React.step -> filters -> unit
 val set_network : t -> ?step:React.step -> network -> unit
 val set_account : t -> ?step:React.step -> account -> unit
 val set_map_view : t -> ?step:React.step -> map_view -> unit
+
+val set_place_sources :
+  t -> ?step:React.step -> Herbier_geo.Place_name.sources -> unit
 
 val focus_map : t -> Herbier_geo.Features.bounds -> unit
 (** Asks 4b to frame the bounds at its next showing: the camera unchanged,

@@ -16,7 +16,8 @@ val snaps : available:float -> top:float -> float list
     ascending values, also for negative values or [nan] (treated as [0.]). *)
 
 val title : Herbier_domain.Places.cluster -> string
-(** {!Journal_day.place} of the members, or ["Lieu"] when [None]. *)
+(** {!Journal_day.place} of the members (« Lieu inconnu » for an unnamed place),
+    or ["Lieu"] when [None]. *)
 
 val summary : Observation.t list -> string
 (** The shown members: ["rayon 500 m · 6 observations · 4 plantes"] (distinct
