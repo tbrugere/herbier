@@ -462,8 +462,9 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   `pmtiles-extract.sh` (region extract, v2), `release.sh` (`dune build
   @web`, `cap sync`, `gradle assembleRelease`), `catalog-dump.sh`
   (`supabase/schema/catalog.json` from the local database, §5),
-  `emulator.sh` (headless Android emulator: create the AVD, boot, debug
-  install, open a dev page; skill `.claude/skills/emulator/`) and
+  `emulator.sh` (one shared headless Android emulator: create the AVD,
+  boot, a lock so device checks take turns, debug install, open a dev page;
+  skill `.claude/skills/emulator/`) and
   `webview.mjs` (a dependency-free DevTools Protocol client for the app's
   WebView: eval, page text, screenshot), `exif-fixture-jpegs.py` (`uv run`:
   the Pillow JPEGs behind `test/fixtures/exifr_pil_*.json`) and

@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # Android emulator and WebView devtools for device checks (dev pages such as
-# #dev/storage) without a phone.
+# #dev/storage) without a phone. One shared emulator (AVD herbier, console
+# port 5554) for every agent and worktree; device checks take turns with
+# lock and unlock.
 #
+#   scripts/emulator.sh lock [label]     wait until this caller holds the device lock (prints the
+#                                        holder while waiting); a lock older than 90 min is stale
+#                                        and taken over with a warning
+#   scripts/emulator.sh unlock [label]   release the lock (with a label: only if that label holds it)
+#   scripts/emulator.sh lock-status      print the holder, or "free"
 #   scripts/emulator.sh start            create the AVD if missing, boot it headless, wait for boot
 #   scripts/emulator.sh stop             remove the devtools forward, kill the emulator
 #   scripts/emulator.sh install          dune build @web, cap sync, assembleDebug, adb install
@@ -27,14 +34,14 @@
 # (java_home -v 21), HERBIER_AVD (herbier), HERBIER_AVD_IMAGE
 # (system-images;android-35;google_apis;arm64-v8a), HERBIER_AVD_DEVICE
 # (pixel_8), HERBIER_DEVTOOLS_PORT (9222), HERBIER_EMULATOR_LOG
-# ($TMPDIR/herbier-emulator.log), HERBIER_EMULATOR_PORT (unset: the emulator
-# picks its console port and the script drives the first emulator adb lists).
+# ($TMPDIR/herbier-emulator.log), HERBIER_EMULATOR_PORT (5554),
+# HERBIER_EMULATOR_GPU (host: the -gpu mode; see the skill), HERBIER_LOCK_DIR
+# (~/.cache/herbier/emulator.lock), HERBIER_LOCK_TIMEOUT (0: wait forever;
+# else seconds before lock gives up, exit 1).
 #
-# Two checks at once (another worktree already on the first emulator): give
-# the second its own AVD, console port and devtools port, e.g.
-#   HERBIER_AVD=herbier-b HERBIER_EMULATOR_PORT=5560 HERBIER_DEVTOOLS_PORT=9224 \
-#     HERBIER_EMULATOR_LOG=$TMPDIR/herbier-b.log scripts/emulator.sh start
-# then the same variables on every later call.
+# Each emulator costs about 5 GB of host memory: start refuses to boot while
+# another emulator runs, unless HERBIER_ALLOW_SECOND_EMULATOR=1 (with its own
+# HERBIER_AVD, HERBIER_EMULATOR_PORT and HERBIER_DEVTOOLS_PORT on every call).
 set -euo pipefail
 
 unset CDPATH
@@ -61,7 +68,10 @@ image="${HERBIER_AVD_IMAGE:-system-images;android-35;google_apis;arm64-v8a}"
 device="${HERBIER_AVD_DEVICE:-pixel_8}"
 port="${HERBIER_DEVTOOLS_PORT:-9222}"
 log="${HERBIER_EMULATOR_LOG:-${TMPDIR:-/tmp}/herbier-emulator.log}"
-console_port="${HERBIER_EMULATOR_PORT:-}"
+console_port="${HERBIER_EMULATOR_PORT:-5554}"
+gpu="${HERBIER_EMULATOR_GPU:-host}"
+lock_dir="${HERBIER_LOCK_DIR:-$HOME/.cache/herbier/emulator.lock}"
+lock_stale_s=$((90 * 60))
 
 die() { echo "emulator.sh: $*" >&2; exit 1; }
 
@@ -75,11 +85,12 @@ app_id() {
 }
 
 serial() {
-  if [[ -n "$console_port" ]]; then
-    adb devices | awk -v s="emulator-$console_port" '$1 == s && $2 == "device" {print $1; exit}'
-  else
-    adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/ {print $1; exit}'
-  fi
+  adb devices | awk -v s="emulator-$console_port" '$1 == s && $2 == "device" {print $1; exit}'
+}
+
+# Emulators other than ours, as adb lists them.
+other_emulators() {
+  adb devices | awk -v s="emulator-$console_port" '$1 ~ /^emulator-/ && $1 != s {print $1}'
 }
 
 booted() {
@@ -103,16 +114,16 @@ cmd_start() {
     echo "already running: $(serial)"
     return
   fi
-  echo "booting $avd (log: $log)"
-  local port_args=()
-  [[ -n "$console_port" ]] && port_args=(-port "$console_port")
-  nohup emulator -avd "$avd" ${port_args[@]+"${port_args[@]}"} -no-window -no-audio \
-    -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect >"$log" 2>&1 &
-  if [[ -n "$console_port" ]]; then
-    adb -s "emulator-$console_port" wait-for-device
-  else
-    adb wait-for-device
+  local others
+  others="$(other_emulators | tr '\n' ' ')"
+  if [[ -n "$others" ]] && [[ "${HERBIER_ALLOW_SECOND_EMULATOR:-}" != 1 ]]; then
+    die "another emulator is running (${others% }): one shared emulator, \
+emulator-$console_port; stop the other, or set HERBIER_ALLOW_SECOND_EMULATOR=1"
   fi
+  echo "booting $avd on emulator-$console_port, -gpu $gpu (log: $log)"
+  nohup emulator -avd "$avd" -port "$console_port" -no-window -no-audio \
+    -no-boot-anim -no-snapshot-save -gpu "$gpu" >"$log" 2>&1 &
+  adb -s "emulator-$console_port" wait-for-device
   local i
   for i in $(seq 1 180); do
     booted && break
@@ -336,6 +347,74 @@ cmd_open() {
   fi
 }
 
+# The device lock: an mkdir'd directory (atomic) holding who took it.
+# Agents call from a fresh shell each time, so the caller's PID is a hint
+# for humans, not a liveness test: only age makes a lock stale.
+lock_info() {
+  local label pid since
+  label="$(cat "$lock_dir/label" 2>/dev/null || echo '?')"
+  pid="$(cat "$lock_dir/pid" 2>/dev/null || echo '?')"
+  since="$(cat "$lock_dir/since" 2>/dev/null || echo 0)"
+  echo "\"$label\" (pid $pid, since $(date -r "$since" '+%H:%M:%S' 2>/dev/null || echo '?'), $(( $(date +%s) - since ))s)"
+}
+
+lock_age() {
+  local since
+  since="$(cat "$lock_dir/since" 2>/dev/null || true)"
+  # A lock dir without its files is one being written: young.
+  [[ -n "$since" ]] || { echo 0; return; }
+  echo $(( $(date +%s) - since ))
+}
+
+cmd_lock() {
+  local label="${1:-${USER:-?}@$(hostname -s)}" timeout="${HERBIER_LOCK_TIMEOUT:-0}"
+  local start next_report=0 waited=0
+  start="$(date +%s)"
+  mkdir -p "$(dirname "$lock_dir")"
+  while ! mkdir "$lock_dir" 2>/dev/null; do
+    if (( $(lock_age) > lock_stale_s )); then
+      # Rename first: of two callers taking over, one mv wins, so the other
+      # cannot remove the lock the winner then makes.
+      local old="$lock_dir.stale.$$"
+      if mv "$lock_dir" "$old" 2>/dev/null; then
+        echo "emulator.sh: warning: taking over a stale lock (> 90 min): $(lock_dir="$old" lock_info)" >&2
+        rm -rf "$old"
+      fi
+      continue
+    fi
+    waited=$(( $(date +%s) - start ))
+    if (( waited >= next_report )); then
+      echo "waiting for the device lock, held by $(lock_info)"
+      next_report=$(( waited + 60 ))
+    fi
+    if (( timeout > 0 && waited >= timeout )); then
+      die "device lock still held after ${timeout}s by $(lock_info)"
+    fi
+    sleep 5
+  done
+  echo "$label" >"$lock_dir/label"
+  echo "$PPID" >"$lock_dir/pid"
+  date +%s >"$lock_dir/since"
+  echo "locked: \"$label\""
+}
+
+cmd_unlock() {
+  local label="${1:-}"
+  if [[ ! -d "$lock_dir" ]]; then
+    echo "not locked"
+    return
+  fi
+  if [[ -n "$label" ]] && [[ "$(cat "$lock_dir/label" 2>/dev/null)" != "$label" ]]; then
+    die "the lock is held by $(lock_info), not \"$label\""
+  fi
+  echo "unlocked $(lock_info)"
+  rm -rf "$lock_dir"
+}
+
+cmd_lock_status() {
+  if [[ -d "$lock_dir" ]]; then echo "held by $(lock_info)"; else echo "free"; fi
+}
+
 cmd_env() {
   cat <<ENV
 export ANDROID_HOME="$ANDROID_HOME"
@@ -345,7 +424,7 @@ export JAVA_HOME="${JAVA_HOME:-}"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:\$PATH"
 ENV
   # Plain adb then targets this emulator too.
-  if [[ -n "$console_port" ]]; then echo "export ANDROID_SERIAL=emulator-$console_port"; fi
+  echo "export ANDROID_SERIAL=emulator-$console_port"
 }
 
 case "${1:-}" in
@@ -359,5 +438,8 @@ case "${1:-}" in
   open) shift; cmd_open "$@" ;;
   webview) shift; webview "$@" ;;
   env) cmd_env ;;
+  lock) shift; cmd_lock "$@" ;;
+  unlock) shift; cmd_unlock "$@" ;;
+  lock-status) cmd_lock_status ;;
   *) sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

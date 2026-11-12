@@ -37,7 +37,8 @@ pushbacks and device checks, then marked ready and merged by you.
   Actions is disabled: `dune build`, `dune test`, `dune build @web`, `dune build @fmt`, plus local
   Supabase `db reset` / `schema-dump.py --check` / `scripts/catalog-dump.sh --check` / `smoke.sql`
   when `supabase/` or the codegen changed); and its device checks, if the step has any, passed on
-  the emulator (`emulator` skill) with the results posted on the PR. Then squash-merge (the title
+  the shared emulator (`emulator` skill: `scripts/emulator.sh lock "<step>"` first, `unlock`
+  at the end, never a second AVD) with the results posted on the PR. Then squash-merge (the title
   becomes the commit subject), delete the branch after retargeting the next PR to `main`, rebase
   the rest of the stack, and carry on with the next step.
 - **Fix without asking.** Defects found by tests, reviews or device checks inside the milestone's

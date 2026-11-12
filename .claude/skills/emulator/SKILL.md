@@ -7,12 +7,61 @@ description: Run the app on a headless Android emulator and drive its WebView ov
 
 Two scripts do the work; this skill is how to use them and what goes wrong.
 
-- `scripts/emulator.sh` (bash): `start`, `stop`, `install`, `install-web`, `launch`,
+- `scripts/emulator.sh` (bash): `lock [label]`, `unlock [label]`,
+  `lock-status`, `start`, `stop`, `install`, `install-web`, `launch`,
   `kill-app`, `forward`, `open [fragment]`, `webview <cmd>…`, `env`.
   Run with no argument for the usage text.
 - `scripts/webview.mjs` (Node 22+, no dependency): `targets`, `eval <js>`,
   `text`, `screenshot <file>`, `wait-for <js> [ms]`,
   `wait-stable [quiet-ms] [ms]`, on `--port` (default 9222).
+
+## One shared emulator, one check at a time
+
+Each emulator costs about 5 GB of host memory (the API 35 image forces
+2560 MB of guest RAM whatever `hw.ramSize` says, plus the GPU renderer) and
+the Mac has 16 GB. So every agent and worktree shares one emulator, AVD
+`herbier` on `emulator-5554`, and device checks take turns:
+
+```sh
+scripts/emulator.sh lock "<step or PR, e.g. M5.44 #46>"   # first, before start
+# ... start, install-web, open, screenshots ...
+scripts/emulator.sh unlock                                # last, also on failure
+```
+
+- `lock` waits until it holds the lock, printing the holder (label, PID,
+  start time) every minute. It can wait long: run it in the background and
+  poll, or set `HERBIER_LOCK_TIMEOUT=<s>` (exit 1 when still held). The lock
+  is a directory, `~/.cache/herbier/emulator.lock` (`HERBIER_LOCK_DIR`);
+  one older than 90 min is stale, and the next `lock` takes it over with a
+  warning. `lock-status` prints the holder or `free`.
+- Release it on every path out, failure included (a trap in a script:
+  `trap 'scripts/emulator.sh unlock' EXIT`). `unlock "<label>"` refuses when
+  another label holds it.
+- Never boot a second AVD and never set `HERBIER_AVD` or
+  `HERBIER_EMULATOR_PORT` for a check. `start` refuses to boot while
+  another emulator runs (`HERBIER_ALLOW_SECOND_EMULATOR=1` overrides, for
+  tooling work only). Without the lock, someone else's `install` replaces
+  your APK under you.
+- The emulator may be left running for the next holder; `stop` it when no
+  other check is queued (`lock-status` free after your `unlock`).
+
+### GPU mode
+
+`start` boots with `-gpu host` (`HERBIER_EMULATOR_GPU` overrides). Measured
+2026-11-12 on the M4 Mac, API 35 Google APIs arm64 image, headless, after
+`#dev/seed`, `#dev/gallery` and `#dev/map` (`vmmap --summary <qemu pid>`):
+
+| `-gpu` | boots | WebGL renderer | `#dev/map` | footprint | boot |
+|---|---|---|---|---|---|
+| `host` | yes | Apple M4 (via the emulator's GLES translator) | map, tiles and 13/13 points | 4.8–4.9 GB | 20–23 s (52 s first boot in this mode) |
+| `swiftshader_indirect` | yes | SwiftShader (host side, ANGLE/Vulkan) | map and 13/13 points; "System UI isn't responding" dialogs | 5.2–5.3 GB | 42–47 s |
+| `guest` | yes | SwiftShader (in the guest) | map and 13/13 points; ANR dialogs, `#dev/seed` past 2 min | 5.2 GB | 65 s |
+
+Guest RAM is 2560 MB in every mode (the image forces it), so the renderer
+is the only lever: `host` is the cheapest and the fastest. The emulator
+warns that host OpenGL rendering is deprecated on macOS; if `host` stops
+booting or the map goes blank after an emulator update,
+`HERBIER_EMULATOR_GPU=swiftshader_indirect` is the fallback.
 
 ## Running a PR's device checks
 
@@ -25,6 +74,7 @@ Two scripts do the work; this skill is how to use them and what goes wrong.
 3. From that checkout (install builds the current directory's repo;
    `HERBIER_REPO` overrides, so the scripts can come from another branch):
    ```sh
+   scripts/emulator.sh lock "M5.44 #46"   # waits for the shared emulator
    scripts/emulator.sh start      # creates the AVD "herbier" if missing, boots headless
    scripts/emulator.sh install-web   # web-only fast path; falls back to install by itself
    scripts/emulator.sh open dev/storage      # prints the page text once it settles
@@ -51,8 +101,10 @@ Two scripts do the work; this skill is how to use them and what goes wrong.
      `devicePixelRatio`, plus the status bar);
    - fresh install state: `adb shell pm clear re.bruge.herbier`;
    - app files: `adb shell run-as re.bruge.herbier ls databases`.
-5. `scripts/emulator.sh stop` at the end (kills the emulator, removes the
-   forward). The AVD stays for next time.
+5. `scripts/emulator.sh unlock` at the end, also when a check failed or the
+   run was aborted. Then `scripts/emulator.sh stop` if `lock-status` says
+   `free` (kills the emulator, removes the forward); the AVD stays for next
+   time.
 
 ## Web-only reinstall
 
@@ -103,17 +155,18 @@ with `python3 -m http.server 8765 -d _build/default/web/dist`, then
 
 ## Pitfalls
 
-- One emulator per check run. Another worktree may already drive the
-  default emulator (`ps -eo command | grep emulator.sh`): its `install`
-  replaces your APK under you (`dumpsys package re.bruge.herbier | grep
-  lastUpdateTime`), and `#dev/<page>` falls back to a tab when the page is
-  not in the installed build. Run your own with `HERBIER_AVD=herbier-b
-  HERBIER_EMULATOR_PORT=5560 HERBIER_DEVTOOLS_PORT=9224` (and its own
-  `HERBIER_EMULATOR_LOG`) on every call; `eval "$(scripts/emulator.sh env)"`
-  then sets `ANDROID_SERIAL` for plain adb.
+- Skipping `lock`: another worktree on the same emulator replaces your APK
+  under you (`dumpsys package re.bruge.herbier | grep lastUpdateTime`), and
+  `#dev/<page>` falls back to a tab when the page is not in the installed
+  build. `eval "$(scripts/emulator.sh env)"` sets `ANDROID_SERIAL` to
+  `emulator-5554` for plain adb.
 - `webview screenshot` does not capture the MapLibre WebGL canvas on the
   emulator (it comes out blank); use `adb exec-out screencap -p > file.png`
   for a map.
+- `#dev/map` prints no `done`: `open dev/map` waits 2 min and fails, with
+  the page loaded; read `herbierDev.mapRendered()` instead. Reach it with
+  `kill-app` then `open dev/map` (a hash change from a page that holds the
+  database fails with "database is locked").
 - A previous run can leave airplane mode on: `adb shell cmd connectivity
   airplane-mode disable` (then `airplane-mode` prints `disabled`).
 
