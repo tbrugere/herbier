@@ -11,7 +11,7 @@ evidence. Open decisions are listed at the end.
 |---|---|---|
 | Eliom + Cordova front | **Dropped** | Eliom is alive but its Cordova template is fossilised (2016–2017 plugins, Node 10, "android-26+ may not work"); the Ocsigen team said in June 2026 it is moving to Capacitor and that offline apps are unfunded; an Eliom mobile app needs a version-locked ocsigenserver, which Supabase makes pointless. `front-stack-eliom-cordova.md` |
 | Cordova as the shell | **Dropped for Capacitor** | Cordova core is maintained (cordova-android 15) but every non-core plugin we need (share receiver, App Links, Google auth, background upload) is dead there and has 2026 releases on Capacitor. Capacitor packages any folder of static JS, so js_of_ocaml output drops in unchanged. |
-| Supabase free tier backend | **Kept, as sync + backup target** | Fine for one user, but projects pause after 7 days without user DB activity. The device is the source of truth; Supabase is where data is mirrored. `backend-supabase-offline.md` |
+| Supabase free tier backend | **Kept, as sync target (its copy is the backup)** | Fine for one user, but projects pause after 7 days without user DB activity. The device is the source of truth; Supabase is where data is mirrored. `backend-supabase-offline.md` |
 | Google Photos for originals | **Deferred; Google Drive first** | Every Photos scope requires OAuth verification, URLs expire after 60 min, no delete API, picked items can't be re-fetched. Drive's `drive.file` scope is non-sensitive: no verification, no 7-day token expiry. `photo-storage-google.md` |
 | Google Maps / OSM tiles | **Neither** | OSM's tile server forbids offline/bulk use; Google needs billing, gives 10k loads/month and has WebView quirks. Keyless vector tiles from OpenFreeMap plus an on-device PMTiles extract. `maps-tiles-geocoding.md` |
 
@@ -150,14 +150,12 @@ blocked: nothing.
   5 GB egress, 2 projects, no backups, image transforms Pro-only. PostGIS,
   pg_trgm, unaccent and pg_cron are available on Free.
 - **Pausing**: inactive after 7 days without user DB activity; one-click
-  restore with data intact for up to a year. A **GitHub Actions cron running
-  `supabase db dump` twice a week** is both the backup and the keep-alive
-  (pg_cron alone is reported not to count, unverified). GitHub Free includes
-  2,000 Actions minutes/month for private repos; the job needs a minute or
-  two. The dump (`roles.sql`, `schema.sql`, `data.sql`) is committed to a
-  **separate private repository** (it contains coordinates and notes), so
-  the app repo can be public. The dump does not cover Storage bucket files;
-  previews stay on device and originals on Drive, so nothing is lost.
+  restore with data intact for up to a year. The keep-alive is a **background
+  job in the app** (WorkManager through `@capacitor/background-runner`) that
+  syncs about twice a week, app closed or not (pg_cron alone is reported not
+  to count, unverified). **No dumps and no backup repo** (decision
+  2026-11-12): personal data (coordinates, notes) stays off GitHub, the device
+  is the source of truth and Supabase its copy; originals are on Drive.
 - **Auth**: one Google sign-in on the device through Credential Manager,
   passed to Supabase with `signInWithIdToken`; the same plugin's
   `AuthorizationClient` grants the `drive.file` scope and hands out 1-hour

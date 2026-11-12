@@ -410,10 +410,8 @@ is always two diffs, the migration and the dump, and CI runs `--check`.
 `scripts/catalog-dump.sh` (same stack, `--check` in CI too) rewrites
 `schema/catalog.json`, from which `app/store/tables.ml` is generated.
 
-The backup/keep-alive cron (`supabase db dump` twice a week) and the dumps
-it commits live in the **separate private repo `herbier-backups`**
-(`.github/workflows/backup.yml`, `roles.sql`, `schema.sql`, `data.sql`).
-Nothing in this repo reads them; this repo only documents the pointer.
+There is no backup repo and no database dump: the keep-alive is a background
+job in the app (plan M6.50), and Supabase is the only copy besides the device.
 
 ## 6. `test/`
 
