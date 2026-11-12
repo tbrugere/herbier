@@ -154,3 +154,11 @@
     grid-row: 1 / -1
   &[aria-busy]
     opacity: .6
+
+// The place card: the mini-map flush with the card's top and sides, the text
+// under it.
+.observation__place .card
+  overflow: hidden
+  .mini-map
+    margin: (- widgets.$card-padding) (- widgets.$card-padding) 12px
+    border-radius: 0

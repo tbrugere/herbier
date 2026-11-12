@@ -219,13 +219,15 @@ let v app =
   in
   (* style: state read and written from future callbacks, MapLibre callbacks
      and [Rb.act] handlers only (outside update steps). [query] is the
-     search's last applied result; [needs_fit]: first entry, the camera frames
-     the first data ([have_data]: it has arrived); [saving]: a rename is being
+     search's last applied result; [needs_fit]: first entry with no framing
+     asked by another screen, the camera frames the first data ([have_data]:
+     it has arrived); [saving]: a rename is being
      written. *)
   let map = ref Creating
   and query = ref Map_filter.Everything
   and searching = ref (Idle 0)
-  and needs_fit = ref (Option.is_none restored.camera)
+  and needs_fit =
+    ref (Option.is_none restored.camera && Option.is_none restored.focus)
   and have_data = ref false
   and saving = ref false in
   let alive () =
@@ -257,6 +259,14 @@ let v app =
         Geo_map.set_places m v.places;
         Geo_map.set_selection m v.selected
     | Creating | Failed | Released -> ()
+  in
+  (* Read when the map exists, not at entry: the framing is the latest one
+     asked. Also taken, and dropped, when the map cannot be created, so that it
+     does not surprise a later visit. *)
+  let take_focus () =
+    let current = React.S.value (State.map_view state) in
+    State.set_map_view state {current with focus = None};
+    current.focus
   in
   let first_fit () =
     match (!map, !needs_fit && !have_data) with
@@ -424,6 +434,7 @@ let v app =
   (match theme with
   | Error (Theme.Missing_tokens missing) ->
       map := Failed;
+      ignore (take_focus ());
       log_error "thème" (String.concat ", " missing)
   | Ok theme ->
       let camera = Option.value restored.camera ~default:world in
@@ -434,6 +445,7 @@ let v app =
         | Error _ when not (alive ()) -> ()
         | Error e ->
             map := Failed;
+            ignore (take_focus ());
             log_error "création" (Geo_map.error_to_string e);
             let v = React.S.value view in
             set_view {v with broken = Some Map_sheet.Map_unavailable}
@@ -442,6 +454,11 @@ let v app =
             Geo_map.on_tap m on_tap;
             Geo_map.on_moveend m on_moveend;
             push_map ();
+            (match take_focus () with
+            | Some b ->
+                needs_fit := false;
+                Geo_map.fit m b ~padding_px ~animate:false
+            | None -> ());
             first_fit ()));
   reload ();
   let locate () =

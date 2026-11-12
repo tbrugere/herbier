@@ -129,6 +129,24 @@ let el () =
   in
   let link = W.Text_field.v ~action:"Coller" ~placeholder:"Lien" () in
   let bar, _active = tab_bar () in
+  let mini_maps =
+    match Theme.load () with
+    | Error (Theme.Missing_tokens missing) ->
+        log ("mini-carte: jetons absents: " ^ String.concat ", " missing);
+        []
+    | Ok theme ->
+        List.map
+          (fun accuracy_m ->
+            W.Mini_map.v ~colours:theme.map
+              (React.S.const
+                 (Some
+                    {
+                      Herbier_domain.Observation.lat = 45.7712;
+                      lon = 3.0823;
+                      accuracy_m;
+                    })))
+          [Some 30.; None]
+  in
   let bindings =
     List.concat
       [
@@ -163,6 +181,11 @@ let el () =
         [logged (React.S.changes name.value) (fun v -> "name " ^ v)];
         link.bindings;
         [logged link.action (fun () -> "action Coller")];
+        List.concat_map (fun (m : W.Mini_map.t) -> m.bindings) mini_maps;
+        List.mapi
+          (fun i (m : W.Mini_map.t) ->
+            logged m.tap (fun () -> Printf.sprintf "mini-map %d" (i + 1)))
+          mini_maps;
         bar.bindings;
         [
           logged bar.select (fun t -> "tab " ^ W.Tab_bar.label t);
@@ -236,6 +259,17 @@ let el () =
           name.el;
           El.div ~at:[At.style (Jstr.v "height:10px")] [];
           link.el;
+        ];
+      entry "Mini_map"
+        [
+          El.div
+            ~at:[At.id (Jstr.v "mini-maps")]
+            (List.map
+               (fun (m : W.Mini_map.t) ->
+                 El.div
+                   ~at:[At.style (Jstr.v "margin-bottom:10px")]
+                   [W.Card.panel [m.el]])
+               mini_maps);
         ];
       entry "Tab_bar" [El.div ~at:[At.id (Jstr.v "tabs")] [bar.el]];
       entry "Log" [log_el; release];

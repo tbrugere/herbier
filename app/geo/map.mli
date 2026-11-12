@@ -35,9 +35,12 @@ val set_observations : t -> Observation.t list -> unit
     [#dev/map] page only (4b uses {!set_places}). *)
 
 val set_accuracy : t -> (Places.point * float) option -> unit
-(** [Some (centre, radius_m)]: {!Features.circle} with 64 steps into
-    {!Style.accuracy_source}; [None]: {!Features.empty}. Used by the [#dev/map]
-    page only. *)
+(** [Some (centre, radius_m)]: {!Features.circle} with {!Features.circle_steps}
+    steps into {!Style.accuracy_source}; [None]: {!Features.empty}. Used by the
+    [#dev/map] page and 4h's mini-map. *)
+
+val set_focus : t -> Places.point option -> unit
+(** {!Features.focus} into {!Style.focus_source}. *)
 
 val set_places : t -> Features.place list -> unit
 (** {!Features.place_points} into {!Style.places_source} and
@@ -86,10 +89,17 @@ val zoom : t -> float option
 
 val fly_to : t -> center:Places.point -> zoom:float -> unit
 
-val fit : ?max_zoom:float -> t -> Features.bounds -> padding_px:int -> unit
+val fit :
+  ?max_zoom:float ->
+  ?animate:bool ->
+  t ->
+  Features.bounds ->
+  padding_px:int ->
+  unit
 (** Frames the bounds, with [padding_px] CSS pixels on every side, zooming in no
     further than [max_zoom] (default 16, so one point or a tight group keeps its
-    surroundings in view). *)
+    surroundings in view). [animate] (default [true]): [false] jumps there
+    without a transition. *)
 
 val rendered : t -> Observation_id.t list
 (** Observations whose point is currently rendered (in view). *)

@@ -373,6 +373,215 @@ let circle_at_the_pole () =
         (Float.is_finite lon && Float.is_finite lat))
     ring
 
+(* ---------- Features.circle_bounds ---------- *)
+
+let circle_bounds_matches_circle_ring_extremes () =
+  let center : Places.point = {lat = 45.; lon = 3.} in
+  let radius_m = 1000. in
+  let ring =
+    ring_of (Features.circle ~center ~radius_m ~steps:Features.circle_steps)
+  in
+  let lats = List.map snd ring and lons = List.map fst ring in
+  let expected : Features.bounds =
+    {
+      south = List.fold_left Float.min Float.infinity lats;
+      north = List.fold_left Float.max Float.neg_infinity lats;
+      west = List.fold_left Float.min Float.infinity lons;
+      east = List.fold_left Float.max Float.neg_infinity lons;
+    }
+  in
+  match Features.circle_bounds ~center ~radius_m with
+  | None -> Alcotest.fail "circle_bounds gave None for a valid circle"
+  | Some b ->
+      Alcotest.(check bounds)
+        "south/west/north/east equal the ring's min/max" expected b
+
+let circle_bounds_degree_approximation () =
+  let center : Places.point = {lat = 45.; lon = 3.} in
+  match Features.circle_bounds ~center ~radius_m:1000. with
+  | None -> Alcotest.fail "circle_bounds gave None"
+  | Some b ->
+      let half_span_deg = 1000. /. 6_371_000. *. 180. /. Float.pi in
+      Alcotest.(check (float 1e-6))
+        "north - lat is about 1000 m in degrees" half_span_deg
+        (b.north -. center.lat);
+      Alcotest.(check (float 1e-6))
+        "lat - south is the same" half_span_deg (center.lat -. b.south);
+      Alcotest.(check (float 1e-4))
+        "the lon half-span widens by 1 / cos(lat)"
+        (half_span_deg /. Float.cos (center.lat *. Float.pi /. 180.))
+        ((b.east -. b.west) /. 2.)
+
+let circle_bounds_symmetric_at_equator () =
+  match
+    Features.circle_bounds ~center:{Places.lat = 0.; lon = 0.} ~radius_m:500.
+  with
+  | None -> Alcotest.fail "circle_bounds gave None"
+  | Some b ->
+      Alcotest.(check (float 1e-12)) "north equals -south" (-.b.south) b.north;
+      Alcotest.(check (float 1e-12)) "east equals -west" (-.b.west) b.east
+
+let circle_bounds_lon_span_widens_with_latitude () =
+  match
+    Features.circle_bounds ~center:{Places.lat = 60.; lon = 0.} ~radius_m:1000.
+  with
+  | None -> Alcotest.fail "circle_bounds gave None"
+  | Some b ->
+      let lat_half = b.north -. 60. in
+      let lon_half = (b.east -. b.west) /. 2. in
+      Alcotest.(check (float 0.05))
+        "the lon half-span is about twice the lat half-span at lat 60" 2.
+        (lon_half /. lat_half)
+
+let circle_bounds_contains_the_centre () =
+  List.iter
+    (fun (center : Places.point) ->
+      match Features.circle_bounds ~center ~radius_m:200. with
+      | None -> Alcotest.fail "circle_bounds gave None for a valid centre"
+      | Some b -> (
+          match
+            b.south < center.lat
+            && center.lat < b.north
+            && b.west < center.lon
+            && center.lon < b.east
+          with
+          | true -> ()
+          | false ->
+              Alcotest.failf
+                "(%g, %g) is not strictly inside south %g west %g north %g \
+                 east %g"
+                center.lat center.lon b.south b.west b.north b.east))
+    [
+      {Places.lat = 45.; lon = 3.};
+      {Places.lat = -20.; lon = 170.};
+      {Places.lat = 0.; lon = 0.};
+    ]
+
+let circle_bounds_contiguous_across_the_antimeridian () =
+  match
+    Features.circle_bounds
+      ~center:{Places.lat = 0.; lon = 179.9999}
+      ~radius_m:30.
+  with
+  | None -> Alcotest.fail "circle_bounds gave None"
+  | Some b ->
+      Alcotest.(check bool)
+        (Printf.sprintf "east %g is past 180, not wrapped" b.east)
+        true (b.east > 180.);
+      Alcotest.(check bool)
+        (Printf.sprintf "the box is narrow (west %g, east %g)" b.west b.east)
+        true
+        (b.east -. b.west < 0.001)
+
+let circle_bounds_none_on_invalid_input () =
+  let center : Places.point = {lat = 45.; lon = 3.} in
+  List.iter
+    (fun (name, radius_m) ->
+      Alcotest.(check (option bounds))
+        name None
+        (Features.circle_bounds ~center ~radius_m))
+    [
+      ("radius 0 gives None", 0.);
+      ("negative radius gives None", -1.);
+      ("nan radius gives None", Float.nan);
+      ("infinite radius gives None", Float.infinity);
+    ];
+  List.iter
+    (fun (name, center) ->
+      Alcotest.(check (option bounds))
+        name None
+        (Features.circle_bounds ~center ~radius_m:1000.))
+    [
+      ("a nan latitude gives None", {Places.lat = Float.nan; lon = 3.});
+      ( "an infinite latitude gives None",
+        {Places.lat = Float.infinity; lon = 3.} );
+      ("a nan longitude gives None", {Places.lat = 45.; lon = Float.nan});
+      ( "an infinite longitude gives None",
+        {Places.lat = 45.; lon = Float.infinity} );
+    ]
+
+(* ---------- Features.accuracy_bounds ---------- *)
+
+let position lat lon accuracy_m : Observation.position = {lat; lon; accuracy_m}
+
+let accuracy_bounds_matches_circle_bounds () =
+  let pos = position 45.7712 3.0823 (Some 12.5) in
+  let expected =
+    Features.circle_bounds
+      ~center:{Places.lat = pos.lat; lon = pos.lon}
+      ~radius_m:12.5
+  in
+  Alcotest.(check (option bounds))
+    "a positive finite accuracy equals circle_bounds at that radius" expected
+    (Features.accuracy_bounds pos)
+
+let accuracy_bounds_degenerate_box () =
+  List.iter
+    (fun (name, accuracy_m) ->
+      let pos = position 45.1 7.2 accuracy_m in
+      Alcotest.(check (option bounds))
+        name
+        (Some {Features.south = 45.1; west = 7.2; north = 45.1; east = 7.2})
+        (Features.accuracy_bounds pos))
+    [
+      ("accuracy None collapses to the point", None);
+      ("accuracy 0 collapses to the point", Some 0.);
+      ("negative accuracy collapses to the point", Some (-3.));
+      ("nan accuracy collapses to the point", Some Float.nan);
+      ("infinite accuracy collapses to the point", Some Float.infinity);
+    ]
+
+let accuracy_bounds_none_on_nonfinite_position () =
+  Alcotest.(check (option bounds))
+    "nan latitude gives None" None
+    (Features.accuracy_bounds (position Float.nan 7.2 (Some 5.)));
+  Alcotest.(check (option bounds))
+    "infinite longitude gives None" None
+    (Features.accuracy_bounds (position 45.1 Float.infinity (Some 5.)));
+  Alcotest.(check (option bounds))
+    "nan latitude without accuracy gives None" None
+    (Features.accuracy_bounds (position Float.nan 7.2 None));
+  Alcotest.(check (option bounds))
+    "infinite longitude without accuracy gives None" None
+    (Features.accuracy_bounds (position 45.1 Float.infinity None));
+  Alcotest.(check (option bounds))
+    "nan latitude with a zero accuracy gives None" None
+    (Features.accuracy_bounds (position Float.nan 7.2 (Some 0.)))
+
+(* ---------- Features.focus ---------- *)
+
+let focus_none_is_empty () =
+  Alcotest.(check yojson)
+    "None gives Features.empty" Features.empty (Features.focus None)
+
+let focus_some_is_a_lone_point_feature_with_no_properties () =
+  let p : Places.point = {lat = 45.7712; lon = 3.0823} in
+  Alcotest.(check yojson)
+    "exactly the documented FeatureCollection, lon before lat"
+    (collection
+       [
+         `Assoc
+           [
+             ("type", `String "Feature");
+             ( "geometry",
+               `Assoc
+                 [
+                   ("type", `String "Point");
+                   ("coordinates", `List [`Float p.lon; `Float p.lat]);
+                 ] );
+             ("properties", `Assoc []);
+           ];
+       ])
+    (Features.focus (Some p))
+
+let focus_nonfinite_coordinate_is_empty () =
+  Alcotest.(check yojson)
+    "a nan latitude gives empty" Features.empty
+    (Features.focus (Some {Places.lat = Float.nan; lon = 3.}));
+  Alcotest.(check yojson)
+    "an infinite longitude gives empty" Features.empty
+    (Features.focus (Some {Places.lat = 45.; lon = Float.infinity}))
+
 (* ---------- Features.places, find, place_points, selection, hit ---------- *)
 
 (* Three spots well over 500 m apart (app/store/dev_seed.ml's lisiere, jardin,
@@ -848,7 +1057,7 @@ let layers_appended_after_the_base () =
   let base_layers = positron |> member "layers" |> to_list in
   let layers = result |> member "layers" |> to_list in
   let n = List.length base_layers in
-  Alcotest.(check int) "10 layers appended" (n + 10) (List.length layers);
+  Alcotest.(check int) "11 layers appended" (n + 11) (List.length layers);
   Alcotest.(check (list yojson))
     "the base layers are unchanged and in order" base_layers
     (List.filteri (fun i _ -> i < n) layers);
@@ -857,7 +1066,7 @@ let layers_appended_after_the_base () =
     |> List.map (fun l -> l |> member "id" |> to_string)
   in
   Alcotest.(check (list string))
-    "overlay layer ids, in order"
+    "overlay layer ids, in order, ending with focus_layer"
     [
       Style.accuracy_fill_layer;
       Style.accuracy_line_layer;
@@ -869,6 +1078,7 @@ let layers_appended_after_the_base () =
       Style.selection_halo_layer;
       Style.selection_place_layer;
       Style.selection_members_layer;
+      Style.focus_layer;
     ]
     overlay_ids
 
@@ -905,19 +1115,21 @@ let sources_appended_after_the_base () =
     (List.filteri (fun i _ -> i < n) sources);
   let overlay = List.filteri (fun i _ -> i >= n) sources in
   Alcotest.(check (list string))
-    "overlay source ids, in order"
+    "overlay source ids, in order, ending with focus_source"
     [
       Style.observations_source;
       Style.accuracy_source;
       Style.places_source;
       Style.members_source;
       Style.selection_source;
+      Style.focus_source;
     ]
     (List.map fst overlay);
   List.iter
     (fun id ->
       Alcotest.(check yojson)
-        (Printf.sprintf "%s is a plain geojson source holding Features.empty" id)
+        (Printf.sprintf
+           "%s is a plain geojson source holding Features.empty, no cluster" id)
         (`Assoc [("type", `String "geojson"); ("data", Features.empty)])
         (List.assoc id overlay))
     [
@@ -925,6 +1137,7 @@ let sources_appended_after_the_base () =
       Style.accuracy_source;
       Style.members_source;
       Style.selection_source;
+      Style.focus_source;
     ]
 
 let places_source_shape () =
@@ -1051,6 +1264,15 @@ let colours_applied_to_the_overlay_layers () =
     "the line layer reads the accuracy source" Style.accuracy_source
     (line |> member "source" |> to_string)
 
+let focus_paint =
+  `Assoc
+    [
+      ("circle-radius", `Int 7);
+      ("circle-color", `String colours.selected);
+      ("circle-stroke-width", `Int 3);
+      ("circle-stroke-color", `String colours.point_border);
+    ]
+
 let overlay_paints_are_exact () =
   let result = with_overlays_ok positron in
   let open Yojson.Safe.Util in
@@ -1081,7 +1303,9 @@ let overlay_paints_are_exact () =
     "the whole accuracy line paint"
     (`Assoc
        [("line-color", `String colours.accuracy_line); ("line-width", `Int 1)])
-    (paint Style.accuracy_line_layer)
+    (paint Style.accuracy_line_layer);
+  Alcotest.(check yojson)
+    "the whole focus paint" focus_paint (paint Style.focus_layer)
 
 let check_layer_shape ~msg ~zoom_field ~zoom_value expected_without_zoom actual
     =
@@ -1280,6 +1504,20 @@ let selection_members_layer_shape () =
        ])
     (layer_by_id result Style.selection_members_layer)
 
+let focus_layer_shape () =
+  let result = with_overlays_ok positron in
+  Alcotest.(check yojson)
+    "focus_layer: a circle layer on focus_source, paint only, no \
+     minzoom/maxzoom/filter"
+    (`Assoc
+       [
+         ("id", `String Style.focus_layer);
+         ("type", `String "circle");
+         ("source", `String Style.focus_source);
+         ("paint", focus_paint);
+       ])
+    (layer_by_id result Style.focus_layer)
+
 let base_text_fonts () =
   let open Yojson.Safe.Util in
   positron
@@ -1410,9 +1648,11 @@ let with_overlays_duplicate_ids () =
       Style.selection_halo_layer;
       Style.selection_place_layer;
       Style.selection_members_layer;
+      Style.focus_layer;
     ];
-  (* Every new source id, including [places_source] (= "herbier-places"),
-     given only as a base *source*, with no matching base layer. *)
+  (* Every new source id, including [places_source] (= "herbier-places") and
+     [focus_source] (= "herbier-focus"), given only as a base *source*, with
+     no matching base layer. *)
   List.iter expect_source_dup
     [
       Style.observations_source;
@@ -1420,6 +1660,7 @@ let with_overlays_duplicate_ids () =
       Style.places_source;
       Style.members_source;
       Style.selection_source;
+      Style.focus_source;
     ];
   let once = with_overlays_ok positron in
   match Style.with_overlays colours once with
@@ -1466,7 +1707,10 @@ let literal_ids () =
     Style.selection_place_layer;
   Alcotest.(check string)
     "Style.selection_members_layer" "herbier-selection-members"
-    Style.selection_members_layer
+    Style.selection_members_layer;
+  Alcotest.(check string)
+    "Style.focus_source" "herbier-focus" Style.focus_source;
+  Alcotest.(check string) "Style.focus_layer" "herbier-focus" Style.focus_layer
 
 let contains ~sub s =
   let n = String.length sub in
@@ -1534,6 +1778,47 @@ let tests =
     ( "Features.circle stays finite close to the pole",
       `Quick,
       circle_at_the_pole );
+    ( "Features.circle_bounds equals the min/max of circle's own ring",
+      `Quick,
+      circle_bounds_matches_circle_ring_extremes );
+    ( "Features.circle_bounds: the lat/lon half-spans approximate the \
+       spherical-earth formula",
+      `Quick,
+      circle_bounds_degree_approximation );
+    ( "Features.circle_bounds at the equator is symmetric",
+      `Quick,
+      circle_bounds_symmetric_at_equator );
+    ( "Features.circle_bounds: the lon half-span widens with latitude",
+      `Quick,
+      circle_bounds_lon_span_widens_with_latitude );
+    ( "Features.circle_bounds always contains its centre",
+      `Quick,
+      circle_bounds_contains_the_centre );
+    ( "Features.circle_bounds stays contiguous across the antimeridian",
+      `Quick,
+      circle_bounds_contiguous_across_the_antimeridian );
+    ( "Features.circle_bounds is None for an invalid radius or centre",
+      `Quick,
+      circle_bounds_none_on_invalid_input );
+    ( "Features.accuracy_bounds with a positive finite accuracy delegates to \
+       circle_bounds",
+      `Quick,
+      accuracy_bounds_matches_circle_bounds );
+    ( "Features.accuracy_bounds collapses to the point for \
+       no/zero/negative/non-finite accuracy",
+      `Quick,
+      accuracy_bounds_degenerate_box );
+    ( "Features.accuracy_bounds is None for a non-finite position",
+      `Quick,
+      accuracy_bounds_none_on_nonfinite_position );
+    ("Features.focus None is Features.empty", `Quick, focus_none_is_empty);
+    ( "Features.focus Some: a lone point feature with no properties, lon \
+       before lat",
+      `Quick,
+      focus_some_is_a_lone_point_feature_with_no_properties );
+    ( "Features.focus is empty for a non-finite coordinate",
+      `Quick,
+      focus_nonfinite_coordinate_is_empty );
     ( "Features' kind strings are the ones Style matches",
       `Quick,
       kind_matches_the_style );
@@ -1597,10 +1882,10 @@ let tests =
     ( "the recorded positron.json has the expected shape",
       `Quick,
       positron_fixture_sanity );
-    ( "Style.with_overlays appends 10 layers after the base",
+    ( "Style.with_overlays appends 11 layers after the base",
       `Quick,
       layers_appended_after_the_base );
-    ( "Style.with_overlays appends 5 sources after the base (4 plain, 1 \
+    ( "Style.with_overlays appends 6 sources after the base (5 plain, 1 \
        clustered)",
       `Quick,
       sources_appended_after_the_base );
@@ -1640,6 +1925,9 @@ let tests =
     ( "Style.with_overlays: selection_members_layer's shape is exact",
       `Quick,
       selection_members_layer_shape );
+    ( "Style.with_overlays: focus_layer's shape is exact",
+      `Quick,
+      focus_layer_shape );
     ( "the new layers' text-font stacks exist among positron's own layers",
       `Quick,
       new_text_fonts_exist_on_the_server );

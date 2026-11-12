@@ -1,7 +1,10 @@
 (** 4h Observation (modal). Header ← / « OBSERVATION » and the plant's name ›
     (its fiche; « À identifier › » opens 4k) / « Terminé ». Cards: the date («
-    Modifier » edits it in a [datetime-local] input), the place as text (label,
-    else derived name, then coordinates and accuracy), the note edited in place.
+    Modifier » edits it in a [datetime-local] input), the place, the note edited
+    in place. The place: the mini-map ({!Widgets.Mini_map}) when the observation
+    has a position and the theme loaded, tapping it opens 4b centred on the
+    observation ({!State.focus_map}); under it the label, else the derived name,
+    then the coordinates (["48.0633, 7.0081"]). The accuracy is never written.
     Actions: « Changer d'espèce › » (5c; « Identifier › » → 4k when unlinked), «
     Voir dans le journal › », « Supprimer l'observation › » (confirmation, then
     the observation and its photos are soft-deleted and the modal closes). A

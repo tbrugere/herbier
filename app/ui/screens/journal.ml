@@ -50,17 +50,32 @@ let row names (o : Observation.t) =
   in
   (r.el, Rb.act r.click (fun () -> Route.go (Route.Modal target)) :: r.bindings)
 
-let day ~this_year names (d : Observation.t Journal_day.t) =
-  let place =
-    match Journal_day.place d.items with
-    | None -> []
-    | Some p ->
+let day_place state (d : Observation.t Journal_day.t) =
+  match (Journal_day.place d.items, Herbier_geo.Features.bounds d.items) with
+  | None, _ -> ([], [])
+  | Some p, None -> ([El.span ~at:[cls "journal__place"] [El.txt' p]], [])
+  | Some p, Some b ->
+      let button =
+        El.button
+          ~at:
+            [
+              At.type' (Jstr.v "button");
+              cls "journal__place";
+              At.v (Jstr.v "aria-label") (Jstr.v ("Voir sur la carte : " ^ p));
+            ]
+          [El.txt' (p ^ " "); W.Icon.el ~size:14 W.Icon.My_location]
+      in
+      let click, b_click = Rb.click button in
+      ( [button],
         [
-          El.span
-            ~at:[cls "journal__place"]
-            [El.txt' (p ^ " "); W.Icon.el ~size:14 W.Icon.My_location];
-        ]
-  in
+          b_click;
+          Rb.act click (fun () ->
+              State.focus_map state b;
+              Route.go (Route.Tab W.Tab_bar.Map));
+        ] )
+
+let day state ~this_year names (d : Observation.t Journal_day.t) =
+  let place, place_bindings = day_place state d in
   let rows = List.map (row names) d.items in
   let el =
     El.section
@@ -73,7 +88,7 @@ let day ~this_year names (d : Observation.t Journal_day.t) =
          :: place)
       :: List.map fst rows)
   in
-  (el, List.concat_map snd rows)
+  (el, place_bindings @ List.concat_map snd rows)
 
 let log_error e = Console.(error [str "journal"; str (Db.error_to_string e)])
 
@@ -160,7 +175,7 @@ let v app =
         Rb.text counter_el counter;
         Rb.rlist chips_el (Filter_chips.el state) chips;
         Rb.rlist list_el
-          (fun d -> day ~this_year:(this_year ()) (names ()) d)
+          (fun d -> day state ~this_year:(this_year ()) (names ()) d)
           days;
         Rb.text empty empty_text;
         Rb.class_ empty "is-hidden" (React.S.map (String.equal "") empty_text);

@@ -121,8 +121,8 @@ export function flyTo(h, lng, lat, zoom) {
   h.map.flyTo({ center: [lng, lat], zoom });
 }
 
-export function fitBounds(h, west, south, east, north, padding, maxZoom) {
-  h.map.fitBounds([[west, south], [east, north]], { padding, maxZoom });
+export function fitBounds(h, west, south, east, north, padding, maxZoom, animate) {
+  h.map.fitBounds([[west, south], [east, north]], { padding, maxZoom, animate });
 }
 
 export function renderedIds(h, layerIds) {

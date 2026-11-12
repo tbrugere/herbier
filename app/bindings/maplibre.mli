@@ -74,9 +74,11 @@ val fit_bounds :
   north:float ->
   padding:int ->
   max_zoom:float ->
+  animate:bool ->
   unit
 (** Frames the box with [padding] CSS pixels on every side, zooming in no
-    further than [max_zoom]. *)
+    further than [max_zoom]; [animate:false] jumps there without a transition
+    (MapLibre still fires [moveend]). *)
 
 val rendered_ids : t -> layers:string list -> string list
 (** Distinct string [properties.id] of the features of [layers] currently

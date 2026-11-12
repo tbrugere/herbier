@@ -49,21 +49,22 @@ let observations list =
 
 type bounds = {south : float; west : float; north : float; east : float}
 
-let bounds list =
-  let widen b ({lat; lon} : Places.point) =
-    match b with
-    | None -> Some {south = lat; west = lon; north = lat; east = lon}
-    | Some {south; west; north; east} ->
-        Some
-          {
-            south = Float.min south lat;
-            west = Float.min west lon;
-            north = Float.max north lat;
-            east = Float.max east lon;
-          }
-  in
-  placed list |> List.map snd |> List.fold_left widen None
+let box_of_points = function
+  | [] -> None
+  | ({lat; lon} : Places.point) :: rest ->
+      Some
+        (List.fold_left
+           (fun {south; west; north; east} ({lat; lon} : Places.point) ->
+             {
+               south = Float.min south lat;
+               west = Float.min west lon;
+               north = Float.max north lat;
+               east = Float.max east lon;
+             })
+           {south = lat; west = lon; north = lat; east = lon}
+           rest)
 
+let bounds list = box_of_points (List.map snd (placed list))
 let radians d = d *. Float.pi /. 180.
 let degrees r = r *. 180. /. Float.pi
 
@@ -87,7 +88,9 @@ let destination ({lat; lon} : Places.point) ~angle ~bearing : Places.point =
   in
   {lat = degrees phi2; lon = degrees lambda2}
 
-let circle ~(center : Places.point) ~radius_m ~steps =
+(* The closed ring of the accuracy circle, shared by [circle] and
+   [circle_bounds] so that the box holds exactly what is drawn. *)
+let ring ~(center : Places.point) ~radius_m ~steps =
   match
     Float.is_finite radius_m
     && radius_m > 0.
@@ -95,26 +98,52 @@ let circle ~(center : Places.point) ~radius_m ~steps =
     && Float.is_finite center.lat
     && Float.is_finite center.lon
   with
-  | false -> empty
+  | false -> None
   | true ->
       let angle = radius_m /. Places.earth_radius_m in
       (* Vertex [steps] is vertex 0 again: the ring is closed. *)
-      let ring =
-        List.init (steps + 1) (fun i ->
-            let bearing =
-              2. *. Float.pi *. Float.of_int (i mod steps) /. Float.of_int steps
-            in
-            position (destination center ~angle ~bearing))
-      in
+      Some
+        (List.init (steps + 1) (fun i ->
+             let bearing =
+               2.
+               *. Float.pi
+               *. Float.of_int (i mod steps)
+               /. Float.of_int steps
+             in
+             destination center ~angle ~bearing))
+
+let circle ~center ~radius_m ~steps =
+  match ring ~center ~radius_m ~steps with
+  | None -> empty
+  | Some ring ->
       collection
         [
           feature
             (`Assoc
                [
-                 ("type", `String "Polygon"); ("coordinates", `List [`List ring]);
+                 ("type", `String "Polygon");
+                 ("coordinates", `List [`List (List.map position ring)]);
                ])
             [];
         ]
+
+let circle_steps = 64
+
+let circle_bounds ~center ~radius_m =
+  Option.bind (ring ~center ~radius_m ~steps:circle_steps) box_of_points
+
+let accuracy_bounds ({lat; lon; accuracy_m} : Observation.position) =
+  let center : Places.point = {lat; lon} in
+  match Float.is_finite lat && Float.is_finite lon with
+  | false -> None
+  | true -> (
+      (* Which radius is drawable is [ring]'s rule alone, so that the box and
+         the drawn circle agree. *)
+      match
+        Option.bind accuracy_m (fun r -> circle_bounds ~center ~radius_m:r)
+      with
+      | Some _ as box -> box
+      | None -> box_of_points [center])
 
 type place = {
   key : Observation_id.t;
@@ -148,6 +177,10 @@ let north_key = "north"
 
 let finite_point ({lat; lon} : Places.point) =
   Float.is_finite lat && Float.is_finite lon
+
+let focus = function
+  | Some p when finite_point p -> collection [feature (point_geometry p) []]
+  | Some _ | None -> empty
 
 let place_point {key; cluster; shown} =
   match (bounds shown, finite_point cluster.centroid) with

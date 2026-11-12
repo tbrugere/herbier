@@ -42,6 +42,32 @@ val circle : center:Places.point -> radius_m:float -> steps:int -> Yojson.Safe.t
     [radius_m] is not finite or [<= 0.], [steps < 3], or a [center] coordinate
     is not finite. Never raises. *)
 
+val circle_steps : int
+(** The number of vertices of the accuracy circle drawn on a map
+    ([Map.set_accuracy]) and boxed by {!circle_bounds}. *)
+
+val circle_bounds : center:Places.point -> radius_m:float -> bounds option
+(** The box of {!circle} [~center ~radius_m ~steps:circle_steps]: min/max of the
+    ring's latitudes ([south], [north]) and longitudes ([west], [east]),
+    computed from the same vertices, so the drawn circle is inside it.
+    Longitudes are not brought back into [-180, 180]: across the antimeridian
+    [east] passes 180 and the box stays contiguous, as fitBounds wants it.
+    [None] exactly when {!circle} gives {!empty} (radius not finite or [<= 0.],
+    a coordinate not finite). Never raises. *)
+
+val accuracy_bounds : Observation.position -> bounds option
+(** What 4h's mini-map frames. [None] when [lat] or [lon] is not finite. With
+    [accuracy_m = Some r], [r] finite and [> 0.]: {!circle_bounds} at the point
+    with radius [r]. Otherwise ([None], [0.], negative, NaN, infinity) the
+    degenerate box at the point ([south = north = lat], [west = east = lon]).
+    Never raises. *)
+
+val focus : Places.point option -> Yojson.Safe.t
+(** 4h's point. [None], or a non-finite coordinate: {!empty}. [Some p]: a
+    FeatureCollection with one feature
+    [{"type":"Feature","geometry":{"type":"Point","coordinates":[lon,lat]},
+     "properties":{}}]. *)
+
 (** {1 Places (handoff 4b)} *)
 
 type place = {

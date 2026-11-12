@@ -119,7 +119,7 @@ let fly_to h ~center ~zoom =
   run h "flyTo"
     [|Jv.of_float center.lng; Jv.of_float center.lat; Jv.of_float zoom|]
 
-let fit_bounds h ~west ~south ~east ~north ~padding ~max_zoom =
+let fit_bounds h ~west ~south ~east ~north ~padding ~max_zoom ~animate =
   run h "fitBounds"
     [|
       Jv.of_float west;
@@ -128,6 +128,7 @@ let fit_bounds h ~west ~south ~east ~north ~padding ~max_zoom =
       Jv.of_float north;
       Jv.of_int padding;
       Jv.of_float max_zoom;
+      Jv.of_bool animate;
     |]
 
 let rendered_ids h ~layers =

@@ -33,12 +33,17 @@ type map_view = {
   camera : camera option;  (** [None] until 4b has been shown once *)
   selected : Herbier_domain.Ids.Observation_id.t option;
       (** a place key ({!Herbier_geo.Features.place}) *)
+  focus : Herbier_geo.Features.bounds option;
+      (** a framing another screen asked for (4c « ◎ », 4h's mini-map): 4b
+          frames it once, without animation, when its map exists, then sets it
+          back to [None] *)
 }
 (** 4b's camera and selected place, kept across tab switches and modals (handoff
-    « État », Carte: viewport, selectedCluster). *)
+    « État », Carte: viewport, selectedCluster), and a one-shot framing asked by
+    another screen. *)
 
 val no_map_view : map_view
-(** Both [None]. *)
+(** All three [None]. *)
 
 type t
 
@@ -58,3 +63,8 @@ val set_filters : t -> ?step:React.step -> filters -> unit
 val set_network : t -> ?step:React.step -> network -> unit
 val set_account : t -> ?step:React.step -> account -> unit
 val set_map_view : t -> ?step:React.step -> map_view -> unit
+
+val focus_map : t -> Herbier_geo.Features.bounds -> unit
+(** Asks 4b to frame the bounds at its next showing: the camera unchanged,
+    [selected = None], [focus = Some b], in one update step. Called from a DOM
+    handler, right before [Route.go (Tab Map)]. *)

@@ -172,16 +172,16 @@ app/
     map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …)
     style.ml              online (OpenFreeMap) style plus Herbier's overlay sources and layers, merged
                           in OCaml; pure, tested in test/geo/; the offline (pmtiles://) switch is v2
-    features.ml           GeoJSON of the observations, their bounds, the metric accuracy circle, the
-                          places of 4b (filtered clusters, their points, the selection, tap decoding);
-                          pure, tested in test/geo/
+    features.ml           GeoJSON of the observations, their bounds, the metric accuracy circle and its
+                          box, 4h's point, the places of 4b (filtered clusters, their points, the selection, tap
+                          decoding); pure, tested in test/geo/
     tiles.ml              region extract download and storage (v2, with the offline map)
     geocode.ml            Photon / Géoplateforme forward and reverse
   ui/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
     theme.ml              reads the custom properties OCaml needs (map colours, status bar) once at startup
-    state.ml              global signals: filters, network, account, 4b's camera and selected place
-                          (handoff « État »)
+    state.ml              global signals: filters, network, account, 4b's camera and selected place,
+                          and a one-shot framing asked by 4c/4h (handoff « État »)
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
                           the shell holds the tab bar
     screen.ml             a screen's root element + its bindings, as the router takes them
@@ -217,16 +217,17 @@ app/
                           counter, class toggle, RList rows (one binding each) and an Rb.act handler frozen by
                           release, with Rb.live shown; theme_check.ml (#dev/theme): every colour token, type role
                           and bundled icon, and what Theme reads; gallery.ml (#dev/gallery): one fixture entry per
-                          widget and state, with an event log; collection_check.ml (#dev/collection): 4a over the
-                          herbier db; sheet_check.ml (#dev/sheet): a 3-snap sheet and a dropped-frame meter;
-                          spike_check.ml (#dev/spike): 4 rounds of 50 enter/leave cycles of 4a, binding count,
-                          stale-update check against a live control, heap per round; capture_check.ml (#dev/capture):
-                          viewfinder, shutter and gallery → preview file; map_check.ml (#dev/map): the positron
-                          map over the herbier db (spike 3, online half); fixture.ml: the dev pages' State; hooks.ml:
-                          herbierDev.live(), the leak count; linked only outside the release profile
+                          widget and state (two mini-maps among them), with an event log; collection_check.ml
+                          (#dev/collection): 4a over the herbier db; sheet_check.ml (#dev/sheet): a 3-snap sheet and
+                          a dropped-frame meter; spike_check.ml (#dev/spike): 4 rounds of 50 enter/leave cycles of 4a,
+                          binding count, stale-update check against a live control, heap per round; capture_check.ml
+                          (#dev/capture): viewfinder, shutter and gallery → preview file; map_check.ml (#dev/map):
+                          the positron map over the herbier db (spike 3, online half); fixture.ml: the dev pages'
+                          State; hooks.ml: herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
-                          photo_grid, preview_img, icon, viewer_zoom (imperative); month_grid (planned)
+                          photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
+                          month_grid (planned)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
       journal.ml (4c)     record.ml (4d)

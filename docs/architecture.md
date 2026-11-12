@@ -479,8 +479,9 @@ the classifier must accept both a bare URL and text containing one.
   GeoJSON polygon computed in OCaml (`Geo.Features.circle`, 64 vertices on
   the sphere of `Places.distance_m`) in a source drawn by a fill and a line
   layer, exact at every zoom and latitude.
-- Mini-map (observation screen): a non-interactive MapLibre instance, or a
-  cached PNG rendered once from it.
+- Mini-map (observation screen): a non-interactive MapLibre instance framing
+  the accuracy circle (`Widgets.Mini_map`); tapping it opens 4b centred on the
+  observation, through a one-shot framing in `State.map_view`.
 - Reverse geocoding for `place_derived`: Photon (or Géoplateforme in France),
   called once per observation when online, cached in the row.
 

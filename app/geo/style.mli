@@ -73,6 +73,14 @@ val selection_place_layer : string
 val selection_members_layer : string
 (** ["herbier-selection-members"] *)
 
+(** {1 Observation (handoff 4h)} *)
+
+val focus_source : string
+(** ["herbier-focus"]: 4h's point ({!Features.focus}). *)
+
+val focus_layer : string
+(** ["herbier-focus"] *)
+
 type error =
   | Not_a_style of string
       (** The base is not a JSON object with a ["sources"] object and a
@@ -92,7 +100,7 @@ val with_overlays : colours -> Yojson.Safe.t -> (Yojson.Safe.t, error) result
       ["clusterMaxZoom"] [detail_zoom - 1] and ["clusterProperties"] summing
       [count] and [identified] and taking the min of [west], [south] and the max
       of [east], [north] ({!Features.place_points});
-    - {!members_source} and {!selection_source}: unclustered.
+    - {!members_source}, {!selection_source} and {!focus_source}: unclustered.
 
     and, appended after the base layers in this order:
     - {!accuracy_fill_layer}: a [fill] layer of {!accuracy_source}, [fill-color]
@@ -115,7 +123,10 @@ val with_overlays : colours -> Yojson.Safe.t -> (Yojson.Safe.t, error) result
       [selected_halo], 2 px [selected] border) and {!selection_place_layer}
       (radius 7, [selected]) for the ["role"] ["place"] feature below
       {!detail_zoom}; {!selection_members_layer} (radius 7, [selected]) for the
-      ["member"] features from {!detail_zoom}.
+      ["member"] features from {!detail_zoom};
+    - last, {!focus_layer}: a [circle] layer of {!focus_source} at every zoom,
+      radius 7, [selected], 3 px [point_border] ring (20 px overall, as 4b's
+      selected point), above the accuracy circle.
 
     Every other key and every base layer and source is kept unchanged and in
     order. [Duplicate_id] when a new source id is already a base source or a new

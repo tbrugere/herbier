@@ -6,7 +6,9 @@
 
     A chip whose filter is on stays while no observation matches it, so it can
     be turned off. Reloads on {!App.saved}; a failed read shows in the counter.
-    A row opens 4h, or 4k when it is « À identifier »; the day's ◎ is not
-    interactive; rows show no photo count. *)
+    A row opens 4h, or 4k when it is « À identifier »; rows show no photo count.
+    A day's place is a button, « <place> ◎ », when at least one of its shown
+    observations has a position: it opens 4b framing them ({!State.focus_map}).
+    A day with a place name but no position shows the name alone, without ◎. *)
 
 val v : App.t -> Screen.t

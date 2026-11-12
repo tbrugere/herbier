@@ -1,5 +1,6 @@
 // 4c Journal (app/ui/screens/journal.ml).
 @use '../base'
+@use '../widgets'
 
 .journal
   gap: 14px
@@ -29,3 +30,10 @@
   align-items: center
   gap: 2px
   color: var(--moss)
+
+// A 44 px touch target; the negative margin keeps the header's height.
+button.journal__place
+  +widgets.bare-button
+  min-height: 44px
+  padding: 0 8px
+  margin: -14px -8px

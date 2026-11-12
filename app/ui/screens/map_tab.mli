@@ -11,6 +11,13 @@
     (a row opens 4h, or 4k when « À identifier ») and offers « Renommer »,
     written to [place_label] on every member of the place. The sheet is docked
     on the tab bar; the camera and the selected place are kept in
-    {!State.map_view} across navigation. Reloads on {!App.saved}. *)
+    {!State.map_view} across navigation. Reloads on {!App.saved}.
+
+    A framing asked by another screen ({!State.focus_map}: 4c « ◎ », 4h's
+    mini-map) wins over the restored camera and over the first framing of the
+    data: as soon as the map exists it is framed without animation (max zoom
+    16), then the request is cleared in State (also when the map cannot be
+    created). A request left pending because the screen was left before its map
+    existed is applied at the next entry. *)
 
 val v : App.t -> Screen.t

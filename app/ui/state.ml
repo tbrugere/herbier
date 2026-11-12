@@ -35,18 +35,27 @@ type camera = {center : Herbier_domain.Places.point; zoom : float}
 type map_view = {
   camera : camera option;
   selected : Herbier_domain.Ids.Observation_id.t option;
+  focus : Herbier_geo.Features.bounds option;
 }
 
-let no_map_view = {camera = None; selected = None}
+let no_map_view = {camera = None; selected = None; focus = None}
 
 let equal_camera a b =
   Float.equal a.center.lat b.center.lat
   && Float.equal a.center.lon b.center.lon
   && Float.equal a.zoom b.zoom
 
+let equal_bounds (a : Herbier_geo.Features.bounds)
+    (b : Herbier_geo.Features.bounds) =
+  Float.equal a.south b.south
+  && Float.equal a.west b.west
+  && Float.equal a.north b.north
+  && Float.equal a.east b.east
+
 let equal_map_view a b =
   Option.equal equal_camera a.camera b.camera
   && Option.equal Herbier_domain.Ids.Observation_id.equal a.selected b.selected
+  && Option.equal equal_bounds a.focus b.focus
 
 type 'a cell = {signal : 'a React.signal; set : ?step:React.step -> 'a -> unit}
 
@@ -77,3 +86,7 @@ let set_filters t ?step v = t.filters.set ?step v
 let set_network t ?step v = t.network.set ?step v
 let set_account t ?step v = t.account.set ?step v
 let set_map_view t ?step v = t.map_view.set ?step v
+
+let focus_map t b =
+  let current = React.S.value t.map_view.signal in
+  t.map_view.set {current with selected = None; focus = Some b}

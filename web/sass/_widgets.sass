@@ -96,10 +96,12 @@
 
 // Cards
 
+$card-padding: 16px
+
 .card
   background: var(--sand)
   border-radius: 14px
-  padding: 16px
+  padding: $card-padding
 
 .card-plant
   +bare-button
@@ -666,3 +668,25 @@
   background: var(--veil)
   color: var(--paper)
   +base.ui(9px, 700)
+
+// Mini_map: a non-interactive MapLibre map under a full-size tap button.
+.mini-map
+  position: relative
+  height: 130px
+  border-radius: 10px
+  overflow: hidden
+  background: var(--paper)
+
+// Over the canvas, under MapLibre's control corners (z-index 2) so that the
+// attribution stays clickable. The ring is drawn inside the box: a parent
+// clipping its overflow (the 4h card) would cut one drawn outside.
+.mini-map__tap
+  +bare-button
+  position: absolute
+  inset: 0
+  z-index: 1
+  width: 100%
+  height: 100%
+  &:focus-visible
+    outline: 3px solid var(--moss)
+    outline-offset: -3px

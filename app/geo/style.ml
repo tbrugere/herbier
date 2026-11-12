@@ -25,6 +25,8 @@ let members_layer = "herbier-members"
 let selection_halo_layer = "herbier-selection-halo"
 let selection_place_layer = "herbier-selection-place"
 let selection_members_layer = "herbier-selection-members"
+let focus_source = "herbier-focus"
+let focus_layer = "herbier-focus"
 
 type error = Not_a_style of string | Duplicate_id of string
 
@@ -154,6 +156,8 @@ let overlay_layers c =
     layer ~id:selection_members_layer ~type_:"circle" ~source:selection_source
       ~filter:(role "member") ~minzoom:detail_zoom
       (disc ~radius:7 (`String c.selected) c);
+    layer ~id:focus_layer ~type_:"circle" ~source:focus_source
+      (disc ~radius:7 (`String c.selected) c);
   ]
 
 let layer_id = function
@@ -186,6 +190,7 @@ let with_overlays colours = function
           (places_source, places_source_json);
           (members_source, geojson_source);
           (selection_source, geojson_source);
+          (focus_source, geojson_source);
         ]
       and new_layers = overlay_layers colours in
       let duplicate =

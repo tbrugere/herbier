@@ -5,6 +5,7 @@ module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
 module Observation = Herbier_domain.Observation
 module Plant = Herbier_domain.Plant
+module Features = Herbier_geo.Features
 module W = Widgets
 
 let cls c = At.class' (Jstr.v c)
@@ -34,11 +35,10 @@ let load db id =
 
 let day_time t = Fr_date.day_time ~tz_offset_s:(Zone.offset_s t) t
 
+(* The accuracy is never written: the mini-map's circle is its only
+   representation (handoff 4h, architecture §8). *)
 let coordinates (p : Observation.position) =
-  Printf.sprintf "%.4f, %.4f%s" p.lat p.lon
-    (match p.accuracy_m with
-    | Some a -> Printf.sprintf " · ± %.0f m" a
-    | None -> "")
+  Printf.sprintf "%.4f, %.4f" p.lat p.lon
 
 let place (o : Observation.t) =
   let name =
@@ -290,7 +290,25 @@ let render app (data : data React.signal) =
     card "Date"
       [El.div ~at:[cls "observation__line"] [date_value; modify.el]; date_input]
   in
-  let place_el = El.div [] in
+  let place_el = El.div ~at:[cls "observation__place-text"] [] in
+  (* Built once per rendering, outside [place_el]'s rebuilds: a note or date
+     save moves the point instead of recreating the map. *)
+  let mini_map =
+    match App.theme app with
+    | Error (Theme.Missing_tokens missing) ->
+        Console.(
+          error
+            [str "observation: mini-carte"; str (String.concat ", " missing)]);
+        None
+    | Ok theme ->
+        Some
+          (W.Mini_map.v ~colours:theme.map
+             (React.S.map ~eq:( == ) (fun d -> d.observation.position) data))
+  in
+  let open_map () =
+    Option.iter (State.focus_map (App.state app)) (Features.bounds [!current]);
+    Route.go (Route.Tab W.Tab_bar.Map)
+  in
   let note =
     W.Inline_text.v ~cls:"t-notes" ~label:"Note de cette rencontre"
       ~placeholder:"Touchez pour ajouter une note."
@@ -349,7 +367,14 @@ let render app (data : data React.signal) =
         problem_el;
         mosaic_el;
         date_card;
-        card "Lieu" [place_el];
+        El.div
+          ~at:[cls "observation__place"]
+          [
+            W.Card.panel
+              (match mini_map with
+              | Some m -> [m.el; place_el]
+              | None -> [place_el]);
+          ];
         card "Note de cette rencontre" [note.el];
         El.div
           ~at:[cls "observation__actions"]
@@ -402,6 +427,9 @@ let render app (data : data React.signal) =
           Rb.class_ problem_el "is-hidden"
             (React.S.map (String.equal "") problem_text);
         ];
+        (match mini_map with
+        | None -> []
+        | Some m -> Rb.act m.tap open_map :: m.bindings);
         b_change;
         b_journal;
         b_delete;

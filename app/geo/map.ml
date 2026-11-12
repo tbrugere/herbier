@@ -84,13 +84,13 @@ let set_places m places =
 let set_selection m place =
   set_source m Style.selection_source (Features.selection place)
 
-let circle_steps = 64
+let set_focus m point = set_source m Style.focus_source (Features.focus point)
 
 let set_accuracy m = function
   | None -> set_source m Style.accuracy_source Features.empty
   | Some (center, radius_m) ->
       set_source m Style.accuracy_source
-        (Features.circle ~center ~radius_m ~steps:circle_steps)
+        (Features.circle ~center ~radius_m ~steps:Features.circle_steps)
 
 type click = {at : Places.point; observations : Observation_id.t list}
 
@@ -149,9 +149,10 @@ let zoom = Maplibre.zoom
 let fly_to m ~center ~zoom = Maplibre.fly_to m ~center:(lng_lat center) ~zoom
 let fit_max_zoom = 16.
 
-let fit ?(max_zoom = fit_max_zoom) m
+let fit ?(max_zoom = fit_max_zoom) ?(animate = true) m
     ({south; west; north; east} : Features.bounds) ~padding_px =
   Maplibre.fit_bounds m ~west ~south ~east ~north ~padding:padding_px ~max_zoom
+    ~animate
 
 let rendered m =
   Maplibre.rendered_ids m ~layers:[Style.points_layer]
