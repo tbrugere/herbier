@@ -41,3 +41,6 @@ __pycache__/
 *.swp
 .review-report/
 .implement/
+
+# direnv: local env and secrets
+.envrc
