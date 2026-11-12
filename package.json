@@ -9,6 +9,7 @@
     "emu:start": "scripts/emulator.sh start",
     "emu:stop": "scripts/emulator.sh stop",
     "emu:install": "scripts/emulator.sh install",
+    "emu:install-web": "scripts/emulator.sh install-web",
     "emu:open": "scripts/emulator.sh open",
     "release": "scripts/release.sh",
     "db:start": "supabase start",

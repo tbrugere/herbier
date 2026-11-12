@@ -7,7 +7,7 @@ description: Run the app on a headless Android emulator and drive its WebView ov
 
 Two scripts do the work; this skill is how to use them and what goes wrong.
 
-- `scripts/emulator.sh` (bash): `start`, `stop`, `install`, `launch`,
+- `scripts/emulator.sh` (bash): `start`, `stop`, `install`, `install-web`, `launch`,
   `kill-app`, `forward`, `open [fragment]`, `webview <cmd>…`, `env`.
   Run with no argument for the usage text.
 - `scripts/webview.mjs` (Node 22+, no dependency): `targets`, `eval <js>`,
@@ -26,10 +26,19 @@ Two scripts do the work; this skill is how to use them and what goes wrong.
    `HERBIER_REPO` overrides, so the scripts can come from another branch):
    ```sh
    scripts/emulator.sh start      # creates the AVD "herbier" if missing, boots headless
-   scripts/emulator.sh install    # dune build @web, cap sync, assembleDebug, adb install -r
+   scripts/emulator.sh install-web   # web-only fast path; falls back to install by itself
    scripts/emulator.sh open dev/storage      # prints the page text once it settles
    scripts/emulator.sh webview screenshot /path/in/scratchpad/storage.png
    ```
+   Use `install-web` by default, including after switching branches. It
+   runs `dune build @web` and serves the new bundle from the installed debug
+   APK, without Gradle; it falls back to the full `install` (dune build @web,
+   cap sync, assembleDebug, adb install -r) when the app is missing or the
+   APK on the device was not built by `install` from the current native
+   inputs: `android/`, `package.json`, `package-lock.json`,
+   `capacitor.config.ts` (content hash of the checkout, uncommitted edits
+   included). So the caller needs no decision; run `install` directly only
+   to force an APK rebuild. See "Web-only reinstall" below.
 4. Lifecycle checks, with `eval "$(scripts/emulator.sh env)"` for adb on PATH:
    - reload: `open <fragment>` again (it reloads the page);
    - kill and relaunch: `scripts/emulator.sh kill-app`, then `open <fragment>`;
@@ -44,6 +53,29 @@ Two scripts do the work; this skill is how to use them and what goes wrong.
    - app files: `adb shell run-as re.bruge.herbier ls databases`.
 5. `scripts/emulator.sh stop` at the end (kills the emulator, removes the
    forward). The AVD stays for next time.
+
+## Web-only reinstall
+
+`install-web` copies `_build/default/web/dist` into the app's
+`files/herbier-web-dev/<stamp>` (adb push to `/data/local/tmp/herbier-web/`,
+then `run-as cp`) and calls Capacitor's own live-update API from the page:
+`Capacitor.Plugins.WebView.setServerBasePath` then `persistServerBasePath`.
+The app reloads at `https://localhost/` (no fragment; `open` sets one), with
+the same origin, storage, SQLite files and plugins as before. The path is
+persisted, so `kill-app` and relaunch keep the pushed bundle.
+
+- `install` removes `files/herbier-web-dev`, so the APK's own assets are
+  served again (Capacitor keeps a persisted path across a reinstall with the
+  same version code). It also writes the stamp `install-web` checks,
+  `/data/local/tmp/herbier-web/re.bruge.herbier.stamp` (native hash and
+  `lastUpdateTime`); an APK installed any other way forces a full install.
+- `pm clear` drops the pushed bundle too (back to the APK's assets); run
+  `install-web` again after it.
+- Which bundle is served:
+  `webview eval "Capacitor.Plugins.WebView.getServerBasePath().then(r => r.path)"`
+  (`public`: the APK's own assets).
+- Release builds are untouched: nothing in the app or `capacitor.config.ts`
+  changes.
 
 ## Reading a dev page
 

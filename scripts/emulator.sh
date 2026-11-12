@@ -5,6 +5,10 @@
 #   scripts/emulator.sh start            create the AVD if missing, boot it headless, wait for boot
 #   scripts/emulator.sh stop             remove the devtools forward, kill the emulator
 #   scripts/emulator.sh install          dune build @web, cap sync, assembleDebug, adb install
+#   scripts/emulator.sh install-web      dune build @web, push the web bundle into the installed
+#                                        debug app and serve it from there (no Gradle); falls back
+#                                        to install when the APK is missing or its native inputs
+#                                        (android/, package*.json, capacitor.config.ts) changed
 #   scripts/emulator.sh launch           start the app, or bring it to the front
 #   scripts/emulator.sh kill-app         force-stop the app
 #   scripts/emulator.sh forward          forward the app's WebView devtools socket, print the port
@@ -16,8 +20,8 @@
 #   scripts/emulator.sh webview <cmd>... run scripts/webview.mjs on the forwarded port
 #   scripts/emulator.sh env              print the exports this script uses (eval "$(… env)")
 #
-# install builds the checkout of the current directory (HERBIER_REPO overrides),
-# so the script can drive a build of another worktree.
+# install and install-web build the checkout of the current directory
+# (HERBIER_REPO overrides), so the script can drive a build of another worktree.
 #
 # Environment (defaults): ANDROID_HOME (~/Library/Android/sdk), JAVA_HOME
 # (java_home -v 21), HERBIER_AVD (herbier), HERBIER_AVD_IMAGE
@@ -139,8 +143,37 @@ cmd_stop() {
   echo "stopped $s"
 }
 
-cmd_install() {
+# The native inputs of the APK: what install-web cannot ship. Files tracked
+# or not ignored, by content, so an uncommitted edit counts.
+native_hash() {
   local root
+  root="$(repo)"
+  (
+    cd "$root"
+    git ls-files -co --exclude-standard -z -- android package.json package-lock.json capacitor.config.ts \
+      | sort -z | xargs -0 shasum | shasum | awk '{print $1}'
+  )
+}
+
+# Where install-web keeps its state: the bundle pushed by adb (shell-owned,
+# readable by the app's run-as user) and the native hash of the last install.
+device_tmp() { echo "/data/local/tmp/herbier-web/$(app_id)"; }
+
+# The app's own copy of the bundle, which its local server hosts. Relative to
+# the app's data directory (run-as starts there).
+WEB_DEV_DIR=files/herbier-web-dev
+
+app_update_time() {
+  adb -s "$(serial)" shell dumpsys package "$(app_id)" \
+    | tr -d '\r' | sed -n 's/^ *lastUpdateTime=//p' | head -n 1
+}
+
+# "<native hash> <lastUpdateTime>" as left by the last install: the APK on
+# the device is ours and was built from these native inputs.
+install_stamp() { echo "$(native_hash) $(app_update_time)"; }
+
+cmd_install() {
+  local root s id
   root="$(repo)"
   booted || die "no booted emulator: scripts/emulator.sh start"
   echo "building $root ($(git -C "$root" rev-parse --short HEAD))"
@@ -151,7 +184,67 @@ cmd_install() {
     npx cap sync android
     cd android && ./gradlew -q assembleDebug
   )
-  adb -s "$(serial)" install -r "$root/android/app/build/outputs/apk/debug/app-debug.apk"
+  s="$(serial)"
+  id="$(app_id)"
+  adb -s "$s" install -r "$root/android/app/build/outputs/apk/debug/app-debug.apk"
+  # A reinstall keeps the version code, so Capacitor would keep serving a
+  # bundle pushed by install-web: remove it, the APK's own assets win again.
+  adb -s "$s" shell run-as "$id" rm -rf "$WEB_DEV_DIR"
+  adb -s "$s" shell "mkdir -p $(device_tmp) && echo '$(install_stamp)' > $(device_tmp).stamp"
+}
+
+# The fast path for a web-only change: build the bundle, copy it into the
+# app's files and point Capacitor's local server at it, with the WebView
+# plugin's setServerBasePath and persistServerBasePath (Capacitor's own live
+# update API). The origin stays https://localhost, so storage, the SQLite
+# databases and the secure context are those of the installed app. The
+# persisted path survives a kill or relaunch; the next install drops it.
+cmd_install_web() {
+  local root s id tmp stamp dir dist
+  root="$(repo)"
+  booted || die "no booted emulator: scripts/emulator.sh start"
+  s="$(serial)"
+  id="$(app_id)"
+  tmp="$(device_tmp)"
+  stamp="$(adb -s "$s" shell cat "$tmp.stamp" 2>/dev/null | tr -d '\r' || true)"
+  if [[ -z "$(app_update_time)" ]]; then
+    echo "install-web: $id not installed, full install"
+    cmd_install
+    return
+  fi
+  if [[ "$stamp" != "$(install_stamp)" ]]; then
+    echo "install-web: APK not built by install from these native inputs, full install"
+    cmd_install
+    return
+  fi
+  echo "building $root ($(git -C "$root" rev-parse --short HEAD)), web only"
+  (
+    cd "$root"
+    if command -v opam >/dev/null; then eval "$(opam env 2>/dev/null)" || true; fi
+    dune build @web
+  )
+  dist="$root/_build/default/web/dist"
+  adb -s "$s" shell "rm -rf $tmp && mkdir -p $tmp && chmod 755 $tmp"
+  adb -s "$s" push -q "$dist/." "$tmp/" >/dev/null
+  adb -s "$s" shell "chmod -R a+rX $tmp"
+  # A fresh directory per push: the WebView never mixes two bundles.
+  dir="$WEB_DEV_DIR/$(date +%s)"
+  adb -s "$s" shell run-as "$id" sh -c "'rm -rf $WEB_DEV_DIR && mkdir -p $dir && cp -R $tmp/. $dir/'"
+  local abs
+  abs="$(adb -s "$s" shell run-as "$id" sh -c "'cd $dir && pwd'" | tr -d '\r')"
+  [[ "$abs" == /* ]] || die "cannot resolve $dir in $id"
+  if [[ -n "$(app_pid)" ]] && ! app_in_front; then cmd_kill_app; fi
+  [[ -n "$(app_pid)" ]] || { cmd_launch; sleep 2; }
+  cmd_forward >/dev/null
+  webview wait-for "document.readyState === 'complete'" 20000 >/dev/null
+  # Both calls queue on the plugin thread in this order, before the reload
+  # setServerBasePath posts can tear down this page.
+  webview eval "window.__herbierOpenPending = true; const w = Capacitor.Plugins.WebView; w.setServerBasePath({ path: '$abs' }); w.persistServerBasePath(); true" >/dev/null
+  sleep 1
+  webview wait-for "document.readyState === 'complete' && !window.__herbierOpenPending" 60000 >/dev/null
+  [[ "$(webview eval "Capacitor.Plugins.WebView.getServerBasePath().then(r => r.path)")" == "$abs" ]] \
+    || die "the app does not serve $abs"
+  echo "serving $abs"
 }
 
 cmd_launch() {
@@ -259,6 +352,7 @@ case "${1:-}" in
   start) cmd_start ;;
   stop) cmd_stop ;;
   install) cmd_install ;;
+  install-web) cmd_install_web ;;
   launch) cmd_launch ;;
   kill-app) cmd_kill_app ;;
   forward) cmd_forward ;;
