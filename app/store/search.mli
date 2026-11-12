@@ -32,11 +32,24 @@ val match_expression : string -> string option
     [None] when there is no term (empty, blank, punctuation or symbols only).
     Never raises. *)
 
+val matches : query:string -> string -> bool
+(** [matches ~query text] runs, in memory, what {!match_expression} asks of
+    FTS5: [true] when every term of [query] (split, folded and with one ending
+    stripped exactly as {!match_expression} does) is a prefix of some term of
+    [text] (split and folded the same way, no ending stripped). [false] when
+    [query] has no term. Never raises. *)
+
 val plants : string -> Herbier_domain.Plant.t Stmt.query option
 (** [None] when [match_expression text] is [None]; the caller then shows the
     unfiltered list. Otherwise the query returns each live plant whose document
     matches, once, in {!Plants.order_by} (not by rank), decoded with
     {!Plants.row}. *)
+
+val plants_by_name : string -> Herbier_domain.Plant.t Stmt.query option
+(** {!plants} on the names and tags only: a plant is not found through the
+    places it was seen at. The map (4b) matches a place on its own name with
+    {!matches}; through the places column, « lisi » would also admit the
+    observations made elsewhere of every plant ever seen at « Lisière ». *)
 
 val plants_or_all : string -> Herbier_domain.Plant.t Stmt.query
 (** {!plants}, or {!Plants.list} when the text has no term. *)

@@ -27,3 +27,10 @@ let place obs =
       | Places.Named s | Places.Derived s -> s
       | Places.Coordinates {lat; lon} -> Printf.sprintf "%.4f, %.4f" lat lon)
     (Places.label obs)
+
+let plant_name names id =
+  match
+    List.find_opt (fun (p, _) -> Herbier_domain.Ids.Plant_id.equal p id) names
+  with
+  | Some (_, n) -> n
+  | None -> "Plante supprimée"

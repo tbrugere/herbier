@@ -1,7 +1,7 @@
 type t = Jv.t
 type lng_lat = {lng : float; lat : float}
 type camera = {center : lng_lat; zoom : float}
-type click = {at : lng_lat; ids : string list}
+type click = {at : lng_lat; ids : string list; properties : string list}
 
 let plugin = "map"
 
@@ -78,10 +78,10 @@ let on_click h ~layers f =
   let cb v =
     match lng_lat_of v with
     | Some at ->
-        let ids =
-          match Jv.find v "ids" with Some ids -> strings ids | None -> []
+        let field name =
+          match Jv.find v name with Some l -> strings l | None -> []
         in
-        f {at; ids}
+        f {at; ids = field "ids"; properties = field "properties"}
     | None -> ()
   in
   run h "onClick" [|layer_list layers; callback cb|]

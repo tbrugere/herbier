@@ -2,8 +2,10 @@
     line of metadata and a chevron. About 72 px high; pressed = [sand]. *)
 
 (** [Image url] (a local preview or reference thumbnail, never an unchecked
-    remote URL), or the striped placeholder while there is none yet. *)
-type thumb = Image of string | Placeholder
+    remote URL); [Preview path] a device preview ([previews/<id>.jpg]) shown
+    through {!Preview_img}; or the striped placeholder while there is none yet.
+*)
+type thumb = Image of string | Preview of string | Placeholder
 
 (** [To_identify] writes the title in [ochre] (["À identifier"]). *)
 type tone = Normal | To_identify

@@ -4,9 +4,19 @@
 
 type t
 
-val create : db:Herbier_store.Db.t -> state:State.t -> t
+val create :
+  db:Herbier_store.Db.t ->
+  state:State.t ->
+  theme:(Theme.t, Theme.error) result ->
+  t
+(** [theme]: {!Theme.load}'s result, read once at startup. *)
+
 val db : t -> Herbier_store.Db.t
 val state : t -> State.t
+
+val theme : t -> (Theme.t, Theme.error) result
+(** The design tokens OCaml needs (the map's colours), or why they are missing.
+*)
 
 val save :
   t ->

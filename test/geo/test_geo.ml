@@ -96,6 +96,36 @@ let style_error =
   in
   Alcotest.testable pp equal
 
+let pp_point f (p : Places.point) =
+  Format.fprintf f "{lat = %.12g; lon = %.12g}" p.lat p.lon
+
+let close_point (a : Places.point) (b : Places.point) =
+  Float.abs (a.lat -. b.lat) <= 1e-9 && Float.abs (a.lon -. b.lon) <= 1e-9
+
+let point = Alcotest.testable pp_point close_point
+
+let pp_hit f = function
+  | Features.Group (b : Features.bounds) ->
+      Format.fprintf f
+        "Group {south = %.9g; west = %.9g; north = %.9g; east = %.9g}" b.south
+        b.west b.north b.east
+  | Features.Member id ->
+      Format.fprintf f "Member %s" (Ids.Observation_id.to_string id)
+
+let equal_hit a b =
+  match (a, b) with
+  | Features.Group (a : Features.bounds), Features.Group (b : Features.bounds)
+    ->
+      Float.equal a.south b.south
+      && Float.equal a.west b.west
+      && Float.equal a.north b.north
+      && Float.equal a.east b.east
+  | Features.Member a, Features.Member b -> Ids.Observation_id.equal a b
+  | Features.Group _, Features.Member _ | Features.Member _, Features.Group _ ->
+      false
+
+let hit_t = Alcotest.testable pp_hit equal_hit
+
 (* ---------- small JSON helpers ---------- *)
 
 let collection features =
@@ -343,6 +373,434 @@ let circle_at_the_pole () =
         (Float.is_finite lon && Float.is_finite lat))
     ring
 
+(* ---------- Features.places, find, place_points, selection, hit ---------- *)
+
+(* Three spots well over 500 m apart (app/store/dev_seed.ml's lisiere, jardin,
+   ruisseau; the 500 m rule is architecture §8),
+   so [Places.cluster] gives three places; members of the same spot share its
+   point, so each cluster's extent collapses to that point and its bounds are
+   that single point. Ascending [at] (0..5) across the 3 spots so
+   [Places.cluster] orders the places A, B, C. *)
+
+let spot_a : Places.point = {lat = 45.7712; lon = 3.0823}
+let spot_b : Places.point = {lat = 45.7650; lon = 3.0901}
+let spot_c : Places.point = {lat = 45.7801; lon = 3.0711}
+let at_spot (p : Places.point) = (p.lat, p.lon)
+
+(* Cluster A: 3 members, mixed identified (2 of 3); cluster B: 1 member,
+   unidentified; cluster C: 2 members, mixed identified (1 of 2). *)
+let a1 = obs ~id:21 ~at:0 (Some (at_spot spot_a))
+let a2 = obs ~id:22 ~at:1 ~plant:(plant_id 1) (Some (at_spot spot_a))
+let a3 = obs ~id:23 ~at:2 ~plant:(plant_id 2) (Some (at_spot spot_a))
+let b1 = obs ~id:24 ~at:3 (Some (at_spot spot_b))
+let c1 = obs ~id:25 ~at:4 ~plant:(plant_id 3) (Some (at_spot spot_c))
+let c2 = obs ~id:26 ~at:5 (Some (at_spot spot_c))
+let three_spots = [a1; a2; a3; b1; c1; c2]
+let always_true (_ : Places.cluster) (_ : Observation.t) = true
+let key_string (p : Features.place) = Ids.Observation_id.to_string p.key
+let member_ids (p : Features.place) = List.map string_of_id p.cluster.members
+let shown_ids (p : Features.place) = List.map string_of_id p.shown
+
+let places_everything () =
+  let places = Features.places ~keep:always_true three_spots in
+  Alcotest.(check (list string))
+    "key is each cluster's earliest member's id"
+    [string_of_id a1; string_of_id b1; string_of_id c1]
+    (List.map key_string places);
+  Alcotest.(check (list (list string)))
+    "shown is the whole cluster when keep is always true"
+    [
+      List.map string_of_id [a1; a2; a3];
+      [string_of_id b1];
+      List.map string_of_id [c1; c2];
+    ]
+    (List.map shown_ids places);
+  Alcotest.(check (list (list string)))
+    "cluster.members mirrors shown here"
+    (List.map shown_ids places)
+    (List.map member_ids places)
+
+let places_whole_cluster_dropped () =
+  let keep (_ : Places.cluster) (o : Observation.t) =
+    not (Ids.Observation_id.equal o.id b1.id)
+  in
+  let everything = Features.places ~keep:always_true three_spots in
+  let places = Features.places ~keep three_spots in
+  Alcotest.(check (list string))
+    "B is absent, A and C remain in order"
+    [string_of_id a1; string_of_id c1]
+    (List.map key_string places);
+  let cluster_of key ps =
+    List.find (fun (p : Features.place) -> String.equal (key_string p) key) ps
+  in
+  List.iter
+    (fun key ->
+      let before = cluster_of key everything
+      and after = cluster_of key places in
+      Alcotest.(check (list string))
+        (Printf.sprintf "%s's cluster.members is unchanged" key)
+        (member_ids before) (member_ids after);
+      Alcotest.(check point)
+        (Printf.sprintf "%s's centroid is unchanged" key)
+        before.cluster.centroid after.cluster.centroid)
+    [string_of_id a1; string_of_id c1]
+
+let places_earliest_member_dropped () =
+  let keep (_ : Places.cluster) (o : Observation.t) =
+    not (Ids.Observation_id.equal o.id a1.id)
+  in
+  let places = Features.places ~keep three_spots in
+  let a =
+    match
+      List.find_opt
+        (fun (p : Features.place) -> Ids.Observation_id.equal p.key a1.id)
+        places
+    with
+    | Some p -> p
+    | None ->
+        Alcotest.fail "place A is missing although 2 of its 3 members pass"
+  in
+  Alcotest.(check string)
+    "key is still A1's id" (string_of_id a1) (key_string a);
+  Alcotest.(check (list string))
+    "shown is A without A1"
+    (List.map string_of_id [a2; a3])
+    (shown_ids a)
+
+let places_keep_sees_the_cluster () =
+  let keep (c : Places.cluster) (_ : Observation.t) =
+    List.length c.members >= 2
+  in
+  let places = Features.places ~keep three_spots in
+  Alcotest.(check (list string))
+    "only the clusters with >= 2 members (A, C)"
+    [string_of_id a1; string_of_id c1]
+    (List.map key_string places)
+
+let places_unplaceable_and_empty () =
+  Alcotest.(check (list string))
+    "no place for unplaceable observations" []
+    (List.map key_string (Features.places ~keep:always_true unplaceable));
+  Alcotest.(check (list string))
+    "no place for an empty input" []
+    (List.map key_string (Features.places ~keep:always_true []))
+
+let find_by_any_member () =
+  let places = Features.places ~keep:always_true three_spots in
+  Alcotest.(check bool)
+    "finds by the key (earliest member)" true
+    (Option.is_some (Features.find places a1.id));
+  Alcotest.(check bool)
+    "finds by a non-earliest member" true
+    (Option.is_some (Features.find places a3.id));
+  let keep (_ : Places.cluster) (o : Observation.t) =
+    not (Ids.Observation_id.equal o.id a3.id)
+  in
+  let filtered = Features.places ~keep three_spots in
+  Alcotest.(check bool)
+    "finds by a member filtered out of shown, through cluster.members" true
+    (Option.is_some (Features.find filtered a3.id))
+
+let find_absent () =
+  let places = Features.places ~keep:always_true three_spots in
+  Alcotest.(check bool)
+    "unknown id" false
+    (Option.is_some (Features.find places (obs_id 999)));
+  Alcotest.(check bool)
+    "an unplaceable observation's id" false
+    (Option.is_some (Features.find places no_position.id))
+
+let place_points_props (j : Yojson.Safe.t) =
+  let open Yojson.Safe.Util in
+  j
+  |> member "features"
+  |> to_list
+  |> List.map (fun f ->
+      let p = f |> member "properties" in
+      ( p |> member "id" |> to_string,
+        p |> member "count" |> to_int,
+        p |> member "identified" |> to_int ))
+
+let place_points_order_and_counts () =
+  let places = Features.places ~keep:always_true three_spots in
+  let json = Features.place_points places in
+  Alcotest.(check (list string))
+    "one feature per place, in order"
+    (List.map key_string places)
+    (List.map (fun (id, _, _) -> id) (place_points_props json));
+  Alcotest.(check (list (pair int int)))
+    "count/identified: A mixed 3/2, B all-unidentified 1/0, C mixed 2/1"
+    [(3, 2); (1, 0); (2, 1)]
+    (List.map (fun (_, c, i) -> (c, i)) (place_points_props json))
+
+let place_points_properties_are_exact () =
+  let places = Features.places ~keep:always_true three_spots in
+  let json = Features.place_points places in
+  let open Yojson.Safe.Util in
+  match (places, json |> member "features" |> to_list) with
+  | a :: _, first :: _ ->
+      Alcotest.(check yojson)
+        "A's feature has exactly id, count, identified, west, south, east, \
+         north"
+        (`Assoc
+           [
+             ("id", `String (key_string a));
+             ("count", `Int 3);
+             ("identified", `Int 2);
+             ("west", `Float spot_a.lon);
+             ("south", `Float spot_a.lat);
+             ("east", `Float spot_a.lon);
+             ("north", `Float spot_a.lat);
+           ])
+        (first |> member "properties");
+      Alcotest.(check yojson)
+        "geometry is a Point at the centroid"
+        (`Assoc
+           [
+             ("type", `String "Point");
+             ("coordinates", `List [`Float spot_a.lon; `Float spot_a.lat]);
+           ])
+        (first |> member "geometry")
+  | _ -> Alcotest.fail "expected at least one place and one feature"
+
+let place_points_empty_for_no_places () =
+  Alcotest.(check yojson)
+    "[] gives Features.empty" Features.empty (Features.place_points [])
+
+(* One place whose two members are about 110 m apart: west/east and
+   south/north differ, and the centroid is neither member. Kept out of
+   [three_spots] so the order and count tests above stay as they are. *)
+let d1 = obs ~id:31 ~at:10 (Some (45.7900, 3.0600))
+let d2 = obs ~id:32 ~at:11 ~plant:(plant_id 4) (Some (45.7905, 3.0612))
+let close_pair = [d1; d2]
+
+let number_prop key f =
+  Yojson.Safe.Util.(f |> member "properties" |> member key |> to_number)
+
+let coordinates f =
+  Yojson.Safe.Util.(
+    f
+    |> member "geometry"
+    |> member "coordinates"
+    |> to_list
+    |> List.map to_number)
+
+let only_feature json =
+  match Yojson.Safe.Util.(json |> member "features" |> to_list) with
+  | [f] -> f
+  | l -> Alcotest.failf "expected one feature, got %d" (List.length l)
+
+let place_points_bounds_and_centroid () =
+  let close = Alcotest.float 1e-9 in
+  let mean = ((45.7900 +. 45.7905) /. 2., (3.0600 +. 3.0612) /. 2.) in
+  let f =
+    only_feature
+      (Features.place_points (Features.places ~keep:always_true close_pair))
+  in
+  List.iter
+    (fun (key, expected) ->
+      Alcotest.check close key expected (number_prop key f))
+    [("west", 3.0600); ("south", 45.7900); ("east", 3.0612); ("north", 45.7905)];
+  Alcotest.(check (list (float 1e-9)))
+    "the point is the centroid, the members' mean"
+    [snd mean; fst mean]
+    (coordinates f);
+  (* With d1 hidden, the bounds shrink to d2 but the place stays where the
+     whole cluster is. *)
+  let keep (_ : Places.cluster) (o : Observation.t) =
+    not (Ids.Observation_id.equal o.id d1.id)
+  in
+  let f =
+    only_feature (Features.place_points (Features.places ~keep close_pair))
+  in
+  List.iter
+    (fun (key, expected) ->
+      Alcotest.check close (key ^ " from shown") expected (number_prop key f))
+    [
+      ("west", 3.0612);
+      ("south", 45.7905);
+      ("east", 3.0612);
+      ("north", 45.7905);
+      ("count", 1.);
+      ("identified", 1.);
+    ];
+  Alcotest.(check (list (float 1e-9)))
+    "the point is still the whole cluster's centroid"
+    [snd mean; fst mean]
+    (coordinates f)
+
+let place_points_and_selection_follow_shown () =
+  let keep (_ : Places.cluster) (o : Observation.t) =
+    not (Ids.Observation_id.equal o.id a2.id)
+  in
+  let places = Features.places ~keep three_spots in
+  Alcotest.(check (list (pair int int)))
+    "A counts a1 and a3 only (1 identified); B and C unchanged"
+    [(2, 1); (1, 0); (2, 1)]
+    (List.map
+       (fun (_, c, i) -> (c, i))
+       (place_points_props (Features.place_points places)));
+  let open Yojson.Safe.Util in
+  let ids =
+    Features.selection (Some (List.hd places))
+    |> member "features"
+    |> to_list
+    |> List.map (fun f -> f |> member "properties" |> member "id" |> to_string)
+  in
+  Alcotest.(check (list string))
+    "the selection is A's place, then its shown members a1 and a3"
+    [string_of_id a1; string_of_id a1; string_of_id a3]
+    ids
+
+let selection_none_is_empty () =
+  Alcotest.(check yojson)
+    "None gives Features.empty" Features.empty (Features.selection None)
+
+let selection_some () =
+  let places = Features.places ~keep:always_true three_spots in
+  let a = List.hd places in
+  let json = Features.selection (Some a) in
+  let open Yojson.Safe.Util in
+  let features = json |> member "features" |> to_list in
+  Alcotest.(check int)
+    "one place feature plus one per shown member" 4 (List.length features);
+  let first = List.hd features in
+  Alcotest.(check yojson)
+    "first feature: role place, id = key, at the centroid"
+    (`Assoc [("id", `String (key_string a)); ("role", `String "place")])
+    (first |> member "properties");
+  Alcotest.(check yojson)
+    "first feature's geometry is the centroid"
+    (`Assoc
+       [
+         ("type", `String "Point");
+         ("coordinates", `List [`Float spot_a.lon; `Float spot_a.lat]);
+       ])
+    (first |> member "geometry");
+  let members = List.tl features in
+  Alcotest.(check (list string))
+    "member features in compare_obs order (ascending at)"
+    (List.map string_of_id [a1; a2; a3])
+    (List.map
+       (fun f -> f |> member "properties" |> member "id" |> to_string)
+       members);
+  List.iter
+    (fun f ->
+      Alcotest.(check (list string))
+        "a member feature has exactly id and role" ["id"; "role"]
+        (f |> member "properties" |> to_assoc |> List.map fst);
+      Alcotest.(check string)
+        "role is member" "member"
+        (f |> member "properties" |> member "role" |> to_string);
+      Alcotest.(check yojson)
+        "a member feature is a Point at its observation's position (spot A)"
+        (`Assoc
+           [
+             ("type", `String "Point");
+             ("coordinates", `List [`Float spot_a.lon; `Float spot_a.lat]);
+           ])
+        (f |> member "geometry"))
+    members
+
+let group_props ?(west = `Float 3.07) ?(south = `Float 45.76)
+    ?(east = `Float 3.09) ?(north = `Float 45.78) () =
+  `Assoc
+    [
+      ("cluster", `Bool true);
+      ("cluster_id", `Int 3);
+      ("point_count", `Int 2);
+      ("count", `Int 5);
+      ("identified", `Int 4);
+      ("west", west);
+      ("south", south);
+      ("east", east);
+      ("north", north);
+    ]
+
+let hit_group () =
+  Alcotest.(check (option hit_t))
+    "float bounds give Group"
+    (Some
+       (Features.Group
+          {Features.south = 45.76; west = 3.07; north = 45.78; east = 3.09}))
+    (Features.hit (group_props ()));
+  Alcotest.(check (option hit_t))
+    "an integer bound gives Group with floats"
+    (Some
+       (Features.Group
+          {Features.south = 45.76; west = 3.; north = 45.78; east = 3.09}))
+    (Features.hit (group_props ~west:(`Int 3) ()))
+
+let hit_group_missing_or_nonfinite_bound () =
+  Alcotest.(check (option hit_t))
+    "cluster:true without north is None" None
+    (Features.hit
+       (`Assoc
+          [
+            ("cluster", `Bool true);
+            ("west", `Float 3.07);
+            ("south", `Float 45.76);
+            ("east", `Float 3.09);
+          ]));
+  Alcotest.(check (option hit_t))
+    "cluster:true with a nan bound is None" None
+    (Features.hit (group_props ~south:(`Float Float.nan) ()))
+
+let hit_member () =
+  let uuid = id_string 1 in
+  let mid = obs_id 1 in
+  Alcotest.(check (option hit_t))
+    "id + an unrelated property" (Some (Features.Member mid))
+    (Features.hit (`Assoc [("id", `String uuid); ("count", `Int 1)]));
+  Alcotest.(check (option hit_t))
+    "id + role member" (Some (Features.Member mid))
+    (Features.hit (`Assoc [("id", `String uuid); ("role", `String "member")]))
+
+let hit_none () =
+  Alcotest.(check (option hit_t))
+    "an unparsable id" None
+    (Features.hit (`Assoc [("id", `String "nope")]));
+  Alcotest.(check (option hit_t))
+    "id not a string" None
+    (Features.hit (`Assoc [("id", `Int 3)]));
+  Alcotest.(check (option hit_t)) "a bare list" None (Features.hit (`List []));
+  Alcotest.(check (option hit_t))
+    "an empty object" None
+    (Features.hit (`Assoc []))
+
+let hit_round_trips_through_place_points_and_selection () =
+  let places = Features.places ~keep:always_true three_spots in
+  let check_features json =
+    let open Yojson.Safe.Util in
+    json
+    |> member "features"
+    |> to_list
+    |> List.iter (fun feature ->
+        let props = feature |> member "properties" in
+        let id = props |> member "id" |> to_string in
+        match Features.hit props with
+        | Some (Features.Member got) ->
+            Alcotest.(check string)
+              "round trip id" id
+              (Ids.Observation_id.to_string got)
+        | Some (Features.Group _) ->
+            Alcotest.fail "a place or member feature decoded as Group"
+        | None ->
+            Alcotest.failf "hit gave None on %s" (Yojson.Safe.to_string props))
+  in
+  check_features (Features.place_points places);
+  check_features (Features.selection (Some (List.hd places)))
+
+let places_literal_keys () =
+  Alcotest.(check string) "Features.count_key" "count" Features.count_key;
+  Alcotest.(check string)
+    "Features.identified_key" "identified" Features.identified_key;
+  Alcotest.(check string) "Features.role_key" "role" Features.role_key;
+  Alcotest.(check string) "Features.west_key" "west" Features.west_key;
+  Alcotest.(check string) "Features.south_key" "south" Features.south_key;
+  Alcotest.(check string) "Features.east_key" "east" Features.east_key;
+  Alcotest.(check string) "Features.north_key" "north" Features.north_key
+
 (* ---------- Style.with_overlays ---------- *)
 
 let positron_text =
@@ -390,7 +848,7 @@ let layers_appended_after_the_base () =
   let base_layers = positron |> member "layers" |> to_list in
   let layers = result |> member "layers" |> to_list in
   let n = List.length base_layers in
-  Alcotest.(check int) "3 layers appended" (n + 3) (List.length layers);
+  Alcotest.(check int) "10 layers appended" (n + 10) (List.length layers);
   Alcotest.(check (list yojson))
     "the base layers are unchanged and in order" base_layers
     (List.filteri (fun i _ -> i < n) layers);
@@ -400,8 +858,41 @@ let layers_appended_after_the_base () =
   in
   Alcotest.(check (list string))
     "overlay layer ids, in order"
-    [Style.accuracy_fill_layer; Style.accuracy_line_layer; Style.points_layer]
+    [
+      Style.accuracy_fill_layer;
+      Style.accuracy_line_layer;
+      Style.points_layer;
+      Style.groups_layer;
+      Style.groups_count_layer;
+      Style.places_layer;
+      Style.members_layer;
+      Style.selection_halo_layer;
+      Style.selection_place_layer;
+      Style.selection_members_layer;
+    ]
     overlay_ids
+
+let source_by_id result id =
+  let open Yojson.Safe.Util in
+  result |> member "sources" |> to_assoc |> List.assoc id
+
+(* [minzoom]/[maxzoom]/[clusterMaxZoom] are JSON numbers that the
+   implementation may write as [`Int] or [`Float] (both spell "15" in the
+   style JSON; [clusterMaxZoom] is computed as [detail_zoom -. 1.], a float);
+   [number_field] reads either representation, and [check_layer_shape] checks
+   a zoom field numerically while comparing the rest of the layer with
+   [Yojson.Safe.equal]. *)
+let number_field (j : Yojson.Safe.t) key =
+  match j with
+  | `Assoc fields ->
+      Option.map Yojson.Safe.Util.to_number (List.assoc_opt key fields)
+  | _ -> None
+
+let strip_field key (j : Yojson.Safe.t) =
+  match j with
+  | `Assoc fields ->
+      `Assoc (List.filter (fun (k, _) -> not (String.equal k key)) fields)
+  | other -> other
 
 let sources_appended_after_the_base () =
   let result = with_overlays_ok positron in
@@ -415,15 +906,71 @@ let sources_appended_after_the_base () =
   let overlay = List.filteri (fun i _ -> i >= n) sources in
   Alcotest.(check (list string))
     "overlay source ids, in order"
-    [Style.observations_source; Style.accuracy_source]
+    [
+      Style.observations_source;
+      Style.accuracy_source;
+      Style.places_source;
+      Style.members_source;
+      Style.selection_source;
+    ]
     (List.map fst overlay);
   List.iter
-    (fun (_, source) ->
+    (fun id ->
       Alcotest.(check yojson)
-        "an overlay source is a geojson source holding Features.empty"
+        (Printf.sprintf "%s is a plain geojson source holding Features.empty" id)
         (`Assoc [("type", `String "geojson"); ("data", Features.empty)])
-        source)
-    overlay
+        (List.assoc id overlay))
+    [
+      Style.observations_source;
+      Style.accuracy_source;
+      Style.members_source;
+      Style.selection_source;
+    ]
+
+let places_source_shape () =
+  let result = with_overlays_ok positron in
+  let source = source_by_id result Style.places_source in
+  (match number_field source "clusterMaxZoom" with
+  | Some v -> Alcotest.(check (float 1e-9)) "clusterMaxZoom is 14" 14. v
+  | None -> Alcotest.fail "the places source has no clusterMaxZoom");
+  Alcotest.(check yojson)
+    "the places source clusters, with the summed/min/max cluster properties \
+     (clusterMaxZoom checked separately above)"
+    (`Assoc
+       [
+         ("type", `String "geojson");
+         ("data", Features.empty);
+         ("cluster", `Bool true);
+         ("clusterRadius", `Int 40);
+         ( "clusterProperties",
+           `Assoc
+             [
+               ( "count",
+                 `List [`String "+"; `List [`String "get"; `String "count"]] );
+               ( "identified",
+                 `List
+                   [`String "+"; `List [`String "get"; `String "identified"]] );
+               ( "west",
+                 `List [`String "min"; `List [`String "get"; `String "west"]] );
+               ( "south",
+                 `List [`String "min"; `List [`String "get"; `String "south"]]
+               );
+               ( "east",
+                 `List [`String "max"; `List [`String "get"; `String "east"]] );
+               ( "north",
+                 `List [`String "max"; `List [`String "get"; `String "north"]]
+               );
+             ] );
+       ])
+    (strip_field "clusterMaxZoom" source)
+
+let places_source_and_layer_share_the_literal () =
+  Alcotest.(check string)
+    "places_source and places_layer share \"herbier-places\" (sources and \
+     layers are separate namespaces)"
+    Style.places_source Style.places_layer;
+  (* The shared id is not a Duplicate_id. *)
+  ignore (with_overlays_ok positron)
 
 let other_top_level_keys_unchanged () =
   let result = with_overlays_ok positron in
@@ -536,6 +1083,273 @@ let overlay_paints_are_exact () =
        [("line-color", `String colours.accuracy_line); ("line-width", `Int 1)])
     (paint Style.accuracy_line_layer)
 
+let check_layer_shape ~msg ~zoom_field ~zoom_value expected_without_zoom actual
+    =
+  (match number_field actual zoom_field with
+  | Some v ->
+      Alcotest.(check (float 1e-9)) (msg ^ ": " ^ zoom_field) zoom_value v
+  | None -> Alcotest.failf "%s: no %s" msg zoom_field);
+  Alcotest.(check yojson)
+    (msg ^ ": shape apart from " ^ zoom_field)
+    expected_without_zoom
+    (strip_field zoom_field actual)
+
+let identified_case =
+  `List
+    [
+      `String "case";
+      `List [`String "=="; `List [`String "get"; `String "identified"]; `Int 0];
+      `String colours.to_identify;
+      `String colours.point;
+    ]
+
+let groups_layer_shape () =
+  let result = with_overlays_ok positron in
+  check_layer_shape ~msg:"groups_layer" ~zoom_field:"maxzoom"
+    ~zoom_value:Style.detail_zoom
+    (`Assoc
+       [
+         ("id", `String Style.groups_layer);
+         ("type", `String "circle");
+         ("source", `String Style.places_source);
+         ("filter", `List [`String "has"; `String "point_count"]);
+         ( "paint",
+           `Assoc
+             [
+               ("circle-radius", `Int 9);
+               ("circle-stroke-width", `Int 3);
+               ("circle-stroke-color", `String colours.point_border);
+               ("circle-color", identified_case);
+             ] );
+       ])
+    (layer_by_id result Style.groups_layer)
+
+let groups_count_layer_shape () =
+  let result = with_overlays_ok positron in
+  check_layer_shape ~msg:"groups_count_layer" ~zoom_field:"maxzoom"
+    ~zoom_value:Style.detail_zoom
+    (`Assoc
+       [
+         ("id", `String Style.groups_count_layer);
+         ("type", `String "symbol");
+         ("source", `String Style.places_source);
+         ("filter", `List [`String "has"; `String "point_count"]);
+         ( "layout",
+           `Assoc
+             [
+               ( "text-field",
+                 `List
+                   [`String "to-string"; `List [`String "get"; `String "count"]]
+               );
+               ("text-font", `List [`String "Noto Sans Bold"]);
+               ("text-size", `Int 11);
+               ("text-allow-overlap", `Bool true);
+             ] );
+         ("paint", `Assoc [("text-color", `String colours.point_border)]);
+       ])
+    (layer_by_id result Style.groups_count_layer)
+
+let places_layer_shape () =
+  let result = with_overlays_ok positron in
+  check_layer_shape ~msg:"places_layer" ~zoom_field:"maxzoom"
+    ~zoom_value:Style.detail_zoom
+    (`Assoc
+       [
+         ("id", `String Style.places_layer);
+         ("type", `String "circle");
+         ("source", `String Style.places_source);
+         ( "filter",
+           `List [`String "!"; `List [`String "has"; `String "point_count"]] );
+         ( "paint",
+           `Assoc
+             [
+               ("circle-radius", `Int 6);
+               ("circle-stroke-width", `Int 3);
+               ("circle-stroke-color", `String colours.point_border);
+               ("circle-color", identified_case);
+             ] );
+       ])
+    (layer_by_id result Style.places_layer)
+
+let members_layer_shape () =
+  let result = with_overlays_ok positron in
+  check_layer_shape ~msg:"members_layer" ~zoom_field:"minzoom"
+    ~zoom_value:Style.detail_zoom
+    (`Assoc
+       [
+         ("id", `String Style.members_layer);
+         ("type", `String "circle");
+         ("source", `String Style.members_source);
+         ( "paint",
+           `Assoc
+             [
+               ("circle-radius", `Int 6);
+               ("circle-stroke-width", `Int 3);
+               ("circle-stroke-color", `String colours.point_border);
+               ( "circle-color",
+                 `List
+                   [
+                     `String "match";
+                     `List [`String "get"; `String "kind"];
+                     `String "to_identify";
+                     `String colours.to_identify;
+                     `String colours.point;
+                   ] );
+             ] );
+       ])
+    (layer_by_id result Style.members_layer)
+
+let selection_halo_layer_shape () =
+  let result = with_overlays_ok positron in
+  check_layer_shape ~msg:"selection_halo_layer" ~zoom_field:"maxzoom"
+    ~zoom_value:Style.detail_zoom
+    (`Assoc
+       [
+         ("id", `String Style.selection_halo_layer);
+         ("type", `String "circle");
+         ("source", `String Style.selection_source);
+         ( "filter",
+           `List
+             [
+               `String "==";
+               `List [`String "get"; `String "role"];
+               `String "place";
+             ] );
+         ( "paint",
+           `Assoc
+             [
+               ("circle-radius", `Int 28);
+               ("circle-color", `String colours.selected_halo);
+               ("circle-stroke-width", `Int 2);
+               ("circle-stroke-color", `String colours.selected);
+             ] );
+       ])
+    (layer_by_id result Style.selection_halo_layer)
+
+let selection_place_layer_shape () =
+  let result = with_overlays_ok positron in
+  check_layer_shape ~msg:"selection_place_layer" ~zoom_field:"maxzoom"
+    ~zoom_value:Style.detail_zoom
+    (`Assoc
+       [
+         ("id", `String Style.selection_place_layer);
+         ("type", `String "circle");
+         ("source", `String Style.selection_source);
+         ( "filter",
+           `List
+             [
+               `String "==";
+               `List [`String "get"; `String "role"];
+               `String "place";
+             ] );
+         ( "paint",
+           `Assoc
+             [
+               ("circle-radius", `Int 7);
+               ("circle-stroke-width", `Int 3);
+               ("circle-stroke-color", `String colours.point_border);
+               ("circle-color", `String colours.selected);
+             ] );
+       ])
+    (layer_by_id result Style.selection_place_layer)
+
+let selection_members_layer_shape () =
+  let result = with_overlays_ok positron in
+  check_layer_shape ~msg:"selection_members_layer" ~zoom_field:"minzoom"
+    ~zoom_value:Style.detail_zoom
+    (`Assoc
+       [
+         ("id", `String Style.selection_members_layer);
+         ("type", `String "circle");
+         ("source", `String Style.selection_source);
+         ( "filter",
+           `List
+             [
+               `String "==";
+               `List [`String "get"; `String "role"];
+               `String "member";
+             ] );
+         ( "paint",
+           `Assoc
+             [
+               ("circle-radius", `Int 7);
+               ("circle-stroke-width", `Int 3);
+               ("circle-stroke-color", `String colours.point_border);
+               ("circle-color", `String colours.selected);
+             ] );
+       ])
+    (layer_by_id result Style.selection_members_layer)
+
+let base_text_fonts () =
+  let open Yojson.Safe.Util in
+  positron
+  |> member "layers"
+  |> to_list
+  |> List.concat_map (fun l ->
+      (* [member] raises on a non-object receiver, and a layer without
+         [layout] gives [`Null] for it, not an empty object. *)
+      match member "layout" l with
+      | `Assoc _ as layout -> (
+          match member "text-font" layout with
+          | `List fonts -> List.filter_map to_string_option fonts
+          | _ -> [])
+      | _ -> [])
+
+let new_text_fonts_exist_on_the_server () =
+  let result = with_overlays_ok positron in
+  let open Yojson.Safe.Util in
+  let fonts =
+    match
+      layer_by_id result Style.groups_count_layer
+      |> member "layout"
+      |> member "text-font"
+    with
+    | `List l -> List.filter_map to_string_option l
+    | _ -> Alcotest.fail "groups_count_layer has no text-font in its layout"
+  in
+  let available = base_text_fonts () in
+  List.iter
+    (fun f ->
+      Alcotest.(check bool)
+        (Printf.sprintf "%S is used by some positron layer's own text-font" f)
+        true (List.mem f available))
+    fonts
+
+let detail_zoom_consistency () =
+  Alcotest.(check (float 0.)) "Style.detail_zoom is 15." 15. Style.detail_zoom;
+  let result = with_overlays_ok positron in
+  List.iter
+    (fun id ->
+      match number_field (layer_by_id result id) "maxzoom" with
+      | Some v ->
+          Alcotest.(check (float 1e-9))
+            (Printf.sprintf "%s maxzoom = detail_zoom" id)
+            Style.detail_zoom v
+      | None -> Alcotest.failf "%s has no maxzoom" id)
+    [
+      Style.groups_layer;
+      Style.places_layer;
+      Style.selection_halo_layer;
+      Style.selection_place_layer;
+    ];
+  List.iter
+    (fun id ->
+      match number_field (layer_by_id result id) "minzoom" with
+      | Some v ->
+          Alcotest.(check (float 1e-9))
+            (Printf.sprintf "%s minzoom = detail_zoom" id)
+            Style.detail_zoom v
+      | None -> Alcotest.failf "%s has no minzoom" id)
+    [Style.members_layer; Style.selection_members_layer];
+  match
+    number_field (source_by_id result Style.places_source) "clusterMaxZoom"
+  with
+  | Some v ->
+      Alcotest.(check (float 1e-9))
+        "the places source's clusterMaxZoom is detail_zoom - 1"
+        (Style.detail_zoom -. 1.) v
+  | None -> Alcotest.fail "the places source has no clusterMaxZoom"
+
 let kind_matches_the_style () =
   Alcotest.(check string) "Features.kind_key" "kind" Features.kind_key;
   Alcotest.(check string)
@@ -564,49 +1378,49 @@ let with_overlays_errors () =
     (`Assoc [("sources", `List []); ("layers", `List [])])
 
 let with_overlays_duplicate_ids () =
-  let base_with_layer =
-    `Assoc
-      [
-        ("sources", `Assoc []);
-        ("layers", `List [`Assoc [("id", `String Style.points_layer)]]);
-      ]
+  let expect_layer_dup id =
+    Alcotest.(check (result yojson style_error))
+      (Printf.sprintf "a layer named %s already present" id)
+      (Error (Style.Duplicate_id id))
+      (Style.with_overlays colours
+         (`Assoc
+            [
+              ("sources", `Assoc []);
+              ("layers", `List [`Assoc [("id", `String id)]]);
+            ]))
   in
-  Alcotest.(check (result yojson style_error))
-    "a layer named herbier-points already present"
-    (Error (Style.Duplicate_id Style.points_layer))
-    (Style.with_overlays colours base_with_layer);
-  let base_with_source =
-    `Assoc
-      [
-        ("sources", `Assoc [(Style.accuracy_source, `Assoc [])]);
-        ("layers", `List []);
-      ]
+  let expect_source_dup id =
+    Alcotest.(check (result yojson style_error))
+      (Printf.sprintf "a source named %s already present" id)
+      (Error (Style.Duplicate_id id))
+      (Style.with_overlays colours
+         (`Assoc [("sources", `Assoc [(id, `Assoc [])]); ("layers", `List [])]))
   in
-  Alcotest.(check (result yojson style_error))
-    "a source named herbier-accuracy already present"
-    (Error (Style.Duplicate_id Style.accuracy_source))
-    (Style.with_overlays colours base_with_source);
-  List.iter
-    (fun id ->
-      Alcotest.(check (result yojson style_error))
-        (Printf.sprintf "a layer named %s already present" id)
-        (Error (Style.Duplicate_id id))
-        (Style.with_overlays colours
-           (`Assoc
-              [
-                ("sources", `Assoc []);
-                ("layers", `List [`Assoc [("id", `String id)]]);
-              ])))
-    [Style.accuracy_fill_layer; Style.accuracy_line_layer; Style.points_layer];
-  Alcotest.(check (result yojson style_error))
-    "a source named herbier-observations already present"
-    (Error (Style.Duplicate_id Style.observations_source))
-    (Style.with_overlays colours
-       (`Assoc
-          [
-            ("sources", `Assoc [(Style.observations_source, `Assoc [])]);
-            ("layers", `List []);
-          ]));
+  (* Every new layer id, including [places_layer] (= "herbier-places"), given
+     only as a base *layer*, with no matching base source. *)
+  List.iter expect_layer_dup
+    [
+      Style.accuracy_fill_layer;
+      Style.accuracy_line_layer;
+      Style.points_layer;
+      Style.groups_layer;
+      Style.groups_count_layer;
+      Style.places_layer;
+      Style.members_layer;
+      Style.selection_halo_layer;
+      Style.selection_place_layer;
+      Style.selection_members_layer;
+    ];
+  (* Every new source id, including [places_source] (= "herbier-places"),
+     given only as a base *source*, with no matching base layer. *)
+  List.iter expect_source_dup
+    [
+      Style.observations_source;
+      Style.accuracy_source;
+      Style.places_source;
+      Style.members_source;
+      Style.selection_source;
+    ];
   let once = with_overlays_ok positron in
   match Style.with_overlays colours once with
   | Error (Style.Duplicate_id _) -> ()
@@ -629,7 +1443,30 @@ let literal_ids () =
     Style.accuracy_fill_layer;
   Alcotest.(check string)
     "Style.accuracy_line_layer" "herbier-accuracy-line"
-    Style.accuracy_line_layer
+    Style.accuracy_line_layer;
+  Alcotest.(check string)
+    "Style.places_source" "herbier-places" Style.places_source;
+  Alcotest.(check string)
+    "Style.members_source" "herbier-members" Style.members_source;
+  Alcotest.(check string)
+    "Style.selection_source" "herbier-selection" Style.selection_source;
+  Alcotest.(check string)
+    "Style.groups_layer" "herbier-groups" Style.groups_layer;
+  Alcotest.(check string)
+    "Style.groups_count_layer" "herbier-groups-count" Style.groups_count_layer;
+  Alcotest.(check string)
+    "Style.places_layer" "herbier-places" Style.places_layer;
+  Alcotest.(check string)
+    "Style.members_layer" "herbier-members" Style.members_layer;
+  Alcotest.(check string)
+    "Style.selection_halo_layer" "herbier-selection-halo"
+    Style.selection_halo_layer;
+  Alcotest.(check string)
+    "Style.selection_place_layer" "herbier-selection-place"
+    Style.selection_place_layer;
+  Alcotest.(check string)
+    "Style.selection_members_layer" "herbier-selection-members"
+    Style.selection_members_layer
 
 let contains ~sub s =
   let n = String.length sub in
@@ -700,15 +1537,79 @@ let tests =
     ( "Features' kind strings are the ones Style matches",
       `Quick,
       kind_matches_the_style );
+    ( "Features.places: key, shown and cluster.members with keep always true",
+      `Quick,
+      places_everything );
+    ( "Features.places: dropping a whole cluster removes its place only",
+      `Quick,
+      places_whole_cluster_dropped );
+    ( "Features.places: dropping the earliest member keeps the place and its key",
+      `Quick,
+      places_earliest_member_dropped );
+    ( "Features.places: keep sees the member's own cluster",
+      `Quick,
+      places_keep_sees_the_cluster );
+    ( "Features.places: unplaceable observations and [] give []",
+      `Quick,
+      places_unplaceable_and_empty );
+    ( "Features.find locates a place by any cluster member, shown or not",
+      `Quick,
+      find_by_any_member );
+    ( "Features.find is None for an unknown or unplaceable id",
+      `Quick,
+      find_absent );
+    ( "Features.place_points: one feature per place, in order, with the \
+       mixed/all-unidentified counts",
+      `Quick,
+      place_points_order_and_counts );
+    ( "Features.place_points: properties and geometry are exact",
+      `Quick,
+      place_points_properties_are_exact );
+    ( "Features.place_points [] is Features.empty",
+      `Quick,
+      place_points_empty_for_no_places );
+    ( "Features.selection None is Features.empty",
+      `Quick,
+      selection_none_is_empty );
+    ( "Features.selection Some: place feature then members in compare_obs \
+       order, exact properties",
+      `Quick,
+      selection_some );
+    ("Features.hit decodes a cluster feature into Group", `Quick, hit_group);
+    ( "Features.hit: a cluster feature missing or with a non-finite bound is \
+       None",
+      `Quick,
+      hit_group_missing_or_nonfinite_bound );
+    ("Features.hit decodes an id into Member", `Quick, hit_member);
+    ("Features.hit is None for anything else", `Quick, hit_none);
+    ( "Features.hit round-trips every place_points and selection feature's id",
+      `Quick,
+      hit_round_trips_through_place_points_and_selection );
+    ( "Features.place_points: distinct bounds, centroid of the whole cluster",
+      `Quick,
+      place_points_bounds_and_centroid );
+    ( "Features.place_points and selection count and list shown, not members",
+      `Quick,
+      place_points_and_selection_follow_shown );
+    ( "Features' place-related keys are the wire literals",
+      `Quick,
+      places_literal_keys );
     ( "the recorded positron.json has the expected shape",
       `Quick,
       positron_fixture_sanity );
-    ( "Style.with_overlays appends 3 layers after the base",
+    ( "Style.with_overlays appends 10 layers after the base",
       `Quick,
       layers_appended_after_the_base );
-    ( "Style.with_overlays appends 2 geojson sources after the base",
+    ( "Style.with_overlays appends 5 sources after the base (4 plain, 1 \
+       clustered)",
       `Quick,
       sources_appended_after_the_base );
+    ( "Style.with_overlays: the places source clusters",
+      `Quick,
+      places_source_shape );
+    ( "places_source and places_layer share \"herbier-places\" without colliding",
+      `Quick,
+      places_source_and_layer_share_the_literal );
     ( "Style.with_overlays leaves other top-level keys unchanged",
       `Quick,
       other_top_level_keys_unchanged );
@@ -718,15 +1619,41 @@ let tests =
     ( "Style.with_overlays: the overlay paints are exactly the expected ones",
       `Quick,
       overlay_paints_are_exact );
+    ( "Style.with_overlays: groups_layer's shape is exact",
+      `Quick,
+      groups_layer_shape );
+    ( "Style.with_overlays: groups_count_layer's shape is exact",
+      `Quick,
+      groups_count_layer_shape );
+    ( "Style.with_overlays: places_layer's shape is exact",
+      `Quick,
+      places_layer_shape );
+    ( "Style.with_overlays: members_layer's shape is exact",
+      `Quick,
+      members_layer_shape );
+    ( "Style.with_overlays: selection_halo_layer's shape is exact",
+      `Quick,
+      selection_halo_layer_shape );
+    ( "Style.with_overlays: selection_place_layer's shape is exact",
+      `Quick,
+      selection_place_layer_shape );
+    ( "Style.with_overlays: selection_members_layer's shape is exact",
+      `Quick,
+      selection_members_layer_shape );
+    ( "the new layers' text-font stacks exist among positron's own layers",
+      `Quick,
+      new_text_fonts_exist_on_the_server );
+    ( "Style.detail_zoom is 15 and matches the layers' min/maxzoom and the \
+       places source's clusterMaxZoom",
+      `Quick,
+      detail_zoom_consistency );
     ( "Style.with_overlays rejects a base that is not a style",
       `Quick,
       with_overlays_errors );
     ( "Style.with_overlays rejects a duplicate source or layer id",
       `Quick,
       with_overlays_duplicate_ids );
-    ( "Style's path and overlay ids are the literals the plan gives",
-      `Quick,
-      literal_ids );
+    ("Style's path and overlay ids are the wire literals", `Quick, literal_ids);
     ( "Style.error_to_string covers both constructors",
       `Quick,
       error_to_string_covers_both_constructors );

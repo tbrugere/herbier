@@ -75,6 +75,15 @@ let set_source m source json =
 let set_observations m list =
   set_source m Style.observations_source (Features.observations list)
 
+let set_places m places =
+  set_source m Style.places_source (Features.place_points places);
+  set_source m Style.members_source
+    (Features.observations
+       (List.concat_map (fun (p : Features.place) -> p.shown) places))
+
+let set_selection m place =
+  set_source m Style.selection_source (Features.selection place)
+
 let circle_steps = 64
 
 let set_accuracy m = function
@@ -86,12 +95,48 @@ let set_accuracy m = function
 type click = {at : Places.point; observations : Observation_id.t list}
 
 let on_click m f =
-  Maplibre.on_click m ~layers:[Style.points_layer] (fun {Maplibre.at; ids} ->
+  Maplibre.on_click m ~layers:[Style.points_layer] (fun {Maplibre.at; ids; _} ->
       f
         {
           at = point at;
           observations = List.filter_map Observation_id.of_string ids;
         })
+
+type tap = {at : Places.point; hits : Features.hit list}
+
+let tap_layers =
+  [
+    Style.selection_members_layer;
+    Style.selection_place_layer;
+    Style.members_layer;
+    Style.places_layer;
+    Style.groups_layer;
+  ]
+
+(* Only the keys are logged: the values are the user's data. *)
+let undecodable = function
+  | Ok (`Assoc fields) -> "{" ^ String.concat ", " (List.map fst fields) ^ "}"
+  | Ok (_ : Yojson.Safe.t) -> "not an object"
+  | Error (_ : string) -> "not JSON"
+
+let decode_hit text =
+  let json =
+    match Yojson.Safe.from_string text with
+    | json -> Ok json
+    | exception Yojson.Json_error m -> Error m
+  in
+  match Result.map Features.hit json with
+  | Ok (Some hit) -> Some hit
+  | Ok None | Error _ ->
+      Brr.Console.(warn [str "carte: tap non décodé"; str (undecodable json)]);
+      None
+
+let on_tap m f =
+  Maplibre.on_click m ~layers:tap_layers
+    (fun {Maplibre.at; properties; ids = _} ->
+      match (properties, List.filter_map decode_hit properties) with
+      | _ :: _, [] -> ()
+      | ([] | _ :: _), hits -> f {at = point at; hits})
 
 let on_moveend m f =
   Maplibre.on_moveend m (fun {Maplibre.center; zoom} ->

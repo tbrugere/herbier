@@ -15,6 +15,11 @@ type t = {
   snap_to : int -> unit;
       (** moves to that snap point (index, clamped); call it from outside an
           update step *)
+  set_snaps : float list -> unit;
+      (** replaces the snap points (same rules as [v]'s [snaps]; the sheet's
+          height follows) and shows the same index as before, clamped, without a
+          transition. Raises [Invalid_argument], changing nothing, when they are
+          invalid. Call it from outside an update step. *)
   bindings : Rb.binding list;
 }
 

@@ -429,9 +429,11 @@ the classifier must accept both a bare URL and text containing one.
   JSON in OCaml (`Geo.Style.with_overlays`), so they survive `setStyle`.
 - MapLibre 6 is bundled by esbuild into the IIFE `vendor.js`; its worker is
   served as the file `maplibre-gl-worker.js` and set with `setWorkerUrl`.
-- Sources: observations as a GeoJSON source with `cluster: true`; the 500 m
-  semantics come from a **pre-clustering step in OCaml** (`Places.cluster`) at
-  low zooms, MapLibre clustering only merges overlapping markers on screen.
+- Sources: the 500 m semantics come from a **pre-clustering step in OCaml**
+  (`Places.cluster`): below zoom 15 the map shows one point per place, in a
+  GeoJSON source with `cluster: true` whose MapLibre clustering only merges
+  places that overlap on screen; from zoom 15 it shows the observations
+  themselves (4b, `Geo.Style.detail_zoom`).
 - Styles: OpenFreeMap `positron` online; offline, the same style with the
   tile source swapped to `pmtiles://` pointing at `tiles/<region>.pmtiles`
   (Protomaps `@protomaps/basemaps` flavour `white`). Switch is automatic on

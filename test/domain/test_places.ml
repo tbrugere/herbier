@@ -579,6 +579,141 @@ let label_case_sensitive () =
     (Places.label
        [at_o ~label:"col" ~id:1 ~at:0 (); at_o ~label:"Col" ~id:2 ~at:1 ()])
 
+(* rename *)
+
+let id_of (id : Ids.Observation_id.t) = Ids.Observation_id.to_string id
+
+let find_result results (original : Observation.t) =
+  List.find
+    (fun (r : Observation.t) -> Ids.Observation_id.equal r.id original.id)
+    results
+
+(* Checks every field of [result] against [original] except [place_label]
+   (set to [expected_label]) and [updated_at] (set to [expected_at]). *)
+let check_unchanged msg ~(original : Observation.t) ~expected_label ~expected_at
+    (result : Observation.t) =
+  Alcotest.(check string)
+    (msg ^ ": id unchanged") (id_of original.id) (id_of result.id);
+  Alcotest.(check bool)
+    (msg ^ ": plant_id unchanged")
+    true
+    (Option.equal Ids.Plant_id.equal original.plant_id result.plant_id);
+  Alcotest.(check bool)
+    (msg ^ ": at unchanged") true
+    (Ptime.equal original.at result.at);
+  Alcotest.(check bool)
+    (msg ^ ": position unchanged")
+    true
+    (original.position = result.position);
+  Alcotest.(check (option string))
+    (msg ^ ": place_label set")
+    expected_label result.place_label;
+  Alcotest.(check bool)
+    (msg ^ ": place_derived unchanged")
+    true
+    (original.place_derived = result.place_derived);
+  Alcotest.(check bool)
+    (msg ^ ": note unchanged") true
+    (original.note = result.note);
+  Alcotest.(check bool)
+    (msg ^ ": created_at unchanged")
+    true
+    (Ptime.equal original.created_at result.created_at);
+  Alcotest.(check bool)
+    (msg ^ ": updated_at set to at")
+    true
+    (Ptime.equal expected_at result.updated_at);
+  Alcotest.(check bool)
+    (msg ^ ": deleted_at unchanged")
+    true
+    (Option.equal Ptime.equal original.deleted_at result.deleted_at)
+
+let rename_changes_only_members_whose_label_must_differ () =
+  let m1 = obs ~id:1 ~at:0 (Some o) in
+  let m2 = obs ~label:"Jardin" ~id:2 ~at:1 (Some o) in
+  let m3 = obs ~label:"Bois" ~id:3 ~at:2 (Some o) in
+  let cluster : Places.cluster = {centroid = o; members = [m1; m2; m3]} in
+  let at = time 100 in
+  let result = Places.rename "Jardin" ~at cluster in
+  Alcotest.(check (list string))
+    "m1 and m3 only, in cluster.members order"
+    [id_of m1.id; id_of m3.id]
+    (ids result);
+  check_unchanged "m1" ~original:m1 ~expected_label:(Some "Jardin")
+    ~expected_at:at (find_result result m1);
+  check_unchanged "m3" ~original:m3 ~expected_label:(Some "Jardin")
+    ~expected_at:at (find_result result m3)
+
+let rename_trims_the_name () =
+  let m1 = obs ~id:1 ~at:0 (Some o) in
+  let cluster : Places.cluster = {centroid = o; members = [m1]} in
+  match Places.rename "  Jardin  " ~at:(time 100) cluster with
+  | [r] ->
+      Alcotest.(check (option string))
+        "trimmed to Jardin" (Some "Jardin") r.place_label
+  | results ->
+      Alcotest.failf "expected exactly 1 renamed member, got %d"
+        (List.length results)
+
+let rename_noop_when_every_member_already_named () =
+  let m1 = obs ~label:"Jardin" ~id:1 ~at:0 (Some o) in
+  let m2 = obs ~label:"Jardin" ~id:2 ~at:1 (Some o) in
+  let cluster : Places.cluster = {centroid = o; members = [m1; m2]} in
+  Alcotest.(check (list string))
+    "nothing to save" []
+    (ids (Places.rename "Jardin" ~at:(time 100) cluster))
+
+let rename_rewrites_a_label_differing_only_by_spaces () =
+  let m1 = obs ~label:" Jardin " ~id:1 ~at:0 (Some o) in
+  let cluster : Places.cluster = {centroid = o; members = [m1]} in
+  match Places.rename "Jardin" ~at:(time 100) cluster with
+  | [r] ->
+      Alcotest.(check (option string))
+        "rewritten to the trimmed label" (Some "Jardin") r.place_label
+  | results ->
+      Alcotest.failf "expected exactly 1 renamed member, got %d"
+        (List.length results)
+
+let rename_blank_clears_the_label () =
+  let a = obs ~label:"A" ~id:1 ~at:0 (Some o) in
+  let b = obs ~id:2 ~at:1 (Some o) in
+  let cluster : Places.cluster = {centroid = o; members = [a; b]} in
+  let at = time 100 in
+  let result = Places.rename "   " ~at cluster in
+  Alcotest.(check (list string))
+    "only A (B is already unlabelled)"
+    [id_of a.id]
+    (ids result);
+  check_unchanged "A" ~original:a ~expected_label:None ~expected_at:at
+    (find_result result a)
+
+let rename_blank_noop_when_every_member_already_unlabelled () =
+  let a = obs ~id:1 ~at:0 (Some o) in
+  let b = obs ~id:2 ~at:1 (Some o) in
+  let cluster : Places.cluster = {centroid = o; members = [a; b]} in
+  Alcotest.(check (list string))
+    "nothing to save" []
+    (ids (Places.rename "" ~at:(time 100) cluster))
+
+let rename_result_names_the_place () =
+  let m1 = obs ~id:1 ~at:0 (Some o) in
+  let m2 = obs ~label:"Jardin" ~id:2 ~at:1 (Some o) in
+  let m3 = obs ~label:"Bois" ~id:3 ~at:2 (Some o) in
+  let cluster : Places.cluster = {centroid = o; members = [m1; m2; m3]} in
+  let result = Places.rename "Jardin" ~at:(time 100) cluster in
+  let replace (m : Observation.t) =
+    match
+      List.find_opt
+        (fun (r : Observation.t) -> Ids.Observation_id.equal r.id m.id)
+        result
+    with
+    | Some r -> r
+    | None -> m
+  in
+  Alcotest.(check (option label))
+    "the renamed cluster's label is Named Jardin" (named "Jardin")
+    (Places.label (List.map replace cluster.members))
+
 let tests =
   [
     ( "distance_m of a point to itself is 0",
@@ -667,4 +802,21 @@ let tests =
       `Quick,
       label_without_position );
     ("label compares names case-sensitively", `Quick, label_case_sensitive);
+    ( "rename changes only the members whose label must differ, in order",
+      `Quick,
+      rename_changes_only_members_whose_label_must_differ );
+    ("rename trims the given name", `Quick, rename_trims_the_name);
+    ( "rename is a no-op when every member already has that name",
+      `Quick,
+      rename_noop_when_every_member_already_named );
+    ( "rename rewrites a label differing from the trimmed name only by spaces",
+      `Quick,
+      rename_rewrites_a_label_differing_only_by_spaces );
+    ("a blank name clears place_label", `Quick, rename_blank_clears_the_label);
+    ( "a blank name is a no-op when every member is already unlabelled",
+      `Quick,
+      rename_blank_noop_when_every_member_already_unlabelled );
+    ( "applying rename's result names the place",
+      `Quick,
+      rename_result_names_the_place );
   ]

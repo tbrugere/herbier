@@ -53,12 +53,43 @@ export function setData(h, sourceId, geojsonText) {
   if (source) source.setData(data);
 }
 
+// A finger is wider than a point: a click with nothing under it takes the
+// point features whose centre is within TAP_SLOP_PX, nearest first (MapLibre
+// orders a box query by paint order, not by distance).
+const TAP_SLOP_PX = 22;
+
+function distance(h, point, f) {
+  if (!f.geometry || f.geometry.type !== 'Point') return Infinity;
+  const p = h.map.project(f.geometry.coordinates);
+  return Math.hypot(p.x - point.x, p.y - point.y);
+}
+
+function hitsAt(h, point, layers) {
+  const exact = h.map.queryRenderedFeatures(point, { layers });
+  if (exact.length > 0) return exact;
+  const r = TAP_SLOP_PX;
+  const box = [
+    [point.x - r, point.y - r],
+    [point.x + r, point.y + r],
+  ];
+  return h.map
+    .queryRenderedFeatures(box, { layers })
+    .map((f) => ({ f, d: distance(h, point, f) }))
+    .filter(({ d }) => d <= r)
+    .sort((a, b) => a.d - b.d)
+    .map(({ f }) => f);
+}
+
 export function onClick(h, layerIds, cb) {
   h.map.on('click', (e) => {
     const layers = presentLayers(h, layerIds);
-    const features =
-      layers.length === 0 ? [] : h.map.queryRenderedFeatures(e.point, { layers });
-    cb({ lng: e.lngLat.lng, lat: e.lngLat.lat, ids: distinctIds(features) });
+    const features = layers.length === 0 ? [] : hitsAt(h, e.point, layers);
+    cb({
+      lng: e.lngLat.lng,
+      lat: e.lngLat.lat,
+      ids: distinctIds(features),
+      properties: features.map((f) => JSON.stringify(f.properties || {})),
+    });
   });
 }
 

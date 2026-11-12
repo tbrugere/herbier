@@ -11,3 +11,10 @@ val place : Herbier_domain.Observation.t list -> string option
 (** The day's place (handoff 4c), by {!Herbier_domain.Places.label}: its label,
     or the mean position as ["48.0633, 7.0081"]. [None] when the day has no
     label and no position. *)
+
+val plant_name :
+  (Herbier_domain.Ids.Plant_id.t * string) list ->
+  Herbier_domain.Ids.Plant_id.t ->
+  string
+(** A row's title: the plant's name in [names], or ["Plante supprimée"] when it
+    is not there. *)

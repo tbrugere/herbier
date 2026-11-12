@@ -95,3 +95,13 @@ val label : Observation.t list -> label option
     (case-sensitive) and the trimmed string is returned. A frequency tie goes to
     the label whose earliest observation (by [at], then id) comes first. Never
     raises. *)
+
+val rename : string -> at:Ptime.t -> cluster -> Observation.t list
+(** « Renommer » (handoff 4b): [rename name ~at c] is the members of [c], in
+    [c.members] order, whose [place_label] must change for the place to be
+    called [name], each with [place_label] set and [updated_at = at]; members
+    already right are left out, so [[]] means nothing to save. [name] is trimmed
+    with [String.trim]; a blank one means [place_label = None] (clearing the
+    user-given name). A member whose stored label differs only by surrounding
+    spaces is rewritten with the trimmed one. Other fields are untouched. Never
+    raises. *)

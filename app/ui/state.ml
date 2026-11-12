@@ -30,6 +30,24 @@ let equal_account a b =
   && Original_target.equal a.storage b.storage
   && Bool.equal a.wifi_only b.wifi_only
 
+type camera = {center : Herbier_domain.Places.point; zoom : float}
+
+type map_view = {
+  camera : camera option;
+  selected : Herbier_domain.Ids.Observation_id.t option;
+}
+
+let no_map_view = {camera = None; selected = None}
+
+let equal_camera a b =
+  Float.equal a.center.lat b.center.lat
+  && Float.equal a.center.lon b.center.lon
+  && Float.equal a.zoom b.zoom
+
+let equal_map_view a b =
+  Option.equal equal_camera a.camera b.camera
+  && Option.equal Herbier_domain.Ids.Observation_id.equal a.selected b.selected
+
 type 'a cell = {signal : 'a React.signal; set : ?step:React.step -> 'a -> unit}
 
 let cell ~eq v =
@@ -40,6 +58,7 @@ type t = {
   filters : filters cell;
   network : network cell;
   account : account cell;
+  map_view : map_view cell;
 }
 
 let create ~network ~account =
@@ -47,11 +66,14 @@ let create ~network ~account =
     filters = cell ~eq:equal_filters no_filters;
     network = cell ~eq:equal_network network;
     account = cell ~eq:equal_account account;
+    map_view = cell ~eq:equal_map_view no_map_view;
   }
 
 let filters t = t.filters.signal
 let network t = t.network.signal
 let account t = t.account.signal
+let map_view t = t.map_view.signal
 let set_filters t ?step v = t.filters.set ?step v
 let set_network t ?step v = t.network.set ?step v
 let set_account t ?step v = t.account.set ?step v
+let set_map_view t ?step v = t.map_view.set ?step v

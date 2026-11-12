@@ -123,15 +123,29 @@ let match_expression text =
         (String.concat " "
            (List.map (fun t -> "\"" ^ strip_ending (fold t) ^ "\"*") terms))
 
-let plants text =
+let matches ~query text =
+  match terms query with
+  | [] -> false
+  | query_terms ->
+      let words = List.map fold (terms text) in
+      List.for_all
+        (fun q ->
+          let prefix = strip_ending (fold q) in
+          List.exists (String.starts_with ~prefix) words)
+        query_terms
+
+let matching expression =
+  Plants.query
+    ("select p.* from plants p where p.deleted_at is null and p.id in (select \
+      plant_id from plant_search where plant_search match ?) order by "
+    ^ Plants.order_by)
+    [Codec.Text expression]
+
+let plants text = Option.map matching (match_expression text)
+
+let plants_by_name text =
   Option.map
-    (fun expression ->
-      Plants.query
-        ("select p.* from plants p where p.deleted_at is null and p.id in \
-          (select plant_id from plant_search where plant_search match ?) order \
-          by "
-        ^ Plants.order_by)
-        [Codec.Text expression])
+    (fun expression -> matching ("{names tags} : (" ^ expression ^ ")"))
     (match_expression text)
 
 let plants_or_all text = Option.value (plants text) ~default:Plants.list

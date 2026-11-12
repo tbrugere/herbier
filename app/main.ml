@@ -32,7 +32,7 @@ let tab app = function
   | Herbier_ui.Widgets.Tab_bar.Collection -> Herbier_ui.Screens.Collection.v app
   | Journal -> Herbier_ui.Screens.Journal.v app
   | Settings -> Herbier_ui.Screens.Settings.v app
-  | Map as t -> Herbier_ui.Screens.Placeholder.v t
+  | Map -> Herbier_ui.Screens.Map_tab.v app
 
 let modal app = function
   | Herbier_ui.Route.Tags -> Herbier_ui.Screens.Tags.v app
@@ -52,14 +52,15 @@ let modal app = function
   | Herbier_ui.Route.New_plant ->
       Herbier_ui.Screens.Edit_plant.v app Herbier_ui.Screens.Edit_plant.New
 
-(* [online] is read once, here: no online or offline listener updates it. *)
+(* [online] and the theme are read once, here: no online or offline listener
+   updates the first, and app.css is loaded by now. *)
 let create_app db (storage, wifi_only) =
   let state =
     Herbier_ui.State.create
       ~network:{online = Navigator.online G.navigator; pending_uploads = 0}
       ~account:{google_signed_in = false; storage; wifi_only}
   in
-  Herbier_ui.App.create ~db ~state
+  Herbier_ui.App.create ~db ~state ~theme:(Herbier_ui.Theme.load ())
 
 (* What the router gets: the database for the dev pages and the app for the
    tabs, or why there is none. An exception while building the app (a bug)

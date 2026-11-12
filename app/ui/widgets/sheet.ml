@@ -5,6 +5,7 @@ type t = {
   visible : float React.signal;
   settled : int React.event;
   snap_to : int -> unit;
+  set_snaps : float list -> unit;
   bindings : Rb.binding list;
 }
 
@@ -45,20 +46,26 @@ let shown_ty el =
       | None -> None)
   | _ -> None
 
+let highest snaps = snaps.(Array.length snaps - 1)
+let clamp_index snaps i = max 0 (min (Array.length snaps - 1) i)
+let px f = Printf.sprintf "%gpx" f
+
 let v ~snaps ?(start = 0) ~header ~body () =
-  let snaps = Snap.of_list snaps in
-  let last = Array.length snaps - 1 in
-  let hi = snaps.(last) in
-  let clamp_i i = max 0 (min last i) in
-  let start = clamp_i start in
-  let visible, set_visible = React.S.create ~eq:Float.equal snaps.(start) in
+  let initial = Snap.of_list snaps in
+  let start = clamp_index initial start in
+  (* style: [index] is the snap point last settled on, kept so that new snap
+     points ({!set_snaps}) keep the sheet at the same one (style 2.2). *)
+  let index = ref start in
+  let snaps, set_snaps_s = React.S.create ~eq:( == ) initial in
+  let current () = React.S.value snaps in
+  let visible, set_visible = React.S.create ~eq:Float.equal initial.(start) in
   let settled, send_settled = React.E.create () in
   let grab =
     El.div
       ~at:[cls "sheet__grab"]
       (El.div ~at:[cls "sheet__handle"] [] :: header)
   in
-  let hidden i = Printf.sprintf "%gpx" (hi -. snaps.(i)) in
+  let hidden snaps i = px (highest snaps -. snaps.(i)) in
   (* style: inline custom properties because both come from the caller's
      snaps, known only at runtime: the sheet's height, and how much of it is
      below the screen at the current snap point, which pads the body so its
@@ -70,19 +77,35 @@ let v ~snaps ?(start = 0) ~header ~body () =
           cls "sheet";
           At.style
             (Jstr.v
-               (Printf.sprintf "--sheet-height:%gpx;--sheet-hidden:%s" hi
-                  (hidden start)));
+               (Printf.sprintf "--sheet-height:%s;--sheet-hidden:%s"
+                  (px (highest initial))
+                  (hidden initial start)));
         ]
       [grab; El.div ~at:[cls "sheet__body"] body]
   in
   let settling = Jstr.v "sheet--settling" in
   let snap_to i =
-    let i = clamp_i i in
+    let snaps = current () in
+    let i = clamp_index snaps i in
+    index := i;
     El.set_class settling true el;
-    El.set_inline_style (Jstr.v "--sheet-hidden") (Jstr.v (hidden i)) el;
+    El.set_inline_style (Jstr.v "--sheet-hidden") (Jstr.v (hidden snaps i)) el;
     let step = React.Step.create () in
     set_visible ~step snaps.(i);
     send_settled ~step i;
+    React.Step.execute step
+  in
+  let set_snaps l =
+    let snaps = Snap.of_list l in
+    let i = clamp_index snaps !index in
+    index := i;
+    El.set_inline_style (Jstr.v "--sheet-height")
+      (Jstr.v (px (highest snaps)))
+      el;
+    El.set_inline_style (Jstr.v "--sheet-hidden") (Jstr.v (hidden snaps i)) el;
+    let step = React.Step.create () in
+    set_snaps_s ~step snaps;
+    set_visible ~step snaps.(i);
     React.Step.execute step
   in
   (* style: a ref because one gesture's state lives across DOM pointer events
@@ -103,7 +126,9 @@ let v ~snaps ?(start = 0) ~header ~body () =
       | false -> React.S.value visible
       | true -> (
           match shown_ty el with
-          | Some ty -> Snap.clamp snaps (hi -. ty)
+          | Some ty ->
+              let snaps = current () in
+              Snap.clamp snaps (highest snaps -. ty)
           | None -> React.S.value visible)
     in
     El.set_class settling false el;
@@ -136,7 +161,7 @@ let v ~snaps ?(start = 0) ~header ~body () =
         | false -> ());
         d.last_y <- y;
         d.last_t <- t;
-        set_visible (Snap.clamp snaps (d.from_visible +. d.from_y -. y))
+        set_visible (Snap.clamp (current ()) (d.from_visible +. d.from_y -. y))
     | Idle | Pressed _ | Dragging _ -> ()
   in
   (* A lift flings along the gesture; a cancel or a lost capture only settles
@@ -149,7 +174,7 @@ let v ~snaps ?(start = 0) ~header ~body () =
         gesture := Idle;
         let speed = match fling with true -> d.speed | false -> 0. in
         snap_to
-          (Snap.release snaps ~at:(React.S.value visible) ~speed
+          (Snap.release (current ()) ~at:(React.S.value visible) ~speed
              ~rest_ms:(Ev.timestamp_ms e -. d.last_t))
     | Idle | Pressed _ | Dragging _ -> ()
   in
@@ -161,18 +186,19 @@ let v ~snaps ?(start = 0) ~header ~body () =
     | false -> ()
   in
   let transform =
-    React.S.map
-      (fun v ->
+    React.S.l2
+      (fun snaps v ->
         "translate3d(0,"
-        ^ Jstr.to_string (Jstr.of_float ~frac:1 (hi -. v))
+        ^ Jstr.to_string (Jstr.of_float ~frac:1 (highest snaps -. v))
         ^ "px,0)")
-      visible
+      snaps visible
   in
   {
     el;
     visible;
     settled;
     snap_to;
+    set_snaps;
     bindings =
       [
         Rb.style el "transform" transform;

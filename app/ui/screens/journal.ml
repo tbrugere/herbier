@@ -14,11 +14,7 @@ module W = Widgets
 let cls c = At.class' (Jstr.v c)
 let offset (o : Observation.t) = Zone.offset_s o.at
 let date (o : Observation.t) = Zone.date o.at
-let year (o : Observation.t) = Fr_date.year ~tz_offset_s:(offset o) o.at
-
-let year_now () =
-  let now = Ptime_clock.now () in
-  Fr_date.year ~tz_offset_s:(Zone.offset_s now) now
+let year (o : Observation.t) = Zone.year o.at
 
 (* What the list is built from, loaded on entry and after each save. *)
 type data = {
@@ -28,18 +24,12 @@ type data = {
   links : Tag.Plant_tag.t list;
 }
 
-type chip = Year of int | To_identify of int | Tag of Tag.t
-
 let row names (o : Observation.t) =
   let time = Fr_date.time ~tz_offset_s:(offset o) o.at in
   let r =
     match o.plant_id with
     | Some id ->
-        let title =
-          match List.find_opt (fun (p, _) -> Plant_id.equal p id) names with
-          | Some (_, n) -> n
-          | None -> "Plante supprimée"
-        in
+        let title = Journal_day.plant_name names id in
         let meta =
           match o.note with Some _ -> time ^ " · note" | None -> time
         in
@@ -94,7 +84,6 @@ let v app =
   let counter, set_counter = React.S.create "" in
   let empty_text, set_empty_text = React.S.create "" in
   let filters = State.filters state in
-  let update f = State.set_filters state (f (React.S.value filters)) in
   (* style: the loaded data, read and written only outside update steps
      ([Rb.act] handlers, future callbacks). *)
   let data = ref {observations = []; names = []; tags = []; links = []} in
@@ -113,57 +102,6 @@ let v app =
       | [], [] -> "Aucune observation pour l’instant."
       | [], _ :: _ -> "Aucune observation pour ces filtres.");
     RList.set days_handle (Journal_day.group ~date shown)
-  in
-  (* Chips are rebuilt with the data: years and the « À identifier » count
-     change with it. *)
-  let chip_of = function
-    | Year y ->
-        let active =
-          React.S.map
-            (fun (f : State.filters) -> Option.equal Int.equal f.year (Some y))
-            filters
-        in
-        let c = W.Chip.filter ~label:(string_of_int y) ~active () in
-        let act =
-          Rb.act c.click (fun () ->
-              update (fun f ->
-                  {
-                    f with
-                    year =
-                      (match f.year with
-                      | Some z when Int.equal z y -> None
-                      | _ -> Some y);
-                  }))
-        in
-        (c.el, act :: c.bindings)
-    | To_identify n ->
-        let active =
-          React.S.map (fun (f : State.filters) -> f.to_identify_only) filters
-        in
-        let c =
-          W.Chip.filter ~tone:W.Chip.Ochre
-            ~label:(Printf.sprintf "À identifier · %d" n)
-            ~active ()
-        in
-        let act =
-          Rb.act c.click (fun () ->
-              update (fun f ->
-                  {f with to_identify_only = not f.to_identify_only}))
-        in
-        (c.el, act :: c.bindings)
-    | Tag (t : Tag.t) ->
-        let active =
-          React.S.map
-            (fun (f : State.filters) -> List.exists (Tag_id.equal t.id) f.tags)
-            filters
-        in
-        let c = W.Chip.filter ~label:t.name ~active () in
-        let act =
-          Rb.act c.click (fun () ->
-              update (fun f ->
-                  {f with tags = Collection_filter.toggle_tag t.id f.tags}))
-        in
-        (c.el, act :: c.bindings)
   in
   let load () =
     let open Fut.Result_syntax in
@@ -189,18 +127,11 @@ let v app =
             (Fr_text.plural
                (List.length d.observations)
                "observation" "observations");
-          let f = React.S.value filters in
-          let years =
-            Journal_filter.year_chips ~year_of:year ~year:f.year d.observations
-          in
-          let to_identify =
-            Journal_filter.to_identify_chip ~to_identify_only:f.to_identify_only
-              d.observations
-          in
+          (* Chips are rebuilt with the data: years and the « À identifier »
+             count change with it. *)
           RList.set chips_handle
-            (List.map (fun y -> Year y) years
-            @ (match to_identify with None -> [] | Some n -> [To_identify n])
-            @ List.map (fun t -> Tag t) d.tags);
+            (Filter_chips.chips ~year_of:year (React.S.value filters)
+               d.observations d.tags);
           render ())
   in
   load ();
@@ -221,13 +152,13 @@ let v app =
       ]
   in
   let names () = !data.names in
-  let this_year () = year_now () in
+  let this_year () = Zone.this_year () in
   {
     Screen.el;
     bindings =
       [
         Rb.text counter_el counter;
-        Rb.rlist chips_el chip_of chips;
+        Rb.rlist chips_el (Filter_chips.el state) chips;
         Rb.rlist list_el
           (fun d -> day ~this_year:(this_year ()) (names ()) d)
           days;

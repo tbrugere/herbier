@@ -3,6 +3,7 @@
 
 module Observation = Herbier_domain.Observation
 module Places = Herbier_domain.Places
+module Observation_id = Herbier_domain.Ids.Observation_id
 
 val empty : Yojson.Safe.t
 (** [{"type":"FeatureCollection","features":[]}] *)
@@ -40,3 +41,80 @@ val circle : center:Places.point -> radius_m:float -> steps:int -> Yojson.Safe.t
     bearings [360 * i / steps] degrees from north, i = 0..steps-1. {!empty} when
     [radius_m] is not finite or [<= 0.], [steps < 3], or a [center] coordinate
     is not finite. Never raises. *)
+
+(** {1 Places (handoff 4b)} *)
+
+type place = {
+  key : Observation_id.t;
+      (** id of the cluster's first member ({!Places.compare_obs} order): stable
+          under appends in time order, the place's id on the map and in the 4b
+          state *)
+  cluster : Places.cluster;
+      (** the whole place: its name, what « Renommer » writes *)
+  shown : Observation.t list;
+      (** members that pass the filters, in [cluster.members] order; never empty
+          in {!places}' result *)
+}
+
+val places :
+  keep:(Places.cluster -> Observation.t -> bool) ->
+  Observation.t list ->
+  place list
+(** {!Places.cluster} of the whole list, then for each cluster its members
+    satisfying [keep cluster]; clusters with no such member are dropped. Order:
+    {!Places.cluster}'s. [keep] gets the member's own cluster (so a caller can
+    match on the place's name) and must be pure. Never raises (unless [keep]
+    does). *)
+
+val find : place list -> Observation_id.t -> place option
+(** The place whose [cluster.members] (not only [shown]) holds an observation
+    with that id; [None] otherwise. *)
+
+val count_key : string
+(** ["count"] *)
+
+val identified_key : string
+(** ["identified"] *)
+
+val role_key : string
+(** ["role"] *)
+
+val west_key : string
+(** ["west"] *)
+
+val south_key : string
+(** ["south"] *)
+
+val east_key : string
+(** ["east"] *)
+
+val north_key : string
+(** ["north"] *)
+
+val place_points : place list -> Yojson.Safe.t
+(** A FeatureCollection, one Point per place in the given order, at
+    [cluster.centroid], properties exactly:
+    [{"id": <key uuid>, "count": <length shown>, "identified": <shown members
+     with a plant>, "west": w, "south": s, "east": e, "north": n}] (the
+    {!count_key} … {!north_key} names) where the four floats are {!bounds} of
+    [shown]. A place whose [shown] is empty is skipped. No NaN or infinity
+    emitted (a place with a non-finite centroid is skipped). *)
+
+val selection : place option -> Yojson.Safe.t
+(** [None]: {!empty}. [Some p]: a FeatureCollection whose first feature is a
+    Point at [p.cluster.centroid] with properties
+    [{"id": <key>, "role": "place"}], followed by one Point per placeable member
+    of [p.shown] in {!Places.compare_obs} order with
+    [{"id": <observation id>, "role": "member"}]. *)
+
+type hit =
+  | Group of bounds  (** a MapLibre cluster of places: its aggregated bounds *)
+  | Member of Observation_id.t
+      (** a place point (its key), a member point or a selection point *)
+
+val hit : Yojson.Safe.t -> hit option
+(** Decodes the properties of a tapped feature: an object with ["cluster": true]
+    and numeric (int or float), finite ["west"], ["south"], ["east"], ["north"]
+    is [Group]; [cluster:true] with a bound missing or not finite is [None];
+    otherwise an object with a string ["id"] that [Observation_id.of_string]
+    accepts is [Member]; anything else [None]. Never raises. *)

@@ -31,11 +31,21 @@ val create :
     raises. *)
 
 val set_observations : t -> Observation.t list -> unit
-(** {!Features.observations} into {!Style.observations_source}. *)
+(** {!Features.observations} into {!Style.observations_source}. Used by the
+    [#dev/map] page only (4b uses {!set_places}). *)
 
 val set_accuracy : t -> (Places.point * float) option -> unit
 (** [Some (centre, radius_m)]: {!Features.circle} with 64 steps into
-    {!Style.accuracy_source}; [None]: {!Features.empty}. *)
+    {!Style.accuracy_source}; [None]: {!Features.empty}. Used by the [#dev/map]
+    page only. *)
+
+val set_places : t -> Features.place list -> unit
+(** {!Features.place_points} into {!Style.places_source} and
+    {!Features.observations} of every place's [shown] into
+    {!Style.members_source}. *)
+
+val set_selection : t -> Features.place option -> unit
+(** {!Features.selection} into {!Style.selection_source}. *)
 
 type click = {at : Places.point; observations : Observation_id.t list}
 (** The point tapped and the observations under it, topmost first (ids that do
@@ -43,7 +53,20 @@ type click = {at : Places.point; observations : Observation_id.t list}
 
 val on_click : t -> (click -> unit) -> unit
 (** Clicks on the map, hit-testing {!Style.points_layer}. The callback must not
-    raise. *)
+    raise. Used by the [#dev/map] page only (4b uses {!on_tap}). *)
+
+type tap = {at : Places.point; hits : Features.hit list}
+(** In {!Herbier_bindings.Maplibre.on_click}'s order (topmost first, or nearest
+    first for a near miss). *)
+
+val on_tap : t -> (tap -> unit) -> unit
+(** Clicks hit-testing {!Style.selection_members_layer},
+    {!Style.selection_place_layer}, {!Style.members_layer},
+    {!Style.places_layer} and {!Style.groups_layer}; the list does not set the
+    priority, the style's paint order does. A feature whose properties do not
+    decode ({!Features.hit}) is dropped with a [Console.warn] naming its keys; a
+    tap whose features all fail to decode is not reported at all, so that it is
+    not taken for a tap on empty map. The callback must not raise. *)
 
 val on_moveend : t -> (center:Places.point -> zoom:float -> unit) -> unit
 (** After every camera move. The callback must not raise. *)

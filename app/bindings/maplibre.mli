@@ -15,7 +15,12 @@ type t
 
 type lng_lat = {lng : float; lat : float}
 type camera = {center : lng_lat; zoom : float}
-type click = {at : lng_lat; ids : string list}
+
+type click = {at : lng_lat; ids : string list; properties : string list}
+(** [properties]: [JSON.stringify] of each hit feature's [properties] object, in
+    hit order (topmost first, or nearest first for a near miss: see
+    {!on_click}), one per feature, not deduplicated; a feature without a
+    properties object gives ["{}"]. A non-string element is dropped. *)
 
 val create :
   Brr.El.t ->
@@ -38,8 +43,10 @@ val set_data : t -> source:string -> string -> unit
 
 val on_click : t -> layers:string list -> (click -> unit) -> unit
 (** On every map click: where, and the [properties.id] strings of the features
-    of [layers] under it, topmost first, without duplicates; [[]] when none.
-    Layers absent from the style are ignored. *)
+    of [layers] under it, topmost first, without duplicates; [[]] when none. A
+    finger is wider than a point: when no feature is under the click itself, the
+    point features whose centre is within 22 CSS px (a 44 px target) are taken
+    instead, nearest first. Layers absent from the style are ignored. *)
 
 val on_moveend : t -> (camera -> unit) -> unit
 

@@ -27,6 +27,19 @@ type account = {
   wifi_only : bool;  (** the Settings « Envoyer seulement en Wi-Fi » *)
 }
 
+type camera = {center : Herbier_domain.Places.point; zoom : float}
+
+type map_view = {
+  camera : camera option;  (** [None] until 4b has been shown once *)
+  selected : Herbier_domain.Ids.Observation_id.t option;
+      (** a place key ({!Herbier_geo.Features.place}) *)
+}
+(** 4b's camera and selected place, kept across tab switches and modals (handoff
+    « État », Carte: viewport, selectedCluster). *)
+
+val no_map_view : map_view
+(** Both [None]. *)
+
 type t
 
 val create : network:network -> account:account -> t
@@ -36,6 +49,7 @@ val create : network:network -> account:account -> t
 val filters : t -> filters React.signal
 val network : t -> network React.signal
 val account : t -> account React.signal
+val map_view : t -> map_view React.signal
 
 val set_filters : t -> ?step:React.step -> filters -> unit
 (** [step] groups this change with other setters in one update step (style guide
@@ -43,3 +57,4 @@ val set_filters : t -> ?step:React.step -> filters -> unit
 
 val set_network : t -> ?step:React.step -> network -> unit
 val set_account : t -> ?step:React.step -> account -> unit
+val set_map_view : t -> ?step:React.step -> map_view -> unit

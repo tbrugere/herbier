@@ -1322,6 +1322,62 @@ let match_expression () =
       (["ý"; "ÿ"; "Ý"; "Ÿ"], 'y');
     ]
 
+(* ---------- Search.matches ---------- *)
+
+(* Each case as (query, text, expected). *)
+let matches_cases =
+  [
+    ("schlu", "Col de la Schlucht", true);
+    ("col schlucht", "Col de la Schlucht", true);
+    ("ecrin", "Les Écrins", true);
+    ("ÉCRINS", "les ecrins", true);
+    ("digitale", "Digitalis purpurea", true);
+    ("bois", "Lisière du bois", true);
+    ("oi", "Lisière du bois", false);
+    ("jardin potager", "Jardin", false);
+    ("", "Jardin", false);
+    ("  , ", "Jardin", false);
+    ("\xf0\x9f\x8c\xbf" (* 🌿 *), "Jardin", false);
+    ("jardin", "", false);
+  ]
+
+let matches_runs_what_match_expression_asks () =
+  List.iter
+    (fun (query, text, expected) ->
+      Alcotest.(check bool)
+        (Printf.sprintf "matches ~query:%S %S" query text)
+        expected
+        (Search.matches ~query text))
+    matches_cases
+
+(* A query with no term ([match_expression] is [None]) matches no text. *)
+let matches_false_when_no_term () =
+  let no_term =
+    [""; "  , "; "\xf0\x9f\x8c\xbf"; "\xc2\xab"; "\xe2\x80\x94"; "-'\"*"]
+  and texts =
+    [
+      "";
+      "Jardin";
+      "Col de la Schlucht";
+      "\xc2\xab Le Pr\xc3\xa9 \xc2\xbb";
+      "-'\"*";
+    ]
+  in
+  List.iter
+    (fun query ->
+      Alcotest.(check bool)
+        (Printf.sprintf "match_expression %S is None" query)
+        true
+        (Option.is_none (Search.match_expression query));
+      List.iter
+        (fun text ->
+          Alcotest.(check bool)
+            (Printf.sprintf "matches ~query:%S %S" query text)
+            false
+            (Search.matches ~query text))
+        texts)
+    no_term
+
 (* ---------- Search over the FTS index ---------- *)
 
 let digitale =
@@ -1499,6 +1555,29 @@ let search_places () =
     (Printf.sprintf "delete from observations where id = '%s';\n" (uuid 0x32));
   check_search "a hard-deleted observation's place no longer finds" db "munster"
     []
+
+let search_by_name () =
+  let db = three_plants_db () in
+  writes "observations" db
+    [
+      Observations.upsert
+        (observation 0x35 t1 ~plant:0xd3 ~place_label:"Col de la Schlucht");
+    ];
+  let by_name text =
+    match Search.plants_by_name text with
+    | None -> Alcotest.failf "Search.plants_by_name %S is None" text
+    | Some q -> names (all db q)
+  in
+  Alcotest.(check (list string))
+    "a place_label does not find the plant" [] (by_name "schlucht");
+  Alcotest.(check (list string))
+    "names still match" ["Églantier"] (by_name "rosa");
+  Alcotest.(check (list string))
+    "two terms in the names" ["Digitale pourpre"]
+    (by_name "digitale pourpre");
+  Alcotest.(check bool)
+    "blank is None" true
+    (Option.is_none (Search.plants_by_name "  "))
 
 let search_once () =
   let db = three_plants_db () in
@@ -1909,6 +1988,13 @@ let () =
           case "folds, strips one ending, quotes and prefixes each term"
             match_expression;
         ] );
+      ( "Search.matches",
+        [
+          case "runs in memory what match_expression asks of FTS5 MATCH"
+            matches_runs_what_match_expression_asks;
+          case "is false whenever match_expression has no term"
+            matches_false_when_no_term;
+        ] );
       ( "Search",
         [
           case "\"digitale\" finds Digitale pourpre and Digitalis" search_done;
@@ -1922,6 +2008,7 @@ let () =
           case "the index follows tagging, renaming and deleting tags"
             search_tags;
           case "the index follows observation places" search_places;
+          case "plants_by_name ignores observation places" search_by_name;
           case "a plant matching several fields is returned once" search_once;
           case "migration 2 backfills plants present at version 1"
             search_backfill;

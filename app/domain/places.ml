@@ -149,3 +149,12 @@ let label observations =
           |> List.filter_map position_point
           |> mean
           |> Option.map (fun c -> Coordinates c))
+
+let rename name ~at {centroid = _; members} =
+  let label = present name in
+  List.filter_map
+    (fun (o : Observation.t) ->
+      match Option.equal String.equal o.place_label label with
+      | true -> None
+      | false -> Some {o with place_label = label; updated_at = at})
+    members

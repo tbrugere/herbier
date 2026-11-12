@@ -67,7 +67,9 @@ let run ~db ~stage ~result ~current =
     El.set_children stage []
   in
   let enter_and_leave i =
-    let screen = Screens.Collection.v (App.create ~db ~state) in
+    let screen =
+      Screens.Collection.v (App.create ~db ~state ~theme:(Theme.load ()))
+    in
     mount screen;
     let* filled =
       lift (until ~ms:load_timeout_ms (fun () -> cards screen.el > 0))
@@ -111,7 +113,9 @@ let run ~db ~stage ~result ~current =
     | Ok [] -> fail "no tag in herbier: seed with #dev/seed first"
     | Error e -> fail "tags: %s" (Db.error_to_string e)
   in
-  let control = Screens.Collection.v (App.create ~db ~state) in
+  let control =
+    Screens.Collection.v (App.create ~db ~state ~theme:(Theme.load ()))
+  in
   mount control;
   let* filled =
     lift (until ~ms:load_timeout_ms (fun () -> cards control.el > 0))

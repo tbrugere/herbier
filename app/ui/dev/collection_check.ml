@@ -6,7 +6,8 @@ let el db =
   | Error e -> El.p [El.txt' ("no herbier database: " ^ e)]
   | Ok db ->
       let screen =
-        Screens.Collection.v (App.create ~db ~state:(Fixture.state ()))
+        Screens.Collection.v
+          (App.create ~db ~state:(Fixture.state ()) ~theme:(Theme.load ()))
       in
       let root = El.div [screen.el] in
       (* The page is left by a reload: nothing releases the screen, so its

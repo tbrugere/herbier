@@ -1,6 +1,6 @@
 open Brr
 
-type thumb = Image of string | Placeholder
+type thumb = Image of string | Preview of string | Placeholder
 type tone = Normal | To_identify
 type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
 
@@ -20,6 +20,10 @@ let thumb_el = function
               ]
             ();
         ]
+  | Preview path ->
+      El.span
+        ~at:[cls "list-row__thumb"]
+        [Preview_img.v ~cls:["list-row__preview"] path]
   | Placeholder -> El.span ~at:[cls "list-row__thumb"] []
 
 let v ?thumb ?(tone = Normal) ~title ~meta () =

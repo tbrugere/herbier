@@ -6,3 +6,9 @@ val offset_s : Ptime.t -> int
 
 val date : Ptime.t -> Ptime.date
 (** The local calendar day of that instant. *)
+
+val year : Ptime.t -> int
+(** The local year of that instant. *)
+
+val this_year : unit -> int
+(** The local year now. *)

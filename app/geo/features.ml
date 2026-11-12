@@ -17,6 +17,9 @@ let feature geometry properties =
 
 let position ({lat; lon} : Places.point) = `List [`Float lon; `Float lat]
 
+let point_geometry p =
+  `Assoc [("type", `String "Point"); ("coordinates", position p)]
+
 let placed observations =
   observations
   |> List.filter_map (fun o ->
@@ -37,8 +40,7 @@ let observations list =
   placed list
   |> List.stable_sort (fun (a, _) (b, _) -> Places.compare_obs a b)
   |> List.map (fun ((o : Observation.t), p) ->
-      feature
-        (`Assoc [("type", `String "Point"); ("coordinates", position p)])
+      feature (point_geometry p)
         [
           ("id", `String (Observation_id.to_string o.id));
           (kind_key, `String (kind_to_string (kind o)));
@@ -113,3 +115,102 @@ let circle ~(center : Places.point) ~radius_m ~steps =
                ])
             [];
         ]
+
+type place = {
+  key : Observation_id.t;
+  cluster : Places.cluster;
+  shown : Observation.t list;
+}
+
+let places ~keep list =
+  Places.cluster list
+  |> List.filter_map (fun (cluster : Places.cluster) ->
+      match (cluster.members, List.filter (keep cluster) cluster.members) with
+      | _, [] | [], _ :: _ -> None
+      | (first : Observation.t) :: _, shown ->
+          Some {key = first.id; cluster; shown})
+
+let find places id =
+  List.find_opt
+    (fun {cluster; key = _; shown = _} ->
+      List.exists
+        (fun (o : Observation.t) -> Observation_id.equal o.id id)
+        cluster.members)
+    places
+
+let count_key = "count"
+let identified_key = "identified"
+let role_key = "role"
+let west_key = "west"
+let south_key = "south"
+let east_key = "east"
+let north_key = "north"
+
+let finite_point ({lat; lon} : Places.point) =
+  Float.is_finite lat && Float.is_finite lon
+
+let place_point {key; cluster; shown} =
+  match (bounds shown, finite_point cluster.centroid) with
+  | None, _ | Some _, false -> None
+  | Some {south; west; north; east}, true ->
+      let identified =
+        List.length
+          (List.filter
+             (fun (o : Observation.t) -> Option.is_some o.plant_id)
+             shown)
+      in
+      Some
+        (feature
+           (point_geometry cluster.centroid)
+           [
+             ("id", `String (Observation_id.to_string key));
+             (count_key, `Int (List.length shown));
+             (identified_key, `Int identified);
+             (west_key, `Float west);
+             (south_key, `Float south);
+             (east_key, `Float east);
+             (north_key, `Float north);
+           ])
+
+let place_points places = collection (List.filter_map place_point places)
+
+let role_feature id role p =
+  feature (point_geometry p)
+    [("id", `String (Observation_id.to_string id)); (role_key, `String role)]
+
+let selection = function
+  | None -> empty
+  | Some {key; cluster; shown} ->
+      let members =
+        (* [shown] keeps [cluster.members]' order, which is compare_obs. *)
+        placed shown
+        |> List.map (fun ((o : Observation.t), p) ->
+            role_feature o.id "member" p)
+      in
+      collection (role_feature key "place" cluster.centroid :: members)
+
+type hit = Group of bounds | Member of Observation_id.t
+
+let number = function
+  | `Int i -> Some (Float.of_int i)
+  | `Float f when Float.is_finite f -> Some f
+  | _ -> None
+
+let hit = function
+  | `Assoc fields -> (
+      let field k = List.assoc_opt k fields in
+      let bound k = Option.bind (field k) number in
+      match field "cluster" with
+      | Some (`Bool true) -> (
+          match
+            (bound west_key, bound south_key, bound east_key, bound north_key)
+          with
+          | Some west, Some south, Some east, Some north ->
+              Some (Group {south; west; north; east})
+          | _ -> None)
+      | _ -> (
+          match field "id" with
+          | Some (`String s) ->
+              Option.map (fun id -> Member id) (Observation_id.of_string s)
+          | _ -> None))
+  | _ -> None

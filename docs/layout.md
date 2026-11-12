@@ -167,14 +167,16 @@ app/
     map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …)
     style.ml              online (OpenFreeMap) style plus Herbier's overlay sources and layers, merged
                           in OCaml; pure, tested in test/geo/; the offline (pmtiles://) switch is v2
-    features.ml           GeoJSON of the observations, their bounds, the metric accuracy circle; pure,
-                          tested in test/geo/
+    features.ml           GeoJSON of the observations, their bounds, the metric accuracy circle, the
+                          places of 4b (filtered clusters, their points, the selection, tap decoding);
+                          pure, tested in test/geo/
     tiles.ml              region extract download and storage (v2, with the offline map)
     geocode.ml            Photon / Géoplateforme forward and reverse
   ui/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
     theme.ml              reads the custom properties OCaml needs (map colours, status bar) once at startup
-    state.ml              global signals: filters, network, account (handoff « État »)
+    state.ml              global signals: filters, network, account, 4b's camera and selected place
+                          (handoff « État »)
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
                           the shell holds the tab bar
     screen.ml             a screen's root element + its bindings, as the router takes them
@@ -182,8 +184,9 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
-    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml
-                          pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml, map_filter.ml,
+    map_sheet.ml          pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     zone.ml               the phone's zone offset at an instant, for Fr_date
     loaded.ml             a screen's content from store reads: rendered per load, or once over a signal
