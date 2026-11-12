@@ -65,10 +65,13 @@ WT=$(treehouse get --lease --lease-holder "implement $ARGUMENTS")   # prints the
 cd "$WT"
 ```
 
-If `treehouse.toml` is missing at the repo root, run `treehouse init` once and commit it. The dune
-shared cache makes the locked packages (compiler included) restore in a fresh worktree instead of
-rebuilding; the first `dune build` there still takes a minute or two. Release the worktree with
-`treehouse return "$WT"` at the end, after the PR is posted.
+If `treehouse.toml` is missing at the repo root, run `treehouse init` once and commit it. The locked
+packages (compiler included) restore from the dune shared cache in a fresh worktree instead of
+rebuilding, but only because `~/.config/dune/config` sets `(cache enabled)`: the default,
+`enabled-except-user-rules`, does not cache package builds. With it, the first `dune build @check`
+in a fresh worktree takes about a minute instead of 15 to 60. A "cache store error" warning
+listing the compiler's files is harmless (the macOS compiler build is not bit-reproducible).
+Release the worktree with `treehouse return "$WT"` at the end, after the PR is posted.
 
 Running in the cloud: work in place unless implementing several steps at once.
 
@@ -241,8 +244,9 @@ links to the PR and its comments, and what the next step is. Then release the wo
 
 # Notes specific to this repo
 
-- `dune build` from a clean clone fetches and compiles the locked packages including OCaml;
-  in CI that is cached under `_build/_private`, keyed on `dune.lock/`.
+- `dune build` from a clean clone fetches and compiles the locked packages including OCaml,
+  unless the shared cache already holds them (`(cache enabled)`, see step 0); in CI that is cached
+  under `_build/_private`, keyed on `dune.lock/`.
 - A `dune build @check --watch` holds the build lock; in a leased worktree this is not an issue.
   In place, stop the watch before `dune test` and say so.
 - The PostgREST integration fixtures are recorded by `scripts/record-postgrest-fixtures.sh`
