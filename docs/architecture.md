@@ -23,9 +23,9 @@ fit and what the data looks like end to end.
         │ PostgREST (JWT)         │ Drive API (1h token)      │ GET, keyless
         ▼                         ▼                           ▼
   Supabase Free            Google Drive               GBIF · Wikidata · Tela
-  (Postgres + RLS,         Herbier/<species>/…        INPN odata · Wikipedia
-   optional Storage        originals                  OpenFreeMap tiles
-   bucket for previews)                               Photon / Géoplateforme
+  (Postgres + RLS)         Herbier/<species>/…        INPN odata · Wikipedia
+                           originals                  OpenFreeMap tiles
+                                                      Photon / Géoplateforme
         ▲
         │ background job on the phone, about twice a week: light sync
         │ = keep-alive (no dumps; Supabase is the device's only copy)
@@ -62,7 +62,8 @@ Observation  id, plant_id? (null ⇒ « À identifier »), at, lat?, lon?,
              lat and lon both null or both set, accuracy_m only with them
 Photo        id, observation_id, taken_at, width, height,
              sha256 (of the original as captured),
-             preview_path (device), preview_bucket_key? (Supabase Storage),
+             preview_path (device), preview_bucket_key? (unused: the previews
+             Storage mirror, M6.49, was dropped; always null),
              original_target (app_only|drive), drive_file_id?,
              upload_state (pending|uploaded|failed|original_missing),
              created_at, updated_at, deleted_at?
@@ -281,9 +282,8 @@ online:
    defer_foreign_keys = on`; if the commit fails on a foreign key, the whole
    pull rolls back with its cursors and the next cycle, which now sees the
    parent, retries.
-3. Previews: if the private Storage bucket is enabled, upload
-   `previews/<id>.jpg` missing remotely; download missing locally on demand
-   (new device case).
+3. Previews are not synced (no Storage bucket; M6.49 dropped 2026-11-12):
+   a new device rebuilds them from the originals (Drive).
 
 Pausing: if PostgREST answers with the paused-project error, the outbox just
 waits; the user sees "serveur en pause" in Settings with a link to the
@@ -321,8 +321,7 @@ capture / pick
 - Health check (weekly, when online): `files.get?fields=trashed` on a
   batch of `drive_file_id`s; `trashed` or 404 → `original_missing`.
 - App-only storage target (no Google): originals are simply not kept, only
-  the preview. Settings explains the ~570-photo budget if the Storage mirror
-  is on.
+  the preview, on the device alone (no Storage mirror).
 - Google Photos: not implemented; the settings radio offers Drive and
   app-only, no Google Photos row.
 
@@ -436,8 +435,11 @@ gbif_key
 
 ## 7. Link interception and resolution
 
-Manifest `intent-filter`s (`VIEW` + `BROWSABLE`, `https`), one per host
-below; the resolver classifies exactly the same hosts:
+Manifest `intent-filter`s (`VIEW` + `BROWSABLE`, `https`) for Pl@ntNet's
+hosts only (user decision 2026-11-12): `identify.plantnet.org` and the
+Pl@ntUse hosts below. The resolver classifies all the hosts below, the others
+only when pasted in « Liens de référence » (5a); gbif.org may be re-added to
+the manifest if needed:
 `www.gbif.org` and `m.gbif.org`: `/species/*` and `/{lang}/species/*`;
 `identify.plantnet.org`: `/*/species/*` and `/*/observations/*`;
 `plantuse.plantnet.org`, `uses.plantnet.org` and the old
@@ -448,8 +450,8 @@ species pages; which host is current is to verify);
 `inpn.mnhn.fr`: `/espece/cd_nom/*` and `/explorer/especes/*`;
 `www.tela-botanica.org`: `/bdtfx-nn-*`;
 `www.inaturalist.org` and `m.inaturalist.org`: `/taxa/*`.
-Plus `SEND text/plain` via the share-target plugin. On Android 12+ the user
-enables these once under "Ouvrir par défaut" (no Digital Asset Links since we
+Plus `SEND text/plain` via the share-target plugin (Pl@ntNet's share). On
+Android 12+ the user enables the Pl@ntNet hosts once under "Ouvrir par défaut" (no Digital Asset Links since we
 do not own these domains); the share sheet path needs nothing. Both paths
 ship in v1.
 
@@ -464,7 +466,8 @@ input (URL or text)
                   4i fallback with an empty query
      plantuse   → "Genus_species" wiki page name → GBIF species/match (host to verify)
      wikipedia  → REST summary → wikibase_item → Wikidata P846
-     inpn/tela  → Wikidata by P3186/P3105 → P846 (not the regional APIs; gaps → 4i)
+     inpn/tela  → Wikidata by P3186/P3105 → P846 (not the regional APIs; gaps → 4i;
+                  INPN/Tela as sources are the M4.59 regional layer)
      powo/inat  → Wikidata by P5037/P3151 → P846
      free text  → GBIF species/suggest + search?qField=VERNACULAR
   → gbif_key + immediate partial snapshot (canonical name, family)

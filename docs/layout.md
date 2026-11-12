@@ -141,7 +141,7 @@ app/
   sync/                   Supabase (§4 of architecture)
     auth.ml               Google id token → signInWithIdToken, session, auto-refresh
     transport.ml          Postgrest.Request.t → Brr fetch, body to the decoder; JWT, paused-project detection
-    push.ml  pull.ml  engine.ml (schedule, backoff)  previews_mirror.ml
+    push.ml  pull.ml  engine.ml (schedule, backoff)
   photos/                 §5 of architecture
     exif.ml  capture.ml (getUserMedia / pick)
     preview.ml            canvas resize + JPEG encode, sha256 of the original; save: previews/<id>.jpg
@@ -154,7 +154,7 @@ app/
     decode.ml             decode error variant, JSON parsing, field helpers shared by sources/
     qid.ml                Wikidata item id (Q<digits>)
     sources/              gbif.ml  wikidata.ml  wikipedia.ml: request descriptions + payload decoders
-                          tela.ml  inpn.ml: later, once the region is decided
+                          tela.ml  inpn.ml: the optional regional layer (M4.59), for species with a TaxRef id
     payload.ml            one reference row's payload: an object of each call's body, pruned to the fields
                           the decoders read; shared by the projection (reader) and the pipeline (writer)
     projection.ml         reference rows → ReferenceSnapshot fields (4f), pure over JSON

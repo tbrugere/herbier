@@ -215,8 +215,8 @@ blocked: nothing.
   `thumbnailLink` (`=s1600` variant, community-documented). Counts against
   the account's shared 15 GB.
 - **Preview** (≤1600 px, JPEG q0.7 or WebP, 150–250 KB target) is always
-  kept on device, and optionally mirrored to a private Supabase Storage
-  bucket. Note 1600 px JPEG at q80 is 300–500 KB in practice, so the design's
+  kept on device only; no Storage bucket (M6.49 dropped 2026-11-12: previews
+  can be rebuilt from the originals). Note 1600 px JPEG at q80 is 300–500 KB in practice, so the design's
   "200 MB app-only" option holds ~570 photos, not thousands.
 - Canvas-based compression strips EXIF; read GPS and capture date once (e.g.
   with `exifr`) into the observation row before compressing.
@@ -250,9 +250,10 @@ blocked: nothing.
 - **Not obtainable**: structured altitude range. **Partial**: native vs
   introduced range (WCVP gaps, POWO's JSON API is Cloudflare-blocked),
   height (parsed from Coste prose), toxicity (heuristic).
-- **Regional layer**: INPN and Tela Botanica are France-specific. They are a
-  pluggable "regional" enrichment, since the user's region is not fixed; the
-  design's "En France" row only renders when that layer applies.
+- **Regional layer**: INPN and Tela Botanica are France-specific. They are an
+  optional "regional" enrichment (M4.59), fetched for species with a TaxRef
+  id; the design's "En France" row and the other rows they fill only render
+  when that layer has data, so the app stays complete outside France.
 - Wikimedia requires a descriptive User-Agent (200 req/min with one, 10
   without). GBIF wants one too.
 
@@ -283,11 +284,13 @@ are Cloudflare R2 beyond 10 GB of originals and Supabase Pro, both optional.
 
 ## Open decisions (for Tristan)
 
-1. **Region**. Still open. Decided 2026-09-16 that the offline PMTiles
-   extract is v2 and the France-only sources (INPN, Tela, IGN) stay unwired
-   until a region is named. Exception (M5.43): the IGN Géoplateforme reverse
-   geocoder is wired, chosen per point (« when in France »), which needs no
-   region; INPN and Tela stay unwired. The handoff's Alsace/Vosges examples are
+1. **Region**. Decided 2026-11-12: **France-focused, works elsewhere**.
+   INPN and Tela Botanica are an optional regional layer (M4.59): fetched for
+   species with a TaxRef id, their rows shown only when the data exists.
+   They are sources, not intercepted link hosts; pasted INPN/Tela links still
+   resolve through Wikidata (M4.36). Earlier (2026-09-16): the offline PMTiles
+   extract is v2; the IGN Géoplateforme reverse geocoder (M5.43) is chosen
+   per point (« when in France »). The handoff's Alsace/Vosges examples are
    placeholders.
 2. **Google account**: a personal Gmail is assumed. A Workspace account would
    make the OAuth app "internal" and lift all verification questions, but is

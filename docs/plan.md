@@ -70,7 +70,8 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 36. `refs_io/pipeline.ml` fan-out per gbif_key, `refs_io/resolver.ml` (`Domain.Link` + lookups → gbif_key + partial snapshot), wired in `ui/app.ml`: fetch eagerly at link time in the background, on ↻, on open when > 90 days. Done: linking fills 4f's reference block; a failing source leaves the others intact.
 37. 4f reference block complete: names, type, origin, `widgets/month_grid.ml`, habitat chips, toxicity, organ photos into `refthumbs/` (with the local `ref_images` table, a store migration), links row; rows without data disappear. Done: renders for the two spike species, offline after the first fetch.
 38. 4i as a mode of `resolve.ml`, entered from 4j's « Chercher »: my collection (« Ouvrir › ») and reference search (`species/suggest` + vernacular, 300 ms debounce, offline state); 4k/5c reference "+" path; 5a "Changer" and "Liens de référence" (paste link → `PlantRef`). Done: a free-name plant gets linked and its name becomes an alias.
-39. `AndroidManifest.xml` intent-filters (VIEW/BROWSABLE hosts of §7 including the Pl@ntUse one, SEND text/plain), `bindings/cap_share_target.ml`, `cap_app.ml` `appUrlOpen`; 4j sheet mode of `resolve.ml` with "Première observation ici", "Enlever", recent tags, "Déjà dans ma collection" variant. Done: a Pl@ntNet share, a gbif.org link and a Pl@ntUse link (after "Ouvrir par défaut") all land on 4j and add the plant (spike 1, part 2); what Pl@ntNet actually shares and the real Pl@ntUse host get written down here.
+39. `AndroidManifest.xml` intent-filters, Pl@ntNet only (user decision 2026-11-12): VIEW/BROWSABLE for `identify.plantnet.org` and the Pl@ntUse hosts of §7, SEND text/plain (Pl@ntNet's share); other hosts (gbif.org, Wikipedia, POWO, INPN, Tela Botanica, iNaturalist) are not intercepted and are recognised only when pasted in « Liens de référence » (M4.38). `bindings/cap_share_target.ml`, `cap_app.ml` `appUrlOpen`; 4j sheet mode of `resolve.ml` with "Première observation ici", "Enlever", recent tags, "Déjà dans ma collection" variant. Done: a Pl@ntNet share and a Pl@ntUse link (after "Ouvrir par défaut") land on 4j and add the plant (spike 1, part 2); a gbif.org link opens the browser; what Pl@ntNet actually shares and the real Pl@ntUse host get written down here.
+59. Regional layer on 4f (France-focused, works elsewhere; user decision 2026-11-12): `refs/sources/inpn.ml` (TaxRef status, protection, French red list, presence in France) and `refs/sources/tela.ml` (flowering months, habitat, ecology), request descriptions and payload decoders with recorded fixtures, fetched by `refs_io/pipeline.ml` only for species that have a TaxRef id (Wikidata P3186, else Tela's `bdtfx/noms?masque=` bridge), projected into the existing 4f rows. Rows show only when the data exists, so a species outside France keeps the global block of M4.37 unchanged. Pasted INPN/Tela links still resolve through Wikidata (M4.36); these sources are enrichment, not link hosts. Done: Digitalis purpurea and Arnica montana show « En France », protection, French red list, Floraison and Habitat from fixtures; a species without a TaxRef id fetches nothing from INPN/Tela and renders as before; each decoder tested natively.
 
 ## M5 — Map and places (spike 3; runnable: 4b, 5b, mini-map)
 
@@ -88,7 +89,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 46. `bindings/cap_social_login.ml`, `sync/auth.ml`: Credential Manager id token → `signInWithIdToken`, session in Preferences, auto-refresh on resume/background. Sign-ups are off (`config.toml`), so the account is created by hand (dashboard or admin API) before its first sign-in, locally too. Done: sign-in from 4m with an "In production" OAuth client and no verification prompt (spike 4, part 1).
 47. `sync/transport.ml` (`Postgrest.Request.t` → Brr fetch, body to the decoder; JWT, paused-project detection), the push upsert and pull select-since requests over `Tables`, `domain/merge.ml` (LWW on `updated_at`, outbox wins; `reference.payload` compared structurally through Yojson, never as text, since `jsonb` reorders keys); native tests for the rendered requests, merge and outbox ordering. Done: the upsert and select-since render to the expected PostgREST requests in `test/postgrest/`; the style guide §12.2 merge cases are tested.
 48. `sync/push.ml`, `pull.ml`, `engine.ml` (start, resume, after write, backoff, park 4xx with `last_error`), `store/sync_state.ml`, wired in `ui/app.ml`. Pull gets its own transaction entry point (`defer_foreign_keys`), and `Outbox.without_entry` / `Tags.upsert_plant_tag` stop being callable from `Db.write`. Done: an edit on install A shows on install B after pull; parked rows listed in 4m.
-49. `sync/previews_mirror.ml` (optional Storage bucket, up and on-demand down); offline banner and "N en attente" from `state.ml`. Done: a fresh install fetches previews on demand.
+49. ~~`sync/previews_mirror.ml` (optional Storage bucket, up and on-demand down)~~ Dropped (user decision 2026-11-12): previews can be rebuilt from the originals, so no Storage bucket. The offline banner and "N en attente" from `state.ml` move to M8.55 (empty and error states).
 50. Keep-alive from the phone: a background job (`@capacitor/background-runner`, WorkManager underneath) runs a light sync about twice a week even when the app is closed: push pending outbox rows, then one authenticated PostgREST query, so the free project sees activity and does not pause. The job script stays small (no OCaml, no WebView) and reads the session the app hands it at each sign-in. No database dumps anywhere: the device is the source of truth and Supabase its copy (user decision 2026-11-12: no personal data on GitHub, no separate backup). Done: with the app closed, the job runs (logged) and its request reaches Supabase; whether an API request counts as activity for the pause is checked in Supabase's docs and recorded here.
 
 ## M7 — Drive originals (spikes 1 and 4; runnable: originals in Drive)
@@ -100,7 +101,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 ## M8 — Polish and release (runnable: signed release APK)
 
 54. View Transitions (modal from bottom 300 ms, shared hero 4a → 4f 350 ms, fade fallback), pressed states, `sass/screens/` pass per handoff id. Done: side-by-side check against `Herbier v2.dc.html` for every screen.
-55. Empty and error states: 4n illustration in `web/img/`, offline texts on 4g/4i, "serveur en pause" in 4m, "Libérer" (refthumbs eviction, size counters). Done: each state reachable by toggling network or data.
+55. Empty and error states: 4n illustration in `web/img/`, offline texts on 4g/4i, offline banner and "N en attente" from `state.ml` (moved from the dropped M6.49), "serveur en pause" in 4m, "Libérer" (refthumbs eviction, size counters). Done: each state reachable by toggling network or data.
 56. `scripts/release.sh`, signing config, `android.yml` release on tag; launcher icons, splash, `strings.xml`. Done: the release APK installed over the debug one keeps the database.
 
 ## Screen → milestone
@@ -133,12 +134,11 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 - Fixed order: M0 → M1 → M2 → M3. Everything after depends only on M2 (M7 also on M3) and can be reordered.
 - First usable version = M0–M3 plus M6: records plants and photos offline, mirrored to Supabase, without references, map or Drive.
 - M4 and M5 are independent: M4 first if links are the main entry path, M5 first if field use is.
-- Droppable for v1: 49 (previews mirror), 53 (health check).
+- Droppable for v1: 53 (health check). 49 (previews mirror) is dropped (2026-11-12).
 
 ## Later (v2)
 
 - Offline map region: `bindings/pmtiles.ml`, `geo/tiles.ml` (region download to `tiles/`, `scripts/pmtiles-extract.sh`), `web/map/offline.json`, automatic style switch on connectivity, 4m "Données hors-ligne" row (spike 3, offline half). If filesystem-backed PMTiles fails: `addProtocol` write-through cache of visited tiles, offline map becomes "areas already seen".
-- Regional layer: `refs_io/regional.ml` + `refs/sources/tela.ml`, `inpn.ml` behind a setting; "En France" row. Waits for the region decision (stack.md open decision 1).
 
 ## Risk points
 
@@ -159,11 +159,11 @@ Taken 2026-09-16; the toolchain ones are in `layout.md`.
 - The local store comes first (M1) and the UI spike (M2) runs on real rows; `test/fixtures/` keeps recorded API payloads only. No throwaway data layer, and the spike exercises the queries it will live on. Addendum 2026-11-10 (M3.26): "recorded API payloads" widens to recorded external payloads (API responses, library output such as exifr's), still never app rows.
 - Photos (M3) before sync (M6): photos are the field workflow, text rows can wait.
 - Offline map region is v2; v1 uses online tiles only.
-- Link interception in v1 = the SEND share target and the VIEW intent-filters, Pl@ntUse host included.
+- Link interception in v1 = the SEND share target and the VIEW intent-filters, Pl@ntUse host included. Narrowed 2026-11-12: intercepted hosts are Pl@ntNet's only (`identify.plantnet.org`, Pl@ntUse); other reference hosts are recognised only when pasted (gbif.org may be re-added if needed).
 - Tests: alcotest natively on `domain/`, `lib/postgrest/`, `refs/`; browser-side tests only if M2.20 fails its leak check.
 - Package management: `dune pkg lock` from M0; opam switch with a lock file as the fallback.
 - References are fetched eagerly at link time, in the background: 4j promises it and 4f then works offline.
 - Device builds are debug-signed sideloads from `android.yml` artifacts until M8.
-- Regional (France-only) sources are skipped until the region is decided.
+- ~~Regional (France-only) sources are skipped until the region is decided.~~ Decided 2026-11-12: France-focused, works elsewhere; INPN and Tela Botanica are an optional regional layer (M4.59) whose rows show only when they have data.
 - Camera: in-app viewfinder via the browser camera stream; `camera-preview` plugin as the fallback (R4).
 - The Google Photos row is removed from 4m; the storage radio offers Drive and app-only.
