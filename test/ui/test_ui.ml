@@ -327,6 +327,173 @@ let fr_date =
           (Fr_date.time ~tz_offset_s:3600 (utc 2026 1 3 8 5)));
   ]
 
+(* Fr_date.ago: whole days between the instant and [now] (floor). *)
+
+let ago_now = utc 2026 11 12 0 0
+
+let ago =
+  let case what expected instant =
+    Alcotest.test_case what `Quick (fun () ->
+        Alcotest.(check string) what expected (Fr_date.ago ~now:ago_now instant))
+  in
+  [
+    case "0 s: aujourd'hui" "aujourd'hui" ago_now;
+    case "23 h: aujourd'hui" "aujourd'hui" (utc 2026 11 11 1 0);
+    case "1 day" "il y a 1 j" (utc 2026 11 11 0 0);
+    case "13 days: still in days" "il y a 13 j" (utc 2026 10 30 0 0);
+    case "14 days: weeks start" "il y a 2 sem." (utc 2026 10 29 0 0);
+    case "59 days: still weeks" "il y a 8 sem." (utc 2026 9 14 0 0);
+    case "60 days: months start" "il y a 2 mois" (utc 2026 9 13 0 0);
+    case "364 days: still months" "il y a 12 mois" (utc 2025 11 13 0 0);
+    case "365 days: years start, singular" "il y a 1 an" (utc 2025 11 12 0 0);
+    case "800 days: plural ans" "il y a 2 ans" (utc 2024 9 3 0 0);
+    case "an instant after now" "aujourd'hui" (utc 2026 11 12 1 0);
+    case "days after now" "aujourd'hui" (utc 2026 11 15 0 0);
+  ]
+
+(* Plant_link: the plant record after linking to a GBIF taxon. *)
+
+module Plant = Herbier_domain.Plant
+module Gbif = Herbier_refs.Sources.Gbif
+module Source = Herbier_domain.Reference.Source
+module Projection = Herbier_refs.Projection
+
+let base_plant : Plant.t =
+  {
+    id = Plant_id.fresh ();
+    display_name = "Ma plante";
+    aliases = ["la mauve du talus"];
+    scientific_name = None;
+    authorship = None;
+    gbif_key = None;
+    notes = "vue au bord du chemin";
+    notes_updated_at = Some (utc 2026 2 1 0 0);
+    cover_photo_id = Some (Herbier_domain.Ids.Photo_id.fresh ());
+    created_at = utc 2026 1 1 0 0;
+    updated_at = utc 2026 1 1 0 0;
+    deleted_at = None;
+  }
+
+let digitalis_taxon : Gbif.Taxon.t =
+  {
+    key = 5414995;
+    scientific_name = "Digitalis purpurea L.";
+    canonical_name = Some "Digitalis purpurea";
+    authorship = Some "L.";
+    rank = Some "SPECIES";
+    status = Some Gbif.Status.Accepted;
+    accepted_key = None;
+    family = Some "Plantaginaceae";
+    vernacular_name = Some "Foxglove";
+  }
+
+let link_at = utc 2026 11 12 10 0
+
+let plant_link =
+  [
+    Alcotest.test_case "apply: a free-name plant linked to a taxon" `Quick
+      (fun () ->
+        let p = Plant_link.apply ~at:link_at base_plant digitalis_taxon in
+        Alcotest.(check (option int)) "gbif_key" (Some 5414995) p.gbif_key;
+        Alcotest.(check (option string))
+          "scientific_name (canonical)" (Some "Digitalis purpurea")
+          p.scientific_name;
+        Alcotest.(check (option string)) "authorship" (Some "L.") p.authorship;
+        Alcotest.(check bool)
+          "updated_at = at" true
+          (Ptime.equal p.updated_at link_at);
+        Alcotest.(check string)
+          "display_name unchanged" base_plant.display_name p.display_name;
+        Alcotest.(check (list string))
+          "aliases unchanged" base_plant.aliases p.aliases;
+        Alcotest.(check string) "notes unchanged" base_plant.notes p.notes;
+        Alcotest.(check bool)
+          "notes_updated_at unchanged" true
+          (Option.equal Ptime.equal base_plant.notes_updated_at
+             p.notes_updated_at);
+        Alcotest.(check (option string))
+          "cover_photo_id unchanged"
+          (Option.map Herbier_domain.Ids.Photo_id.to_string
+             base_plant.cover_photo_id)
+          (Option.map Herbier_domain.Ids.Photo_id.to_string p.cover_photo_id);
+        Alcotest.(check bool)
+          "created_at unchanged" true
+          (Ptime.equal p.created_at base_plant.created_at));
+    Alcotest.test_case "apply: no canonical_name falls back to scientific_name"
+      `Quick (fun () ->
+        let taxon = {digitalis_taxon with Gbif.Taxon.canonical_name = None} in
+        let p = Plant_link.apply ~at:link_at base_plant taxon in
+        Alcotest.(check (option string))
+          "scientific_name" (Some taxon.scientific_name) p.scientific_name);
+    Alcotest.test_case "apply: no authorship replaces an old one with None"
+      `Quick (fun () ->
+        let taxon = {digitalis_taxon with Gbif.Taxon.authorship = None} in
+        let old_plant = {base_plant with Plant.authorship = Some "Old"} in
+        let p = Plant_link.apply ~at:link_at old_plant taxon in
+        Alcotest.(check (option string)) "authorship" None p.authorship);
+    Alcotest.test_case "retires_references" `Quick (fun () ->
+        Alcotest.(check bool)
+          "no gbif_key: false" false
+          (Plant_link.retires_references base_plant digitalis_taxon);
+        Alcotest.(check bool)
+          "same key: false" false
+          (Plant_link.retires_references
+             {base_plant with Plant.gbif_key = Some 5414995}
+             digitalis_taxon);
+        Alcotest.(check bool)
+          "other key: true" true
+          (Plant_link.retires_references
+             {base_plant with Plant.gbif_key = Some 1}
+             digitalis_taxon));
+  ]
+
+(* Ref_text: texts of 4f's reference block. *)
+
+let ref_text =
+  [
+    Alcotest.test_case "source_name for every source" `Quick (fun () ->
+        let case expected source =
+          Alcotest.(check string)
+            (Source.to_string source) expected
+            (Ref_text.source_name source)
+        in
+        case "GBIF" Source.Gbif;
+        case "Wikidata" Source.Wikidata;
+        case "Wikipédia" Source.Wikipedia;
+        case "POWO" Source.Powo;
+        case "IPNI" Source.Ipni;
+        case "INPN" Source.Taxref;
+        case "Tela Botanica" Source.Tela;
+        case "EPPO" Source.Eppo;
+        case "iNaturalist" Source.Inat;
+        case "Pl@ntNet" Source.Plantnet);
+    Alcotest.test_case
+      "names_source_line: family and sources, no family, neither, family alone"
+      `Quick (fun () ->
+        Alcotest.(check string)
+          "family and sources" "Plantaginaceae · GBIF, Wikidata"
+          (Ref_text.names_source_line ~family:(Some "Plantaginaceae")
+             [Source.Gbif; Source.Wikidata]);
+        Alcotest.(check string)
+          "no family" "GBIF, Wikidata"
+          (Ref_text.names_source_line ~family:None
+             [Source.Gbif; Source.Wikidata]);
+        Alcotest.(check string)
+          "neither" ""
+          (Ref_text.names_source_line ~family:None []);
+        Alcotest.(check string)
+          "family alone, no separator" "Plantaginaceae"
+          (Ref_text.names_source_line ~family:(Some "Plantaginaceae") []));
+    Alcotest.test_case "names_line joins with \", \"" `Quick (fun () ->
+        Alcotest.(check string)
+          "names_line" "Digitale pourpre, grande digitale"
+          (Ref_text.names_line
+             {
+               Projection.lang = Projection.Lang.Fr;
+               names = ["Digitale pourpre"; "grande digitale"];
+             }));
+  ]
+
 (* Journal_day *)
 
 let obs ?(hour = 12) ?label ?derived ?pos () : Herbier_domain.Observation.t =
@@ -1428,7 +1595,9 @@ let () =
       ("to_identify", to_identify);
       ("plant_form", plant_form);
       ("tag_edits", tag_edits);
-      ("fr_date", fr_date);
+      ("fr_date", fr_date @ ago);
+      ("plant_link", plant_link);
+      ("ref_text", ref_text);
       ("journal_day", journal_day);
       ("map_filter", map_filter);
       ("map_sheet", map_sheet);

@@ -108,4 +108,4 @@ let () =
       | Ok (_ : Herbier_ui.App.t) -> ()
       | Error reason -> Console.(error [str "herbier: startup"; str reason]));
       Herbier_ui.Router.start ~root ~tab:(or_unavailable tab app)
-        ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db))
+        ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db app))

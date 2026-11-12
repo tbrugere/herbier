@@ -386,6 +386,108 @@ let put_for_unknown_plant_fails () =
         "it fails on the foreign key" true
         (Cli.contains ~sub:"FOREIGN KEY constraint failed" stderr)
 
+(* ---------- remove ---------- *)
+
+let remove_live_row_soft_deletes () =
+  let db = Cli.migrated_db () in
+  let p = plant 0x1 "Digitale" in
+  let (_ : int) =
+    Cli.write_ok "seed plant" db (Outbox.without_entry (Plants.upsert p))
+  in
+  check_edit "put appends 1 entry" 1 db
+    [
+      References.put ~plant:p.id ~source:Source.Gbif ~fetched_at:t1
+        ~payload:payload_a ~status:Status.Complete ~at:t1;
+    ];
+  let id = derived_reference_id ~plant:p.id ~source:Source.Gbif in
+  check_edit "remove on the live row appends 1 entry" 1 db
+    [References.remove ~plant:p.id ~source:Source.Gbif ~at:t2];
+  Alcotest.(check Cli.yojson)
+    "the entry: deleted_at = updated_at = at, id and payload kept"
+    (reference_payload
+       ~id:(Ids.Reference_id.to_string id)
+       ~plant:p.id ~source:Source.Gbif ~fetched_at:t1 ~payload:payload_a
+       ~status:Status.Complete ~created_at:t1 ~updated_at:t2
+       ~deleted_at:(Some t2))
+    (last db).payload;
+  match Cli.all db (References.get p.id Source.Gbif) with
+  | [] -> ()
+  | _ -> Alcotest.fail "the removed row should no longer be live"
+
+let remove_no_row_or_already_deleted_is_a_no_op () =
+  let db = Cli.migrated_db () in
+  let p = plant 0x1 "Digitale" in
+  let (_ : int) =
+    Cli.write_ok "seed plant" db (Outbox.without_entry (Plants.upsert p))
+  in
+  check_edit "remove on a missing row appends nothing" 0 db
+    [References.remove ~plant:p.id ~source:Source.Gbif ~at:t1];
+  check_edit "put appends 1 entry" 1 db
+    [
+      References.put ~plant:p.id ~source:Source.Gbif ~fetched_at:t1
+        ~payload:payload_a ~status:Status.Complete ~at:t1;
+    ];
+  check_edit "first remove appends 1 entry" 1 db
+    [References.remove ~plant:p.id ~source:Source.Gbif ~at:t2];
+  check_edit "remove again appends nothing" 0 db
+    [References.remove ~plant:p.id ~source:Source.Gbif ~at:t3]
+
+let put_after_remove_revives () =
+  let db = Cli.migrated_db () in
+  let p = plant 0x1 "Digitale" in
+  let (_ : int) =
+    Cli.write_ok "seed plant" db (Outbox.without_entry (Plants.upsert p))
+  in
+  let id = derived_reference_id ~plant:p.id ~source:Source.Gbif in
+  check_edit "put appends 1 entry" 1 db
+    [
+      References.put ~plant:p.id ~source:Source.Gbif ~fetched_at:t1
+        ~payload:payload_a ~status:Status.Complete ~at:t1;
+    ];
+  check_edit "remove appends 1 entry" 1 db
+    [References.remove ~plant:p.id ~source:Source.Gbif ~at:t2];
+  check_edit "put after remove revives it" 1 db
+    [
+      References.put ~plant:p.id ~source:Source.Gbif ~fetched_at:t3
+        ~payload:payload_b ~status:Status.Complete ~at:t3;
+    ];
+  match Cli.find db (References.get p.id Source.Gbif) with
+  | Some (r : Reference.t) ->
+      Alcotest.(check string)
+        "id kept"
+        (Ids.Reference_id.to_string id)
+        (Ids.Reference_id.to_string r.id);
+      Alcotest.(check bool)
+        "deleted_at is null" true
+        (Option.is_none r.deleted_at)
+  | None -> Alcotest.fail "the revived row should be live"
+
+let remove_another_source_untouched () =
+  let db = Cli.migrated_db () in
+  let p = plant 0x1 "Digitale" in
+  let (_ : int) =
+    Cli.write_ok "seed plant" db (Outbox.without_entry (Plants.upsert p))
+  in
+  check_edit "gbif" 1 db
+    [
+      References.put ~plant:p.id ~source:Source.Gbif ~fetched_at:t1
+        ~payload:payload_a ~status:Status.Complete ~at:t1;
+    ];
+  check_edit "wikipedia" 1 db
+    [
+      References.put ~plant:p.id ~source:Source.Wikipedia ~fetched_at:t1
+        ~payload:payload_b ~status:Status.Complete ~at:t1;
+    ];
+  check_edit "remove gbif only" 1 db
+    [References.remove ~plant:p.id ~source:Source.Gbif ~at:t2];
+  match Cli.all db (References.get p.id Source.Wikipedia) with
+  | [(r : Reference.t)] ->
+      Alcotest.(check bool)
+        "wikipedia still live" true
+        (Option.is_none r.deleted_at)
+  | rs ->
+      Alcotest.failf "expected 1 live wikipedia row, got %d" (List.length rs)
+
 (* ---------- link, unlink, plant_refs ---------- *)
 
 let link_unlink_and_plant_refs () =
@@ -550,6 +652,19 @@ let () =
             "of_plant orders by source, excludes soft-deleted and other \
              plants; get on an absent row is 0 rows"
             of_plant_orders_filters_live_and_by_plant;
+        ] );
+      ( "remove",
+        [
+          case
+            "remove on a live row: one change, deleted_at = updated_at = at, \
+             id and payload kept"
+            remove_live_row_soft_deletes;
+          case "remove on a missing or already-deleted row is a no-op"
+            remove_no_row_or_already_deleted_is_a_no_op;
+          case "put after remove revives the row, same id"
+            put_after_remove_revives;
+          case "remove of one source leaves another source's row untouched"
+            remove_another_source_untouched;
         ] );
       ( "link, unlink, plant_refs",
         [

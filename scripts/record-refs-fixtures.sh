@@ -62,11 +62,18 @@ fetch gbif_occurrence_count_5414995.json gbif "https://api.gbif.org/v1/occurrenc
 fetch gbif_occurrence_count_5405976.json gbif "https://api.gbif.org/v1/occurrence/count?taxonKey=5405976"
 fetch gbif_plantnet_media_5414995.json gbif "https://api.gbif.org/v1/occurrence/search?datasetKey=7a3679ef-5582-4aaa-81f0-8c2545cafc81&taxonKey=5414995&mediaType=StillImage&limit=50"
 fetch gbif_plantnet_media_5405976.json gbif "https://api.gbif.org/v1/occurrence/search?datasetKey=7a3679ef-5582-4aaa-81f0-8c2545cafc81&taxonKey=5405976&mediaType=StillImage&limit=50"
+fetch gbif_species_2889173.json gbif "https://api.gbif.org/v1/species/2889173"
+fetch gbif_suggest_digitale_pourpre.json gbif "https://api.gbif.org/v1/species/suggest?q=digitale%20pourpre&datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&rank=SPECIES&highertaxonKey=6&limit=10"
+fetch gbif_vernacular_search_digitalis_purp.json gbif "https://api.gbif.org/v1/species/search?q=Digitalis%20purp&datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&highertaxonKey=6&qField=VERNACULAR&limit=20"
+fetch gbif_plantnet_media_1.json gbif "https://api.gbif.org/v1/occurrence/search?datasetKey=7a3679ef-5582-4aaa-81f0-8c2545cafc81&taxonKey=1&mediaType=StillImage&limit=50"
 
 fetch wikidata_search_p846_5414995.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P846%3D5414995%22&format=json&origin=%2A"
 fetch wikidata_search_p846_5405976.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P846%3D5405976%22&format=json&origin=%2A"
 fetch wikidata_search_p5037_802077-1.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P5037%3Durn%3Alsid%3Aipni.org%3Anames%3A802077-1%22&format=json&origin=%2A"
 fetch wikidata_search_p846_999999999.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P846%3D999999999%22&format=json&origin=%2A"
+fetch wikidata_search_p3151_53983.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P3151%3D53983%22&format=json&origin=%2A"
+fetch wikidata_search_p3186_94959.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P3186%3D94959%22&format=json&origin=%2A"
+fetch wikidata_search_p3105_22437.json wikidata "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P3105%3D22437%22&format=json&origin=%2A"
 
 fetch wikidata_entity_Q157555.json wikidata "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q157555&props=claims%7Csitelinks&sitefilter=frwiki%7Cenwiki%7Cdewiki%7Citwiki&format=json&origin=%2A"
 fetch wikidata_entity_Q207848.json wikidata "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q207848&props=claims%7Csitelinks&sitefilter=frwiki%7Cenwiki%7Cdewiki%7Citwiki&format=json&origin=%2A"
@@ -77,3 +84,4 @@ fetch wikipedia_summary_fr_Digitalis_purpurea.json wikipedia "https://fr.wikiped
 fetch wikipedia_summary_fr_Arnica_montana.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Arnica_montana"
 fetch wikipedia_summary_en_Digitalis_purpurea.json wikipedia "https://en.wikipedia.org/api/rest_v1/page/summary/Digitalis_purpurea"
 fetch wikipedia_summary_fr_Lis.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Lis"
+fetch wikipedia_summary_fr_Arnica_des_montagnes.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Arnica_des_montagnes"

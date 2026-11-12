@@ -7,4 +7,7 @@ let () =
       Test_wikipedia.suite;
       Test_payload.suite;
       Test_projection.suite;
+      Test_step.suite;
+      Test_fanout.suite;
+      Test_resolve.suite;
     ]

@@ -91,6 +91,14 @@ let gbif_plantnet = "7a3679ef-5582-4aaa-81f0-8c2545cafc81"
 
 let gbif_url_tests =
   [
+    ( "species_url renders and classifies back to Link.Gbif",
+      `Quick,
+      fun () ->
+        let u = Gbif.species_url 5414995 in
+        Alcotest.(check string) "url" "https://www.gbif.org/species/5414995" u;
+        Alcotest.(check bool)
+          "Link.classify roundtrip" true
+          Herbier_domain.Link.(equal (classify u) (Gbif 5414995)) );
     ( "species",
       `Quick,
       fun () ->
@@ -189,6 +197,26 @@ let wikidata_url_tests =
              (some "search"
                 (Wikidata.search ~property:Wikidata.Property.Powo
                    ~value:"urn:lsid:ipni.org:names:802077-1"))) );
+    ( "search by taxref (P3186)",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "url"
+          "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P3186%3D94959%22&format=json&origin=%2A"
+          (url
+             (some "search"
+                (Wikidata.search ~property:Wikidata.Property.Taxref
+                   ~value:"94959"))) );
+    ( "search by tela (P3105)",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "url"
+          "https://www.wikidata.org/w/api.php?action=query&list=search&srsearch=haswbstatement%3A%22P3105%3D22437%22&format=json&origin=%2A"
+          (url
+             (some "search"
+                (Wikidata.search ~property:Wikidata.Property.Tela ~value:"22437")))
+    );
     ( "search is None for a blank value",
       `Quick,
       fun () ->
@@ -416,6 +444,7 @@ let recorded_requests =
     ("gbif_species_5414995.json", Gbif.species ~key:5414995);
     ("gbif_species_5405976.json", Gbif.species ~key:5405976);
     ("gbif_species_5334357.json", Gbif.species ~key:5334357);
+    ("gbif_species_2889173.json", Gbif.species ~key:2889173);
     ( "gbif_match_digitalis_purpurea_l.json",
       some "match" (Gbif.match_name ~name:"Digitalis purpurea L.") );
     ( "gbif_match_digitalis_purpurae.json",
@@ -425,8 +454,11 @@ let recorded_requests =
     ( "gbif_match_xyzzy_foo.json",
       some "match" (Gbif.match_name ~name:"Xyzzy foo") );
     ("gbif_suggest_digitalis_purp.json", Gbif.suggest ~q:"Digitalis purp");
+    ("gbif_suggest_digitale_pourpre.json", Gbif.suggest ~q:"digitale pourpre");
     ( "gbif_vernacular_search_digitale_pourpre.json",
       Gbif.vernacular_search ~q:"digitale pourpre" );
+    ( "gbif_vernacular_search_digitalis_purp.json",
+      Gbif.vernacular_search ~q:"Digitalis purp" );
     ("gbif_vernacular_names_5414995.json", Gbif.vernacular_names ~key:5414995);
     ("gbif_vernacular_names_5405976.json", Gbif.vernacular_names ~key:5405976);
     ("gbif_distributions_5414995.json", Gbif.distributions ~key:5414995);
@@ -435,6 +467,7 @@ let recorded_requests =
     ("gbif_occurrence_count_5405976.json", Gbif.occurrence_count ~key:5405976);
     ("gbif_plantnet_media_5414995.json", Gbif.plantnet_media ~key:5414995);
     ("gbif_plantnet_media_5405976.json", Gbif.plantnet_media ~key:5405976);
+    ("gbif_plantnet_media_1.json", Gbif.plantnet_media ~key:1);
     ( "wikidata_search_p846_5414995.json",
       some "p846_5414995"
         (Wikidata.search ~property:Wikidata.Property.Gbif_key ~value:"5414995")
@@ -451,6 +484,15 @@ let recorded_requests =
       some "p846_999999999"
         (Wikidata.search ~property:Wikidata.Property.Gbif_key ~value:"999999999")
     );
+    ( "wikidata_search_p3151_53983.json",
+      some "p3151"
+        (Wikidata.search ~property:Wikidata.Property.Inat ~value:"53983") );
+    ( "wikidata_search_p3186_94959.json",
+      some "p3186"
+        (Wikidata.search ~property:Wikidata.Property.Taxref ~value:"94959") );
+    ( "wikidata_search_p3105_22437.json",
+      some "p3105"
+        (Wikidata.search ~property:Wikidata.Property.Tela ~value:"22437") );
     ( "wikidata_entity_Q157555.json",
       Wikidata.entity (some "Q157555" (Qid.of_string "Q157555")) );
     ( "wikidata_entity_Q207848.json",
@@ -460,6 +502,9 @@ let recorded_requests =
         (Wikipedia.summary ~lang:"fr" ~title:"Digitalis purpurea") );
     ( "wikipedia_summary_fr_Arnica_montana.json",
       some "fr arnica" (Wikipedia.summary ~lang:"fr" ~title:"Arnica montana") );
+    ( "wikipedia_summary_fr_Arnica_des_montagnes.json",
+      some "fr arnica sitelink"
+        (Wikipedia.summary ~lang:"fr" ~title:"Arnica des montagnes") );
     ( "wikipedia_summary_en_Digitalis_purpurea.json",
       some "en digitalis"
         (Wikipedia.summary ~lang:"en" ~title:"Digitalis purpurea") );

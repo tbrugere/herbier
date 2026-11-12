@@ -29,7 +29,8 @@ type problem = {part : Payload.part; error : Decode.error}
 
 type t = {
   fetched_at : Ptime.t option;
-      (** The oldest [fetched_at] among the rows used; [None] with none. *)
+      (** The oldest [fetched_at] among the rows used that are not [Failed] (a
+          failed row brought nothing to date); [None] with none. *)
   taxon : Sources.Gbif.Taxon.t cited option;  (** [Gbif_species]; [[Gbif]]. *)
   vernacular : vernacular list cited option;
       (** fr, en, de, it in that order, languages without a name omitted; [None]

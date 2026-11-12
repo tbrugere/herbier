@@ -585,6 +585,24 @@ let fetched_at_is_the_minimum () =
   Alcotest.(check (option ptime))
     "fetched_at is the earlier row's" (Some earlier) proj.fetched_at
 
+let fetched_at_ignores_failed_rows () =
+  let earlier = time "2026-11-01T09:00:00Z" in
+  let failed =
+    reference_row ~status:Reference.Status.Failed ~source:Source.Plantnet
+      ~fetched_at:earlier (`Assoc [])
+  in
+  Alcotest.(check (option ptime))
+    "the complete row's, not the failed one's" (Some t_gbif)
+    (project
+       [
+         reference_row ~source:Source.Gbif ~fetched_at:t_gbif
+           (gbif_payload digitalis);
+         failed;
+       ])
+      .fetched_at;
+  Alcotest.(check (option ptime))
+    "only failed rows: None" None (project [failed]).fetched_at
+
 let plant_ref_rules () =
   let override_url = "https://www.gbif.org/species/1" in
   let plant_refs =
@@ -1151,6 +1169,7 @@ let rules_tests =
       soft_deleted_wikipedia_row_ignored;
     case "a row of source Powo is ignored" powo_row_ignored;
     case "fetched_at is the minimum across rows" fetched_at_is_the_minimum;
+    case "fetched_at ignores Failed rows" fetched_at_ignores_failed_rows;
     case
       "plant_refs: a live override, an added link, a soft-deleted one ignored"
       plant_ref_rules;

@@ -368,11 +368,7 @@ let wikipedia_url (summary : Wikipedia.t) =
 let derived ~taxon ~entity ~summary source =
   let from_entity f = Option.bind entity f in
   match (source : Source.t) with
-  | Gbif ->
-      Option.map
-        (fun (t : Gbif.Taxon.t) ->
-          "https://www.gbif.org/species/" ^ string_of_int t.key)
-        taxon
+  | Gbif -> Option.map (fun (t : Gbif.Taxon.t) -> Gbif.species_url t.key) taxon
   | Wikipedia -> Option.bind summary wikipedia_url
   | Powo ->
       from_entity (fun (e : Wikidata.Entity.t) -> Option.bind e.powo powo_url)
@@ -461,9 +457,12 @@ let project ~references ~plant_refs =
     fetched_at =
       List.fold_left
         (fun acc (r : Reference.t) ->
-          match acc with
-          | Some t when Ptime.is_earlier t ~than:r.fetched_at -> acc
-          | Some _ | None -> Some r.fetched_at)
+          match r.status with
+          | Reference.Status.Failed -> acc
+          | Complete | Partial | Missing -> (
+              match acc with
+              | Some t when Ptime.is_earlier t ~than:r.fetched_at -> acc
+              | Some _ | None -> Some r.fetched_at))
         None rows;
     taxon = Option.map (cited [Source.Gbif]) taxon;
     vernacular =

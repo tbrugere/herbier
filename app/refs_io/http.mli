@@ -42,3 +42,11 @@ val get :
 val in_flight : unit -> Source.t list
 (** The sources with a request started and not settled (at most one each), for
     the dev log. *)
+
+val run : ?timeout_ms:int -> 'a Herbier_refs.Step.t -> 'a Fut.t
+(** Runs the program, each [Get] through {!get} (same queue, same headers,
+    [timeout_ms] per request): [Ok body] that
+    {!Herbier_refs.Decode.json_of_string} parses → [Body]; [Ok] non-JSON →
+    [Failed] with the parser's message; [Error (Status {status = 404; _})] →
+    [Absent]; any other [Error e] → [Failed (error_to_string e)]. Never raises;
+    an exception raised by a continuation (a bug) is not caught here. *)

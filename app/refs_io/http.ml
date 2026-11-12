@@ -144,3 +144,22 @@ let get ?(timeout_ms = default_timeout_ms) (request : Herbier_refs.Request.t) =
   fut
 
 let in_flight () = List.rev !running
+
+(* 404 is how GBIF species/<key> and Wikipedia say "no such taxon or page";
+   any other status is treated as transient (Failed: live rows are kept and
+   retried later); 429 and 5xx are the expected ones. *)
+let response = function
+  | Ok body -> (
+      match Herbier_refs.Decode.json_of_string body with
+      | Ok json -> Herbier_refs.Step.Body json
+      | Error e ->
+          Herbier_refs.Step.Failed (Herbier_refs.Decode.error_to_string e))
+  | Error (Status {status = 404; _}) -> Herbier_refs.Step.Absent
+  | Error ((Network _ | Timeout | Status _) as e) ->
+      Herbier_refs.Step.Failed (error_to_string e)
+
+let rec run ?timeout_ms = function
+  | Herbier_refs.Step.Done x -> Fut.return x
+  | Herbier_refs.Step.Get (request, k) ->
+      Fut.bind (get ?timeout_ms request) (fun r ->
+          run ?timeout_ms (k (response r)))

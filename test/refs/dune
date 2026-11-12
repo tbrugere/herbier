@@ -6,12 +6,16 @@
   test_refs
   fixture
   check
+  fake_net
   test_request
   test_gbif
   test_wikidata
   test_wikipedia
   test_payload
-  test_projection)
+  test_projection
+  test_step
+  test_fanout
+  test_resolve)
  (libraries herbier_refs herbier_domain yojson ptime alcotest)
  (deps
   (glob_files %{project_root}/test/fixtures/*.json)

@@ -2,6 +2,7 @@ module Organ = Herbier_domain.Reference.Organ
 
 let backbone_dataset = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c"
 let plantnet_dataset = "7a3679ef-5582-4aaa-81f0-8c2545cafc81"
+let species_url key = "https://www.gbif.org/species/" ^ string_of_int key
 
 (* Kingdom Plantae in the backbone (botanical-data-sources.md §1.1). *)
 let plantae = "6"

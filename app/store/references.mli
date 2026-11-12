@@ -53,6 +53,15 @@ val put :
     stored as the text ["null"], which {!row} cannot read back. An unknown plant
     makes {!Db.edit} fail (foreign key). *)
 
+val remove :
+  plant:Plant_id.t -> source:Reference.Source.t -> at:Ptime.t -> Outbox.edit
+(** Soft-deletes the live reference row of [(plant, source)]
+    ([deleted_at = updated_at = at]) → one entry carrying the stored id; nothing
+    (no entry) when there is none or it is already deleted. Read back by
+    [(plant_id, source)]. A later {!put} revives it. Used when a plant is linked
+    to another taxon: the old taxon's rows must not survive as kept rows of the
+    new one. *)
+
 val plant_refs : Plant_id.t -> Reference.Plant_ref.t Stmt.query
 (** Live plant refs of the plant. *)
 

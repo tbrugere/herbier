@@ -320,8 +320,12 @@ capture / pick
 ## 6. Reference pipeline
 
 Triggered when a plant gets a `gbif_key` (link intercepted, search pick,
-"Lier"), on manual ↻, or on opening the species page when online and
-`fetched_at` is older than 90 days.
+"Lier"), on manual ↻, or on opening the species page when online and the
+plant's rows are due (`refs/fanout.ml`): a fetched source without a live row,
+a row older than 90 days, or a `failed`/`partial` row older than one day (so
+one bad connection does not leave the fiche empty for three months). The due
+check runs once per entry into the fiche, never on the reloads the fetch
+itself causes.
 
 ```
 gbif_key
@@ -330,7 +334,8 @@ gbif_key
   ├─ Wikidata  list=search haswbstatement:P846={k} → wbgetentities
   │            → P5037/P961 POWO/IPNI, P3186 TaxRef, P3105 Tela, P3031 EPPO,
   │              P3151 iNat, sitelinks fr/en/de/it
-  ├─ Wikipedia REST page/summary/{fr title} (fallback en)
+  │  └─ Wikipedia REST page/summary/{fr sitelink title} (en sitelink when
+  │     fr has none or answers 404): depends on the Wikidata entity
   └─ regional layer (if enabled):
        Tela  bdtfx/noms?masque={name} → nn, cd_nom
              bdtfx/taxons/{nn} (statut origine/introduction), baseflor
@@ -339,6 +344,32 @@ gbif_key
              /redLists/entries
 ```
 
+- The fetch is three concurrent branches (`refs/fanout.ml`, sans-IO programs
+  of GETs run by `refs_io/http.ml`'s `run`): gbif (species, then vernacular
+  names, distributions, occurrence count), plantnet (media), and wikidata →
+  wikipedia. Each branch's rows are written in one save when that branch
+  ends, so a slow or failing branch neither delays nor rolls back another,
+  and 4f fills progressively.
+- Statuses: `missing` = the source answered it has nothing (GBIF species 404,
+  no Wikidata item, no Pl@ntNet image, no sitelink or summary 404);
+  `failed` = no call of the row gave a decodable answer; `partial` = some
+  did; `complete` = all did. Keep rule (`Fanout.decide`): a `failed` row is
+  never written over a live stored row (a timeout must not blank data that
+  was right; it is written only when nothing was stored, so the due rule
+  retries it); a `partial` row keeps the stored members of its failed parts.
+  When the Wikidata entity could not be read (Wikidata `failed`, or
+  `partial` with only the search), Wikipedia counts as `failed`: a stored
+  row stays, and without one a `failed` row is written, so the one-day
+  retry applies to it too.
+- Relinking a plant to another taxon soft-deletes the live reference row of
+  every fetched source in the link's transaction (whatever is live when it
+  commits, so a branch of the old key that saved just before is retired
+  too), and supersedes any fetch still running for the old key (its branch
+  saves not yet made are dropped): the keep rule would otherwise keep the old
+  taxon's rows under the new key. The plant's non-GBIF `plant_refs` are left
+  as they are (open point, settled with 5a's « Liens de référence »).
+- The fetch starts only online, like ↻; offline, a just-linked plant is due
+  and the next opening of its fiche fetches it.
 - Each source writes its own `reference` row (source, payload, status), so a
   failing source never blanks the others and every row in the UI cites its
   source (handoff 4f: "Une ligne sans donnée disparaît. Toute donnée cite sa
@@ -405,13 +436,19 @@ input (URL or text)
   → classify by host/pattern
      gbif       → key from path
      plantnet   → decode "Genus species Author" from path → GBIF species/match
-     plantnet observation → no name in the path; lookup or 4i fallback decided in M4.36
+     plantnet observation → no name in the path, and Pl@ntNet's API needs a key:
+                  4i fallback with an empty query
      plantuse   → "Genus_species" wiki page name → GBIF species/match (host to verify)
      wikipedia  → REST summary → wikibase_item → Wikidata P846
-     inpn/tela  → cd_nom / nn → name → GBIF species/match
+     inpn/tela  → Wikidata by P3186/P3105 → P846 (not the regional APIs; gaps → 4i)
      powo/inat  → Wikidata by P5037/P3151 → P846
      free text  → GBIF species/suggest + search?qField=VERNACULAR
   → gbif_key + immediate partial snapshot (canonical name, family)
+     = Resolve.Taxon (the GBIF taxon), Candidates (free text), or
+       Unresolved {query, why} with the text 4i is prefilled with
+     a synonym is replaced by its accepted taxon (one hop); a name match
+     at a rank above species is no species; an explicit GBIF key is
+     honoured at any rank; a Wikipedia disambiguation page is no species
   → screen 4j pre-filled; full reference fetch in background after save
 ```
 

@@ -12,6 +12,10 @@ val backbone_dataset : string
 val plantnet_dataset : string
 (** ["7a3679ef-5582-4aaa-81f0-8c2545cafc81"] *)
 
+val species_url : int -> string
+(** ["https://www.gbif.org/species/<key>"]: the species' page on the GBIF
+    website, a URL [Link.classify] reads as [Gbif key]. *)
+
 (** {1 Requests} *)
 
 val species : key:int -> Request.t

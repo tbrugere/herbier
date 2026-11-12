@@ -1,4 +1,8 @@
 module Db = Herbier_store.Db
+module Plants = Herbier_store.Plants
+module References = Herbier_store.References
+module Plant_id = Herbier_domain.Ids.Plant_id
+module Source = Herbier_domain.Reference.Source
 
 type t = {
   db : Db.t;
@@ -6,11 +10,34 @@ type t = {
   theme : (Theme.t, Theme.error) result;
   saved : unit React.event;
   send_saved : unit -> unit;
+  generations : (Plant_id.t * int) list ref;
+      (* style: mutable because a fetch's saves are checked against the
+         plant's current generation when each branch ends, outside any
+         reaction; nothing outside this module sees it. *)
+  running : (Plant_id.t * int) list ref;
+      (* style: mutable for the same reason: a fetch settles in a future's
+         callback, outside any reaction. The fetches started and not settled
+         or superseded, by generation; [fetching] is set from it. *)
+  fetching : Plant_id.t list React.signal;
+  set_fetching : Plant_id.t list -> unit;
 }
 
 let create ~db ~state ~theme =
   let saved, send = React.E.create () in
-  {db; state; theme; saved; send_saved = (fun () -> send ())}
+  let fetching, set_fetching =
+    React.S.create ~eq:(List.equal Plant_id.equal) []
+  in
+  {
+    db;
+    state;
+    theme;
+    saved;
+    send_saved = (fun () -> send ());
+    generations = ref [];
+    running = ref [];
+    fetching;
+    set_fetching = (fun ids -> set_fetching ids);
+  }
 
 let db t = t.db
 let state t = t.state
@@ -51,3 +78,176 @@ let save_photos t ~(observation : Herbier_domain.Observation.t) shots =
        (fun acc s -> Fut.bind acc (fun r -> step r s))
        (Fut.return (0, []))
        shots)
+
+(* References (architecture §6). *)
+
+type link_error = Plant_gone | Store of Db.error
+
+let fetching t = t.fetching
+let log parts = Brr.Console.(log [str (String.concat " " parts)])
+let online t = (React.S.value (State.network t.state)).online
+
+let generation t id =
+  Option.value ~default:0
+    (List.find_map
+       (fun (p, g) ->
+         match Plant_id.equal p id with true -> Some g | false -> None)
+       !(t.generations))
+
+let publish_running t =
+  let ids =
+    List.fold_left
+      (fun acc (id, _) ->
+        match List.exists (Plant_id.equal id) acc with
+        | true -> acc
+        | false -> id :: acc)
+      [] !(t.running)
+  in
+  t.set_fetching (List.rev ids)
+
+(* A new generation makes every save of an earlier fetch of the plant
+   refused: since Db serialises operations, a branch save queued before
+   this point lands first, and one attempted after it is dropped. The
+   earlier fetch no longer counts as running, so it holds no ↻ back. *)
+let supersede t id =
+  let g = generation t id + 1 in
+  t.generations :=
+    (id, g)
+    :: List.filter (fun (p, _) -> not (Plant_id.equal p id)) !(t.generations);
+  t.running :=
+    List.filter (fun (p, _) -> not (Plant_id.equal p id)) !(t.running);
+  publish_running t;
+  g
+
+let report_line label report =
+  "refs: report"
+  :: label
+  :: List.map
+       (fun (source, outcome) ->
+         Source.to_string source
+         ^ " "
+         ^ Herbier_refs_io.Pipeline.outcome_to_string outcome)
+       report
+
+let start_fetch t id gbif_key =
+  let g = supersede t id in
+  t.running := !(t.running) @ [(id, g)];
+  publish_running t;
+  let label = Plant_id.to_string id in
+  log ["refs: fetch"; label; string_of_int gbif_key];
+  let save edits =
+    match generation t id = g with true -> Some (save t edits) | false -> None
+  in
+  Fut.await (Herbier_refs_io.Pipeline.fetch t.db ~save ~plant:id ~gbif_key)
+    (fun result ->
+      t.running :=
+        List.filter
+          (fun (p, h) -> not (Plant_id.equal p id && Int.equal h g))
+          !(t.running);
+      publish_running t;
+      match result with
+      | Error e ->
+          Brr.Console.(
+            error [str "refs: read"; str label; str (Db.error_to_string e)])
+      | Ok report -> (
+          let not_saved = function
+            | _, Herbier_refs_io.Pipeline.Not_saved _ -> true
+            | ( _,
+                Herbier_refs_io.Pipeline.(
+                  Written _ | Kept | Skipped | Not_fetched) ) ->
+                false
+          in
+          let line = String.concat " " (report_line label report) in
+          match List.exists not_saved report with
+          | true -> Brr.Console.(error [str line])
+          | false -> log [line]))
+
+let is_fetching t id =
+  List.exists (Plant_id.equal id) (React.S.value t.fetching)
+
+let read_error e =
+  Brr.Console.(error [str "refs: read"; str (Db.error_to_string e)])
+
+let refresh t id =
+  match (online t, is_fetching t id) with
+  | false, _ | true, true -> ()
+  | true, false ->
+      Fut.await
+        (Db.find t.db (Plants.get id))
+        (function
+          | Error e -> read_error e
+          | Ok None -> ()
+          | Ok (Some (p : Herbier_domain.Plant.t)) -> (
+              match (p.gbif_key, is_fetching t id) with
+              | Some key, false -> start_fetch t id key
+              | None, _ | Some _, true -> ()))
+
+(* The plant first: an unlinked one needs no look at its rows. *)
+let refresh_if_due t id =
+  match online t with
+  | false -> ()
+  | true ->
+      let open Fut.Syntax in
+      Fut.await
+        (let* plant = Db.find t.db (Plants.get id) in
+         match plant with
+         | Error e -> Fut.return (Error e)
+         | Ok None -> Fut.return (Ok None)
+         | Ok (Some (p : Herbier_domain.Plant.t)) -> (
+             match p.gbif_key with
+             | None -> Fut.return (Ok None)
+             | Some key ->
+                 let+ rows = Db.all t.db (References.of_plant id) in
+                 Result.map (fun rows -> Some (key, rows)) rows))
+        (function
+          | Error e -> read_error e
+          | Ok None -> ()
+          | Ok (Some (key, rows)) -> (
+              match
+                Herbier_refs.Fanout.due ~now:(Ptime_clock.now ()) rows
+                && (not (is_fetching t id))
+                && online t
+              with
+              | true -> start_fetch t id key
+              | false -> ()))
+
+let link t id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
+  let open Fut.Syntax in
+  let* plant = Db.find t.db (Plants.get id) in
+  match plant with
+  | Error e -> Fut.return (Error (Store e))
+  | Ok None -> Fut.return (Error Plant_gone)
+  | Ok (Some plant) -> (
+      let at = Ptime_clock.now () in
+      (* Every fetched source, not the rows read now: a branch of the old
+         key's fetch may still save before [supersede] below. *)
+      let removes =
+        match Plant_link.retires_references plant taxon with
+        | false -> []
+        | true ->
+            List.map
+              (fun source -> References.remove ~plant:id ~source ~at)
+              Herbier_refs.Fanout.sources
+      in
+      let edits =
+        Plants.upsert (Plant_link.apply ~at plant taxon)
+        :: References.link ~plant:id ~source:Source.Gbif
+             ~external_id:(string_of_int taxon.key)
+             ~url:(Herbier_refs.Sources.Gbif.species_url taxon.key)
+             ~at
+        :: removes
+      in
+      let was_fetching = is_fetching t id in
+      let (_ : int) = supersede t id in
+      let+ saved = save t edits in
+      match saved with
+      | Error e ->
+          (* Nothing changed, but the old key's fetch was dropped. *)
+          (match was_fetching with true -> refresh t id | false -> ());
+          Error (Store e)
+      | Ok (_ : int) ->
+          (* Offline, the next fiche opening fetches: the plant is due. *)
+          (match online t with
+          | true -> start_fetch t id taxon.key
+          | false -> ());
+          Ok ())

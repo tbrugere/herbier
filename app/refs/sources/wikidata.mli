@@ -4,10 +4,11 @@
     [http.ml] adds the [Api-User-Agent] header. *)
 
 module Property : sig
-  type t = Gbif_key | Powo | Inat
+  type t = Gbif_key | Powo | Inat | Taxref | Tela
 
   val to_string : t -> string
-  (** ["P846"], ["P5037"], ["P3151"]. *)
+  (** ["P846"], ["P5037"], ["P3151"], ["P3186"] (TaxRef cd_nom), ["P3105"]
+      (BDTFX nn). *)
 end
 
 val search : property:Property.t -> value:string -> Request.t option

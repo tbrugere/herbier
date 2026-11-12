@@ -28,3 +28,10 @@ val day_month : Ptime.date -> string
 
 val full_date : Ptime.date -> string
 (** ["12 juin 2026"]: the 4f observation rows. *)
+
+val ago : now:Ptime.t -> Ptime.t -> string
+(** Elapsed time as 4f's « mis à jour … » says it, from the whole days [d]
+    between the instant and [now] (floor): [d < 1] (or the instant after [now])
+    → ["aujourd'hui"]; [d < 14] → ["il y a <d> j"]; [d < 60] →
+    ["il y a <d/7> sem."]; [d < 365] → ["il y a <d/30> mois"]; else
+    ["il y a <d/365> an"] (["ans"] from 2). *)

@@ -9,6 +9,10 @@ module Observation_id = Herbier_domain.Ids.Observation_id
 module Plant = Herbier_domain.Plant
 module Tag = Herbier_domain.Tag
 module Tag_id = Herbier_domain.Ids.Tag_id
+module Plant_id = Herbier_domain.Ids.Plant_id
+module References = Herbier_store.References
+module Reference = Herbier_domain.Reference
+module Projection = Herbier_refs.Projection
 module W = Widgets
 
 let cls c = At.class' (Jstr.v c)
@@ -33,6 +37,9 @@ type data = {
   all_tags : Tag.t list;
   observations : Observation.t list; (* newest first *)
   photos : Herbier_domain.Photo.t list;
+  references : Reference.t list;
+  plant_refs : Reference.Plant_ref.t list;
+  loaded_at : Ptime.t; (* the « mis à jour il y a … » reference instant *)
 }
 
 let load db id =
@@ -44,8 +51,20 @@ let load db id =
       let* tags = Db.all db (Tags.of_plant id) in
       let* all_tags = Db.all db Tags.list in
       let* observations = Db.all db (Observations.of_plant id) in
-      let+ photos = Db.all db (Photos.of_plant id) in
-      Some {plant; tags; all_tags; observations; photos}
+      let* photos = Db.all db (Photos.of_plant id) in
+      let* references = Db.all db (References.of_plant id) in
+      let+ plant_refs = Db.all db (References.plant_refs id) in
+      Some
+        {
+          plant;
+          tags;
+          all_tags;
+          observations;
+          photos;
+          references;
+          plant_refs;
+          loaded_at = Ptime_clock.now ();
+        }
 
 let has_tag ts (t : Tag.t) =
   List.exists (fun (u : Tag.t) -> Tag_id.equal u.id t.id) ts
@@ -233,6 +252,168 @@ let notes app ~problem data =
   in
   (t.el, t.bindings)
 
+(* 4g *)
+let unlinked state () =
+  let offline_text = El.span [] in
+  let link =
+    W.Button.v ~kind:W.Button.Secondary "Lier à une espèce de référence"
+  in
+  El.set_at (Jstr.v "aria-disabled") (Some (Jstr.v "true")) link.el;
+  let online =
+    React.S.map ~eq:Bool.equal
+      (fun (n : State.network) -> n.online)
+      (State.network state)
+  in
+  ( El.section
+      ~at:[cls "species__reference"]
+      [
+        El.h2 ~at:[cls "t-section-label-ref"] [El.txt' "Référence"];
+        El.p
+          ~at:[cls "t-body"]
+          [El.txt' "Aucune espèce de référence liée."; offline_text];
+        link.el;
+      ],
+    Rb.text offline_text
+      (React.S.map
+         (function
+           | true -> ""
+           | false ->
+               " Hors-ligne : la recherche de noms reviendra avec le réseau.")
+         online)
+    :: Rb.class_ link.el "is-offline" (React.S.map not online)
+    :: link.bindings )
+
+let project (d : data) =
+  Projection.project ~references:d.references ~plant_refs:d.plant_refs
+
+(* The sources cited by the « Noms » row, in Source.all order. *)
+let names_sources (p : Projection.t) =
+  let cited =
+    List.concat
+      [
+        Option.fold ~none:[]
+          ~some:(fun (c : _ Projection.cited) -> c.sources)
+          p.vernacular;
+        Option.fold ~none:[]
+          ~some:(fun (c : _ Projection.cited) -> c.sources)
+          p.taxon;
+      ]
+  in
+  List.filter (fun s -> List.mem s cited) Reference.Source.all
+
+let names_row (p : Projection.t) =
+  let family =
+    Option.bind p.taxon (fun (c : _ Projection.cited) ->
+        c.value.Herbier_refs.Sources.Gbif.Taxon.family)
+  in
+  let languages =
+    Option.fold ~none:[]
+      ~some:(fun (c : _ Projection.cited) -> c.value)
+      p.vernacular
+  in
+  match (languages, family) with
+  | [], None -> None
+  | _ ->
+      let line (v : Projection.vernacular) =
+        El.div
+          [
+            El.b [El.txt' (Projection.Lang.to_string v.lang)];
+            El.txt' (" " ^ Ref_text.names_line v);
+          ]
+      in
+      Some
+        (El.div
+           ~at:[cls "species__ref-row"]
+           [
+             El.div ~at:[cls "species__ref-key"] [El.txt' "Noms"];
+             El.div
+               ~at:[cls "species__ref-value"]
+               (List.map line languages
+               @ [
+                   El.div
+                     ~at:[cls "species__ref-sources"]
+                     [
+                       El.txt'
+                         (Ref_text.names_source_line ~family (names_sources p));
+                     ];
+                 ]);
+           ])
+
+(* 4f *)
+let linked app (data : data React.signal) () =
+  let id = (React.S.value data).plant.id in
+  let online =
+    React.S.map ~eq:Bool.equal
+      (fun (n : State.network) -> n.online)
+      (State.network (App.state app))
+  in
+  let fetching =
+    React.S.map ~eq:Bool.equal
+      (List.exists (Plant_id.equal id))
+      (App.fetching app)
+  in
+  let projection = React.S.map ~eq:( == ) project data in
+  let meta = El.span ~at:[cls "t-meta"; cls "species__ref-meta"] [] in
+  let refresh =
+    button ~label:"Mettre à jour la référence" ["icon-button"]
+      [W.Icon.el W.Icon.Refresh]
+  in
+  let click, b_click = Rb.click refresh in
+  let rows = El.div ~at:[cls "species__ref-slot"] [] in
+  let rows_of (p, fetching) =
+    let content =
+      match (names_row p, fetching) with
+      | Some row, _ -> [row]
+      | None, true ->
+          [El.p ~at:[cls "t-meta"] [El.txt' "Récupération de la référence…"]]
+      | None, false ->
+          [
+            El.p
+              ~at:[cls "t-meta"]
+              [El.txt' "Référence indisponible pour l'instant."];
+          ]
+    in
+    (El.div ~at:[cls "species__ref-rows"] content, [])
+  in
+  ( El.section
+      ~at:[cls "species__reference"]
+      [
+        El.div
+          ~at:[cls "species__ref-head"]
+          [
+            El.h2 ~at:[cls "t-section-label-ref"] [El.txt' "Référence"];
+            meta;
+            refresh;
+          ];
+        rows;
+      ],
+    [
+      b_click;
+      Rb.act click (fun () -> App.refresh app id);
+      Rb.attr refresh "aria-disabled"
+        (React.S.l2
+           ~eq:(Option.equal String.equal)
+           (fun fetching online ->
+             match (fetching, online) with
+             | false, true -> None
+             | true, _ | _, false -> Some "true")
+           fetching online);
+      Rb.class_ refresh "is-offline" (React.S.map not online);
+      Rb.text meta
+        (React.S.l4 ~eq:String.equal
+           (fun d (p : Projection.t) fetching online ->
+             let date =
+               match (fetching, p.fetched_at) with
+               | true, _ -> "mise à jour…"
+               | false, Some t -> "mis à jour " ^ Fr_date.ago ~now:d.loaded_at t
+               | false, None -> "pas encore récupérée"
+             in
+             match online with true -> date | false -> date ^ " · hors-ligne")
+           data projection fetching online);
+      Rb.view rows rows_of
+        (React.S.l2 ~eq:( == ) (fun p f -> (p, f)) projection fetching);
+    ] )
+
 (* The fiche of a live plant. The parts [data] shows are updated in place on
    each reload, so an editor open on the fiche (the notes, « + tag ») stays
    open across one. *)
@@ -311,26 +492,10 @@ let render app (data : data React.signal) =
   let obs_list = El.div [] in
   let notes_el, notes_bindings = notes app ~problem data in
   let modified = El.span ~at:[cls "t-meta"] [] in
-  let offline_text = El.span [] in
-  let link =
-    W.Button.v ~kind:W.Button.Secondary "Lier à une espèce de référence"
-  in
-  El.set_at (Jstr.v "aria-disabled") (Some (Jstr.v "true")) link.el;
-  let online =
-    React.S.map ~eq:Bool.equal
-      (fun (n : State.network) -> n.online)
-      (State.network state)
-  in
-  let reference =
-    El.section
-      ~at:[cls "species__reference"]
-      [
-        El.h2 ~at:[cls "t-section-label-ref"] [El.txt' "Référence"];
-        El.p
-          ~at:[cls "t-body"]
-          [El.txt' "Aucune espèce de référence liée."; offline_text];
-        link.el;
-      ]
+  let reference = El.div ~at:[cls "species__reference-slot"] [] in
+  let reference_of = function
+    | false -> unlinked state ()
+    | true -> linked app data ()
   in
   let el =
     El.div
@@ -388,19 +553,13 @@ let render app (data : data React.signal) =
           Rb.text problem_el problem_text;
           Rb.class_ problem_el "is-hidden"
             (React.S.map (String.equal "") problem_text);
-          Rb.text offline_text
-            (React.S.map
-               (function
-                 | true -> ""
-                 | false ->
-                     " Hors-ligne : la recherche de noms reviendra avec le \
-                      réseau.")
-               online);
-          Rb.class_ link.el "is-offline" (React.S.map not online);
+          Rb.view reference reference_of
+            (React.S.map ~eq:Bool.equal
+               (fun d -> Option.is_some d.plant.gbif_key)
+               data);
         ];
         adder.bindings;
         notes_bindings;
-        link.bindings;
       ] )
 
 (* A plant that is not (or no longer) live, or a fiche that could not be
@@ -420,6 +579,9 @@ let notice text =
 
 let v app id =
   let el = El.div ~at:[cls "screen"; cls "species"] [] in
+  (* Once per entry, never on the reloads the fetch itself causes, which
+     would loop on a plant still due. *)
+  App.refresh_if_due app id;
   {
     Screen.el;
     bindings =

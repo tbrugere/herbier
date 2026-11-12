@@ -10,13 +10,14 @@ let page el () =
 
 let () = Herbier_ui.Dev.Hooks.install ()
 
-let find db =
+let find db app =
   let module D = Herbier_ui.Dev in
   function
   | "storage" -> Some (page D.Storage_check.el)
   | "store" -> Some (page D.Store_check.el)
   | "seed" -> Some (page (fun () -> D.Seed_check.el db))
   | "refs-http" -> Some (page D.Refs_http_check.el)
+  | "link" -> Some (page (fun () -> D.Link_check.el app))
   | "photos" -> Some (page D.Photo_check.el)
   | "rb" -> Some (page D.Rb_check.el)
   | "theme" -> Some (page D.Theme_check.el)

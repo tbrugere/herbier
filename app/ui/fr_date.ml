@@ -43,3 +43,19 @@ let year ~tz_offset_s t =
 
 let day_month (_, m, d) = Printf.sprintf "%d %s" d months.(m - 1)
 let full_date ((y, _, _) as date) = Printf.sprintf "%s %d" (day_month date) y
+
+let ago ~now t =
+  let days =
+    match Ptime.Span.to_int_s (Ptime.diff now t) with
+    | Some s -> s / 86_400
+    | None -> max_int
+  in
+  match () with
+  | () when days < 1 -> "aujourd'hui"
+  | () when days < 14 -> Printf.sprintf "il y a %d j" days
+  | () when days < 60 -> Printf.sprintf "il y a %d sem." (days / 7)
+  | () when days < 365 -> Printf.sprintf "il y a %d mois" (days / 30)
+  | () ->
+      let years = days / 365 in
+      Printf.sprintf "il y a %d %s" years
+        (match years with 1 -> "an" | _ -> "ans")

@@ -12,6 +12,13 @@ plus the edge payloads `Herbier_refs` decoders branch on (a synonym, a FUZZY
 and a HIGHERRANK match, a NONE match, an unknown Wikidata id (API error
 `no-such-entity`), a Wikipedia disambiguation page). See `test/refs/test_request.ml` for the exact request
 each file records.
+The fan-out and resolver tests (`test/refs/test_fanout.ml`,
+`test_resolve.ml`) add: the accepted taxon of the synonym
+(`gbif_species_2889173`), both orders of the candidate search
+(`gbif_suggest_digitale_pourpre`, `gbif_vernacular_search_digitalis_purp`), an
+empty Pl@ntNet media page (`gbif_plantnet_media_1`), the iNat / TaxRef / Tela
+Wikidata searches (`wikidata_search_p3151_*`, `_p3186_*`, `_p3105_*`) and
+Arnica's frwiki sitelink summary (`wikipedia_summary_fr_Arnica_des_montagnes`).
 
 `exifr_<name>.json`: what `Herbier_bindings.Exifr.parse ~pick:Exif.tags`
 returns for one photo, never edited:

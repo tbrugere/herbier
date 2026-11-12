@@ -106,13 +106,16 @@ let get plant source =
 (* Read back by the natural key, not the derived id: a row pulled from
    another install keeps the id it was stored with, and the outbox entry must
    carry that one. *)
-let put ~plant ~source ~fetched_at ~payload ~status ~at =
+let reference_edit ~plant ~source stmt =
   Outbox.edit ~table:R.table
     ~reread:
       (query any_by_key
          [Codec.param R.plant_id plant; Codec.param R.source source])
     ~row_id:(fun (r : Reference.t) -> Reference_id.to_string r.id)
-    ~input
+    ~input stmt
+
+let put ~plant ~source ~fetched_at ~payload ~status ~at =
+  reference_edit ~plant ~source
     {
       Stmt.sql =
         "insert into reference (id, plant_id, source, fetched_at, payload, \
@@ -130,6 +133,21 @@ let put ~plant ~source ~fetched_at ~payload ~status ~at =
           Codec.param R.status status;
           Codec.param R.created_at at;
           Codec.param R.updated_at at;
+        ];
+    }
+
+let remove ~plant ~source ~at =
+  reference_edit ~plant ~source
+    {
+      Stmt.sql =
+        "update reference set deleted_at = ?, updated_at = ? where plant_id = \
+         ? and source = ? and deleted_at is null";
+      params =
+        [
+          Codec.param R.deleted_at (Some at);
+          Codec.param R.updated_at at;
+          Codec.param R.plant_id plant;
+          Codec.param R.source source;
         ];
     }
 

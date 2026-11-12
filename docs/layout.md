@@ -156,12 +156,17 @@ app/
     payload.ml            one reference row's payload: an object of each call's body, pruned to the fields
                           the decoders read; shared by the projection (reader) and the pipeline (writer)
     projection.ml         reference rows → ReferenceSnapshot fields (4f), pure over JSON
+    step.ml               a program of sequential GETs (Done | Get), run by refs_io/http.ml or by a
+                          function standing for the network in tests
+    fanout.ml             the reference fetch of one gbif_key as three branch programs, the status
+                          rules, the keep/merge rule against stored rows, the "due" rule
+    resolve.ml            Link.t → GBIF taxon / candidates / unresolved, as a Step program
   refs_io/                §6–7 of architecture, Brr part
     http.ml               fetch identified as Herbier/<version> (Api-User-Agent to
                           Wikimedia) + rate-limited queue (one per source,
-                          ≤3 overall), timeouts
-    pipeline.ml           fan-out per gbif_key, one reference row per source
-    resolver.ml           Domain.Link + network lookups → gbif_key + partial snapshot
+                          ≤3 overall), timeouts; run: executes a refs/ Step program
+    pipeline.ml           runs Fanout for one plant, one save per branch through a callback
+    resolver.ml           runs Resolve: Domain.Link + network lookups → gbif_key + partial snapshot
     regional.ml           pluggable France layer (Tela, INPN), later
   geo/                    §8 of architecture
     map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …)
@@ -185,7 +190,8 @@ app/
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
     plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml, map_filter.ml,
-    map_sheet.ml          pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    map_sheet.ml, plant_link.ml, ref_text.ml
+                          pure helpers of the screens; these and list_patch are tested natively in test/ui/
     filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     zone.ml               the phone's zone offset at an instant, for Fr_date
@@ -198,6 +204,8 @@ app/
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
                           serialisation, park/delete) and the reference payload column (put, link, unlink);
+                          link_check.ml (#dev/link): resolves example links, a pasted link, and links a
+                          plant through App.link, then opens its fiche;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
@@ -240,7 +248,7 @@ refs      ← domain, yojson, ptime        (no Brr)
 bindings  ← brr
 store     ← domain, bindings, postgrest, yojson, ptime, brr (for Fut)
 sync      ← domain, store, bindings, postgrest, brr (for Fut)
-photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs; photos also yojson, ptime;
+photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs, yojson, ptime, ptime.clock.os; photos also yojson, ptime;
                            geo also yojson
                                          (siblings never import each other)
 ui        ← everything above + react, reactiveData
@@ -381,7 +389,8 @@ test/
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
   refs/         native, alcotest: request URLs, payload decoders, stored payloads (pruning keeps decoding)
-                and the projection of the two spike species over fixtures/
+                and the projection of the two spike species over fixtures/; the fan-out and resolver
+                programs over fixtures/
     jsoo/       js_of_ocaml build of the decoders run under node: GBIF occurrence keys above 2^31,
                 also through a pruned Pl@ntNet payload
   ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune)

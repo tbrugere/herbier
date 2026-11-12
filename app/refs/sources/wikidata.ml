@@ -1,10 +1,12 @@
 module Property = struct
-  type t = Gbif_key | Powo | Inat
+  type t = Gbif_key | Powo | Inat | Taxref | Tela
 
   let to_string = function
     | Gbif_key -> "P846"
     | Powo -> "P5037"
     | Inat -> "P3151"
+    | Taxref -> "P3186"
+    | Tela -> "P3105"
 end
 
 let get query =
@@ -180,8 +182,8 @@ let entity_of_json json =
                          gbif_key = numeric (Property.to_string Gbif_key) claims;
                          powo = single (Property.to_string Powo) claims;
                          ipni = single "P961" claims;
-                         taxref = numeric "P3186" claims;
-                         tela = numeric "P3105" claims;
+                         taxref = numeric (Property.to_string Taxref) claims;
+                         tela = numeric (Property.to_string Tela) claims;
                          eppo = single "P3031" claims;
                          inat = numeric (Property.to_string Inat) claims;
                          common_names = common_names claims;

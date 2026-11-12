@@ -169,6 +169,50 @@
   padding: 20px
   background: var(--sand)
 
+// Re-rendered parts of the reference block, boxless.
+.species__reference-slot, .species__ref-slot
+  display: contents
+
+.species__ref-head
+  display: flex
+  align-items: center
+  gap: 8px
+  .t-section-label-ref
+    flex: 1
+  // A full touch target that keeps the header's height.
+  .icon-button
+    width: var(--touch-min)
+    height: var(--touch-min)
+    margin: -12px -12px -12px 0
+    &[aria-disabled]
+      opacity: .4
+    &.is-offline
+      opacity: .5
+
+.species__ref-rows
+  display: flex
+  flex-direction: column
+
+.species__ref-row
+  display: grid
+  grid-template-columns: 104px 1fr
+  gap: 12px
+  padding: 10px 0
+  & + &
+    border-top: 1px solid var(--line-ref)
+
+.species__ref-key
+  +base.meta(13px, 700)
+
+.species__ref-value
+  display: flex
+  flex-direction: column
+  gap: 2px
+  +base.body
+
+.species__ref-sources
+  +base.meta(12px)
+
 // Inert; faded while offline (4g).
 .species__reference .button[aria-disabled]
   cursor: default

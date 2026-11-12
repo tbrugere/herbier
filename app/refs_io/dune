@@ -1,5 +1,14 @@
-; Reference sources, Brr part: rate-limited fetch, pipeline, resolver.
+; Reference sources, Brr part: rate-limited fetch, and the runners of the
+; refs/ programs (pipeline, resolver).
 (library
  (name herbier_refs_io)
  (public_name herbier.refs_io)
- (libraries herbier_domain herbier_store herbier_bindings herbier_refs brr))
+ (libraries
+  herbier_domain
+  herbier_store
+  herbier_bindings
+  herbier_refs
+  brr
+  yojson
+  ptime
+  ptime.clock.os))

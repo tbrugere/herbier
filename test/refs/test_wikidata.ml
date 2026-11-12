@@ -443,7 +443,35 @@ let names_tests =
             Alcotest.failf "decode failed: %s" (Decode.error_to_string e) );
   ]
 
+(* ---------- Property.to_string ---------- *)
+
+let property_tests =
+  [
+    ( "Property.to_string: every property id",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "Gbif_key" "P846"
+          (Wikidata.Property.to_string Wikidata.Property.Gbif_key);
+        Alcotest.(check string)
+          "Powo" "P5037"
+          (Wikidata.Property.to_string Wikidata.Property.Powo);
+        Alcotest.(check string)
+          "Inat" "P3151"
+          (Wikidata.Property.to_string Wikidata.Property.Inat);
+        Alcotest.(check string)
+          "Taxref" "P3186"
+          (Wikidata.Property.to_string Wikidata.Property.Taxref);
+        Alcotest.(check string)
+          "Tela" "P3105"
+          (Wikidata.Property.to_string Wikidata.Property.Tela) );
+  ]
+
 let suite =
   ( "wikidata",
-    search_tests @ entity_tests @ entity_error_tests @ claim_tests @ names_tests
-  )
+    search_tests
+    @ entity_tests
+    @ entity_error_tests
+    @ claim_tests
+    @ names_tests
+    @ property_tests )
