@@ -1,0 +1,150 @@
+// 5b Déplacer le point (app/ui/screens/move_point.ml).
+@use '../base'
+@use '../widgets'
+
+.move-point
+  position: fixed
+  inset: 0
+  background: var(--paper)
+
+.move-point__content
+  display: flex
+  flex-direction: column
+  height: 100%
+
+// The map fills the room above the drawer, and reaches under its rounded
+// corners: the pin at the stage's centre is the map's centre.
+.move-point__stage
+  position: relative
+  flex: 1
+  min-height: 0
+  margin-bottom: calc(-1 * var(--radius-sheet))
+
+.move-point__map
+  position: absolute
+  inset: 0
+
+// A zero-size box at the centre: the stem's foot is its origin.
+.move-point__pin
+  position: absolute
+  left: 50%
+  top: 50%
+  z-index: 1
+  width: 0
+  height: 0
+  pointer-events: none
+
+.move-point__halo
+  position: absolute
+  left: -22px
+  top: -22px
+  width: 44px
+  height: 44px
+  border: 1px solid var(--map-accuracy-line)
+  border-radius: 50%
+  background: var(--map-accuracy-fill)
+
+.move-point__stem
+  position: absolute
+  left: -1px
+  top: -16px
+  width: 2px
+  height: 16px
+  background: var(--moss)
+
+.move-point__head
+  position: absolute
+  left: -12px
+  top: -38px
+  box-sizing: border-box
+  width: 24px
+  height: 24px
+  border: 3px solid var(--paper)
+  border-radius: 50%
+  background: var(--moss)
+  box-shadow: var(--shadow-map-chip)
+
+.move-point__top
+  position: absolute
+  top: calc(14px + env(safe-area-inset-top))
+  left: var(--space-screen)
+  right: var(--space-screen)
+  z-index: 2
+  display: flex
+  align-items: center
+  gap: 10px
+
+.move-point__round
+  flex: none
+  border-radius: 50%
+  background: var(--paper)
+  box-shadow: var(--shadow-map-search)
+
+.move-point__pill
+  +widgets.pill
+  +base.ui(13px, 700)
+  flex: 1
+  min-width: 0
+  padding: 9px 14px
+  background: var(--paper)
+  box-shadow: var(--shadow-map-search)
+  text-align: center
+
+.move-point__drawer
+  position: relative
+  z-index: 1
+  flex: none
+  display: flex
+  flex-direction: column
+  gap: 12px
+  max-height: 60%
+  overflow-y: auto
+  padding: 22px var(--space-screen) calc(18px + env(safe-area-inset-bottom))
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0
+  background: var(--paper)
+  box-shadow: var(--shadow-sheet)
+
+.move-point__title
+  +base.ui(20px, 800)
+  letter-spacing: -0.02em
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
+.move-point__meta
+  margin-top: -8px
+
+.move-point__results
+  display: flex
+  flex-direction: column
+
+.move-point__result
+  +widgets.bare-button
+  display: flex
+  flex-direction: column
+  gap: 2px
+  min-height: 52px
+  padding: 8px 0
+  border-bottom: 1px solid var(--line)
+  &:active
+    background: var(--sand)
+
+.move-point__result-name
+  +base.ui(15px, 700)
+
+.move-point__message
+  &.is-error
+    color: var(--danger)
+  // Kept in the drawer while empty (a live region): it takes no gap then.
+  &:empty
+    margin-top: -12px
+
+.move-point__buttons
+  display: flex
+  align-items: center
+  gap: 10px
+  .button
+    flex: 1
+  .button:disabled
+    opacity: .5
+    cursor: default

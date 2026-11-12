@@ -96,6 +96,13 @@ let cluster observations =
 
 let present s = match String.trim s with "" -> None | t -> Some t
 
+let place_name (o : Observation.t) =
+  match Option.bind o.place_label present with
+  | Some l -> Some l
+  | None -> Option.bind o.place_derived present
+
+let point_text {lat; lon} = Printf.sprintf "%.4f, %.4f" lat lon
+
 (* [labels] in time order. Counts are keyed by label with the rank of the
    label's first appearance, which breaks frequency ties. An association list
    is quadratic in distinct labels, and a day or a place has only a few. *)

@@ -85,6 +85,7 @@ let set_selection m place =
   set_source m Style.selection_source (Features.selection place)
 
 let set_focus m point = set_source m Style.focus_source (Features.focus point)
+let set_origin m point = set_source m Style.origin_source (Features.focus point)
 
 let set_accuracy m = function
   | None -> set_source m Style.accuracy_source Features.empty
@@ -142,6 +143,7 @@ let on_moveend m f =
   Maplibre.on_moveend m (fun {Maplibre.center; zoom} ->
       f ~center:(point center) ~zoom)
 
+let on_movestart = Maplibre.on_movestart
 let on_idle = Maplibre.on_idle
 let on_error = Maplibre.on_error
 let center m = Option.map point (Maplibre.center m)

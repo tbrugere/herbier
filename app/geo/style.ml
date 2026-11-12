@@ -6,6 +6,7 @@ type colours = {
   to_identify : string;
   accuracy_fill : string;
   accuracy_line : string;
+  origin : string;
 }
 
 let path = "map/positron.json"
@@ -27,6 +28,8 @@ let selection_place_layer = "herbier-selection-place"
 let selection_members_layer = "herbier-selection-members"
 let focus_source = "herbier-focus"
 let focus_layer = "herbier-focus"
+let origin_source = "herbier-origin"
+let origin_layer = "herbier-origin"
 
 type error = Not_a_style of string | Duplicate_id of string
 
@@ -156,6 +159,10 @@ let overlay_layers c =
     layer ~id:selection_members_layer ~type_:"circle" ~source:selection_source
       ~filter:(role "member") ~minzoom:detail_zoom
       (disc ~radius:7 (`String c.selected) c);
+    layer ~id:origin_layer ~type_:"circle" ~source:origin_source
+      (disc ~radius:6 (`String c.origin) c
+      @ [("circle-opacity", `Float 0.7); ("circle-stroke-opacity", `Float 0.7)]
+      );
     layer ~id:focus_layer ~type_:"circle" ~source:focus_source
       (disc ~radius:7 (`String c.selected) c);
   ]
@@ -190,6 +197,7 @@ let with_overlays colours = function
           (places_source, places_source_json);
           (members_source, geojson_source);
           (selection_source, geojson_source);
+          (origin_source, geojson_source);
           (focus_source, geojson_source);
         ]
       and new_layers = overlay_layers colours in

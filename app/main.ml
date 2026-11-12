@@ -44,6 +44,7 @@ let modal app = function
   | Herbier_ui.Route.Observation id -> Herbier_ui.Screens.Observation.v app id
   | Herbier_ui.Route.Change_species id ->
       Herbier_ui.Screens.Resolve.v app (Herbier_ui.Screens.Resolve.Change id)
+  | Herbier_ui.Route.Move_point id -> Herbier_ui.Screens.Move_point.v app id
   | Herbier_ui.Route.Identify id ->
       Herbier_ui.Screens.Resolve.v app (Herbier_ui.Screens.Resolve.Identify id)
   | Herbier_ui.Route.Search q ->

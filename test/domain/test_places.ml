@@ -725,6 +725,25 @@ let equal_point_cases () =
     {lat = Float.nan; lon = 5.0}
     {lat = Float.nan; lon = 5.0}
 
+let place_name () =
+  let o ?label ?derived () = obs ?label ?derived ~id:1 ~at:0 None in
+  let check msg expected o =
+    Alcotest.(check (option string)) msg expected (Places.place_name o)
+  in
+  check "a non-blank label wins over a non-blank derived name, both trimmed"
+    (Some "Col")
+    (o ~label:"  Col  " ~derived:"Près de X" ());
+  check "a blank label falls back to the trimmed derived name"
+    (Some "Près de X")
+    (o ~label:"   " ~derived:" Près de X " ());
+  check "both blank: None" None (o ~label:"  " ~derived:"  " ());
+  check "both absent: None" None (o ())
+
+let point_text () =
+  Alcotest.(check string)
+    "four decimals, comma-separated" "48.0633, -7.0081"
+    (Places.point_text {lat = 48.06331; lon = -7.00812})
+
 let tests =
   [
     ( "equal_point compares both coordinates with Float.equal",
@@ -833,4 +852,6 @@ let tests =
     ( "applying rename's result names the place",
       `Quick,
       rename_result_names_the_place );
+    ("place_name", `Quick, place_name);
+    ("point_text", `Quick, point_text);
   ]

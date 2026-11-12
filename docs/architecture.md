@@ -483,8 +483,10 @@ the classifier must accept both a bare URL and text containing one.
 
 - MapLibre GL JS behind a JS facade (`map.js`, ~100 lines) exposing: create,
   set style (for the offline/online switch below), set GeoJSON source, on
-  click/moveend/idle/error, getCenter, getZoom, flyTo, fit bounds (capped at a
-  maximum zoom), rendered ids, resize, remove. Bound from OCaml with Brr `Jv`;
+  click/movestart/moveend/idle/error (movestart reports whether a gesture
+  started the move: 5b disables « Valider » while the camera moves, and only a
+  user move cancels the late fly to the entry fix), getCenter, getZoom, flyTo,
+  fit bounds (capped at a maximum zoom), rendered ids, resize, remove. Bound from OCaml with Brr `Jv`;
   styles and GeoJSON
   cross as JSON text. Herbier's sources and layers are merged into the style
   JSON in OCaml (`Geo.Style.with_overlays`), so they survive `setStyle`.
@@ -506,6 +508,17 @@ the classifier must accept both a bare URL and text containing one.
 - Mini-map (observation screen): a non-interactive MapLibre instance framing
   the accuracy circle (`Widgets.Mini_map`); tapping it opens 4b centred on the
   observation, through a one-shot framing in `State.map_view`.
+- Moving a point (5b): an interactive map under a fixed DOM pin whose foot
+  is the map's centre (the map is laid out above the drawer); the stored
+  position is a grey ghost layer (`Geo.Style.origin_layer`). « Chercher un
+  lieu » is a Photon search on submit, biased to the centre; title and
+  « déplacé de N m » follow the camera on `moveend`; a picked result's name
+  only titles the drawer, it is never stored. « Valider » (disabled while the
+  camera moves, so it saves what the drawer shows) writes the
+  centre at the last `moveend` (6 decimals, longitude wrapped into [-180, 180), latitude clamped)
+  with `accuracy_m` and `place_derived` cleared, `place_label` kept only
+  within 500 m of the old point, through `Observations.upsert`; `App.save`
+  then runs the reverse geocoding below for the new point (`Move_plan`).
 - Reverse geocoding for `place_derived`: Photon (or Géoplateforme in France),
   called once per observation when online, cached in the row
   (`Geo.Geocode.reverse`, run by `Geo.Geocoder`, triggered by `App`):

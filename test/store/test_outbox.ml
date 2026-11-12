@@ -496,6 +496,72 @@ let observations_set_place_derived () =
     ];
   check_count "one entry, from the fill only" 2 db
 
+(* 5b's save of a Move_plan.apply result: the row Observations.upsert stores
+   and its single outbox entry. Built by hand: test/store does not link
+   app/ui/move_plan.ml. *)
+let observations_move_clears_accuracy_and_derived () =
+  let db = Cli.migrated_db () in
+  check_edit "plant" 1 db [Plants.upsert (plant 0x1 "Pissenlit")];
+  let o =
+    {
+      (observation 0x31 t1 ~plant:0x1
+         ~position:{lat = 48.0633; lon = 7.0081; accuracy_m = Some 12.}
+         ~place_label:"Lac Blanc")
+      with
+      place_derived = Some "Près de Colmar";
+    }
+  in
+  check_edit "the original row appends 1 entry" 1 db [Observations.upsert o];
+  let moved =
+    {
+      o with
+      position = Some {lat = 48.064; lon = 7.009; accuracy_m = None};
+      place_derived = None;
+      updated_at = t2;
+    }
+  in
+  check_edit "the move appends 1 entry" 1 db [Observations.upsert moved];
+  check_count "three entries: the plant, the original row, then the move" 3 db;
+  check_entry "the move's entry" ~table:"observations" ~row_id:(uuid 0x31)
+    ~payload:(Input.to_json (Observations.input moved))
+    (last db);
+  Alcotest.(check Cli.yojson)
+    "the move's entry clears accuracy_m" `Null
+    (payload_field "accuracy_m" (last db));
+  Alcotest.(check Cli.yojson)
+    "the move's entry clears place_derived" `Null
+    (payload_field "place_derived" (last db));
+  Alcotest.(check Cli.yojson)
+    "the move's entry keeps place_label (still the same place)"
+    (`String "Lac Blanc")
+    (payload_field "place_label" (last db));
+  (match Cli.find db (Observations.get (observation_id 0x31)) with
+  | None -> Alcotest.fail "Observations.get: the moved row is gone"
+  | Some g ->
+      let accuracy_m =
+        Option.bind g.position (fun (p : Observation.position) -> p.accuracy_m)
+      in
+      Alcotest.(check (option (float 0.))) "accuracy_m cleared" None accuracy_m;
+      Alcotest.(check (option string))
+        "place_derived cleared" None g.place_derived;
+      Alcotest.(check (option string))
+        "place_label kept" (Some "Lac Blanc") g.place_label;
+      (match g.position with
+      | None -> Alcotest.fail "the moved row has no position"
+      | Some p ->
+          Alcotest.(check (float 1e-9)) "lat is the new one" 48.064 p.lat;
+          Alcotest.(check (float 1e-9)) "lon is the new one" 7.009 p.lon);
+      Alcotest.(check bool)
+        "updated_at is the move's time" true
+        (Ptime.equal t2 g.updated_at));
+  Alcotest.(check (list string))
+    "Observations.to_geocode lists the moved observation (place_derived is \
+     null again)"
+    [uuid 0x31]
+    (List.map
+       (fun (r : Observation.t) -> Ids.Observation_id.to_string r.id)
+       (Cli.all db Observations.to_geocode))
+
 let tags_and_links () =
   let db = Cli.migrated_db () in
   let p = plant 0xa "Thym" in
@@ -1069,6 +1135,10 @@ let () =
             "set_place_derived appends 1 entry carrying the whole row when it \
              fills the name, none when already named"
             observations_set_place_derived;
+          case
+            "5b: a stored move keeps accuracy_m and place_derived cleared, \
+             keeps place_label, and leaves the row geocodable again"
+            observations_move_clears_accuracy_and_derived;
           case "tag, untag and revive append; no-op links append nothing"
             tags_and_links;
           case "a link's entry carries the stored id, not of_key"

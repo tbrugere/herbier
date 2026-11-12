@@ -42,6 +42,9 @@ val set_accuracy : t -> (Places.point * float) option -> unit
 val set_focus : t -> Places.point option -> unit
 (** {!Features.focus} into {!Style.focus_source}. *)
 
+val set_origin : t -> Places.point option -> unit
+(** {!Features.focus} into {!Style.origin_source}: 5b's origin ghost. *)
+
 val set_places : t -> Features.place list -> unit
 (** {!Features.place_points} into {!Style.places_source} and
     {!Features.observations} of every place's [shown] into
@@ -73,6 +76,11 @@ val on_tap : t -> (tap -> unit) -> unit
 
 val on_moveend : t -> (center:Places.point -> zoom:float -> unit) -> unit
 (** After every camera move. The callback must not raise. *)
+
+val on_movestart : t -> (user:bool -> unit) -> unit
+(** When a camera move starts; [user] when a gesture started it, [false] for
+    {!fly_to}, {!fit} or a resize of the element. The callback must not raise. A
+    {!on_moveend} follows every [movestart]. *)
 
 val on_idle : t -> (unit -> unit) -> unit
 (** Each time the map settles: no camera move running and every tile in view

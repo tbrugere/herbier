@@ -99,6 +99,15 @@ val label : Observation.t list -> label option
     the label whose earliest observation (by [at], then id) comes first. Never
     raises. *)
 
+val place_name : Observation.t -> string option
+(** One observation's place name (4h, 4e, 5b): its [place_label] when non-blank,
+    else its [place_derived] when non-blank, else [None]; trimmed with
+    [String.trim] as in {!label}. *)
+
+val point_text : point -> string
+(** The coordinates as the screens print them: ["%.4f, %.4f"] of [lat] and
+    [lon], e.g. ["48.0633, 7.0081"]. *)
+
 val rename : string -> at:Ptime.t -> cluster -> Observation.t list
 (** « Renommer » (handoff 4b): [rename name ~at c] is the members of [c], in
     [c.members] order, whose [place_label] must change for the place to be

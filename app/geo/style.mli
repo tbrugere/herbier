@@ -9,6 +9,7 @@ type colours = {
   to_identify : string;  (** an "À identifier" observation *)
   accuracy_fill : string;  (** the GPS accuracy circle *)
   accuracy_line : string;  (** its border *)
+  origin : string;  (** 5b's origin ghost: [--map-origin] *)
 }
 (** CSS colour strings (handoff 4b, 4h), as {!Herbier_ui.Theme} reads them (it
     re-exports this type); MapLibre accepts them as they are. *)
@@ -73,13 +74,20 @@ val selection_place_layer : string
 val selection_members_layer : string
 (** ["herbier-selection-members"] *)
 
-(** {1 Observation (handoff 4h)} *)
+(** {1 Observation (handoff 4h, 5b)} *)
 
 val focus_source : string
 (** ["herbier-focus"]: 4h's point ({!Features.focus}). *)
 
 val focus_layer : string
 (** ["herbier-focus"] *)
+
+val origin_source : string
+(** ["herbier-origin"]: 5b's origin ghost ({!Features.focus} of the stored
+    position). *)
+
+val origin_layer : string
+(** ["herbier-origin"] *)
 
 type error =
   | Not_a_style of string
@@ -100,7 +108,8 @@ val with_overlays : colours -> Yojson.Safe.t -> (Yojson.Safe.t, error) result
       ["clusterMaxZoom"] [detail_zoom - 1] and ["clusterProperties"] summing
       [count] and [identified] and taking the min of [west], [south] and the max
       of [east], [north] ({!Features.place_points});
-    - {!members_source}, {!selection_source} and {!focus_source}: unclustered.
+    - {!members_source}, {!selection_source}, {!origin_source} and
+      {!focus_source}: unclustered.
 
     and, appended after the base layers in this order:
     - {!accuracy_fill_layer}: a [fill] layer of {!accuracy_source}, [fill-color]
@@ -124,6 +133,9 @@ val with_overlays : colours -> Yojson.Safe.t -> (Yojson.Safe.t, error) result
       (radius 7, [selected]) for the ["role"] ["place"] feature below
       {!detail_zoom}; {!selection_members_layer} (radius 7, [selected]) for the
       ["member"] features from {!detail_zoom};
+    - {!origin_layer}: a [circle] layer of {!origin_source} at every zoom,
+      radius 6, [origin], 3 px [point_border] ring, [circle-opacity] and
+      [circle-stroke-opacity] 0.7 (18 px overall: handoff 5b's grey ghost);
     - last, {!focus_layer}: a [circle] layer of {!focus_source} at every zoom,
       radius 7, [selected], 3 px [point_border] ring (20 px overall, as 4b's
       selected point), above the accuracy circle.

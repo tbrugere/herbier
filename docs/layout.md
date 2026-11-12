@@ -177,9 +177,11 @@ app/
                           (cap_http), resized on a canvas, written to refthumbs/
     regional.ml           pluggable France layer (Tela, INPN), later
   geo/                    §8 of architecture
-    map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …)
-    style.ml              online (OpenFreeMap) style plus Herbier's overlay sources and layers, merged
-                          in OCaml; pure, tested in test/geo/; the offline (pmtiles://) switch is v2
+    map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …) and the
+                          overlay setters (places, selection, 4h's point, 5b's origin)
+    style.ml              online (OpenFreeMap) style plus Herbier's overlay sources and layers (5b's
+                          origin ghost among them), merged in OCaml; pure, tested in test/geo/; the
+                          offline (pmtiles://) switch is v2
     features.ml           GeoJSON of the observations, their bounds, the metric accuracy circle and its
                           box, 4h's point, the places of 4b (filtered clusters, their points, the selection, tap
                           decoding); pure, tested in test/geo/
@@ -204,7 +206,8 @@ app/
     plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml, map_filter.ml,
     map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
     ref_search.ml (4i's debounce / stale answer / offline state machine), ref_pick.ml (what a
-    reference row does per mode), ref_paste.ml (5a's pasted link → plant ref)
+    reference row does per mode), ref_paste.ml (5a's pasted link → plant ref),
+    move_plan.ml (5b's texts and what « Valider » writes)
                           pure helpers of the screens; these and list_patch are tested natively in test/ui/
     ref_results.ml        4i's « Référence · GBIF » section (Ref_search's effects, rows), shared by every
                           mode of screens/resolve.ml
@@ -214,6 +217,7 @@ app/
     loaded.ml             a screen's content from store reads: rendered per load, or once over a signal
                           that each reload sets (4f, 4h); the « Retour » notice of a missing record
     tag_usage.ml          live tags with their plants (4l, 5d), from Tags.list and Tags.links
+    locate.ml             the device fix and the world camera shared by 4b and 5b
     snap.ml               the sheet's snap points: nearest, clamp, release projection; pure, tested in test/ui/
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
@@ -421,7 +425,7 @@ test/
     jsoo/       js_of_ocaml build of the decoders run under node: GBIF occurrence keys above 2^31,
                 also through a pruned Pl@ntNet payload
   ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune); 4f's rows
-                (ref_block) for the two spike species projected from fixtures/
+                (ref_block) for the two spike species projected from fixtures/; 5b's move plan (test_move_plan)
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
                 the per-table queries, references included, settings, ref_images, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin

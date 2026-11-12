@@ -12,6 +12,7 @@ type modal =
   | New_plant
   | Observation of Observation_id.t
   | Change_species of Observation_id.t
+  | Move_point of Observation_id.t
   | Identify of Observation_id.t
   | Record
   | Saved of Observation_id.t
@@ -72,6 +73,8 @@ let of_fragment = function
       | ["observation"; id] -> observation id (fun id -> Observation id)
       | ["observation"; id; "espece"] ->
           observation id (fun id -> Change_species id)
+      | ["observation"; id; "position"] ->
+          observation id (fun id -> Move_point id)
       | ["a-identifier"; id] -> observation id (fun id -> Identify id)
       | ["noter"; "enregistre"; id] -> observation id (fun id -> Saved id)
       | ["photo"; id] -> (
@@ -93,6 +96,8 @@ let to_fragment = function
   | Modal (Observation id) -> "observation/" ^ Observation_id.to_string id
   | Modal (Change_species id) ->
       "observation/" ^ Observation_id.to_string id ^ "/espece"
+  | Modal (Move_point id) ->
+      "observation/" ^ Observation_id.to_string id ^ "/position"
   | Modal (Identify id) -> "a-identifier/" ^ Observation_id.to_string id
   | Modal Record -> "noter"
   | Modal (Saved id) -> "noter/enregistre/" ^ Observation_id.to_string id

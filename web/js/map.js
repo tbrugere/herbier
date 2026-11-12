@@ -100,6 +100,12 @@ export function onMoveend(h, cb) {
   });
 }
 
+// A move started by a gesture carries the DOM event behind it; one started by
+// flyTo, fitBounds or a container resize does not.
+export function onMovestart(h, cb) {
+  h.map.on('movestart', (e) => cb(e.originalEvent !== undefined));
+}
+
 export function onIdle(h, cb) {
   h.map.on('idle', () => cb());
 }

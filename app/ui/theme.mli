@@ -16,6 +16,7 @@ type map = Herbier_geo.Style.colours = {
   to_identify : string;  (** an "À identifier" observation *)
   accuracy_fill : string;  (** the GPS accuracy circle *)
   accuracy_line : string;  (** its border *)
+  origin : string;  (** 5b's origin ghost *)
 }
 (** Map colours (handoff 4b, 4h): the record {!Herbier_geo.Style} declares,
     filled here from the CSS tokens. *)

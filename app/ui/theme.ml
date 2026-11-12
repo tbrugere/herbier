@@ -8,6 +8,7 @@ type map = Herbier_geo.Style.colours = {
   to_identify : string;
   accuracy_fill : string;
   accuracy_line : string;
+  origin : string;
 }
 
 type t = {map : map; status_bar : string}
@@ -37,6 +38,7 @@ let load () =
    and+ to_identify = get "--map-to-identify"
    and+ accuracy_fill = get "--map-accuracy-fill"
    and+ accuracy_line = get "--map-accuracy-line"
+   and+ origin = get "--map-origin"
    and+ status_bar = get "--status-bar" in
    {
      map =
@@ -48,6 +50,7 @@ let load () =
          to_identify;
          accuracy_fill;
          accuracy_line;
+         origin;
        };
      status_bar;
    })

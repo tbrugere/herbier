@@ -94,6 +94,14 @@ let on_moveend h f =
   in
   run h "onMoveend" [|callback cb|]
 
+let on_movestart h f =
+  let cb v =
+    match Jstr.to_string (Jv.typeof v) with
+    | "boolean" -> f ~user:(Jv.to_bool v)
+    | _ -> ()
+  in
+  run h "onMovestart" [|callback cb|]
+
 let on_idle h f = run h "onIdle" [|callback (fun _ -> f ())|]
 
 let on_error h f =

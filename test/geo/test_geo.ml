@@ -1026,6 +1026,7 @@ let colours : Style.colours =
     to_identify = "TO_IDENTIFY";
     accuracy_fill = "ACCURACY_FILL";
     accuracy_line = "ACCURACY_LINE";
+    origin = "ORIGIN";
   }
 
 let with_overlays_ok base =
@@ -1057,7 +1058,7 @@ let layers_appended_after_the_base () =
   let base_layers = positron |> member "layers" |> to_list in
   let layers = result |> member "layers" |> to_list in
   let n = List.length base_layers in
-  Alcotest.(check int) "11 layers appended" (n + 11) (List.length layers);
+  Alcotest.(check int) "12 layers appended" (n + 12) (List.length layers);
   Alcotest.(check (list yojson))
     "the base layers are unchanged and in order" base_layers
     (List.filteri (fun i _ -> i < n) layers);
@@ -1066,7 +1067,7 @@ let layers_appended_after_the_base () =
     |> List.map (fun l -> l |> member "id" |> to_string)
   in
   Alcotest.(check (list string))
-    "overlay layer ids, in order, ending with focus_layer"
+    "overlay layer ids, in order, origin_layer right before focus_layer"
     [
       Style.accuracy_fill_layer;
       Style.accuracy_line_layer;
@@ -1078,6 +1079,7 @@ let layers_appended_after_the_base () =
       Style.selection_halo_layer;
       Style.selection_place_layer;
       Style.selection_members_layer;
+      Style.origin_layer;
       Style.focus_layer;
     ]
     overlay_ids
@@ -1115,13 +1117,14 @@ let sources_appended_after_the_base () =
     (List.filteri (fun i _ -> i < n) sources);
   let overlay = List.filteri (fun i _ -> i >= n) sources in
   Alcotest.(check (list string))
-    "overlay source ids, in order, ending with focus_source"
+    "overlay source ids, in order, origin_source right before focus_source"
     [
       Style.observations_source;
       Style.accuracy_source;
       Style.places_source;
       Style.members_source;
       Style.selection_source;
+      Style.origin_source;
       Style.focus_source;
     ]
     (List.map fst overlay);
@@ -1137,6 +1140,7 @@ let sources_appended_after_the_base () =
       Style.accuracy_source;
       Style.members_source;
       Style.selection_source;
+      Style.origin_source;
       Style.focus_source;
     ]
 
@@ -1182,6 +1186,14 @@ let places_source_and_layer_share_the_literal () =
     "places_source and places_layer share \"herbier-places\" (sources and \
      layers are separate namespaces)"
     Style.places_source Style.places_layer;
+  (* The shared id is not a Duplicate_id. *)
+  ignore (with_overlays_ok positron)
+
+let origin_source_and_layer_share_the_literal () =
+  Alcotest.(check string)
+    "origin_source and origin_layer share \"herbier-origin\" (sources and \
+     layers are separate namespaces)"
+    Style.origin_source Style.origin_layer;
   (* The shared id is not a Duplicate_id. *)
   ignore (with_overlays_ok positron)
 
@@ -1273,6 +1285,17 @@ let focus_paint =
       ("circle-stroke-color", `String colours.point_border);
     ]
 
+let origin_paint =
+  `Assoc
+    [
+      ("circle-radius", `Int 6);
+      ("circle-color", `String colours.origin);
+      ("circle-stroke-width", `Int 3);
+      ("circle-stroke-color", `String colours.point_border);
+      ("circle-opacity", `Float 0.7);
+      ("circle-stroke-opacity", `Float 0.7);
+    ]
+
 let overlay_paints_are_exact () =
   let result = with_overlays_ok positron in
   let open Yojson.Safe.Util in
@@ -1304,6 +1327,8 @@ let overlay_paints_are_exact () =
     (`Assoc
        [("line-color", `String colours.accuracy_line); ("line-width", `Int 1)])
     (paint Style.accuracy_line_layer);
+  Alcotest.(check yojson)
+    "the whole origin paint" origin_paint (paint Style.origin_layer);
   Alcotest.(check yojson)
     "the whole focus paint" focus_paint (paint Style.focus_layer)
 
@@ -1518,6 +1543,20 @@ let focus_layer_shape () =
        ])
     (layer_by_id result Style.focus_layer)
 
+let origin_layer_shape () =
+  let result = with_overlays_ok positron in
+  Alcotest.(check yojson)
+    "origin_layer: a circle layer on origin_source, paint only, no \
+     minzoom/maxzoom/filter (shown at every zoom)"
+    (`Assoc
+       [
+         ("id", `String Style.origin_layer);
+         ("type", `String "circle");
+         ("source", `String Style.origin_source);
+         ("paint", origin_paint);
+       ])
+    (layer_by_id result Style.origin_layer)
+
 let base_text_fonts () =
   let open Yojson.Safe.Util in
   positron
@@ -1648,11 +1687,13 @@ let with_overlays_duplicate_ids () =
       Style.selection_halo_layer;
       Style.selection_place_layer;
       Style.selection_members_layer;
+      Style.origin_layer;
       Style.focus_layer;
     ];
-  (* Every new source id, including [places_source] (= "herbier-places") and
-     [focus_source] (= "herbier-focus"), given only as a base *source*, with
-     no matching base layer. *)
+  (* Every new source id, including [places_source] (= "herbier-places"),
+     [origin_source] (= "herbier-origin") and [focus_source] (=
+     "herbier-focus"), given only as a base *source*, with no matching base
+     layer. *)
   List.iter expect_source_dup
     [
       Style.observations_source;
@@ -1660,6 +1701,7 @@ let with_overlays_duplicate_ids () =
       Style.places_source;
       Style.members_source;
       Style.selection_source;
+      Style.origin_source;
       Style.focus_source;
     ];
   let once = with_overlays_ok positron in
@@ -1710,7 +1752,11 @@ let literal_ids () =
     Style.selection_members_layer;
   Alcotest.(check string)
     "Style.focus_source" "herbier-focus" Style.focus_source;
-  Alcotest.(check string) "Style.focus_layer" "herbier-focus" Style.focus_layer
+  Alcotest.(check string) "Style.focus_layer" "herbier-focus" Style.focus_layer;
+  Alcotest.(check string)
+    "Style.origin_source" "herbier-origin" Style.origin_source;
+  Alcotest.(check string)
+    "Style.origin_layer" "herbier-origin" Style.origin_layer
 
 let contains ~sub s =
   let n = String.length sub in
@@ -1882,10 +1928,10 @@ let tests =
     ( "the recorded positron.json has the expected shape",
       `Quick,
       positron_fixture_sanity );
-    ( "Style.with_overlays appends 11 layers after the base",
+    ( "Style.with_overlays appends 12 layers after the base",
       `Quick,
       layers_appended_after_the_base );
-    ( "Style.with_overlays appends 6 sources after the base (5 plain, 1 \
+    ( "Style.with_overlays appends 7 sources after the base (6 plain, 1 \
        clustered)",
       `Quick,
       sources_appended_after_the_base );
@@ -1895,6 +1941,9 @@ let tests =
     ( "places_source and places_layer share \"herbier-places\" without colliding",
       `Quick,
       places_source_and_layer_share_the_literal );
+    ( "origin_source and origin_layer share \"herbier-origin\" without colliding",
+      `Quick,
+      origin_source_and_layer_share_the_literal );
     ( "Style.with_overlays leaves other top-level keys unchanged",
       `Quick,
       other_top_level_keys_unchanged );
@@ -1928,6 +1977,9 @@ let tests =
     ( "Style.with_overlays: focus_layer's shape is exact",
       `Quick,
       focus_layer_shape );
+    ( "Style.with_overlays: origin_layer's shape is exact (5b's origin ghost)",
+      `Quick,
+      origin_layer_shape );
     ( "the new layers' text-font stacks exist among positron's own layers",
       `Quick,
       new_text_fonts_exist_on_the_server );

@@ -50,6 +50,10 @@ val on_click : t -> layers:string list -> (click -> unit) -> unit
 
 val on_moveend : t -> (camera -> unit) -> unit
 
+val on_movestart : t -> (user:bool -> unit) -> unit
+(** MapLibre's [movestart] events; [user] when a gesture (drag, pinch, wheel)
+    started the move, [false] for [flyTo], [fitBounds] or a container resize. *)
+
 val on_idle : t -> (unit -> unit) -> unit
 (** MapLibre's [idle] events: no camera move running, every tile in view loaded
     and rendered. *)

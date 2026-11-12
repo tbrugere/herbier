@@ -36,14 +36,10 @@ let render (d : data) =
   let where =
     List.concat
       [
-        Option.to_list
-          (match o.place_label with
-          | Some l -> Some l
-          | None -> o.place_derived);
+        Option.to_list (Herbier_domain.Places.place_name o);
         Option.to_list
           (Option.map
-             (fun (p : Observation.position) ->
-               Printf.sprintf "%.4f, %.4f" p.lat p.lon)
+             (fun p -> Herbier_domain.Places.(point_text (of_position p)))
              o.position);
         [
           (let now = Ptime_clock.now () in
@@ -126,6 +122,15 @@ let render (d : data) =
       ]
   in
   let note_click, b_note = Rb.click note_row in
+  let move_row =
+    El.button
+      ~at:[At.type' (Jstr.v "button"); cls "saved__action"]
+      [
+        El.span [El.txt' "Corriger la position sur la carte"];
+        El.span ~at:[cls "saved__chevron"] [El.txt' "›"];
+      ]
+  in
+  let move_click, b_move = Rb.click move_row in
   let again = W.Button.v ~icon:W.Icon.Add "Noter une autre plante" in
   let fiche =
     match d.plant with
@@ -161,7 +166,7 @@ let render (d : data) =
              El.div ~at:[cls "saved__thumbs"] (List.map thumb d.photos);
            ];
            where_cards;
-           [note_row; El.div ~at:[cls "saved__spacer"] []; again.el];
+           [note_row; move_row; El.div ~at:[cls "saved__spacer"] []; again.el];
            (match fiche with Some (_, b) -> [b.el] | None -> []);
          ])
   in
@@ -170,10 +175,15 @@ let render (d : data) =
       [
         [
           b_note;
+          b_move;
           b_close;
           Rb.act close_click Route.back;
           Rb.act note_click (fun () ->
               Route.replace (Route.Modal (Route.Observation o.id)));
+          (* [go], not [replace]: back from 5b returns here, rebuilt with the
+             new coordinates. *)
+          Rb.act move_click (fun () ->
+              Route.go (Route.Modal (Route.Move_point o.id)));
           Rb.act again.click (fun () ->
               Route.replace (Route.Modal Route.Record));
         ];

@@ -10,6 +10,7 @@ type modal =
   | New_plant  (** 5a, creating *)
   | Observation of Herbier_domain.Ids.Observation_id.t  (** 4h *)
   | Change_species of Herbier_domain.Ids.Observation_id.t  (** 5c *)
+  | Move_point of Herbier_domain.Ids.Observation_id.t  (** 5b *)
   | Identify of Herbier_domain.Ids.Observation_id.t  (** 4k *)
   | Record  (** 4d *)
   | Saved of Herbier_domain.Ids.Observation_id.t  (** 4e *)
@@ -25,8 +26,9 @@ val of_fragment : string -> t
     ["reglages"]; ["tags"] → [Modal Tags]; ["tags/gerer"] → [Modal Manage_tags];
     ["plante/<id>"] → [Modal (Plant id)]; ["plante/<id>/modifier"] →
     [Modal (Edit_plant id)]; ["plante/nouvelle"] → [Modal New_plant];
-    ["observation/<id>"], ["observation/<id>/espece"], ["a-identifier/<id>"] →
-    [Observation], [Change_species], [Identify]; ["noter"] → [Modal Record];
+    ["observation/<id>"], ["observation/<id>/espece"],
+    ["observation/<id>/position"], ["a-identifier/<id>"] → [Observation],
+    [Change_species], [Move_point], [Identify]; ["noter"] → [Modal Record];
     ["noter/enregistre/<id>"] → [Modal (Saved id)]; ["photo/<id>"] →
     [Modal (Viewer id)]; ["chercher"] → [Modal (Search "")]; ["chercher/<q>"] →
     [Modal (Search q)], [q] percent-decoded (undecodable: as is);

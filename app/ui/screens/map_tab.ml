@@ -14,15 +14,12 @@ module Plant_id = Herbier_domain.Ids.Plant_id
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Features = Herbier_geo.Features
 module Geo_map = Herbier_geo.Map
-module Cap_geolocation = Herbier_bindings.Cap_geolocation
-module Cap_error = Herbier_bindings.Cap_error
 module RList = ReactiveData.RList
 module W = Widgets
 
 let cls c = At.class' (Jstr.v c)
 let year_of (o : Observation.t) = Zone.year o.at
 let padding_px = 64
-let world : State.camera = {center = {lat = 0.; lon = 0.}; zoom = 1.}
 
 (* What the screen is built from, loaded on entry and after each save. *)
 type data = {
@@ -437,7 +434,7 @@ let v app =
       ignore (take_focus ());
       log_error "thème" (String.concat ", " missing)
   | Ok theme ->
-      let camera = Option.value restored.camera ~default:world in
+      let camera = Option.value restored.camera ~default:Locate.world in
       Fut.await
         (Geo_map.create container ~colours:theme.map ~center:camera.center
            ~zoom:camera.zoom ~interactive:true) (function
@@ -462,22 +459,12 @@ let v app =
             first_fit ()));
   reload ();
   let locate () =
-    Fut.await
-      (Cap_geolocation.current_position ~high_accuracy:true ~timeout_ms:10_000
-         ~maximum_age_ms:30_000) (function
+    Fut.await (Locate.current ~what:"carte: position") (function
       | _ when not (alive ()) -> ()
-      | Error e ->
-          Console.(warn [str "carte: position"; str (Cap_error.to_string e)]);
-          let notice =
-            match e with
-            | Cap_error.Rejected {code; message = _} ->
-                Map_sheet.position_failure code
-            | Unavailable _ | Unexpected _ | Invalid_path _ ->
-                Map_sheet.Position_unavailable
-          in
+      | Error notice ->
           let v = React.S.value view in
           set_view {v with notice = Some notice}
-      | Ok {latitude; longitude; _} -> (
+      | Ok fix -> (
           (* A position now: an earlier position failure no longer holds. *)
           let v = React.S.value view in
           (match v.notice with
@@ -492,7 +479,7 @@ let v app =
                 Float.max Herbier_geo.Style.detail_zoom
                   (Option.value (Geo_map.zoom m) ~default:0.)
               in
-              Geo_map.fly_to m ~center:{lat = latitude; lon = longitude} ~zoom
+              Geo_map.fly_to m ~center:fix ~zoom
           | Creating | Failed | Released -> ()))
   in
   let rename (p : Features.place) text =

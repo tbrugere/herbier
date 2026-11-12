@@ -132,6 +132,7 @@ let theme_result () =
           line "map.to_identify" m.to_identify;
           line "map.accuracy_fill" m.accuracy_fill;
           line "map.accuracy_line" m.accuracy_line;
+          line "map.origin" m.origin;
           line "status_bar" status_bar;
         ]
 

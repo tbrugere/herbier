@@ -37,16 +37,10 @@ let day_time t = Fr_date.day_time ~tz_offset_s:(Zone.offset_s t) t
 
 (* The accuracy is never written: the mini-map's circle is its only
    representation (handoff 4h, architecture §8). *)
-let coordinates (p : Observation.position) =
-  Printf.sprintf "%.4f, %.4f" p.lat p.lon
+let coordinates p = Herbier_domain.Places.(point_text (of_position p))
 
 let place (o : Observation.t) =
-  let name =
-    match (o.place_label, o.place_derived) with
-    | Some l, _ -> Some l
-    | None, Some d -> Some d
-    | None, None -> None
-  in
+  let name = Herbier_domain.Places.place_name o in
   match (name, o.position) with
   | None, None ->
       [El.p ~at:[cls "t-meta"] [El.txt' "Pas de position enregistrée."]]
@@ -305,6 +299,18 @@ let render app (data : data React.signal) =
           (W.Mini_map.v ~colours:theme.map
              (React.S.map ~eq:( == ) (fun d -> d.observation.position) data))
   in
+  let move_el =
+    El.button
+      ~at:
+        [
+          At.type' (Jstr.v "button");
+          cls "text-button";
+          cls "text-button--moss";
+          cls "observation__move";
+        ]
+      []
+  in
+  let move_click, b_move = Rb.click move_el in
   let open_map () =
     Option.iter (State.focus_map (App.state app)) (Features.bounds [!current]);
     Route.go (Route.Tab W.Tab_bar.Map)
@@ -371,9 +377,10 @@ let render app (data : data React.signal) =
           ~at:[cls "observation__place"]
           [
             W.Card.panel
-              (match mini_map with
-              | Some m -> [m.el; place_el]
-              | None -> [place_el]);
+              (let line =
+                 El.div ~at:[cls "observation__line"] [place_el; move_el]
+               in
+               match mini_map with Some m -> [m.el; line] | None -> [line]);
           ];
         card "Note de cette rencontre" [note.el];
         El.div
@@ -405,6 +412,16 @@ let render app (data : data React.signal) =
             (React.S.map (fun d -> day_time d.observation.at) data);
           Rb.children place_el
             (React.S.map ~eq:( == ) (fun d -> place d.observation) data);
+          b_move;
+          Rb.text move_el
+            (React.S.map
+               (fun d ->
+                 match d.observation.position with
+                 | Some _ -> "Déplacer"
+                 | None -> "Placer sur la carte")
+               data);
+          Rb.act move_click (fun () ->
+              Route.go (Route.Modal (Route.Move_point id)));
           Rb.act modify.click (fun () ->
               let at = !current.at in
               El.set_prop El.Prop.value
