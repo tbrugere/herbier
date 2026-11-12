@@ -13,6 +13,7 @@
   test_wikipedia
   test_payload
   test_projection
+  test_organ_photos
   test_step
   test_fanout
   test_resolve)

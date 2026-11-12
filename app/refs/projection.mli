@@ -24,6 +24,10 @@ type vernacular = {lang : Lang.t; names : string list}
 (** [names] has 1 to 3 names. *)
 
 type origin = {native : string list; introduced : string list}
+
+type habitat = {phrase : string option; chips : string list}
+(** At least one of the two is non-empty. *)
+
 type link = {source : Reference.Source.t; url : string}
 type problem = {part : Payload.part; error : Decode.error}
 
@@ -35,18 +39,26 @@ type t = {
   vernacular : vernacular list cited option;
       (** fr, en, de, it in that order, languages without a name omitted; [None]
           when all are empty. *)
+  life_form : string cited option;
+      (** « Type » (handoff: « Herbacée bisannuelle, 50–150 cm »). {!project}
+          leaves it [None] (regional layer, architecture §6). *)
   origin : origin cited option;  (** [[Gbif]] (WCVP rows). *)
   red_list : string cited option;
       (** The global IUCN category as GBIF gives it (["LEAST_CONCERN"]);
           [[Gbif]]. *)
+  flowering_months : int list cited option;
+      (** 1..12, ascending, without duplicates, non-empty. {!project} leaves it
+          [None] (regional layer, architecture §6). *)
+  habitat : habitat cited option;
+      (** {!project} leaves it [None] (regional layer, architecture §6). *)
   toxicity : string cited option;
       (** One sentence about toxicity, quoted as written, not a verdict: a
           negated one ("n'est pas toxique") is kept; [[Wikipedia]]. *)
   organ_photos : Sources.Gbif.Image.t list cited option;
-      (** At most one per organ, in [Reference.Organ.all] order (flower, leaf,
-          fruit, habit), each with [organ = Some _]; [[Plantnet]]; [None] when
-          empty. Each [url] is unchecked, as in [Sources.Gbif.Image.t]: a caller
-          checks its host before using it as [src] or downloading it. *)
+      (** Per organ in [Reference.Organ.all] order (flower, leaf, fruit, habit),
+          the first image of the page of that organ whose [url] is
+          {!Organ_photos.downloadable}, so at most one per organ, each with
+          [organ = Some _]; [[Plantnet]]; [None] when no organ has one. *)
   links : link list;  (** In the order of {!link_order}; may be empty. *)
   problems : problem list;
       (** In [Payload.all] order of the failing parts. [Gbif_occurrence_count]
@@ -86,7 +98,8 @@ val project :
       every newline) whose lowercase (ASCII and Latin-1 capitals folded)
       contains ["toxique"], ["toxic"], ["vénéneu"] or ["poison"], trimmed; else
       the [description] when it matches;
-    - organ photos: per organ, the first Pl@ntNet image of that organ;
+    - organ photos: per organ, the first Pl@ntNet image of that organ whose URL
+      is {!Organ_photos.downloadable} ({!Organ_photos.wanted});
     - links: per source of {!link_order}, the [url] of the first live plant ref
       of that source whose [url] is https, has no whitespace or control
       character, and points at that source ({!Herbier_domain.Link.classify}
@@ -96,6 +109,12 @@ val project :
       else a URL derived from the ids (GBIF key, the [Standard] summary's https
       page URL that classifies as Wikipedia, the entity's POWO, TaxRef, Tela,
       iNaturalist and EPPO ids), else none. *)
+
+val organ_photos_wanted : t -> (Reference.Organ.t * Sources.Gbif.Image.t) list
+(** [organ_photos] paired with their organ, [[]] when [None]: the [wanted] of
+    {!Organ_photos.plan} and {!Organ_photos.shown}, for the thumbnail sync and
+    for 4f alike. [plant_refs] never change it, so a projection made with
+    [plant_refs:[]] gives the same list. *)
 
 val link_order : Reference.Source.t list
 (** [Gbif; Plantnet; Wikipedia; Powo; Taxref; Tela; Inat; Eppo; Wikidata; Ipni]:
@@ -130,11 +149,13 @@ end
 
 val filled : t -> Field.t -> bool
 (** [Vernacular]: [vernacular <> None]; [Family]: the taxon has a family;
-    [Native_range] / [Introduced_range]: the list is non-empty; [Red_list],
-    [Toxicity], [Organ_photos]: [Some]; [Links]: non-empty. [Life_form],
-    [Fr_status], [Fr_protection], [Flowering_months], [Habitat], [Ecology]:
-    always [false]: no fetched source fills them (they come from the regional
-    layer, architecture §6). *)
+    [Native_range] / [Introduced_range]: the list is non-empty; [Life_form],
+    [Red_list], [Flowering_months], [Toxicity], [Organ_photos]: [Some];
+    [Habitat]: the habitat has a [phrase]; [Ecology]: the habitat has non-empty
+    [chips]; [Links]: non-empty. [Fr_status], [Fr_protection]: always [false]:
+    no field holds them. {!project} never fills [life_form], [flowering_months]
+    or [habitat] (they come from the regional layer, architecture §6), so for a
+    projection they are never filled. *)
 
 val empty_fields : t -> Field.t list
 (** The fields not {!filled}, in [Field.all] order. *)

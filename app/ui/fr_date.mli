@@ -23,6 +23,9 @@ val time : tz_offset_s:int -> Ptime.t -> string
 val year : tz_offset_s:int -> Ptime.t -> int
 (** The wall-clock year of the instant in that zone. *)
 
+val month_name : int -> string
+(** ["janvier"] … ["décembre"] for 1..12; [""] outside. *)
+
 val day_month : Ptime.date -> string
 (** ["12 juin"], ["1 mars"]: the 4f hero's date and « modifié le … ». *)
 

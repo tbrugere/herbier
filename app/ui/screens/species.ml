@@ -13,6 +13,8 @@ module Plant_id = Herbier_domain.Ids.Plant_id
 module References = Herbier_store.References
 module Reference = Herbier_domain.Reference
 module Projection = Herbier_refs.Projection
+module Organ_photos = Herbier_refs.Organ_photos
+module Ref_images = Herbier_store.Ref_images
 module W = Widgets
 
 let cls c = At.class' (Jstr.v c)
@@ -39,6 +41,7 @@ type data = {
   photos : Herbier_domain.Photo.t list;
   references : Reference.t list;
   plant_refs : Reference.Plant_ref.t list;
+  ref_images : Reference.Image.t list;
   loaded_at : Ptime.t; (* the « mis à jour il y a … » reference instant *)
 }
 
@@ -53,7 +56,18 @@ let load db id =
       let* observations = Db.all db (Observations.of_plant id) in
       let* photos = Db.all db (Photos.of_plant id) in
       let* references = Db.all db (References.of_plant id) in
-      let+ plant_refs = Db.all db (References.plant_refs id) in
+      let* plant_refs = Db.all db (References.plant_refs id) in
+      (* A device-only cache the next sync rebuilds: a read error shows no
+         organ photos rather than no fiche. *)
+      let+ ref_images =
+        Fut.map
+          (function
+            | Ok rows -> Ok rows
+            | Error e ->
+                log_error "ref_images" e;
+                Ok [])
+          (Db.all db (Ref_images.of_plant id))
+      in
       Some
         {
           plant;
@@ -63,6 +77,7 @@ let load db id =
           photos;
           references;
           plant_refs;
+          ref_images;
           loaded_at = Ptime_clock.now ();
         }
 
@@ -283,37 +298,54 @@ let unlinked state () =
     :: Rb.class_ link.el "is-offline" (React.S.map not online)
     :: link.bindings )
 
+(* The projection and the thumbnails 4f shows, from one load. *)
 let project (d : data) =
-  Projection.project ~references:d.references ~plant_refs:d.plant_refs
+  let p =
+    Projection.project ~references:d.references ~plant_refs:d.plant_refs
+  in
+  let wanted = Projection.organ_photos_wanted p in
+  (p, Organ_photos.shown ~wanted ~stored:d.ref_images)
 
-(* The sources cited by the « Noms » row, in Source.all order. *)
-let names_sources (p : Projection.t) =
-  let cited =
-    List.concat
+let ref_row key ?(key_cls = []) value sources =
+  El.div
+    ~at:[cls "species__ref-row"]
+    [
+      El.div ~at:(List.map cls ("species__ref-key" :: key_cls)) [El.txt' key];
+      El.div
+        ~at:[cls "species__ref-value"]
+        (value
+        @
+        match sources with
+        | "" -> []
+        | s -> [El.div ~at:[cls "species__ref-sources"] [El.txt' s]]);
+    ]
+
+let origin_side label = function
+  | None -> []
+  | Some names -> [El.div [El.b [El.txt' label]; El.txt' (" " ^ names)]]
+
+let organ_tile (organ, path) =
+  let label = Ref_text.organ_label organ in
+  El.div
+    ~at:[cls "species__organ"]
+    [
+      W.Preview_img.v ~cls:["species__organ-img"] path;
+      El.span ~at:[cls "species__organ-label"] [El.txt' label];
+    ]
+
+let link_anchor (l : Ref_block.link) =
+  El.a
+    ~at:
       [
-        Option.fold ~none:[]
-          ~some:(fun (c : _ Projection.cited) -> c.sources)
-          p.vernacular;
-        Option.fold ~none:[]
-          ~some:(fun (c : _ Projection.cited) -> c.sources)
-          p.taxon;
+        cls "species__ref-link";
+        At.href (Jstr.v l.url);
+        At.v (Jstr.v "target") (Jstr.v "_blank");
+        At.v (Jstr.v "rel") (Jstr.v "noopener noreferrer");
       ]
-  in
-  List.filter (fun s -> List.mem s cited) Reference.Source.all
+    [El.txt' l.label]
 
-let names_row (p : Projection.t) =
-  let family =
-    Option.bind p.taxon (fun (c : _ Projection.cited) ->
-        c.value.Herbier_refs.Sources.Gbif.Taxon.family)
-  in
-  let languages =
-    Option.fold ~none:[]
-      ~some:(fun (c : _ Projection.cited) -> c.value)
-      p.vernacular
-  in
-  match (languages, family) with
-  | [], None -> None
-  | _ ->
+let row_el = function
+  | Ref_block.Names {languages; sources} ->
       let line (v : Projection.vernacular) =
         El.div
           [
@@ -321,23 +353,54 @@ let names_row (p : Projection.t) =
             El.txt' (" " ^ Ref_text.names_line v);
           ]
       in
-      Some
-        (El.div
-           ~at:[cls "species__ref-row"]
-           [
-             El.div ~at:[cls "species__ref-key"] [El.txt' "Noms"];
-             El.div
-               ~at:[cls "species__ref-value"]
-               (List.map line languages
-               @ [
-                   El.div
-                     ~at:[cls "species__ref-sources"]
-                     [
-                       El.txt'
-                         (Ref_text.names_source_line ~family (names_sources p));
-                     ];
-                 ]);
-           ])
+      ref_row "Noms" (List.map line languages) sources
+  | Life_form {text; sources} -> ref_row "Type" [El.div [El.txt' text]] sources
+  | Origin {native; introduced; sources} ->
+      ref_row "Origine"
+        (origin_side "Indigène :" native @ origin_side "Introduite :" introduced)
+        sources
+  | Red_list {chip; sources} ->
+      ref_row "Liste rouge"
+        [
+          El.div
+            ~at:[cls "species__ref-chips"]
+            [El.span ~at:[cls "species__ref-chip"] [El.txt' chip]];
+        ]
+        sources
+  | Flowering {months; text; sources} ->
+      ref_row "Floraison" [W.Month_grid.v months; El.div [El.txt' text]] sources
+  | Habitat {phrase; chips; sources} ->
+      ref_row "Habitat"
+        (List.map (fun p -> El.div [El.txt' p]) (Option.to_list phrase)
+        @
+        match chips with
+        | [] -> []
+        | _ :: _ ->
+            [
+              El.div
+                ~at:[cls "species__ref-chips"]
+                (List.map
+                   (fun c ->
+                     El.span ~at:[cls "species__habitat-chip"] [El.txt' c])
+                   chips);
+            ])
+        sources
+  | Toxicity {text; sources} ->
+      ref_row "Toxicité" [El.div [El.txt' text]] sources
+  | Organ_photos {photos; credits; sources} ->
+      (* Full width, its caption above the grid (handoff 4f): not a
+         key/value row. *)
+      El.div
+        ~at:[cls "species__organ-block"]
+        [
+          El.div
+            ~at:[cls "species__organ-caption"]
+            [El.txt' ("Photos par organe · " ^ sources)];
+          El.div ~at:[cls "species__organs"] (List.map organ_tile photos);
+          El.div ~at:[cls "species__ref-sources"] [El.txt' credits];
+        ]
+  | Links links ->
+      El.div ~at:[cls "species__ref-links"] (List.map link_anchor links)
 
 (* 4f *)
 let linked app (data : data React.signal) () =
@@ -360,13 +423,13 @@ let linked app (data : data React.signal) () =
   in
   let click, b_click = Rb.click refresh in
   let rows = El.div ~at:[cls "species__ref-slot"] [] in
-  let rows_of (p, fetching) =
+  let rows_of ((p, shown), fetching) =
     let content =
-      match (names_row p, fetching) with
-      | Some row, _ -> [row]
-      | None, true ->
+      match (Ref_block.rows p ~organ_photos:shown, fetching) with
+      | (_ :: _ as rows), _ -> List.map row_el rows
+      | [], true ->
           [El.p ~at:[cls "t-meta"] [El.txt' "Récupération de la référence…"]]
-      | None, false ->
+      | [], false ->
           [
             El.p
               ~at:[cls "t-meta"]
@@ -401,7 +464,7 @@ let linked app (data : data React.signal) () =
       Rb.class_ refresh "is-offline" (React.S.map not online);
       Rb.text meta
         (React.S.l4 ~eq:String.equal
-           (fun d (p : Projection.t) fetching online ->
+           (fun d ((p : Projection.t), _) fetching online ->
              let date =
                match (fetching, p.fetched_at) with
                | true, _ -> "mise à jour…"

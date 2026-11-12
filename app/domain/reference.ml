@@ -123,7 +123,7 @@ module Image = struct
   type t = {
     plant_id : Ids.Plant_id.t;
     source : Source.t;
-    organ : Organ.t option;
+    organ : Organ.t;
     remote_url : string;
     licence : string;
     attribution : string;

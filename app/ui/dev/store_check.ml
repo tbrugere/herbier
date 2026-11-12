@@ -77,7 +77,9 @@ let table_names =
     "plant_refs";
     "plant_tags";
     "plants";
+    "ref_images";
     "reference";
+    "reference_organs";
     "reference_sources";
     "reference_statuses";
     "settings";

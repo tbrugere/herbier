@@ -631,6 +631,26 @@ $card-padding: 16px
   position: absolute
   inset: 0
 
+// « Floraison » (4f): twelve month cells.
+.month-grid
+  display: grid
+  grid-template-columns: repeat(12, 1fr)
+  gap: 3px
+  margin: 2px 0 4px
+
+.month-grid__cell
+  display: flex
+  align-items: center
+  justify-content: center
+  height: 20px
+  border-radius: 4px
+  +base.ui(10px, 700)
+  background: var(--sand-deep)
+  color: var(--muted)
+  &.is-active
+    background: var(--moss)
+    color: var(--paper)
+
 // Photo tiles (Photo_grid)
 .photo-grid
   display: grid

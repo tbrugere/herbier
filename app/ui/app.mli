@@ -64,19 +64,29 @@ val link :
     earlier (its branches not yet saved are dropped; when the save fails, a
     fetch that was running is started again by {!refresh}), then, after the
     commit and when {!State.network} says online, starts the plant's fetch in
-    the background (not awaited). {!saved} fires for the link and again for each
-    branch saved. *)
+    the background (not awaited), followed by the thumbnail sync of {!refresh}.
+    {!saved} fires for the link and again for each branch saved. *)
 
 val refresh : t -> Herbier_domain.Ids.Plant_id.t -> unit
 (** ↻: fetches the plant's references now when {!State.network} says online, the
     plant is live, has a gbif_key and no fetch of it is running (else nothing).
     Read errors go to the console ([refs: …]), and so does the per-source
-    report, as an error when a branch's save failed. *)
+    report, as an error when a branch's save failed.
+
+    After the fetch settles (whatever its report) and while {!State.network}
+    says online, [Organ_thumbs.sync] runs for the plant; {!saved} fires when its
+    report {!Herbier_refs_io.Organ_thumbs.changed}. At most one sync per plant
+    runs at a time: one asked for while another runs starts once it ends. A
+    non-empty report is logged as
+    [refs: thumbs <plant id> flower downloaded leaf present …], as an error when
+    a [Failed] is in it; a store error as [refs: thumbs <plant id> <error>]. *)
 
 val refresh_if_due : t -> Herbier_domain.Ids.Plant_id.t -> unit
 (** On opening the fiche: when {!State.network} says online and the plant has a
     gbif_key, starts its fetch as {!refresh} does if {!Herbier_refs.Fanout.due}
-    [~now] holds for its rows. *)
+    [~now] holds for its rows. When the plant is not due and no fetch of it is
+    running, [Organ_thumbs.sync] still runs (as after a fetch, see {!refresh}),
+    so a thumbnail that failed earlier is retried on the next entry. *)
 
 val fetching : t -> Herbier_domain.Ids.Plant_id.t list React.signal
 (** The plants with a fetch running (4f's « mise à jour… »), each once; set

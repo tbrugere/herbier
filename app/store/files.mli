@@ -4,6 +4,19 @@
 val preview : Herbier_domain.Ids.Photo_id.t -> string
 (** ["previews/<photo id>.jpg"]. *)
 
+val refthumb :
+  plant:Herbier_domain.Ids.Plant_id.t ->
+  source:Herbier_domain.Reference.Source.t ->
+  organ:Herbier_domain.Reference.Organ.t ->
+  string
+(** ["refthumbs/<plant id>/<source>-<organ>.jpg"], e.g.
+    ["refthumbs/0190…/plantnet-flower.jpg"]. *)
+
+val blob_of_base64 :
+  type':string -> string -> (Brr.Blob.t, Herbier_bindings.Cap_error.t) result
+(** Base64 → blob of MIME type [type']; invalid base64 is [Error (Rejected _)].
+*)
+
 val write_blob :
   path:string -> Brr.Blob.t -> (unit, Herbier_bindings.Cap_error.t) result Fut.t
 (** Writes the blob's bytes at [path], replacing the file and creating missing

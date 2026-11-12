@@ -26,7 +26,9 @@ val migrations : migration list
     with [plants], [plant_tags], [tags] and [observations], and indexes the
     plants already present. It needs FTS5 in the device's SQLite (the plugin's
     SQLCipher build has it): without it, version 2 fails and {!Db.open_} returns
-    [Migration {version = 2; _}]. *)
+    [Migration {version = 2; _}]. Version 3 creates the local lookup table
+    [reference_organs] (values [Reference.Organ.all] labels) and the device-only
+    table [ref_images] of {!Ref_images}. *)
 
 val latest : int
 (** Version of the last migration. *)

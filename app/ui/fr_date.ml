@@ -41,6 +41,9 @@ let year ~tz_offset_s t =
   let (y, _, _), _ = Ptime.to_date_time ~tz_offset_s t in
   y
 
+let month_name m =
+  match m >= 1 && m <= 12 with true -> months.(m - 1) | false -> ""
+
 let day_month (_, m, d) = Printf.sprintf "%d %s" d months.(m - 1)
 let full_date ((y, _, _) as date) = Printf.sprintf "%s %d" (day_month date) y
 

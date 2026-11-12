@@ -103,6 +103,7 @@ app/
     cap_sqlite.ml  cap_filesystem.ml  cap_app.ml  cap_share_target.ml
     cap_social_login.ml  cap_uploader.ml  cap_geolocation.ml  cap_camera.ml
     cap_preferences.ml  maplibre.ml  pmtiles.ml  exifr.ml
+    cap_http.ml           Capacitor's core CapacitorHttp GET, 2xx body as base64, no redirects (reference thumbnails: no CORS)
     image_bitmap.ml       createImageBitmap with EXIF orientation applied
     canvas_blob.ml        canvas toBlob with a type and quality
     object_url.ml         URL.createObjectURL / revokeObjectURL: a blob: URL for an <img>
@@ -126,16 +127,17 @@ app/
                           entry in one explicit transaction)
     codec.ml              pure half of db.ml: Col values → bound params, plugin row text → Row (JSON text columns),
                           timestamp format; no Brr, tested natively in test/store/
-    schema.ml             ordered migrations, each a list of SQL statements; `user_version`; migration 2 is the FTS5 index and its triggers
+    schema.ml             ordered migrations, each a list of SQL statements; `user_version`; migration 2 is the FTS5 index and its triggers;
+                          migration 3 the device-only ref_images and its reference_organs lookup
     stmt.ml               statements as pure values (SQL, params, row decoder), run by db.ml (all, find, write)
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
-    outbox.ml  sync_state.ml  settings.ml   local-only tables, columns declared next to their queries;
+    outbox.ml  sync_state.ml  settings.ml  ref_images.ml   local-only tables, columns declared next to their queries;
                           outbox.ml also holds `edit`, the value every synced write is (statement, read-back, payload)
     cascade.ml            soft deletes that take a plant's or an observation's dependents with it
     search.ml             FTS5 query text (folding, endings) and the plant search query
     dev_seed.ml           fixed development rows for M2, applied only by ui/dev/seed_check.ml
     files.ml              paths under Directory.Data (previews/, refthumbs/, tiles/); blob write, read, delete
-                          over cap_filesystem
+                          over cap_filesystem; base64 → blob
   sync/                   Supabase (§4 of architecture)
     auth.ml               Google id token → signInWithIdToken, session, auto-refresh
     transport.ml          Postgrest.Request.t → Brr fetch, body to the decoder; JWT, paused-project detection
@@ -156,6 +158,8 @@ app/
     payload.ml            one reference row's payload: an object of each call's body, pruned to the fields
                           the decoders read; shared by the projection (reader) and the pipeline (writer)
     projection.ml         reference rows → ReferenceSnapshot fields (4f), pure over JSON
+    organ_photos.ml       which Pl@ntNet images a plant keeps, downloads and shows; thumbnail size; allowed host;
+                          a sync's report (outcome per organ)
     step.ml               a program of sequential GETs (Done | Get), run by refs_io/http.ml or by a
                           function standing for the network in tests
     fanout.ml             the reference fetch of one gbif_key as three branch programs, the status
@@ -167,6 +171,8 @@ app/
                           ≤3 overall), timeouts; run: executes a refs/ Step program
     pipeline.ml           runs Fanout for one plant, one save per branch through a callback
     resolver.ml           runs Resolve: Domain.Link + network lookups → gbif_key + partial snapshot
+    organ_thumbs.ml       a plant's ref_images follow its Pl@ntNet row; missing thumbnails downloaded
+                          (cap_http), resized on a canvas, written to refthumbs/
     regional.ml           pluggable France layer (Tela, INPN), later
   geo/                    §8 of architecture
     map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …)
@@ -190,7 +196,7 @@ app/
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
     plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml, map_filter.ml,
-    map_sheet.ml, plant_link.ml, ref_text.ml
+    map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data)
                           pure helpers of the screens; these and list_patch are tested natively in test/ui/
     filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
@@ -227,7 +233,7 @@ app/
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
-                          month_grid (planned)
+                          month_grid
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
       journal.ml (4c)     record.ml (4d)
@@ -251,7 +257,9 @@ store     ← domain, bindings, postgrest, yojson, ptime, brr (for Fut)
 sync      ← domain, store, bindings, postgrest, brr (for Fut)
 photos | refs_io | geo   ← domain, store, bindings, brr (for Fut); refs_io also refs, yojson, ptime, ptime.clock.os; photos also yojson, ptime;
                            geo also yojson
-                                         (siblings never import each other)
+                                         (siblings never import each other: photos/preview.ml and
+                                          refs_io/organ_thumbs.ml each keep their ~25-line canvas resize,
+                                          since bindings/ holds no logic)
 ui        ← everything above + react, reactiveData
 main      ← ui, store, domain, brr      (main.ml opens the db, reads settings, builds State/App, starts the router)
 ```
@@ -391,12 +399,13 @@ test/
                 cli.t (cram) runs the executable
   refs/         native, alcotest: request URLs, payload decoders, stored payloads (pruning keeps decoding)
                 and the projection of the two spike species over fixtures/; the fan-out and resolver
-                programs over fixtures/
+                programs over fixtures/; the organ photo rules (organ_photos)
     jsoo/       js_of_ocaml build of the decoders run under node: GBIF occurrence keys above 2^31,
                 also through a pruned Pl@ntNet payload
-  ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune)
+  ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune); 4f's rows
+                (ref_block) for the two spike species projected from fixtures/
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
-                the per-table queries, references included, settings, search, dev_seed); schema SQL, queries, FTS triggers and
+                the per-table queries, references included, settings, ref_images, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
                 (that is #dev/store)
   photos/       native, alcotest: the pure modules of app/photos/ copied in (exif, over recorded

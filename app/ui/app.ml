@@ -4,6 +4,10 @@ module References = Herbier_store.References
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Source = Herbier_domain.Reference.Source
 
+(* A plant's running thumbnail sync, and whether another was asked for
+   meanwhile. *)
+type thumb_sync = Running | Rerun_requested
+
 type t = {
   db : Db.t;
   state : State.t;
@@ -20,6 +24,9 @@ type t = {
          or superseded, by generation; [fetching] is set from it. *)
   fetching : Plant_id.t list React.signal;
   set_fetching : Plant_id.t list -> unit;
+  thumbs : (Plant_id.t * thumb_sync) list ref;
+      (* style: mutable for the same reason: a thumbnail sync settles in a
+         future's callback. The plants with a sync running. *)
 }
 
 let create ~db ~state ~theme =
@@ -37,6 +44,7 @@ let create ~db ~state ~theme =
     running = ref [];
     fetching;
     set_fetching = (fun ids -> set_fetching ids);
+    thumbs = ref [];
   }
 
 let db t = t.db
@@ -129,6 +137,65 @@ let report_line label report =
          ^ Herbier_refs_io.Pipeline.outcome_to_string outcome)
        report
 
+let without id = List.filter (fun (p, _) -> not (Plant_id.equal p id))
+
+let thumbs_line label report =
+  String.concat " "
+    ("refs: thumbs"
+    :: label
+    :: List.concat_map
+         (fun (organ, outcome) ->
+           [
+             Herbier_domain.Reference.Organ.to_string organ;
+             Herbier_refs_io.Organ_thumbs.outcome_to_string outcome;
+           ])
+         report)
+
+(* One sync per plant at a time; one asked for while it runs (a fetch that
+   ended meanwhile may have changed the wanted images) runs once it ends. *)
+let rec sync_thumbs t id =
+  match
+    (online t, List.exists (fun (p, _) -> Plant_id.equal p id) !(t.thumbs))
+  with
+  | false, _ -> ()
+  | true, true -> t.thumbs := (id, Rerun_requested) :: without id !(t.thumbs)
+  | true, false ->
+      t.thumbs := (id, Running) :: !(t.thumbs);
+      let label = Plant_id.to_string id in
+      Fut.await (Herbier_refs_io.Organ_thumbs.sync t.db ~plant:id)
+        (fun result ->
+          let again =
+            List.find_map
+              (fun (p, s) ->
+                match Plant_id.equal p id with true -> Some s | false -> None)
+              !(t.thumbs)
+          in
+          t.thumbs := without id !(t.thumbs);
+          (match result with
+          | Error e ->
+              Brr.Console.(
+                error
+                  [str "refs: thumbs"; str label; str (Db.error_to_string e)])
+          | Ok [] -> ()
+          | Ok report -> (
+              let failed = function
+                | _, Herbier_refs.Organ_photos.Failed _ -> true
+                | ( _,
+                    Herbier_refs.Organ_photos.(
+                      Present | Updated | Downloaded | Removed) ) ->
+                    false
+              in
+              let line = thumbs_line label report in
+              (match List.exists failed report with
+              | true -> Brr.Console.(error [str line])
+              | false -> log [line]);
+              match Herbier_refs_io.Organ_thumbs.changed report with
+              | true -> t.send_saved ()
+              | false -> ()));
+          match again with
+          | Some Rerun_requested -> sync_thumbs t id
+          | Some Running | None -> ())
+
 let start_fetch t id gbif_key =
   let g = supersede t id in
   t.running := !(t.running) @ [(id, g)];
@@ -145,7 +212,7 @@ let start_fetch t id gbif_key =
           (fun (p, h) -> not (Plant_id.equal p id && Int.equal h g))
           !(t.running);
       publish_running t;
-      match result with
+      (match result with
       | Error e ->
           Brr.Console.(
             error [str "refs: read"; str label; str (Db.error_to_string e)])
@@ -160,7 +227,9 @@ let start_fetch t id gbif_key =
           let line = String.concat " " (report_line label report) in
           match List.exists not_saved report with
           | true -> Brr.Console.(error [str line])
-          | false -> log [line]))
+          | false -> log [line]));
+      (* Whatever the report: a thumbnail that failed before is retried. *)
+      sync_thumbs t id)
 
 let is_fetching t id =
   List.exists (Plant_id.equal id) (React.S.value t.fetching)
@@ -209,7 +278,11 @@ let refresh_if_due t id =
                 && online t
               with
               | true -> start_fetch t id key
-              | false -> ()))
+              | false -> (
+                  (* A running fetch syncs when it ends. *)
+                  match is_fetching t id with
+                  | true -> ()
+                  | false -> sync_thumbs t id)))
 
 let link t id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
   let open Fut.Syntax in

@@ -11,3 +11,47 @@ val names_source_line :
   family:string option -> Herbier_domain.Reference.Source.t list -> string
 (** The « Noms » sub-line: ["Plantaginaceae · GBIF, Wikidata"]; without a
     family, the sources alone; [""] with neither. *)
+
+val sources_line : Herbier_domain.Reference.Source.t list -> string
+(** [source_name]s joined with [", "]; [""] for []. *)
+
+val origin_line : string list -> string option
+(** [None] for []; up to 6 names: all, joined with [", "]; more: the first 5,
+    then [" et <n> autres"] ([n] = the rest), e.g.
+    ["Belgium, Corse, Czechia-Slovakia, France, Germany et 7 autres"]. *)
+
+val red_list : string -> string option
+(** GBIF's IUCN category → the chip: ["LEAST_CONCERN"] →
+    ["LC · préoccupation mineure"], ["NEAR_THREATENED"] →
+    ["NT · quasi menacée"], ["VULNERABLE"] → ["VU · vulnérable"], ["ENDANGERED"]
+    → ["EN · en danger"], ["CRITICALLY_ENDANGERED"] →
+    ["CR · en danger critique"], ["EXTINCT_IN_THE_WILD"] →
+    ["EW · éteinte à l'état sauvage"], ["EXTINCT"] → ["EX · éteinte"],
+    ["DATA_DEFICIENT"] → ["DD · données insuffisantes"]; ["NOT_EVALUATED"] and
+    ["NOT_APPLICABLE"] → [None] (no data: the row disappears); any other string
+    → [Some] of it as given. *)
+
+val month_letter : int -> string
+(** 1..12 → ["J"], ["F"], ["M"], ["A"], ["M"], ["J"], ["J"], ["A"], ["S"],
+    ["O"], ["N"], ["D"]; outside → [""]. *)
+
+val months_text : int list -> string
+(** Runs of consecutive months (December followed by January counts, unless all
+    twelve are there), each ["<m>"] or ["<a> – <b>"] with French month names in
+    lowercase (« juin – août »), runs ordered by their first month ascending (a
+    run wrapping December → January starts at its first month, e.g. novembre)
+    and joined with [", "]; all twelve → ["toute l'année"]; [] → [""]. Values
+    outside 1..12 and duplicates are ignored. Examples: [[6;7;8]] →
+    ["juin – août"]; [[12;1;2]] → ["décembre – février"]; [[3;4;9]] →
+    ["mars – avril, septembre"]; [[5]] → ["mai"]. *)
+
+val organ_label : Herbier_domain.Reference.Organ.t -> string
+(** ["fleur"], ["feuille"], ["fruit"], ["port"]. *)
+
+val credits : Herbier_domain.Reference.Image.t list -> string
+(** ["Photos : "] then ["<attribution> (<licence>)"] per image, in order,
+    duplicates (same attribution and licence) dropped, joined with [", "]; [""]
+    for []. *)
+
+val link_label : Herbier_domain.Reference.Source.t -> string
+(** [source_name ^ " ↗"]. *)

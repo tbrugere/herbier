@@ -113,12 +113,12 @@ module Plant_ref : sig
 end
 
 (** A reference image (handoff 4f organ photos). Device-local row: not synced.
-*)
+    One row per [(plant_id, source, organ)]. *)
 module Image : sig
   type t = {
     plant_id : Ids.Plant_id.t;
     source : Source.t;
-    organ : Organ.t option;
+    organ : Organ.t;
     remote_url : string;
     licence : string;
     attribution : string;

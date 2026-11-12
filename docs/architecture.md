@@ -73,8 +73,9 @@ Reference    id, plant_id, source, fetched_at, payload (one JSON object per
              source: each call's body, pruned to the fields read), status
              (complete|partial|missing|failed),
              created_at, updated_at, deleted_at?; unique (plant_id, source)
-RefImage     plant_id, source, organ? (flower|leaf|fruit|habit), remote_url,
-             licence, attribution, thumb_path? (device, ~300 px); device-only
+RefImage     plant_id, source, organ (flower|leaf|fruit|habit), remote_url,
+             licence, attribution, thumb_path? (device, ~300 px); device-only;
+             key (plant_id, source, organ)
 ```
 
 Enum values are written as their stored labels (the `value` of a Postgres
@@ -139,8 +140,10 @@ the mean of the positions. Details in `app/domain/places.mli`.
   do update set …`, never `insert or replace` / `replace into` (which deletes
   the old row first, taking its children with it). JSON values that are
   `null` and non-finite floats cannot be stored (they read back as SQL null).
-  `RefImage` (§2) is not in migration 1: it gets its table with the organ
-  photos (M4.37). The schema version is SQLite's `user_version`; a file at a
+  `RefImage` (§2) is not in migration 1: migration 3 (M4.37) creates its
+  device-only table `ref_images` (`store/ref_images.ml`, not synced, no
+  outbox entry, hard deletes) and the local lookup table `reference_organs`
+  its `organ` column references. The schema version is SQLite's `user_version`; a file at a
   version above the app's is refused, not migrated. A migration is a list of
   statements (`Schema.migration`), applied with its `user_version` bump in one
   transaction by the plugin's `executeSet`, which prepares each string as
@@ -148,8 +151,12 @@ the mean of the positions. Details in `app/domain/places.mli`.
   used only for single statements.
 - Files under `Directory.Data`:
   - `previews/<photo_id>.jpg` (≤1600 px, q0.7 or WebP), always present.
-  - `refthumbs/<plant_id>/<source>-<n>.jpg` (~300 px), evictable via
-    "Libérer".
+  - `refthumbs/<plant_id>/<source>-<organ>.jpg` (shorter side ≤300 px, JPEG
+    q0.8), evictable via "Libérer". A changed image for an organ overwrites
+    the same file: the row's `thumb_path` is cleared first and set again only
+    if the row still holds the downloaded URL (the syncs of one plant never
+    overlap). The thumbnails of a deleted plant stay until "Libérer" sweeps
+    `refthumbs/` against `ref_images`.
   - `tiles/<region>.pmtiles`, downloaded once from Settings.
 - The binding (`Cap_sqlite.query`) returns each row as the JSON text of the
   plugin's row object; `store/db.ml` parses it and decodes it with
@@ -398,7 +405,18 @@ gbif_key
   summary page and the Wikidata ids (POWO, INPN, Tela, iNat, EPPO).
 - Organ photos: four thumbnails (fleur/feuille/fruit/port) picked from the
   GBIF Pl@ntNet dataset media by `title` suffix, downloaded to `refthumbs/`
-  with licence and attribution kept for display.
+  with licence and attribution kept for display. `ref_images` is a cache of
+  the live Pl@ntNet reference row (`refs_io/organ_thumbs.ml`, rules in
+  `refs/organ_photos.ml`): after each fetch and on each fiche entry, while
+  online, the rows follow the projection's organ photos (only
+  `https://bs.plantnet.org/` URLs), then the missing thumbnails are
+  downloaded one at a time per plant; a failed one is tried again on the next
+  sync. The image host sends no CORS headers, so the bytes come through
+  Capacitor's core `CapacitorHttp` plugin (`bindings/cap_http.ml`, base64
+  body, redirects not followed; the global fetch patch stays off), and are
+  resized on a canvas. 4f shows a tile only when its row's URL is
+  the projection's and its thumbnail exists, so a relink never shows the old
+  taxon's photos.
 - Distribution map on the species page: GBIF density tiles
   `v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=` over the base
   map; attribution GBIF.
@@ -408,7 +426,9 @@ gbif_key
   get no custom header: GBIF refuses CORS preflights.
 - Reference fetches go through a small **rate-limited queue** (at most one
   request in flight per source, ≤3 overall) since we call several public
-  APIs at once.
+  APIs at once. Organ thumbnail downloads do not: they go through
+  `CapacitorHttp`, one at a time per plant (two fiches opened in a row can
+  download at once).
 
 ## 7. Link interception and resolution
 

@@ -1,5 +1,5 @@
-; Reference sources, Brr part: rate-limited fetch, and the runners of the
-; refs/ programs (pipeline, resolver).
+; Reference sources, Brr part: rate-limited fetch, the runners of the refs/
+; programs (pipeline, resolver), and the organ thumbnail sync (organ_thumbs).
 (library
  (name herbier_refs_io)
  (public_name herbier.refs_io)

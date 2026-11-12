@@ -272,5 +272,21 @@ let el () =
                mini_maps);
         ];
       entry "Tab_bar" [El.div ~at:[At.id (Jstr.v "tabs")] [bar.el]];
+      entry "Month_grid"
+        [
+          El.div
+            ~at:[At.id (Jstr.v "month-grids")]
+            (List.map
+               (fun months ->
+                 El.div
+                   ~at:[At.style (Jstr.v "margin-bottom:10px")]
+                   [
+                     W.Month_grid.v months;
+                     El.p
+                       ~at:[cls "t-meta"]
+                       [El.txt' (Ref_text.months_text months)];
+                   ])
+               [[]; [6; 7; 8]; [12; 1; 2]; List.init 12 (fun i -> i + 1)]);
+        ];
       entry "Log" [log_el; release];
     ]

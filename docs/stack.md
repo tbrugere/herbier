@@ -63,7 +63,9 @@ evidence. Open decisions are listed at the end.
   `@capawesome/capacitor-google-sign-in` (Credential Manager +
   AuthorizationClient), `@capgo/capacitor-uploader` (WorkManager background
   upload), `@capacitor-community/sqlite`, `@capacitor/filesystem`,
-  `@capacitor/geolocation`, `@capacitor/camera` (gallery pick). Camera
+  `@capacitor/geolocation`, `@capacitor/camera` (gallery pick),
+  `@capacitor/preferences`, and the core `CapacitorHttp` (plugin calls only,
+  fetch patch off) for reference thumbnails. Camera
   viewfinder via `getUserMedia` in the WebView, with
   `@capacitor-community/camera-preview` as fallback.
 - A **small Kotlin layer** is expected: the `intent-filter`s in the manifest

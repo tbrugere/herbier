@@ -221,8 +221,31 @@ let v2 =
     documents "p.deleted_at is null";
   ]
 
+(* Migration 3: the device-only organ photos of 4f (Ref_images, architecture
+   §2 RefImage, §6). Never synced, so no server table mirrors it; its organ
+   column is a local lookup table like the four of migration 1. *)
+let v3 =
+  [
+    {|create table reference_organs (value text primary key not null)|};
+    {|insert into reference_organs (value) values ('flower'), ('leaf'), ('fruit'), ('habit')|};
+    {|create table ref_images (
+  plant_id text not null references plants (id) on delete cascade,
+  source text not null references reference_sources (value),
+  organ text not null references reference_organs (value),
+  remote_url text not null,
+  licence text not null,
+  attribution text not null,
+  thumb_path text,
+  primary key (plant_id, source, organ)
+)|};
+  ]
+
 let migrations =
-  [{version = 1; statements = v1}; {version = 2; statements = v2}]
+  [
+    {version = 1; statements = v1};
+    {version = 2; statements = v2};
+    {version = 3; statements = v3};
+  ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0
 

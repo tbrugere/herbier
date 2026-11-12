@@ -213,6 +213,90 @@
 .species__ref-sources
   +base.meta(12px)
 
+.species__ref-chips
+  display: flex
+  flex-wrap: wrap
+  gap: 6px
+  margin: 2px 0
+
+// « Liste rouge »
+.species__ref-chip
+  padding: 3px 9px
+  border-radius: 6px
+  background: var(--paper)
+  +base.ui(13px, 700)
+
+// « Habitat »
+.species__habitat-chip
+  padding: 2px 9px
+  border: 1px solid var(--hint)
+  border-radius: var(--radius-pill)
+  +base.ui(12px, 400)
+
+// « Photos par organe »: full width under the rows, the caption above four
+// 1:1 tiles, the organ on a band at the bottom of each.
+.species__organ-block
+  display: flex
+  flex-direction: column
+  gap: 8px
+  padding-top: 12px
+  border-top: 1px solid var(--line-ref)
+
+.species__organ-caption
+  +base.meta(12px)
+
+.species__organs
+  display: grid
+  grid-template-columns: repeat(4, 1fr)
+  gap: 6px
+
+.species__organ
+  position: relative
+  aspect-ratio: 1
+  border-radius: 10px
+  overflow: hidden
+
+.species__organ-img
+  position: absolute
+  inset: 0
+
+.species__organ-label
+  position: absolute
+  left: 0
+  right: 0
+  bottom: 0
+  padding: 3px 0
+  background: var(--organ-band)
+  color: var(--paper)
+  text-align: center
+  +base.ui(10px, 700)
+
+// The links row closes the block.
+.species__ref-links
+  display: flex
+  flex-wrap: wrap
+  gap: 8px
+  margin-top: 18px
+
+// The handoff's chip size; the tap target is stretched to --touch-min.
+.species__ref-link
+  position: relative
+  padding: 8px 12px
+  border-radius: 10px
+  background: var(--paper)
+  color: var(--ink)
+  text-decoration: none
+  +base.ui(13px, 700)
+  &::before
+    content: ""
+    position: absolute
+    left: 0
+    right: 0
+    top: 50%
+    min-height: var(--touch-min)
+    height: 100%
+    transform: translateY(-50%)
+
 // Inert; faded while offline (4g).
 .species__reference .button[aria-disabled]
   cursor: default

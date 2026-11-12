@@ -13,6 +13,7 @@ module Ids = Herbier_domain.Ids
 module Photo = Herbier_domain.Photo
 module Source = Herbier_domain.Reference.Source
 module Status = Herbier_domain.Reference.Status
+module Organ = Herbier_domain.Reference.Organ
 module P = Tables.Plants
 module Cli = Sqlite_cli
 
@@ -170,6 +171,16 @@ let local_tables : (string * (string * string) list) list =
       ] );
     ("sync_state", [("table_name", "text"); ("last_pulled_at", "text")]);
     ("settings", [("key", "text"); ("value", "text")]);
+    ( "ref_images",
+      [
+        ("plant_id", "text");
+        ("source", "text");
+        ("organ", "text");
+        ("remote_url", "text");
+        ("licence", "text");
+        ("attribution", "text");
+        ("thumb_path", "text");
+      ] );
   ]
 
 (* Each lookup table and the values it must hold: the to_string of every
@@ -182,6 +193,7 @@ let lookup_tables : (string * string list) list =
       List.map Photo.Original_target.to_string Photo.Original_target.all );
     ( "photo_upload_states",
       List.map Photo.Upload_state.to_string Photo.Upload_state.all );
+    ("reference_organs", List.map Organ.to_string Organ.all);
   ]
 
 let lookup_columns =
@@ -212,7 +224,7 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  Alcotest.(check int) "latest is 2" 2 Schema.latest;
+  Alcotest.(check int) "latest is 3" 3 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -232,8 +244,13 @@ let pending_at_latest () =
 
 let pending_from_one () =
   Alcotest.(check string)
-    "pending from 1 is migration 2 alone" "Ok [2]"
+    "pending from 1 is migrations 2 and 3" "Ok [2; 3]"
     (string_of_pending (Schema.pending ~current:1))
+
+let pending_from_two () =
+  Alcotest.(check string)
+    "pending from 2 is migration 3 alone" "Ok [3]"
+    (string_of_pending (Schema.pending ~current:2))
 
 let pending_above_latest () =
   Alcotest.(check string)
@@ -306,7 +323,7 @@ let check_at_latest what db =
     (what ^ ": user_version is latest")
     Schema.latest (user_version db);
   Alcotest.(check (list string))
-    (what ^ ": the fourteen tables exist")
+    (what ^ ": the sixteen tables exist")
     all_tables (table_names db);
   Alcotest.(check (list string))
     (what ^ ": the search triggers exist")
@@ -456,6 +473,22 @@ let plant_sql ?(cover = "NULL") id =
     "insert into plants (id, display_name, aliases, notes, cover_photo_id, \
      created_at, updated_at) values ('%s', 'p', '[]', '', %s, %s, %s);\n"
     id cover t0 t0
+
+(* Migration 3 adds ref_images and reference_organs only: a database at
+   version 2 with a row keeps it after upgrading to 3. *)
+let upgrade_from_version_2_keeps_rows () =
+  let db = fresh_db () in
+  (match Schema.migrations with
+  | m1 :: m2 :: _ -> Cli.apply_migrations db [m1; m2]
+  | _ -> Alcotest.fail "need at least two migrations");
+  Alcotest.(check int)
+    "after migrations 1 and 2, user_version is 2" 2 (user_version db);
+  exec_ok "seed one plant" db (fk_on ^ plant_sql plant_a);
+  migrate db ~current:2;
+  check_at_latest "upgrade from 2" db;
+  Alcotest.(check int)
+    "the plant survives the migration to 3" 1
+    (Cli.count db "select count(*) as n from plants;\n")
 
 let observation_sql ?(plant = "NULL") ?(lat = "NULL") ?(lon = "NULL")
     ?(accuracy = "NULL") id =
@@ -1196,7 +1229,8 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
-          case "pending from 1 is migration 2" pending_from_one;
+          case "pending from 1 is migrations 2 and 3" pending_from_one;
+          case "pending from 2 is migration 3" pending_from_two;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
@@ -1205,13 +1239,15 @@ let () =
       ( "Schema in sqlite3",
         [
           case
-            "a fresh install reaches the latest version with fourteen tables, \
+            "a fresh install reaches the latest version with sixteen tables, \
              the search table and its triggers"
             fresh_install;
           case "an empty database upgrades to the latest version"
             upgrade_from_empty;
           case "a version 1 database upgrades to the latest version"
             upgrade_from_version_1;
+          case "a version 2 database upgrades to 3 and keeps its rows"
+            upgrade_from_version_2_keeps_rows;
           case "each statement string is one SQL statement"
             one_statement_per_string;
           case "no column is named sql_deleted or last_modified"

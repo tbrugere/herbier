@@ -1,6 +1,10 @@
-; Native checks of the pure modules of app/ui/ (no Brr, no React).
-(copy_files# ../../app/ui/{list_patch,collection_filter,fr_date,fr_text,journal_day,journal_filter,tag_edits,plant_form,local_time,to_identify,record_plan,cover,zoom,snap,map_filter,map_sheet,plant_link,ref_text}.{ml,mli})
+; Native checks of the pure modules of app/ui/ (no Brr, no React). ref_block
+; must stay free of Brr and React; test_ref_block.ml reads the recorded
+; payloads of test/fixtures/ (never writes them) for the rows of the two spike
+; species.
+(copy_files# ../../app/ui/{list_patch,collection_filter,fr_date,fr_text,journal_day,journal_filter,tag_edits,plant_form,local_time,to_identify,record_plan,cover,zoom,snap,map_filter,map_sheet,plant_link,ref_text,ref_block}.{ml,mli})
 
-(test
- (name test_ui)
- (libraries herbier_domain herbier_refs ptime alcotest))
+(tests
+ (names test_ui test_ref_block)
+ (libraries herbier_domain herbier_refs ptime yojson alcotest)
+ (deps (glob_files %{project_root}/test/fixtures/*.json)))

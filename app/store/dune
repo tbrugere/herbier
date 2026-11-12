@@ -1,9 +1,9 @@
 ; Local SQLite over @capacitor-community/sqlite: hand-written SQL, rows
 ; decoded with Postgrest.Row.
 ; The pure modules (codec, schema, tables, stmt, outbox, plants, observations,
-; tags, photos, cascade, settings, search, references, dev_seed) must not
-; reference Db, Herbier_bindings, Brr or Fut: test/store compiles them
-; natively through copy_files.
+; tags, photos, cascade, settings, search, references, ref_images, dev_seed)
+; must not reference Db, Herbier_bindings, Brr or Fut: test/store compiles
+; them natively through copy_files.
 (library
  (name herbier_store)
  (public_name herbier.store)

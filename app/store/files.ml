@@ -3,6 +3,13 @@ module Cap_filesystem = Herbier_bindings.Cap_filesystem
 
 let preview id = "previews/" ^ Herbier_domain.Ids.Photo_id.to_string id ^ ".jpg"
 
+let refthumb ~plant ~source ~organ =
+  let module Reference = Herbier_domain.Reference in
+  Printf.sprintf "refthumbs/%s/%s-%s.jpg"
+    (Herbier_domain.Ids.Plant_id.to_string plant)
+    (Reference.Source.to_string source)
+    (Reference.Organ.to_string organ)
+
 (* The filesystem plugin takes binary data as base64. *)
 let base64_of_blob blob =
   Fut.map
@@ -25,19 +32,18 @@ let write_blob ~path blob =
 
 let blob_of_base64 ~type' base64 =
   let open Result.Syntax in
-  let* data = Brr.Base64.decode (Jstr.v base64) in
-  let+ bytes =
-    Brr.Tarray.of_binary_jstr (Brr.Base64.data_to_binary_jstr data)
-  in
-  Brr.Blob.of_array_buffer
-    ~init:(Brr.Blob.init ~type':(Jstr.v type') ())
-    (Brr.Tarray.buffer bytes)
+  Result.map_error Cap_error.of_jv_error
+    (let* data = Brr.Base64.decode (Jstr.v base64) in
+     let+ bytes =
+       Brr.Tarray.of_binary_jstr (Brr.Base64.data_to_binary_jstr data)
+     in
+     Brr.Blob.of_array_buffer
+       ~init:(Brr.Blob.init ~type':(Jstr.v type') ())
+       (Brr.Tarray.buffer bytes))
 
 let read_blob ~path ~type' =
   Fut.map
-    (fun read ->
-      Result.bind read (fun base64 ->
-          Result.map_error Cap_error.of_jv_error (blob_of_base64 ~type' base64)))
+    (fun read -> Result.bind read (blob_of_base64 ~type'))
     (Cap_filesystem.read_base64 ~path)
 
 let delete ~path = Cap_filesystem.delete_file ~path

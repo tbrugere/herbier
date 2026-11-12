@@ -15,6 +15,7 @@ end
 type 'a cited = {value : 'a; sources : Source.t list}
 type vernacular = {lang : Lang.t; names : string list}
 type origin = {native : string list; introduced : string list}
+type habitat = {phrase : string option; chips : string list}
 type link = {source : Source.t; url : string}
 type problem = {part : Payload.part; error : Decode.error}
 
@@ -22,8 +23,11 @@ type t = {
   fetched_at : Ptime.t option;
   taxon : Gbif.Taxon.t cited option;
   vernacular : vernacular list cited option;
+  life_form : string cited option;
   origin : origin cited option;
   red_list : string cited option;
+  flowering_months : int list cited option;
+  habitat : habitat cited option;
   toxicity : string cited option;
   organ_photos : Gbif.Image.t list cited option;
   links : link list;
@@ -309,16 +313,9 @@ let toxicity (summary : Wikipedia.t) =
           | Some _ | None -> None))
 
 let organ_photos (page : Gbif.Image.t Gbif.page) =
-  match
-    List.filter_map
-      (fun organ ->
-        List.find_opt
-          (fun (i : Gbif.Image.t) -> i.organ = Some organ)
-          page.results)
-      Reference.Organ.all
-  with
+  match Organ_photos.wanted page.results with
   | [] -> None
-  | photos -> Some (cited [Source.Plantnet] photos)
+  | photos -> Some (cited [Source.Plantnet] (List.map snd photos))
 
 (* {1 Links}
 
@@ -469,8 +466,11 @@ let project ~references ~plant_refs =
       vernacular
         (Option.fold ~none:[] ~some:gbif_votes (ok vernacular_names)
         @ Option.fold ~none:[] ~some:wikidata_votes entity_value);
+    life_form = None;
     origin = Option.bind distributions_value origin;
     red_list = Option.bind distributions_value red_list;
+    flowering_months = None;
+    habitat = None;
     toxicity = Option.bind summary_value toxicity;
     organ_photos = Option.bind (ok media) organ_photos;
     links = links ~plant_refs ~taxon ~entity:entity_value ~summary:summary_value;
@@ -549,12 +549,23 @@ let filled t = function
       Option.fold ~none:false ~some:(fun c -> c.value.native <> []) t.origin
   | Introduced_range ->
       Option.fold ~none:false ~some:(fun c -> c.value.introduced <> []) t.origin
+  | Life_form -> Option.is_some t.life_form
   | Red_list -> Option.is_some t.red_list
+  | Flowering_months -> Option.is_some t.flowering_months
+  | Habitat ->
+      Option.fold ~none:false
+        ~some:(fun c -> Option.is_some c.value.phrase)
+        t.habitat
+  | Ecology ->
+      Option.fold ~none:false ~some:(fun c -> c.value.chips <> []) t.habitat
   | Toxicity -> Option.is_some t.toxicity
   | Organ_photos -> Option.is_some t.organ_photos
   | Links -> t.links <> []
-  | Life_form | Fr_status | Fr_protection | Flowering_months | Habitat | Ecology
-    ->
-      false
+  | Fr_status | Fr_protection -> false
 
 let empty_fields t = List.filter (fun f -> not (filled t f)) Field.all
+
+let organ_photos_wanted t =
+  Option.fold ~none:[]
+    ~some:(fun (c : _ cited) -> Organ_photos.wanted c.value)
+    t.organ_photos

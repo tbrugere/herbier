@@ -3,6 +3,7 @@
 // with the MapLibre facade (map.js). Importing MapLibre's CSS makes esbuild
 // emit dist/vendor.css next to vendor.js.
 import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite';
+import { CapacitorHttp } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { Preferences } from '@capacitor/preferences';
 import { App } from '@capacitor/app';
@@ -19,6 +20,7 @@ globalThis.herbier = {
   app: App,
   camera: Camera,
   geolocation: Geolocation,
+  http: CapacitorHttp,
   exifr,
   map,
 };

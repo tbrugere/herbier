@@ -324,6 +324,14 @@ let digitalis_tests =
                  Ecology;
                ])
           (fields_json (Projection.empty_fields proj)) );
+    ( "life_form, flowering_months, habitat are None (v1: not fetched)",
+      `Quick,
+      fun () ->
+        Alcotest.(check bool) "life_form" true (Option.is_none proj.life_form);
+        Alcotest.(check bool)
+          "flowering_months" true
+          (Option.is_none proj.flowering_months);
+        Alcotest.(check bool) "habitat" true (Option.is_none proj.habitat) );
   ]
 
 let arnica_tests =
@@ -441,6 +449,14 @@ let arnica_tests =
                  Toxicity;
                ])
           (fields_json (Projection.empty_fields proj)) );
+    ( "life_form, flowering_months, habitat are None (v1: not fetched)",
+      `Quick,
+      fun () ->
+        Alcotest.(check bool) "life_form" true (Option.is_none proj.life_form);
+        Alcotest.(check bool)
+          "flowering_months" true
+          (Option.is_none proj.flowering_months);
+        Alcotest.(check bool) "habitat" true (Option.is_none proj.habitat) );
   ]
 
 (* ---------- degradation and rules ---------- *)
@@ -904,6 +920,37 @@ let filled_family_and_ranges () =
     (fields_json
        (empty (vernacular_page [distribution ~locality:"France" wcvp])))
 
+(* [project] leaves these [None]; [filled] must still read them on a
+   hand-built [t] (regional layer, architecture §6). *)
+let filled_life_form_flowering_habitat () =
+  let base = project [] in
+  let cited value : _ Projection.cited = {value; sources = []} in
+  let filled_of fields t = List.map (Projection.filled t) fields in
+  let with_phrase_only =
+    {
+      base with
+      Projection.life_form = Some (cited "Herbacée bisannuelle, 50-150 cm");
+      flowering_months = Some (cited [6; 7; 8]);
+      habitat = Some (cited {Projection.phrase = Some "Prairies"; chips = []});
+    }
+  in
+  Alcotest.(check (list bool))
+    "life_form, flowering_months, habitat filled; ecology not (no chips)"
+    [true; true; true; false]
+    (filled_of
+       Projection.Field.[Life_form; Flowering_months; Habitat; Ecology]
+       with_phrase_only);
+  let with_chips_only =
+    {
+      base with
+      Projection.habitat =
+        Some (cited {Projection.phrase = None; chips = ["mi-ombre"]});
+    }
+  in
+  Alcotest.(check (list bool))
+    "ecology filled (chips), habitat not (no phrase)" [true; false]
+    (filled_of Projection.Field.[Ecology; Habitat] with_chips_only)
+
 (* ---------- rows ---------- *)
 
 let first_live_row_of_a_source_wins () =
@@ -1193,6 +1240,10 @@ let rules_tests =
        red_list: the global IUCN row"
       origin_and_red_list_rules;
     case "filled: family and each range on their own" filled_family_and_ranges;
+    case
+      "filled: life_form/flowering_months/habitat read a hand-built value; \
+       ecology follows habitat.chips, not habitat.phrase"
+      filled_life_form_flowering_habitat;
     case
       "rows: the first live row of a source wins, deleted rows do not count, \
        status is not read"
