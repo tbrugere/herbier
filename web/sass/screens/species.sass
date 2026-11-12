@@ -330,6 +330,25 @@
 .edit-plant__footer
   margin-top: 12px
 
+// « Espèce de référence »: the latin name, « Changer › » at the end.
+.edit-plant__species
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 12px
+  .text-button[aria-disabled]
+    opacity: .5
+    cursor: default
+
+.edit-plant__latin
+  +base.sci(18px)
+
+.edit-plant__author
+  +base.author(13px)
+
+.edit-plant__refs
+  display: contents
+
 .edit-plant__problem
   color: var(--danger)
 

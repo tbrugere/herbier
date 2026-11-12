@@ -84,17 +84,52 @@ module Taxon = struct
     vernacular_name : string option;
   }
 
+  (* [/species/suggest] sends no [authorship]: it is what [scientificName]
+     adds after the words of [canonicalName], which leaves out the hybrid sign
+     and the rank markers ("Digitalis ×purpurascens Lindl.", "Digitalis
+     purpurea subsp. purpurea"). *)
+  let hybrid = "\u{00D7}"
+
+  let marker = function
+    | "x" | "subsp." | "ssp." | "var." | "subvar." | "f." | "fo." | "forma" ->
+        true
+    | token -> token = hybrid
+
+  let same_word token word = token = word || token = hybrid ^ word
+
+  let rec rest tokens words =
+    match (tokens, words) with
+    | _, [] -> Some tokens
+    | [], _ :: _ -> None
+    | token :: tokens', word :: words' -> (
+        match same_word token word with
+        | true -> rest tokens' words'
+        | false -> (
+            match marker token with true -> rest tokens' words | false -> None))
+
+  let words s = List.filter (fun w -> w <> "") (String.split_on_char ' ' s)
+
+  let authorship ~scientific_name ~canonical json =
+    match (Decode.string "authorship" json, canonical) with
+    | Some a, _ -> Some a
+    | None, None -> None
+    | None, Some c ->
+        Option.bind
+          (rest (words scientific_name) (words c))
+          (fun tokens -> Decode.non_blank (String.concat " " tokens))
+
   (* The endpoints name the same fields differently: [key]/[usageKey],
      [taxonomicStatus]/[status], [acceptedKey]/[acceptedUsageKey]. *)
   let of_json ~at ~key ~status ~accepted json =
     let open Decode.Syntax in
     let* k = Decode.required_int ~at key json in
     let+ scientific_name = Decode.required_string ~at "scientificName" json in
+    let canonical_name = Decode.string "canonicalName" json in
     {
       key = k;
       scientific_name;
-      canonical_name = Decode.string "canonicalName" json;
-      authorship = Decode.string "authorship" json;
+      canonical_name;
+      authorship = authorship ~scientific_name ~canonical:canonical_name json;
       rank = Decode.string "rank" json;
       status = Option.map Status.of_string (Decode.string status json);
       accepted_key = Decode.int accepted json;

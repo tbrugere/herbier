@@ -339,6 +339,50 @@ let suggest_tests =
               taxa
         | Error e ->
             Alcotest.failf "decode failed: %s" (Decode.error_to_string e) );
+    ( "authorship is what scientificName adds to canonicalName",
+      `Quick,
+      fun () ->
+        match Gbif.suggest_of_json suggest_digitalis with
+        | Ok taxa ->
+            Alcotest.(check (list (pair int (option string))))
+              "authorships"
+              [
+                (5414995, Some "L.");
+                (7549341, Some "Lindl.");
+                (8296187, Some "G.Mey.");
+                (7971454, Some "Lej.");
+                (7354417, Some "Roth");
+                (8192969, Some "H.L\u{00E9}v., 1917");
+              ]
+              (List.map (fun (t : Gbif.Taxon.t) -> (t.key, t.authorship)) taxa)
+        | Error e ->
+            Alcotest.failf "decode failed: %s" (Decode.error_to_string e) );
+    ( "a rank marker is skipped; words that differ give no authorship",
+      `Quick,
+      fun () ->
+        let taxon name canonical =
+          `Assoc
+            [
+              ("key", `Int 1);
+              ("scientificName", `String name);
+              ("canonicalName", `String canonical);
+            ]
+        in
+        match
+          Gbif.suggest_of_json
+            (`List
+               [
+                 taxon "Digitalis purpurea subsp. purpurea"
+                   "Digitalis purpurea purpurea";
+                 taxon "Digitalis lutea Lam." "Digitalis grandiflora";
+               ])
+        with
+        | Ok taxa ->
+            Alcotest.(check (list (option string)))
+              "authorships" [None; None]
+              (List.map (fun (t : Gbif.Taxon.t) -> t.authorship) taxa)
+        | Error e ->
+            Alcotest.failf "decode failed: %s" (Decode.error_to_string e) );
     ( "a non-array root is Unexpected at the root",
       `Quick,
       fun () ->

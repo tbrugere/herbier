@@ -92,7 +92,9 @@ Rules from the handoff that the model must keep: a plant may have zero
 observations; an observation with no plant is "À identifier" and shows in
 Journal and Carte only; free-name plants (`scientific_name = null`) are
 valid and linking later fills `gbif_key`/refs and turns the free name into
-an alias; deleting a photo in Herbier only unlinks, never touches Drive;
+an alias (the display name becomes the chosen row's French name, else its
+Latin name; a relink of an already linked plant keeps its names and
+aliases); deleting a photo in Herbier only unlinks, never touches Drive;
 a Drive-side deletion becomes `original_missing` with the preview kept.
 
 Derived, not stored: places. A "place" in the UI is a cluster of
@@ -373,8 +375,10 @@ gbif_key
   commits, so a branch of the old key that saved just before is retired
   too), and supersedes any fetch still running for the old key (its branch
   saves not yet made are dropped): the keep rule would otherwise keep the old
-  taxon's rows under the new key. The plant's non-GBIF `plant_refs` are left
-  as they are (open point, settled with 5a's « Liens de référence »).
+  taxon's rows under the new key. The plant's non-GBIF `plant_refs` (links
+  pasted in 5a « Liens de référence ») are soft-deleted in the same
+  transaction: they named the old taxon, and 4f falls back to the links
+  derived from the new one.
 - The fetch starts only online, like ↻; offline, a just-linked plant is due
   and the next opening of its fiche fetches it.
 - Each source writes its own `reference` row (source, payload, status), so a

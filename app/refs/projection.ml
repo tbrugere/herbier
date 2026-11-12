@@ -319,37 +319,29 @@ let organ_photos (page : Gbif.Image.t Gbif.page) =
 
 (* {1 Links}
 
-   The URL builders below have their parser in Herbier_domain.Link; the
-   link_classification test of test_projection checks that every derived
-   link classifies back to its source. *)
+   The URL builders are Source_url's, whose parser is Herbier_domain.Link;
+   the link_classification test of test_projection checks that every
+   derived link classifies back to its source. Wikidata's ids are checked
+   here first. *)
 
 let all_chars f s = s <> "" && String.for_all f s
 
 let powo_url powo =
-  let prefix = "urn:lsid:ipni.org:names:" in
-  let p = String.length prefix in
-  match String.starts_with ~prefix powo with
+  match Source_url.is_ipni_lsid powo with
+  | true -> Some (Source_url.powo powo)
   | false -> None
-  | true -> (
-      match
-        all_chars
-          (function '0' .. '9' | '-' -> true | _ -> false)
-          (String.sub powo p (String.length powo - p))
-      with
-      | true -> Some ("https://powo.science.kew.org/taxon/" ^ powo)
-      | false -> None)
 
 let eppo_url eppo =
   match
     all_chars (function 'A' .. 'Z' | '0' .. '9' -> true | _ -> false) eppo
   with
-  | true -> Some ("https://gd.eppo.int/taxon/" ^ eppo)
+  | true -> Some (Source_url.eppo eppo)
   | false -> None
 
 (* Link.classify reads ids as positive ints, so a derived link is built
    only from one. *)
-let positive prefix = function
-  | Some n when n > 0 -> Some (prefix ^ string_of_int n)
+let positive url = function
+  | Some n when n > 0 -> Some (url n)
   | Some _ | None -> None
 
 let wikipedia_url (summary : Wikipedia.t) =
@@ -371,13 +363,13 @@ let derived ~taxon ~entity ~summary source =
       from_entity (fun (e : Wikidata.Entity.t) -> Option.bind e.powo powo_url)
   | Taxref ->
       from_entity (fun (e : Wikidata.Entity.t) ->
-          positive "https://inpn.mnhn.fr/espece/cd_nom/" e.taxref)
+          positive Source_url.taxref e.taxref)
   | Tela ->
       from_entity (fun (e : Wikidata.Entity.t) ->
-          positive "https://www.tela-botanica.org/bdtfx-nn-" e.tela)
+          positive Source_url.tela e.tela)
   | Inat ->
       from_entity (fun (e : Wikidata.Entity.t) ->
-          positive "https://www.inaturalist.org/taxa/" e.inat)
+          positive Source_url.inat e.inat)
   | Eppo ->
       from_entity (fun (e : Wikidata.Entity.t) -> Option.bind e.eppo eppo_url)
   | Plantnet | Wikidata | Ipni -> None

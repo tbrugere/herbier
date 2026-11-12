@@ -697,6 +697,301 @@ let text_empty_suggest_and_failed_vernacular_is_unavailable () =
   in
   expect_unavailable ~query:q (run_resolve net (Link.Text q))
 
+(* ---------- search / Candidate, chosen (4i / 4k / 5c) ---------- *)
+
+module Candidate = Resolve.Candidate
+
+let candidate_keys (cs : Candidate.t list) =
+  List.map (fun (c : Candidate.t) -> c.taxon.key) cs
+
+let candidate_french (cs : Candidate.t list) key =
+  match List.find_opt (fun (c : Candidate.t) -> c.taxon.key = key) cs with
+  | Some c -> c.french
+  | None -> Alcotest.failf "no candidate of key %d" key
+
+let search_requests net q =
+  List.map
+    (fun (r : Request.t) -> r.url)
+    (Step.requests net (Resolve.search ~q))
+
+let taxon_of_species file =
+  match Gbif.species_of_json (Fake_net.json_of_fixture file) with
+  | Ok t -> t
+  | Error e -> Alcotest.failf "%s: %s" file (Decode.error_to_string e)
+
+let suggest_taxon ~key file =
+  match Gbif.suggest_of_json (Fake_net.json_of_fixture file) with
+  | Ok taxa -> (
+      match List.find_opt (fun (t : Gbif.Taxon.t) -> t.key = key) taxa with
+      | Some t -> t
+      | None -> Alcotest.failf "%s: no taxon of key %d" file key)
+  | Error e -> Alcotest.failf "%s: %s" file (Decode.error_to_string e)
+
+let run_chosen net taxon = Step.run net (Resolve.chosen taxon)
+
+let chosen_requests net taxon =
+  List.map
+    (fun (r : Request.t) -> r.url)
+    (Step.requests net (Resolve.chosen taxon))
+
+let chosen_result_string = function
+  | Ok (t : Gbif.Taxon.t) -> Printf.sprintf "Ok %d" t.key
+  | Error e -> "Error " ^ why_string e
+
+let search_digitalis_purp_matches_candidates_french_empty () =
+  let q = "Digitalis purp" in
+  let net =
+    Fake_net.fixtures
+      [
+        (url (Gbif.suggest ~q), "gbif_suggest_digitalis_purp.json");
+        ( url (Gbif.vernacular_search ~q),
+          "gbif_vernacular_search_digitalis_purp.json" );
+      ]
+  in
+  (match Step.run net (Resolve.search ~q) with
+  | Ok cs ->
+      Alcotest.(check (list int))
+        "same taxa as candidates ~q"
+        [5414995; 7549341; 8296187; 7971454; 7354417; 8192969]
+        (candidate_keys cs);
+      List.iter
+        (fun (c : Candidate.t) ->
+          Alcotest.(check (list string))
+            (Printf.sprintf "french of %d empty" c.taxon.key)
+            [] c.french)
+        cs
+  | Error e -> Alcotest.failf "expected Ok, got Error %s" (why_string e));
+  Alcotest.(check (list string))
+    "suggest, then vernacular search"
+    [url (Gbif.suggest ~q); url (Gbif.vernacular_search ~q)]
+    (search_requests net q)
+
+let search_digitale_pourpre_french_names () =
+  let q = "digitale pourpre" in
+  let net =
+    Fake_net.fixtures
+      [
+        (url (Gbif.suggest ~q), "gbif_suggest_digitale_pourpre.json");
+        ( url (Gbif.vernacular_search ~q),
+          "gbif_vernacular_search_digitale_pourpre.json" );
+      ]
+  in
+  match Step.run net (Resolve.search ~q) with
+  | Ok cs ->
+      Alcotest.(check (list int))
+        "taxa as candidates"
+        [10263161; 5708907; 5414995]
+        (candidate_keys cs);
+      Alcotest.(check (list string))
+        "french of 5708907"
+        ["Digitale pourpre"; "Gantelée"; "Gant de Notre-Dame"]
+        (candidate_french cs 5708907);
+      Alcotest.(check (list string))
+        "french of 5414995"
+        [
+          "Digitale pourpre";
+          "Gantelée";
+          "Gant de Notre-Dame";
+          "Digitale";
+          "Digitale pourprée";
+          "grande digitale";
+          "Digitale à fleurs blanches";
+        ]
+        (candidate_french cs 5414995);
+      Alcotest.(check (list string))
+        "french of 10263161 (one name listed twice)"
+        ["Hybride entre la Digitale à petites fleurs et la Digitale pourpre"]
+        (candidate_french cs 10263161)
+  | Error e -> Alcotest.failf "expected Ok, got Error %s" (why_string e)
+
+let search_suggest_failed_falls_back_to_vernacular () =
+  let q = "digitale pourpre" in
+  let base =
+    Fake_net.fixtures
+      [
+        ( url (Gbif.vernacular_search ~q),
+          "gbif_vernacular_search_digitale_pourpre.json" );
+      ]
+  in
+  let net = Fake_net.with_ [(url (Gbif.suggest ~q), Step.Failed "x")] base in
+  match Step.run net (Resolve.search ~q) with
+  | Ok cs ->
+      Alcotest.(check (list int))
+        "vernacular's taxa"
+        [10263161; 5708907; 5414995]
+        (candidate_keys cs);
+      Alcotest.(check (list string))
+        "french of 5708907 kept"
+        ["Digitale pourpre"; "Gantelée"; "Gant de Notre-Dame"]
+        (candidate_french cs 5708907)
+  | Error e -> Alcotest.failf "expected Ok, got Error %s" (why_string e)
+
+let search_both_failed_is_unavailable () =
+  let q = "x" in
+  let net =
+    only
+      [
+        (url (Gbif.suggest ~q), Step.Failed "x");
+        (url (Gbif.vernacular_search ~q), Step.Failed "x");
+      ]
+  in
+  match Step.run net (Resolve.search ~q) with
+  | Error (Resolve.Unavailable _) -> ()
+  | Ok _ -> Alcotest.fail "expected Error, got Ok"
+  | Error e -> Alcotest.failf "expected Unavailable, got %s" (why_string e)
+
+let search_vernacular_failed_keeps_suggest_french_empty () =
+  let q = "Digitalis purp" in
+  let net =
+    Fake_net.with_
+      [(url (Gbif.vernacular_search ~q), Step.Failed "x")]
+      (Fake_net.fixtures
+         [(url (Gbif.suggest ~q), "gbif_suggest_digitalis_purp.json")])
+  in
+  match Step.run net (Resolve.search ~q) with
+  | Ok cs ->
+      Alcotest.(check (list int))
+        "suggest's taxa"
+        [5414995; 7549341; 8296187; 7971454; 7354417; 8192969]
+        (candidate_keys cs);
+      List.iter
+        (fun (c : Candidate.t) ->
+          Alcotest.(check (list string))
+            (Printf.sprintf "french of %d empty" c.taxon.key)
+            [] c.french)
+        cs
+  | Error e -> Alcotest.failf "expected Ok, got Error %s" (why_string e)
+
+let search_blank_is_empty_no_call () =
+  List.iter
+    (fun q ->
+      let net = only [] in
+      (match Step.run net (Resolve.search ~q) with
+      | Ok [] -> ()
+      | Ok _ -> Alcotest.failf "%S: expected Ok []" q
+      | Error e ->
+          Alcotest.failf "%S: expected Ok [], got Error %s" q (why_string e));
+      Alcotest.(check (list string))
+        (Printf.sprintf "%S: no request" q)
+        [] (search_requests net q))
+    [""; "   "]
+
+let chosen_synonym_from_species_followed_one_hop () =
+  let taxon = taxon_of_species "gbif_species_7971454.json" in
+  let net =
+    Fake_net.fixtures
+      [
+        (url (Gbif.species ~key:7971454), "gbif_species_7971454.json");
+        (url (Gbif.species ~key:5708907), "gbif_species_5708907.json");
+      ]
+  in
+  (match run_chosen net taxon with
+  | Ok (t : Gbif.Taxon.t) -> Alcotest.(check int) "accepted key" 5708907 t.key
+  | Error e -> Alcotest.failf "expected Ok, got Error %s" (why_string e));
+  Alcotest.(check (list string))
+    "species, then the accepted species"
+    [url (Gbif.species ~key:7971454); url (Gbif.species ~key:5708907)]
+    (chosen_requests net taxon)
+
+let chosen_synonym_from_suggest_same_result () =
+  let taxon = suggest_taxon ~key:7971454 "gbif_suggest_digitalis_purp.json" in
+  Alcotest.(check (option int))
+    "suggest omits acceptedKey" None taxon.accepted_key;
+  let net =
+    Fake_net.fixtures
+      [
+        (url (Gbif.species ~key:7971454), "gbif_species_7971454.json");
+        (url (Gbif.species ~key:5708907), "gbif_species_5708907.json");
+      ]
+  in
+  (match run_chosen net taxon with
+  | Ok (t : Gbif.Taxon.t) -> Alcotest.(check int) "accepted key" 5708907 t.key
+  | Error e -> Alcotest.failf "expected Ok, got Error %s" (why_string e));
+  Alcotest.(check (list string))
+    "same two requests as from the species decoder"
+    [url (Gbif.species ~key:7971454); url (Gbif.species ~key:5708907)]
+    (chosen_requests net taxon)
+
+let chosen_accepted_taxon_no_call () =
+  let taxon = suggest_taxon ~key:5414995 "gbif_suggest_digitalis_purp.json" in
+  let net = only [] in
+  (match run_chosen net taxon with
+  | Ok (t : Gbif.Taxon.t) -> Alcotest.(check int) "itself" 5414995 t.key
+  | Error e -> Alcotest.failf "expected Ok, got Error %s" (why_string e));
+  Alcotest.(check (list string)) "no request" [] (chosen_requests net taxon)
+
+let chosen_other_statuses_no_call () =
+  List.iter
+    (fun (what, status) ->
+      let taxon =
+        {
+          (suggest_taxon ~key:5414995 "gbif_suggest_digitalis_purp.json") with
+          Gbif.Taxon.status;
+        }
+      in
+      let net = only [] in
+      (match run_chosen net taxon with
+      | Ok (t : Gbif.Taxon.t) ->
+          Alcotest.(check int) (what ^ ": itself") 5414995 t.key
+      | Error e ->
+          Alcotest.failf "%s: expected Ok, got Error %s" what (why_string e));
+      Alcotest.(check (list string))
+        (what ^ ": no request") []
+        (chosen_requests net taxon))
+    [
+      ("Accepted", Some Gbif.Status.Accepted);
+      ("Doubtful", Some Gbif.Status.Doubtful);
+      ("Other", Some (Gbif.Status.Other "PROPARTE_SYNONYM"));
+      ("None", None);
+    ]
+
+let chosen_synonym_species_absent_is_no_species () =
+  let taxon = suggest_taxon ~key:7971454 "gbif_suggest_digitalis_purp.json" in
+  let net = only [(url (Gbif.species ~key:7971454), Step.Absent)] in
+  match run_chosen net taxon with
+  | Error Resolve.No_species -> ()
+  | r ->
+      Alcotest.failf "expected Error No_species, got %s"
+        (chosen_result_string r)
+
+let chosen_synonym_accepted_absent_or_failed () =
+  let taxon = taxon_of_species "gbif_species_7971454.json" in
+  List.iter
+    (fun (what, response, expected) ->
+      let net =
+        Fake_net.with_
+          [(url (Gbif.species ~key:5708907), response)]
+          (Fake_net.fixtures
+             [(url (Gbif.species ~key:7971454), "gbif_species_7971454.json")])
+      in
+      match run_chosen net taxon with
+      | Error e when String.equal (why_string e) expected -> ()
+      | r ->
+          Alcotest.failf "%s: expected Error %s, got %s" what expected
+            (chosen_result_string r))
+    [
+      ("Absent", Step.Absent, why_string Resolve.No_species);
+      ("Failed", Step.Failed "x", why_string (Resolve.Unavailable "x"));
+    ]
+
+let chosen_synonym_species_failed_is_unavailable () =
+  let taxon = suggest_taxon ~key:7971454 "gbif_suggest_digitalis_purp.json" in
+  let net = only [(url (Gbif.species ~key:7971454), Step.Failed "x")] in
+  match run_chosen net taxon with
+  | Error (Resolve.Unavailable "x") -> ()
+  | r ->
+      Alcotest.failf "expected Error (Unavailable \"x\"), got %s"
+        (chosen_result_string r)
+
+let chosen_synonym_species_undecodable_is_unavailable () =
+  let taxon = suggest_taxon ~key:7971454 "gbif_suggest_digitalis_purp.json" in
+  let net = only [(url (Gbif.species ~key:7971454), Step.Body (`List []))] in
+  match run_chosen net taxon with
+  | Error (Resolve.Unavailable _) -> ()
+  | r ->
+      Alcotest.failf "expected Error (Unavailable _), got %s"
+        (chosen_result_string r)
+
 (* ---------- run ---------- *)
 
 let case name f = (name, `Quick, f)
@@ -789,4 +1084,42 @@ let suite =
         candidates_suggest_failed_vernacular_repeat_listed_once;
       case "Text: suggest [] and vernacular search Failed is Unavailable"
         text_empty_suggest_and_failed_vernacular_is_unavailable;
+      case
+        "search ~q: same taxa as candidates ~q, every french = [], suggest \
+         then vernacular"
+        search_digitalis_purp_matches_candidates_french_empty;
+      case "search ~q: french names from the vernacular search page"
+        search_digitale_pourpre_french_names;
+      case "search ~q: suggest failed falls back to the vernacular candidates"
+        search_suggest_failed_falls_back_to_vernacular;
+      case "search ~q: both calls failed is Error (Unavailable _)"
+        search_both_failed_is_unavailable;
+      case "search ~q: vernacular failed keeps suggest's taxa, french = []"
+        search_vernacular_failed_keeps_suggest_french_empty;
+      case "search ~q: blank q is Ok [] without a call"
+        search_blank_is_empty_no_call;
+      case
+        "chosen: a synonym from the species decoder is followed one hop to its \
+         accepted taxon"
+        chosen_synonym_from_species_followed_one_hop;
+      case
+        "chosen: a synonym from the suggest decoder (no acceptedKey) gives the \
+         same requests and result"
+        chosen_synonym_from_suggest_same_result;
+      case "chosen: an Accepted taxon is Ok itself, no request"
+        chosen_accepted_taxon_no_call;
+      case
+        "chosen: Accepted, Doubtful, Other or no status is Ok itself, no \
+         request"
+        chosen_other_statuses_no_call;
+      case "chosen: a synonym's species call Absent is Error No_species"
+        chosen_synonym_species_absent_is_no_species;
+      case
+        "chosen: the accepted species call Absent or Failed is Error \
+         No_species or Unavailable"
+        chosen_synonym_accepted_absent_or_failed;
+      case "chosen: a synonym's species call Failed is Error (Unavailable _)"
+        chosen_synonym_species_failed_is_unavailable;
+      case "chosen: an undecodable species body is Error (Unavailable _)"
+        chosen_synonym_species_undecodable_is_unavailable;
     ] )

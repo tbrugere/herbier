@@ -19,6 +19,9 @@ The fan-out and resolver tests (`test/refs/test_fanout.ml`,
 empty Pl@ntNet media page (`gbif_plantnet_media_1`), the iNat / TaxRef / Tela
 Wikidata searches (`wikidata_search_p3151_*`, `_p3186_*`, `_p3105_*`) and
 Arnica's frwiki sitelink summary (`wikipedia_summary_fr_Arnica_des_montagnes`).
+`Resolve.chosen`'s synonym pair: `gbif_species_7971454` (Digitalis
+purpurascens Lej., SYNONYM, acceptedKey 5708907) and `gbif_species_5708907`
+(its accepted taxon, Digitalis purpurea subsp. purpurea).
 
 `photon_*`, `geoplateforme_*.json`: recorded by
 `scripts/record-geo-fixtures.sh` (`[--force]` to re-record; it pauses 1.2 s

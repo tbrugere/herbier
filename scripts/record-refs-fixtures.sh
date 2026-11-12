@@ -42,6 +42,8 @@ fetch() {
 fetch gbif_species_5414995.json gbif "https://api.gbif.org/v1/species/5414995"
 fetch gbif_species_5405976.json gbif "https://api.gbif.org/v1/species/5405976"
 fetch gbif_species_5334357.json gbif "https://api.gbif.org/v1/species/5334357"
+fetch gbif_species_7971454.json gbif "https://api.gbif.org/v1/species/7971454"
+fetch gbif_species_5708907.json gbif "https://api.gbif.org/v1/species/5708907"
 
 fetch gbif_match_digitalis_purpurea_l.json gbif "https://api.gbif.org/v1/species/match?name=Digitalis%20purpurea%20L.&kingdom=Plantae"
 fetch gbif_match_digitalis_purpurae.json gbif "https://api.gbif.org/v1/species/match?name=Digitalis%20purpurae&kingdom=Plantae"

@@ -445,6 +445,8 @@ let recorded_requests =
     ("gbif_species_5405976.json", Gbif.species ~key:5405976);
     ("gbif_species_5334357.json", Gbif.species ~key:5334357);
     ("gbif_species_2889173.json", Gbif.species ~key:2889173);
+    ("gbif_species_7971454.json", Gbif.species ~key:7971454);
+    ("gbif_species_5708907.json", Gbif.species ~key:5708907);
     ( "gbif_match_digitalis_purpurea_l.json",
       some "match" (Gbif.match_name ~name:"Digitalis purpurea L.") );
     ( "gbif_match_digitalis_purpurae.json",

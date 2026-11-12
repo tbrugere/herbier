@@ -51,22 +51,39 @@ type link_error =
 
 val link :
   t ->
+  ?name:string ->
   Herbier_domain.Ids.Plant_id.t ->
   Herbier_refs.Sources.Gbif.Taxon.t ->
   (unit, link_error) result Fut.t
 (** Links the plant to the taxon in one {!save}: [Plants.upsert] of
-    {!Plant_link.apply},
+    [Plant_link.apply ?name] (a free-name plant takes [name], its old name
+    becoming an alias),
     [References.link ~source:Gbif ~external_id:(string_of_int key)
      ~url:(Sources.Gbif.species_url key)], and, when the plant had another
     gbif_key, [References.remove] of each source of
-    {!Herbier_refs.Fanout.sources} (whatever is live then). Reads the plant
-    first: a plant not live → [Error Plant_gone], nothing written; a read or
-    save error → [Error (Store _)]. Supersedes any fetch of that plant started
-    earlier (its branches not yet saved are dropped; when the save fails, a
-    fetch that was running is started again by {!refresh}), then, after the
-    commit and when {!State.network} says online, starts the plant's fetch in
-    the background (not awaited), followed by the thumbnail sync of {!refresh}.
-    {!saved} fires for the link and again for each branch saved. *)
+    {!Herbier_refs.Fanout.sources} and [References.unlink] of every other source
+    than [Gbif] (the links pasted in 5a named the old taxon), whatever is live
+    then. Reads the plant first: a plant not live → [Error Plant_gone], nothing
+    written; a read or save error → [Error (Store _)]. Supersedes any fetch of
+    that plant started earlier (its branches not yet saved are dropped; when the
+    save fails, a fetch that was running is started again by {!refresh}), then,
+    after the commit and when {!State.network} says online, starts the plant's
+    fetch in the background (not awaited), followed by the thumbnail sync of
+    {!refresh}. {!saved} fires for the link and again for each branch saved. *)
+
+val create_linked :
+  t ->
+  ?extra:Herbier_store.Outbox.edit list ->
+  Herbier_domain.Plant.t ->
+  Herbier_refs.Sources.Gbif.Taxon.t ->
+  (unit, Herbier_store.Db.error) result Fut.t
+(** A new plant, not stored yet (from {!Plant_link.create}), in one {!save}:
+    [Plants.upsert plant],
+    [References.link ~source:Gbif ~external_id ~url:(Sources.Gbif.species_url
+     key)], then [extra] in order (4k/5c: the observation's upsert onto the new
+    plant). After the commit and when {!State.network} says online, starts the
+    plant's fetch in the background followed by the thumbnail sync, as {!link}.
+    A save error → [Error e], nothing written, no fetch. *)
 
 val refresh : t -> Herbier_domain.Ids.Plant_id.t -> unit
 (** ↻: fetches the plant's references now when {!State.network} says online, the

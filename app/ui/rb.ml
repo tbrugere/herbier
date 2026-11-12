@@ -178,6 +178,12 @@ let view el f s =
   rlist el f
     (RList.from_signal ~eq:( == ) (React.S.map ~eq:( == ) (fun v -> [v]) s))
 
+let patch handle =
+  List.iter (function
+    | List_patch.Remove i -> RList.remove i handle
+    | List_patch.Insert (i, v) -> RList.insert v i handle
+    | List_patch.Update (i, v) -> RList.update v i handle)
+
 let ev el type' =
   let e, send = React.E.create () in
   let listener = Ev.listen type' send (El.as_target el) in

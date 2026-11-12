@@ -446,6 +446,723 @@ let plant_link =
           (Plant_link.retires_references
              {base_plant with Plant.gbif_key = Some 1}
              digitalis_taxon));
+    (* apply ?name (free name -> alias), display_name, create. *)
+    Alcotest.test_case
+      "apply ~name: a free-name plant is renamed, its old name becomes an \
+       alias (Done criterion)"
+      `Quick (fun () ->
+        let free : Plant.t =
+          {
+            base_plant with
+            display_name = "Fleur violette";
+            aliases = ["violette"];
+          }
+        in
+        let p =
+          Plant_link.apply ~at:link_at ~name:"Digitale pourpre" free
+            digitalis_taxon
+        in
+        Alcotest.(check string) "display_name" "Digitale pourpre" p.display_name;
+        Alcotest.(check (list string))
+          "aliases: old name prepended, order kept"
+          ["Fleur violette"; "violette"]
+          p.aliases;
+        Alcotest.(check (option int)) "gbif_key" (Some 5414995) p.gbif_key;
+        Alcotest.(check (option string))
+          "scientific_name" (Some "Digitalis purpurea") p.scientific_name);
+    Alcotest.test_case
+      "apply ~name equal (trimmed, case-insensitive) to the old name: no alias \
+       added, the trimmed spelling is kept"
+      `Quick (fun () ->
+        let free : Plant.t =
+          {
+            base_plant with
+            display_name = "Fleur Violette";
+            aliases = ["violette"];
+          }
+        in
+        let p =
+          Plant_link.apply ~at:link_at ~name:" fleur violette " free
+            digitalis_taxon
+        in
+        Alcotest.(check string) "display_name" "fleur violette" p.display_name;
+        Alcotest.(check (list string))
+          "aliases unchanged" ["violette"] p.aliases);
+    Alcotest.test_case
+      "apply ~name: the old name already an alias is not duplicated; an alias \
+       equal to the new name is removed"
+      `Quick (fun () ->
+        let free : Plant.t =
+          {
+            base_plant with
+            display_name = "Fleur violette";
+            aliases = ["fleur violette"; "violette"];
+          }
+        in
+        let p =
+          Plant_link.apply ~at:link_at ~name:"Digitale pourpre" free
+            digitalis_taxon
+        in
+        Alcotest.(check (list string))
+          "old name not added twice (already an alias)"
+          ["fleur violette"; "violette"]
+          p.aliases;
+        let free2 : Plant.t =
+          {
+            base_plant with
+            display_name = "Fleur violette";
+            aliases = ["digitale pourpre"; "violette"];
+          }
+        in
+        let p2 =
+          Plant_link.apply ~at:link_at ~name:"Digitale pourpre" free2
+            digitalis_taxon
+        in
+        Alcotest.(check (list string))
+          "an alias equal to the new name is removed, old name prepended"
+          ["Fleur violette"; "violette"]
+          p2.aliases);
+    Alcotest.test_case "apply ~name:\"  \" (blank): name and aliases unchanged"
+      `Quick (fun () ->
+        let free : Plant.t =
+          {
+            base_plant with
+            display_name = "Fleur violette";
+            aliases = ["violette"];
+          }
+        in
+        let p = Plant_link.apply ~at:link_at ~name:"  " free digitalis_taxon in
+        Alcotest.(check string) "display_name" "Fleur violette" p.display_name;
+        Alcotest.(check (list string)) "aliases" ["violette"] p.aliases);
+    Alcotest.test_case
+      "apply ~name on an already-linked plant (relink): display name and \
+       aliases are untouched"
+      `Quick (fun () ->
+        let linked : Plant.t =
+          {
+            base_plant with
+            display_name = "Digitalis purpurea";
+            aliases = ["violette"];
+            scientific_name = Some "Digitalis purpurea L.";
+            gbif_key = Some 999;
+          }
+        in
+        let p =
+          Plant_link.apply ~at:link_at ~name:"Nouveau nom" linked
+            digitalis_taxon
+        in
+        Alcotest.(check string)
+          "display_name unchanged" "Digitalis purpurea" p.display_name;
+        Alcotest.(check (list string))
+          "aliases unchanged" ["violette"] p.aliases;
+        Alcotest.(check (option int))
+          "gbif_key updated" (Some 5414995) p.gbif_key);
+    Alcotest.test_case
+      "display_name: first french, else canonical_name, else scientific_name"
+      `Quick (fun () ->
+        let cand french taxon : Herbier_refs.Resolve.Candidate.t =
+          {taxon; french}
+        in
+        Alcotest.(check string)
+          "first french" "Digitale pourpre"
+          (Plant_link.display_name
+             (cand ["Digitale pourpre"; "Gantelée"] digitalis_taxon));
+        Alcotest.(check string)
+          "no french: canonical_name" "Digitalis purpurea"
+          (Plant_link.display_name (cand [] digitalis_taxon));
+        let no_canonical =
+          {digitalis_taxon with Gbif.Taxon.canonical_name = None}
+        in
+        Alcotest.(check string)
+          "no canonical: scientific_name" "Digitalis purpurea L."
+          (Plant_link.display_name (cand [] no_canonical)));
+    Alcotest.test_case
+      "create: a new linked plant, no alias, created_at = updated_at = at"
+      `Quick (fun () ->
+        let id = Plant_id.fresh () in
+        let p =
+          Plant_link.create ~id ~at:link_at ~name:"Digitale pourpre"
+            digitalis_taxon
+        in
+        Alcotest.(check bool) "id" true (Plant_id.equal id p.id);
+        Alcotest.(check string) "display_name" "Digitale pourpre" p.display_name;
+        Alcotest.(check (list string)) "no alias" [] p.aliases;
+        Alcotest.(check (option int)) "gbif_key" (Some 5414995) p.gbif_key;
+        Alcotest.(check (option string))
+          "scientific_name" (Some "Digitalis purpurea") p.scientific_name;
+        Alcotest.(check (option string)) "authorship" (Some "L.") p.authorship;
+        Alcotest.(check bool)
+          "created_at = at" true
+          (Ptime.equal p.created_at link_at);
+        Alcotest.(check bool)
+          "updated_at = at" true
+          (Ptime.equal p.updated_at link_at);
+        Alcotest.(check bool)
+          "deleted_at = None" true
+          (Option.is_none p.deleted_at));
+  ]
+
+(* Ref_search: 4i's reference search state machine, without timers or
+   network. *)
+
+module Resolve = Herbier_refs.Resolve
+
+let cand key : Resolve.Candidate.t =
+  {taxon = {digitalis_taxon with key}; french = []}
+
+let status_str = function
+  | Ref_search.Blank -> "Blank"
+  | Ref_search.Pending -> "Pending"
+  | Ref_search.Found cs ->
+      Printf.sprintf "Found [%s]"
+        (String.concat ", "
+           (List.map
+              (fun (c : Resolve.Candidate.t) -> string_of_int c.taxon.key)
+              cs))
+  | Ref_search.Offline -> "Offline"
+  | Ref_search.Failed m -> "Failed " ^ m
+
+let status =
+  Alcotest.testable
+    (fun f s -> Format.pp_print_string f (status_str s))
+    Ref_search.equal_status
+
+let effect_str = function
+  | Ref_search.No_effect -> "No_effect"
+  | Ref_search.Wait {seq; ms} ->
+      Printf.sprintf "Wait {seq = %d; ms = %d}" seq ms
+  | Ref_search.Fetch {seq; q} -> Printf.sprintf "Fetch {seq = %d; q = %S}" seq q
+
+let check_effect what expected eff =
+  Alcotest.(check string) what expected (effect_str eff)
+
+let ref_search_init () =
+  (match Ref_search.init ~online:true "digitale" with
+  | t, Ref_search.Fetch {seq = 0; q = "digitale"} ->
+      Alcotest.(check status) "status" Ref_search.Pending (Ref_search.status t)
+  | _, e ->
+      Alcotest.failf "expected Fetch {seq=0; q=\"digitale\"}, got %s"
+        (effect_str e));
+  (match Ref_search.init ~online:false "x" with
+  | t, Ref_search.No_effect ->
+      Alcotest.(check status) "offline" Ref_search.Offline (Ref_search.status t)
+  | _, e -> Alcotest.failf "expected No_effect, got %s" (effect_str e));
+  match Ref_search.init ~online:true " " with
+  | t, Ref_search.No_effect ->
+      Alcotest.(check status) "blank" Ref_search.Blank (Ref_search.status t)
+  | _, e -> Alcotest.failf "expected No_effect, got %s" (effect_str e)
+
+let ref_search_debounce_sequence () =
+  let t0 = fst (Ref_search.init ~online:true "") in
+  let t1, e1 = Ref_search.typed ~online:true "di" t0 in
+  let t2, e2 = Ref_search.typed ~online:true "dig" t1 in
+  let t3, e3 = Ref_search.typed ~online:true "digi" t2 in
+  Alcotest.(check int) "debounce_ms" 300 Ref_search.debounce_ms;
+  check_effect "di" "Wait {seq = 1; ms = 300}" e1;
+  check_effect "dig" "Wait {seq = 2; ms = 300}" e2;
+  check_effect "digi" "Wait {seq = 3; ms = 300}" e3;
+  check_effect "elapsed, stale seq 1" "No_effect"
+    (snd (Ref_search.elapsed ~online:true ~seq:1 t3));
+  check_effect "elapsed, stale seq 2" "No_effect"
+    (snd (Ref_search.elapsed ~online:true ~seq:2 t3));
+  let t4, e4 = Ref_search.elapsed ~online:true ~seq:3 t3 in
+  check_effect "elapsed, current seq" "Fetch {seq = 3; q = \"digi\"}" e4;
+  Alcotest.(check status)
+    "still Pending" Ref_search.Pending (Ref_search.status t4)
+
+let ref_search_stale_answer_ignored () =
+  let t0 = fst (Ref_search.init ~online:true "") in
+  let t1, _ = Ref_search.typed ~online:true "di" t0 in
+  let t2, _ = Ref_search.typed ~online:true "dig" t1 in
+  let t3, _ = Ref_search.typed ~online:true "digi" t2 in
+  let stale = Ref_search.answered ~seq:1 (Ok [cand 1]) t3 in
+  Alcotest.(check status)
+    "an older seq changes nothing" Ref_search.Pending (Ref_search.status stale);
+  Alcotest.(check int) "seq unchanged" 3 (Ref_search.seq stale);
+  let current = Ref_search.answered ~seq:3 (Ok [cand 1; cand 2]) t3 in
+  Alcotest.(check status)
+    "the current seq's answer"
+    (Ref_search.Found [cand 1; cand 2])
+    (Ref_search.status current)
+
+let ref_search_typed_same_text_or_blank () =
+  let t0 = fst (Ref_search.init ~online:true "") in
+  let t1, _ = Ref_search.typed ~online:true "digi" t0 in
+  let same, e = Ref_search.typed ~online:true " digi " t1 in
+  check_effect "same text (padded)" "No_effect" e;
+  Alcotest.(check status)
+    "unchanged" (Ref_search.status t1) (Ref_search.status same);
+  Alcotest.(check int) "seq unchanged" (Ref_search.seq t1) (Ref_search.seq same);
+  let blank, e2 = Ref_search.typed ~online:true "  " t1 in
+  check_effect "blank" "No_effect" e2;
+  Alcotest.(check status) "Blank" Ref_search.Blank (Ref_search.status blank);
+  Alcotest.(check int)
+    "blank bumps seq"
+    (Ref_search.seq t1 + 1)
+    (Ref_search.seq blank)
+
+let ref_search_answered_unavailable_and_no_species () =
+  let t0 = fst (Ref_search.init ~online:true "digi") in
+  Alcotest.(check status)
+    "Failed" (Ref_search.Failed "m")
+    (Ref_search.status
+       (Ref_search.answered ~seq:0 (Error (Resolve.Unavailable "m")) t0));
+  Alcotest.(check status)
+    "No_species is Found []" (Ref_search.Found [])
+    (Ref_search.status
+       (Ref_search.answered ~seq:0 (Error Resolve.No_species) t0));
+  Alcotest.(check status)
+    "Observation_link is Found []" (Ref_search.Found [])
+    (Ref_search.status
+       (Ref_search.answered ~seq:0 (Error Resolve.Observation_link) t0))
+
+let ref_search_network_changes () =
+  let t0 = fst (Ref_search.init ~online:true "digi") in
+  let offline, e = Ref_search.network ~online:false t0 in
+  check_effect "going offline while Pending" "No_effect" e;
+  Alcotest.(check status)
+    "Offline" Ref_search.Offline
+    (Ref_search.status offline);
+  Alcotest.(check int)
+    "seq bumped (drops the in-flight request)" 1 (Ref_search.seq offline);
+  let ignored = Ref_search.answered ~seq:0 (Ok [cand 1]) offline in
+  Alcotest.(check status)
+    "the in-flight answer is ignored" Ref_search.Offline
+    (Ref_search.status ignored);
+  let online, e2 = Ref_search.network ~online:true offline in
+  check_effect "coming online with a query, at once"
+    "Fetch {seq = 2; q = \"digi\"}" e2;
+  Alcotest.(check status)
+    "Pending" Ref_search.Pending (Ref_search.status online);
+  let found = Ref_search.answered ~seq:2 (Ok [cand 1]) online in
+  let unaffected, e3 = Ref_search.network ~online:false found in
+  check_effect "Found stays shown offline" "No_effect" e3;
+  Alcotest.(check status)
+    "unchanged"
+    (Ref_search.Found [cand 1])
+    (Ref_search.status unaffected)
+
+let ref_search_online_while_pending_or_found () =
+  let pending = fst (Ref_search.init ~online:true "digi") in
+  let t1, e1 = Ref_search.network ~online:true pending in
+  check_effect "online while Pending" "No_effect" e1;
+  Alcotest.(check status)
+    "still Pending" Ref_search.Pending (Ref_search.status t1);
+  Alcotest.(check int)
+    "seq unchanged while Pending" (Ref_search.seq pending) (Ref_search.seq t1);
+  let found = Ref_search.answered ~seq:0 (Ok [cand 1]) pending in
+  let t2, e2 = Ref_search.network ~online:true found in
+  check_effect "online while Found" "No_effect" e2;
+  Alcotest.(check status)
+    "still Found"
+    (Ref_search.Found [cand 1])
+    (Ref_search.status t2);
+  Alcotest.(check int)
+    "seq unchanged while Found" (Ref_search.seq found) (Ref_search.seq t2)
+
+let ref_search_network_from_failed () =
+  let t0 = fst (Ref_search.init ~online:true "digi") in
+  let failed =
+    Ref_search.answered ~seq:0 (Error (Resolve.Unavailable "m")) t0
+  in
+  let offline, e = Ref_search.network ~online:false failed in
+  check_effect "going offline while Failed" "No_effect" e;
+  Alcotest.(check status)
+    "Offline" Ref_search.Offline
+    (Ref_search.status offline);
+  Alcotest.(check int) "seq bumped" 1 (Ref_search.seq offline);
+  let online, e2 = Ref_search.network ~online:true failed in
+  check_effect "coming online while Failed, at once"
+    "Fetch {seq = 1; q = \"digi\"}" e2;
+  Alcotest.(check status)
+    "Pending" Ref_search.Pending (Ref_search.status online)
+
+let ref_search_blank_ignores_network_and_retry () =
+  let t0 = fst (Ref_search.init ~online:true "") in
+  let t1, e1 = Ref_search.network ~online:true t0 in
+  check_effect "online with a blank query" "No_effect" e1;
+  Alcotest.(check status) "Blank" Ref_search.Blank (Ref_search.status t1);
+  let t2, e2 = Ref_search.retry ~online:true t0 in
+  check_effect "retry with a blank query" "No_effect" e2;
+  Alcotest.(check status) "Blank" Ref_search.Blank (Ref_search.status t2);
+  Alcotest.(check int) "seq unchanged" 0 (Ref_search.seq t2)
+
+let ref_search_typed_and_elapsed_offline () =
+  let t0 = fst (Ref_search.init ~online:true "") in
+  let t1, e1 = Ref_search.typed ~online:false "abc" t0 in
+  check_effect "typed offline" "No_effect" e1;
+  Alcotest.(check status) "Offline" Ref_search.Offline (Ref_search.status t1);
+  let t2, e2 = Ref_search.elapsed ~online:false ~seq:(Ref_search.seq t1) t1 in
+  check_effect "elapsed offline, current seq" "No_effect" e2;
+  Alcotest.(check status) "Offline" Ref_search.Offline (Ref_search.status t2)
+
+let ref_search_retry () =
+  let t0 = fst (Ref_search.init ~online:true "digi") in
+  let failed =
+    Ref_search.answered ~seq:0 (Error (Resolve.Unavailable "m")) t0
+  in
+  let t1, e1 = Ref_search.retry ~online:true failed in
+  check_effect "retry online: Fetch at once" "Fetch {seq = 1; q = \"digi\"}" e1;
+  Alcotest.(check status) "Pending" Ref_search.Pending (Ref_search.status t1);
+  let t2, e2 = Ref_search.retry ~online:false failed in
+  check_effect "retry offline" "No_effect" e2;
+  Alcotest.(check status) "Offline" Ref_search.Offline (Ref_search.status t2)
+
+let ref_search =
+  [
+    Alcotest.test_case "network online while Pending or Found: nothing" `Quick
+      ref_search_online_while_pending_or_found;
+    Alcotest.test_case "init: prefilled online, offline, blank" `Quick
+      ref_search_init;
+    Alcotest.test_case
+      "typed: debounce sequence, elapsed drops the stale timers" `Quick
+      ref_search_debounce_sequence;
+    Alcotest.test_case
+      "answered: a stale seq is ignored, the current one is not" `Quick
+      ref_search_stale_answer_ignored;
+    Alcotest.test_case "typed: a padded repeat is a no-op, blank clears" `Quick
+      ref_search_typed_same_text_or_blank;
+    Alcotest.test_case "answered: Unavailable is Failed, No_species is Found []"
+      `Quick ref_search_answered_unavailable_and_no_species;
+    Alcotest.test_case
+      "network: offline drops the request, online retries at once, Found is \
+       unaffected"
+      `Quick ref_search_network_changes;
+    Alcotest.test_case
+      "network: Failed goes Offline (seq bumped) or fetches again at once"
+      `Quick ref_search_network_from_failed;
+    Alcotest.test_case "network and retry leave a blank query alone" `Quick
+      ref_search_blank_ignores_network_and_retry;
+    Alcotest.test_case "typed and elapsed stay Offline without a network change"
+      `Quick ref_search_typed_and_elapsed_offline;
+    Alcotest.test_case "retry: online fetches again, offline stays Offline"
+      `Quick ref_search_retry;
+  ]
+
+(* Ref_pick: what tapping a reference row does, per entry mode. *)
+
+let plant_with ?(gbif_key = None) ?(deleted_at = None) () : Plant.t =
+  {base_plant with id = Plant_id.fresh (); gbif_key; deleted_at}
+
+let action_str = function
+  | Ref_pick.Inert -> "Inert"
+  | Ref_pick.Open (p : Plant.t) -> "Open " ^ Plant_id.to_string p.id
+  | Ref_pick.Attach_to (p : Plant.t) -> "Attach_to " ^ Plant_id.to_string p.id
+  | Ref_pick.Create -> "Create"
+  | Ref_pick.Link_this -> "Link_this"
+
+let action =
+  Alcotest.testable
+    (fun f a -> Format.pp_print_string f (action_str a))
+    Ref_pick.equal_action
+
+let ref_pick_matching_plant_per_mode () =
+  let a = plant_with ~gbif_key:(Some 5414995) () in
+  let b = plant_with () in
+  Alcotest.(check action)
+    "Browse: Open" (Ref_pick.Open a)
+    (Ref_pick.action Ref_pick.Browse ~current:None ~plants:[a; b]
+       digitalis_taxon);
+  Alcotest.(check action)
+    "Attach: Attach_to" (Ref_pick.Attach_to a)
+    (Ref_pick.action Ref_pick.Attach ~current:None ~plants:[a; b]
+       digitalis_taxon);
+  Alcotest.(check action)
+    "Relink: Link_this" Ref_pick.Link_this
+    (Ref_pick.action Ref_pick.Relink ~current:(Some b.id) ~plants:[a; b]
+       digitalis_taxon)
+
+let ref_pick_current_is_inert () =
+  let a = plant_with ~gbif_key:(Some 5414995) () in
+  List.iter
+    (fun mode ->
+      Alcotest.(check action)
+        "Inert" Ref_pick.Inert
+        (Ref_pick.action mode ~current:(Some a.id) ~plants:[a] digitalis_taxon))
+    [Ref_pick.Browse; Ref_pick.Attach; Ref_pick.Relink]
+
+let ref_pick_no_match () =
+  let b = plant_with () in
+  Alcotest.(check action)
+    "Browse: Create" Ref_pick.Create
+    (Ref_pick.action Ref_pick.Browse ~current:None ~plants:[b] digitalis_taxon);
+  Alcotest.(check action)
+    "Attach: Create" Ref_pick.Create
+    (Ref_pick.action Ref_pick.Attach ~current:None ~plants:[b] digitalis_taxon);
+  Alcotest.(check action)
+    "Relink: Link_this" Ref_pick.Link_this
+    (Ref_pick.action Ref_pick.Relink ~current:None ~plants:[b] digitalis_taxon)
+
+let ref_pick_synonym_accepted_key_matches () =
+  let a = plant_with ~gbif_key:(Some 5414995) () in
+  let synonym =
+    {digitalis_taxon with Gbif.Taxon.key = 7971454; accepted_key = Some 5414995}
+  in
+  Alcotest.(check action)
+    "Browse: Open via accepted_key" (Ref_pick.Open a)
+    (Ref_pick.action Ref_pick.Browse ~current:None ~plants:[a] synonym)
+
+let ref_pick_deleted_ignored_first_match_wins () =
+  let deleted =
+    plant_with ~gbif_key:(Some 5414995) ~deleted_at:(Some (utc 2026 1 1 0 0)) ()
+  in
+  let live = plant_with ~gbif_key:(Some 5414995) () in
+  Alcotest.(check action)
+    "soft-deleted ignored" (Ref_pick.Open live)
+    (Ref_pick.action Ref_pick.Browse ~current:None ~plants:[deleted; live]
+       digitalis_taxon);
+  let other = plant_with ~gbif_key:(Some 5414995) () in
+  Alcotest.(check action)
+    "two matches: the first in list order" (Ref_pick.Open live)
+    (Ref_pick.action Ref_pick.Browse ~current:None ~plants:[live; other]
+       digitalis_taxon)
+
+let ref_pick_other_owner () =
+  let a = plant_with ~gbif_key:(Some 5414995) () in
+  let b = plant_with ~gbif_key:(Some 5414995) () in
+  match
+    Ref_pick.other_owner ~current:(Some a.id) ~plants:[a; b] digitalis_taxon
+  with
+  | Some (p : Plant.t) ->
+      Alcotest.(check bool)
+        "the other matching plant" true (Plant_id.equal p.id b.id)
+  | None -> Alcotest.fail "expected Some"
+
+let ref_pick_other_owner_none () =
+  let a = plant_with ~gbif_key:(Some 5414995) () in
+  let b = plant_with () in
+  Alcotest.(check bool)
+    "only the current plant has the species" true
+    (Option.is_none
+       (Ref_pick.other_owner ~current:(Some a.id) ~plants:[a; b] digitalis_taxon))
+
+let ref_pick =
+  [
+    Alcotest.test_case
+      "action: the matching plant per mode (Open / Attach_to / Link_this)"
+      `Quick ref_pick_matching_plant_per_mode;
+    Alcotest.test_case "action: current is Inert in every mode" `Quick
+      ref_pick_current_is_inert;
+    Alcotest.test_case
+      "action: no match is Create (Browse / Attach) or Link_this (Relink)"
+      `Quick ref_pick_no_match;
+    Alcotest.test_case
+      "action: a synonym's accepted_key matches the plant's gbif_key" `Quick
+      ref_pick_synonym_accepted_key_matches;
+    Alcotest.test_case
+      "action: a soft-deleted plant is ignored, the first match wins" `Quick
+      ref_pick_deleted_ignored_first_match_wins;
+    Alcotest.test_case
+      "other_owner: the first matching plant that is not current" `Quick
+      ref_pick_other_owner;
+    Alcotest.test_case "other_owner: None when only the current plant matches"
+      `Quick ref_pick_other_owner_none;
+  ]
+
+(* Ref_paste: a pasted link -> the plant's id at one source (5a). *)
+
+module Link = Herbier_domain.Link
+module Plant_ref = Herbier_domain.Reference.Plant_ref
+
+let ref_paste_str = function
+  | Ref_paste.Species k -> Printf.sprintf "Species %d" k
+  | Ref_paste.Plant_ref {source; external_id; url} ->
+      Printf.sprintf "Plant_ref {%s; %S; %S}" (Source.to_string source)
+        external_id url
+  | Ref_paste.Not_a_reference -> "Not_a_reference"
+  | Ref_paste.Unrecognised -> "Unrecognised"
+
+let paste =
+  Alcotest.testable
+    (fun f t -> Format.pp_print_string f (ref_paste_str t))
+    Ref_paste.equal
+
+let plant_ref ?(plant_id = Plant_id.fresh ()) ~source ~external_id ~url () :
+    Plant_ref.t =
+  {
+    id = Plant_ref.id_of_key ~plant:plant_id ~source;
+    plant_id;
+    source;
+    external_id;
+    url;
+    created_at = utc 2026 1 1 0 0;
+    updated_at = utc 2026 1 1 0 0;
+    deleted_at = None;
+  }
+
+let ref_paste =
+  [
+    Alcotest.test_case "a GBIF species link is Species" `Quick (fun () ->
+        Alcotest.check paste "species" (Ref_paste.Species 5414995)
+          (Ref_paste.of_text "https://www.gbif.org/species/5414995"));
+    Alcotest.test_case "a Pl@ntNet species link is a Plant_ref" `Quick
+      (fun () ->
+        Alcotest.check paste "plantnet"
+          (Ref_paste.Plant_ref
+             {
+               source = Source.Plantnet;
+               external_id = "Digitalis purpurea L.";
+               url =
+                 "https://identify.plantnet.org/k-world-flora/species/Digitalis%20purpurea%20L./data";
+             })
+          (Ref_paste.of_text
+             "https://identify.plantnet.org/fr/k-world-flora/species/Digitalis%20purpurea%20L./data"));
+    Alcotest.test_case "a Wikipedia link is a Plant_ref, interwiki external_id"
+      `Quick (fun () ->
+        Alcotest.check paste "wikipedia"
+          (Ref_paste.Plant_ref
+             {
+               source = Source.Wikipedia;
+               external_id = "fr:Digitale pourpre";
+               url = "https://fr.wikipedia.org/wiki/Digitale_pourpre";
+             })
+          (Ref_paste.of_text "https://fr.wikipedia.org/wiki/Digitale_pourpre"));
+    Alcotest.test_case "an INPN link is a Plant_ref (Taxref)" `Quick (fun () ->
+        Alcotest.check paste "inpn"
+          (Ref_paste.Plant_ref
+             {
+               source = Source.Taxref;
+               external_id = "94959";
+               url = "https://inpn.mnhn.fr/espece/cd_nom/94959";
+             })
+          (Ref_paste.of_text "https://inpn.mnhn.fr/espece/cd_nom/94959"));
+    Alcotest.test_case "a Tela link drops the -<tab> suffix from the url" `Quick
+      (fun () ->
+        Alcotest.check paste "tela"
+          (Ref_paste.Plant_ref
+             {
+               source = Source.Tela;
+               external_id = "22437";
+               url = "https://www.tela-botanica.org/bdtfx-nn-22437";
+             })
+          (Ref_paste.of_text
+             "https://www.tela-botanica.org/bdtfx-nn-22437-synthese"));
+    Alcotest.test_case "a POWO link is a Plant_ref, the IPNI lsid kept as is"
+      `Quick (fun () ->
+        Alcotest.check paste "powo"
+          (Ref_paste.Plant_ref
+             {
+               source = Source.Powo;
+               external_id = "urn:lsid:ipni.org:names:802077-1";
+               url =
+                 "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:802077-1";
+             })
+          (Ref_paste.of_text
+             "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:802077-1"));
+    Alcotest.test_case "an iNat link is a Plant_ref" `Quick (fun () ->
+        Alcotest.check paste "inat"
+          (Ref_paste.Plant_ref
+             {
+               source = Source.Inat;
+               external_id = "53983";
+               url = "https://www.inaturalist.org/taxa/53983";
+             })
+          (Ref_paste.of_text
+             "https://www.inaturalist.org/taxa/53983-Digitalis-purpurea"));
+    Alcotest.test_case "a POWO id other than an IPNI lsid is percent-encoded"
+      `Quick (fun () ->
+        Alcotest.check paste "powo other"
+          (Ref_paste.Plant_ref
+             {
+               source = Source.Powo;
+               external_id = "abc:1";
+               url = "https://powo.science.kew.org/taxon/abc%3A1";
+             })
+          (Ref_paste.of_text "https://powo.science.kew.org/taxon/abc:1"));
+    Alcotest.test_case
+      "an accented or parenthesised Wikipedia title is decoded in the id" `Quick
+      (fun () ->
+        List.iter
+          (fun (text, external_id) ->
+            match Ref_paste.of_text text with
+            | Ref_paste.Plant_ref {external_id = got; _} ->
+                Alcotest.(check string) text external_id got
+            | Ref_paste.(Species _ | Not_a_reference | Unrecognised) ->
+                Alcotest.failf "%s: expected a Plant_ref" text)
+          [
+            ( "https://fr.wikipedia.org/wiki/Digitale_%C3%A0_grandes_fleurs",
+              "fr:Digitale à grandes fleurs" );
+            ("https://fr.wikipedia.org/wiki/Ail_(plante)", "fr:Ail (plante)");
+          ]);
+    Alcotest.test_case "a Pl@ntUse link is Not_a_reference" `Quick (fun () ->
+        Alcotest.check paste "plantuse" Ref_paste.Not_a_reference
+          (Ref_paste.of_text
+             "https://plantuse.plantnet.org/fr/Digitalis_purpurea"));
+    Alcotest.test_case "a Pl@ntNet observation link is Not_a_reference" `Quick
+      (fun () ->
+        Alcotest.check paste "plantnet observation" Ref_paste.Not_a_reference
+          (Ref_paste.of_text
+             "https://identify.plantnet.org/fr/observations/1012345678"));
+    Alcotest.test_case "plain text is Unrecognised" `Quick (fun () ->
+        Alcotest.check paste "text" Ref_paste.Unrecognised
+          (Ref_paste.of_text "digitale pourpre"));
+    Alcotest.test_case
+      "round trip: Link.classify of the stored url matches the text's \
+       classification"
+      `Quick (fun () ->
+        List.iter
+          (fun text ->
+            match Ref_paste.of_text text with
+            | Ref_paste.Plant_ref {url; _} ->
+                Alcotest.(check bool)
+                  (text ^ ": classify url = classify text")
+                  true
+                  (Link.equal (Link.classify url) (Link.classify text))
+            | _ -> Alcotest.failf "%s: expected a Plant_ref" text)
+          [
+            "https://identify.plantnet.org/fr/k-world-flora/species/Digitalis%20purpurea%20L./data";
+            "https://fr.wikipedia.org/wiki/Digitale_pourpre";
+            "https://fr.wikipedia.org/wiki/Digitale_%C3%A0_grandes_fleurs";
+            "https://fr.wikipedia.org/wiki/Ail_(plante)";
+            "https://powo.science.kew.org/taxon/abc:1";
+            "https://inpn.mnhn.fr/espece/cd_nom/94959";
+            "https://www.tela-botanica.org/bdtfx-nn-22437-synthese";
+            "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:802077-1";
+            "https://www.inaturalist.org/taxa/53983-Digitalis-purpurea";
+          ]);
+    Alcotest.test_case
+      "a url with a query string and fragment gives the same Plant_ref as the \
+       bare url"
+      `Quick (fun () ->
+        Alcotest.check paste "with query and fragment"
+          (Ref_paste.of_text "https://inpn.mnhn.fr/espece/cd_nom/94959")
+          (Ref_paste.of_text
+             "https://inpn.mnhn.fr/espece/cd_nom/94959?tab=taxo#onglet"));
+    Alcotest.test_case "text around the url is still classified" `Quick
+      (fun () ->
+        Alcotest.check paste "surrounded by text"
+          (Ref_paste.of_text "https://inpn.mnhn.fr/espece/cd_nom/94959")
+          (Ref_paste.of_text "voir https://inpn.mnhn.fr/espece/cd_nom/94959"));
+    Alcotest.test_case "removable: every source but Gbif" `Quick (fun () ->
+        Alcotest.(check bool)
+          "Gbif: not removable" false
+          (Ref_paste.removable
+             (plant_ref ~source:Source.Gbif ~external_id:"5414995"
+                ~url:(Gbif.species_url 5414995) ()));
+        List.iter
+          (fun source ->
+            Alcotest.(check bool)
+              (Source.to_string source ^ ": removable")
+              true
+              (Ref_paste.removable
+                 (plant_ref ~source ~external_id:"x"
+                    ~url:"https://example.invalid/x" ())))
+          (List.filter
+             (fun s -> not (Source.to_string s = Source.to_string Source.Gbif))
+             Source.all));
+    Alcotest.test_case "label: source name, a middle dot, external_id" `Quick
+      (fun () ->
+        Alcotest.(check string)
+          "label" "GBIF · 5414995"
+          (Ref_paste.label
+             (plant_ref ~source:Source.Gbif ~external_id:"5414995"
+                ~url:(Gbif.species_url 5414995) ()));
+        Alcotest.(check string)
+          "Wikipédia label" "Wikipédia · fr:Digitale pourpre"
+          (Ref_paste.label
+             (plant_ref ~source:Source.Wikipedia
+                ~external_id:"fr:Digitale pourpre"
+                ~url:"https://fr.wikipedia.org/wiki/Digitale_pourpre" ())));
   ]
 
 (* Ref_text: texts of 4f's reference block. *)
@@ -1721,6 +2438,9 @@ let () =
       ("tag_edits", tag_edits);
       ("fr_date", fr_date @ ago);
       ("plant_link", plant_link);
+      ("ref_search", ref_search);
+      ("ref_pick", ref_pick);
+      ("ref_paste", ref_paste);
       ("ref_text", ref_text);
       ("journal_day", journal_day);
       ("map_filter", map_filter);

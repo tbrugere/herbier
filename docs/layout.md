@@ -158,13 +158,15 @@ app/
     payload.ml            one reference row's payload: an object of each call's body, pruned to the fields
                           the decoders read; shared by the projection (reader) and the pipeline (writer)
     projection.ml         reference rows → ReferenceSnapshot fields (4f), pure over JSON
+    source_url.ml         a taxon's page URL at each source (4f's derived links, 5a's pasted ones)
     organ_photos.ml       which Pl@ntNet images a plant keeps, downloads and shows; thumbnail size; allowed host;
                           a sync's report (outcome per organ)
     step.ml               a program of sequential GETs (Done | Get), run by refs_io/http.ml or by a
                           function standing for the network in tests
     fanout.ml             the reference fetch of one gbif_key as three branch programs, the status
                           rules, the keep/merge rule against stored rows, the "due" rule
-    resolve.ml            Link.t → GBIF taxon / candidates / unresolved, as a Step program
+    resolve.ml            Link.t → GBIF taxon / candidates / unresolved, as a Step program; 4i's
+                          reference search (taxa with their French names) and a chosen row's accepted taxon
   refs_io/                §6–7 of architecture, Brr part
     http.ml               fetch identified as Herbier/<version> (Api-User-Agent to
                           Wikimedia) + rate-limited queue (one per source,
@@ -200,8 +202,12 @@ app/
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
     plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml, map_filter.ml,
-    map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data)
+    map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
+    ref_search.ml (4i's debounce / stale answer / offline state machine), ref_pick.ml (what a
+    reference row does per mode), ref_paste.ml (5a's pasted link → plant ref)
                           pure helpers of the screens; these and list_patch are tested natively in test/ui/
+    ref_results.ml        4i's « Référence · GBIF » section (Ref_search's effects, rows), shared by every
+                          mode of screens/resolve.ml
     filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     zone.ml               the phone's zone offset at an instant, for Fr_date
@@ -215,7 +221,7 @@ app/
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
                           serialisation, park/delete) and the reference payload column (put, link, unlink);
                           link_check.ml (#dev/link): resolves example links, a pasted link, and links a
-                          plant through App.link, then opens its fiche;
+                          plant through App.link, then opens its fiche; « Chercher » opens 4i with the text;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
@@ -244,7 +250,8 @@ app/
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
       journal.ml (4c)     record.ml (4d)
       saved.ml (4e)       species.ml (4f, 4g)  observation.ml (4h)
-      resolve.ml (4i, 4j, 4k, 5c: one screen, four entry modes)
+      resolve.ml (4i, 4j, 4k, 5c, and 4i for one plant from 4g « Lier » / 5a « Changer › »:
+                  one screen, one entry mode each; 4j is M4.39's sheet mode, its « Chercher » enters 4i)
       tags.ml (4l)        manage_tags.ml (5d)  settings.ml (4m)
       edit_plant.ml (5a)  move_point.ml (5b)  viewer.ml (5e)
 ```

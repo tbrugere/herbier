@@ -14,6 +14,9 @@ type modal =
   | Record  (** 4d *)
   | Saved of Herbier_domain.Ids.Observation_id.t  (** 4e *)
   | Viewer of Herbier_domain.Ids.Photo_id.t  (** 5e *)
+  | Search of string  (** 4i, prefilled with this query (may be [""]) *)
+  | Link_species of Herbier_domain.Ids.Plant_id.t
+      (** 4i for one plant: 4g « Lier », 5a « Changer › » *)
 
 type t = Tab of Widgets.Tab_bar.tab | Modal of modal | Dev of string
 
@@ -25,12 +28,16 @@ val of_fragment : string -> t
     ["observation/<id>"], ["observation/<id>/espece"], ["a-identifier/<id>"] →
     [Observation], [Change_species], [Identify]; ["noter"] → [Modal Record];
     ["noter/enregistre/<id>"] → [Modal (Saved id)]; ["photo/<id>"] →
-    [Modal (Viewer id)]; ["dev/<name>"] → [Dev name]. Anything else (an id that
-    is not a UUID too) is [Tab Collection]. *)
+    [Modal (Viewer id)]; ["chercher"] → [Modal (Search "")]; ["chercher/<q>"] →
+    [Modal (Search q)], [q] percent-decoded (undecodable: as is);
+    ["plante/<id>/lier"] → [Modal (Link_species id)]; ["dev/<name>"] →
+    [Dev name]. Anything else (an id that is not a UUID too) is
+    [Tab Collection]. *)
 
 val to_fragment : t -> string
 (** Inverse of {!of_fragment} on its canonical forms ([Tab Collection] is
-    ["collection"]). *)
+    ["collection"], [Search ""] is ["chercher"], [Search q] is ["chercher/"]
+    then [q] as [encodeURIComponent] gives it). *)
 
 val current : unit -> t
 (** The route of the current fragment. *)

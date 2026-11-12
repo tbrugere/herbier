@@ -268,12 +268,11 @@ let notes app ~problem data =
   (t.el, t.bindings)
 
 (* 4g *)
-let unlinked state () =
+let unlinked state id () =
   let offline_text = El.span [] in
   let link =
     W.Button.v ~kind:W.Button.Secondary "Lier à une espèce de référence"
   in
-  El.set_at (Jstr.v "aria-disabled") (Some (Jstr.v "true")) link.el;
   let online =
     React.S.map ~eq:Bool.equal
       (fun (n : State.network) -> n.online)
@@ -296,6 +295,12 @@ let unlinked state () =
                " Hors-ligne : la recherche de noms reviendra avec le réseau.")
          online)
     :: Rb.class_ link.el "is-offline" (React.S.map not online)
+    :: Rb.attr link.el "aria-disabled"
+         (React.S.map (function true -> None | false -> Some "true") online)
+    :: Rb.act link.click (fun () ->
+        match (React.S.value (State.network state)).online with
+        | true -> Route.go (Route.Modal (Route.Link_species id))
+        | false -> ())
     :: link.bindings )
 
 (* The projection and the thumbnails 4f shows, from one load. *)
@@ -557,7 +562,7 @@ let render app (data : data React.signal) =
   let modified = El.span ~at:[cls "t-meta"] [] in
   let reference = El.div ~at:[cls "species__reference-slot"] [] in
   let reference_of = function
-    | false -> unlinked state ()
+    | false -> unlinked state id ()
     | true -> linked app data ()
   in
   let el =

@@ -1,0 +1,73 @@
+// 4i « Référence · GBIF », shared by 4i, 4k and 5c
+// (app/ui/ref_results.ml, screens/resolve.ml).
+@use '../base'
+@use '../widgets'
+
+.ref-results
+  display: flex
+  flex-direction: column
+  gap: 6px
+
+.ref-results__head
+  display: flex
+  align-items: baseline
+  justify-content: space-between
+  gap: 8px
+
+.ref-results__rows
+  display: flex
+  flex-direction: column
+
+.ref-row
+  display: flex
+  align-items: center
+  gap: 12px
+  padding: 10px 0
+  border-bottom: 1px solid var(--line-soft)
+
+.ref-row__text
+  flex: 1
+  min-width: 0
+
+.ref-row__latin
+  +base.sci(18px)
+  color: var(--ink)
+
+.ref-row__author
+  +base.ui(13px, 400)
+  color: var(--muted)
+  margin-left: 6px
+
+.ref-row__french
+  +base.ui(14px, 400)
+  color: var(--ink-soft)
+
+.ref-row__add
+  +widgets.bare-button
+  flex: none
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 36px
+  height: 36px
+  border-radius: 50%
+  background: var(--sand)
+  color: var(--ink)
+  // 36 px circle, 44 px touch area (handoff: « cible tactile minimale 44 »).
+  // It spills 4 px around: rows are at least 56 px tall.
+  position: relative
+  &::before
+    content: ''
+    position: absolute
+    inset: -4px
+  &[aria-disabled]
+    cursor: default
+  // The plant's own species: the meta line says « Espèce actuelle ».
+  .ref-row.is-current &
+    opacity: .5
+
+// Offline, the « + » buttons wait for the network (the status line says so);
+// « Ouvrir › » and « Lier › » do not.
+.ref-results.is-offline .ref-row__add
+  opacity: .5
+  pointer-events: none

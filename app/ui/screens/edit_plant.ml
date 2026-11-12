@@ -5,6 +5,9 @@ module Tags = Herbier_store.Tags
 module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
 module Cascade = Herbier_store.Cascade
+module References = Herbier_store.References
+module Plant_ref = Herbier_domain.Reference.Plant_ref
+module Source = Herbier_domain.Reference.Source
 module Observation = Herbier_domain.Observation
 module Photo = Herbier_domain.Photo
 module Plant = Herbier_domain.Plant
@@ -21,10 +24,14 @@ let log_error what e =
   Console.(
     error [str ("modifier la fiche: " ^ what); str (Db.error_to_string e)])
 
-(* A stored plant carries what a delete takes with it. *)
+(* A stored plant carries what a delete takes with it, and its links. *)
 type origin =
   | Fresh
-  | Stored of {observations : Observation.t list; photos : Photo.t list}
+  | Stored of {
+      observations : Observation.t list;
+      photos : Photo.t list;
+      plant_refs : Plant_ref.t list;
+    }
 
 (* What the form starts from. *)
 type data = {
@@ -48,8 +55,15 @@ let load db mode =
       | Some plant ->
           let* tags = Db.all db (Tags.of_plant id) in
           let* observations = Db.all db (Observations.of_plant id) in
-          let+ photos = Db.all db (Photos.of_plant id) in
-          Some {plant; tags; all_tags; origin = Stored {observations; photos}})
+          let* photos = Db.all db (Photos.of_plant id) in
+          let+ plant_refs = Db.all db (References.plant_refs id) in
+          Some
+            {
+              plant;
+              tags;
+              all_tags;
+              origin = Stored {observations; photos; plant_refs};
+            })
 
 let delete_edits ~at (d : data) ~observations ~photos =
   Cascade.plant ~at
@@ -60,12 +74,6 @@ let delete_edits ~at (d : data) ~observations ~photos =
 
 let field_card label children =
   W.Card.panel (El.h2 ~at:[cls "t-section-label"] [El.txt' label] :: children)
-
-let apply handle =
-  List.iter (function
-    | List_patch.Remove i -> RList.remove i handle
-    | List_patch.Insert (i, v) -> RList.insert v i handle
-    | List_patch.Update (i, v) -> RList.update v i handle)
 
 let its_observations = function
   | 1 -> "son observation"
@@ -85,6 +93,151 @@ let leaving ~observations ~photos =
         (Fr_text.plural p "photo" "photos")
 
 type delete = Delete | Keep
+
+(* Leaving for 4i with unsaved changes is refused: 5a is read again on
+   return, and « Enregistrer » would otherwise write back the plant as it was
+   before the link. *)
+let reference_part ~problem ~dirty app (plant : Plant.t) plant_refs =
+  let id = plant.id in
+  let online =
+    React.S.map ~eq:Bool.equal
+      (fun (n : State.network) -> n.online)
+      (State.network (App.state app))
+  in
+  let species, change =
+    match plant.scientific_name with
+    | Some latin ->
+        ( El.p
+            ~at:[cls "edit-plant__latin"]
+            (El.i [El.txt' latin]
+            :: Option.to_list
+                 (Option.map
+                    (fun a ->
+                      El.span ~at:[cls "edit-plant__author"] [El.txt' (" " ^ a)])
+                    plant.authorship)),
+          W.Button.text "Changer ›" )
+    | None ->
+        ( El.p ~at:[cls "t-meta"] [El.txt' "nom libre — espèce non liée"],
+          W.Button.text "Lier ›" )
+  in
+  let offline_hint =
+    El.p
+      ~at:[cls "t-meta"]
+      [El.txt' "Hors-ligne : la recherche reviendra avec le réseau."]
+  in
+  let go_link () =
+    match (React.S.value online, dirty ()) with
+    | false, _ -> ()
+    | true, true ->
+        problem
+          "Enregistrez ou annulez vos modifications avant de changer d'espèce."
+    | true, false -> Route.go (Route.Modal (Route.Link_species id))
+  in
+  let refs, set_refs = React.S.create ~eq:( == ) plant_refs in
+  let note_text, note = React.S.create ~eq:String.equal "" in
+  let note_el = El.p ~at:[cls "t-meta"; cls "edit-plant__problem"] [] in
+  let reload () =
+    Fut.await
+      (Db.all (App.db app) (References.plant_refs id))
+      (function
+        | Error e ->
+            log_error "plant refs" e;
+            note "Les liens n'ont pas pu être relus."
+        | Ok rows -> set_refs rows)
+  in
+  let saved ?(done_ = "") what = function
+    | Error e ->
+        log_error what e;
+        note "Le lien n'a pas pu être enregistré."
+    | Ok (_ : int) ->
+        note done_;
+        reload ()
+  in
+  let ref_el (r : Plant_ref.t) =
+    match Ref_paste.removable r with
+    | false -> (W.Chip.tag (Ref_paste.label r), [])
+    | true ->
+        let c = W.Chip.removable ~fill:W.Chip.Paper (Ref_paste.label r) in
+        ( c.el,
+          Rb.act c.click (fun () ->
+              Fut.await
+                (App.save app
+                   [
+                     References.unlink ~plant:id ~source:r.source
+                       ~at:(Ptime_clock.now ());
+                   ])
+                (saved "unlink"))
+          :: c.bindings )
+  in
+  (* A handful of chips, rebuilt whole on each change: the paste field is
+     outside them, so no focus or typed text is lost. *)
+  let rows_el = El.span ~at:[cls "chip-row__items"] [] in
+  let rows_of refs =
+    let els = List.map ref_el refs in
+    ( El.span ~at:[cls "edit-plant__refs"] (List.map fst els),
+      List.concat_map snd els )
+  in
+  let paste =
+    W.Adder.v ~label:"Coller un lien (POWO, INPN…)" ~placeholder:"https://…" ()
+  in
+  (* One link per source: a new paste replaces the stored one, and says so. *)
+  let replaced source external_id =
+    match
+      List.find_opt
+        (fun (r : Plant_ref.t) ->
+          String.equal (Source.to_string r.source) (Source.to_string source)
+          && not (String.equal r.external_id external_id))
+        (React.S.value refs)
+    with
+    | None -> ""
+    | Some old -> Printf.sprintf "Remplace %s." (Ref_paste.label old)
+  in
+  let pasted text =
+    match Ref_paste.of_text text with
+    | Ref_paste.Plant_ref {source; external_id; url} ->
+        let done_ = replaced source external_id in
+        Fut.await
+          (App.save app
+             [
+               References.link ~plant:id ~source ~external_id ~url
+                 ~at:(Ptime_clock.now ());
+             ])
+          (saved ~done_ "link")
+    | Ref_paste.Species _ ->
+        note "Lien GBIF : changez l'espèce avec « Changer › »."
+    | Ref_paste.Not_a_reference -> note "Ce lien ne désigne pas une espèce."
+    | Ref_paste.Unrecognised ->
+        note
+          "Lien non reconnu (GBIF, Pl@ntNet, Wikipédia, POWO, INPN, Tela \
+           Botanica, iNaturalist)."
+  in
+  ( [
+      field_card "Espèce de référence"
+        [
+          El.div ~at:[cls "edit-plant__species"] [species; change.el];
+          offline_hint;
+        ];
+      field_card "Liens de référence"
+        [El.div ~at:[cls "edit-plant__chips"] [rows_el; paste.el]; note_el];
+    ],
+    List.concat
+      [
+        [
+          Rb.act change.click go_link;
+          Rb.attr change.el "aria-disabled"
+            (React.S.map
+               (function true -> None | false -> Some "true")
+               online);
+          Rb.class_ offline_hint "is-hidden" online;
+          Rb.view rows_el rows_of refs;
+          Rb.act paste.added pasted;
+          Rb.text note_el note_text;
+          Rb.class_ note_el "is-hidden"
+            (React.S.map (String.equal "") note_text);
+        ];
+        change.bindings;
+        paste.bindings;
+      ] )
 
 (* One tile of 5a « Photo de couverture ». *)
 type cover_tile = {
@@ -164,13 +317,13 @@ let render app mode (d : data) =
   let aliases, aliases_handle = RList.create [] in
   let tags, tags_handle = RList.create [] in
   let show () =
-    apply aliases_handle
+    Rb.patch aliases_handle
       (List_patch.diff ~same:String.equal ~equal:String.equal
          (RList.value aliases) !form.aliases);
     let same a b =
       String.equal (Plant_form.tag_name a) (Plant_form.tag_name b)
     in
-    apply tags_handle
+    Rb.patch tags_handle
       (List_patch.diff ~same ~equal:same (RList.value tags) !form.tags)
   in
   let alias a =
@@ -254,15 +407,17 @@ let render app mode (d : data) =
       (fun n -> not (String.equal (String.trim n) ""))
       name.value
   in
+  let edits_now () =
+    let f = {!form with name = React.S.value name.value} in
+    let c = Plant_form.diff ~before:d.plant ~before_tags:d.tags f in
+    Plant_edits.of_change ~at:(Ptime_clock.now ()) ~plant:d.plant.id c
+  in
+  let dirty () = match edits_now () with _, [] -> false | _, _ :: _ -> true in
   let do_save () =
     match (!saving, React.S.value valid) with
     | true, _ | false, false -> ()
     | false, true -> (
-        let f = {!form with name = React.S.value name.value} in
-        let c = Plant_form.diff ~before:d.plant ~before_tags:d.tags f in
-        match
-          Plant_edits.of_change ~at:(Ptime_clock.now ()) ~plant:d.plant.id c
-        with
+        match edits_now () with
         | _, [] -> leave Route.back
         | _, edits ->
             saving := true;
@@ -294,16 +449,28 @@ let render app mode (d : data) =
         save.el;
       ]
   in
+  let reference_els, reference_bindings =
+    match d.origin with
+    | Fresh -> ([], [])
+    | Stored {plant_refs; _} ->
+        reference_part ~problem ~dirty app d.plant plant_refs
+  in
   let cards =
-    [
-      field_card "Nom affiché"
+    List.concat
+      [
         [
-          name.el;
-          El.div ~at:[cls "edit-plant__chips"] [alias_list; add_alias.el];
+          field_card "Nom affiché"
+            [
+              name.el;
+              El.div ~at:[cls "edit-plant__chips"] [alias_list; add_alias.el];
+            ];
         ];
-      field_card "Tags"
-        [El.div ~at:[cls "edit-plant__chips"] [tag_list; add_tag.el]];
-    ]
+        reference_els;
+        [
+          field_card "Tags"
+            [El.div ~at:[cls "edit-plant__chips"] [tag_list; add_tag.el]];
+        ];
+      ]
     @
     match covers with
     | [] -> []
@@ -320,7 +487,7 @@ let render app mode (d : data) =
   let delete_els, delete_bindings =
     match d.origin with
     | Fresh -> ([], [])
-    | Stored {observations; photos} ->
+    | Stored {observations; photos; _} ->
         delete_part ~problem ~leave app d ~observations ~photos
   in
   let el =
@@ -350,6 +517,7 @@ let render app mode (d : data) =
           Rb.on_release (fun () -> left := true);
         ];
         delete_bindings;
+        reference_bindings;
         cancel.bindings;
         save.bindings;
         name.bindings;

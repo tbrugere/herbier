@@ -114,7 +114,10 @@ val match_of_json : Yojson.Safe.t -> (match_, Decode.error) result
 
 val suggest_of_json : Yojson.Safe.t -> (Taxon.t list, Decode.error) result
 (** [/species/suggest]: root array (else [Unexpected] at [""]); per element
-    [key], [scientificName], [status], [family]…; order kept. *)
+    [key], [scientificName], [status], [family]…; order kept. GBIF sends no
+    [authorship] there: it is the rest of [scientificName] after the words of
+    [canonicalName] (a hybrid sign or a rank marker such as [subsp.] between
+    them skipped), [None] when they do not match. *)
 
 module Vernacular : sig
   type t = {

@@ -4,6 +4,7 @@
       logs [Link.to_string] → outcome (key, scientific name, family; candidates
       count and first keys; unresolved reason and query);
     - « Lien ou texte » + « Résoudre » shows the outcome of a pasted input;
+      « Chercher » opens 4i ([#chercher/<text>]) prefilled with it;
     - a select of the live plants + « Lier » (enabled on a taxon) calls
       {!App.link}, then opens the plant's fiche (4f). *)
 

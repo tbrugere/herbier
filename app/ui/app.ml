@@ -388,7 +388,25 @@ let refresh_if_due t id =
                   | true -> ()
                   | false -> sync_thumbs t id)))
 
-let link t id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
+let gbif_ref ~plant ~at (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
+  References.link ~plant ~source:Source.Gbif
+    ~external_id:(string_of_int taxon.key)
+    ~url:(Herbier_refs.Sources.Gbif.species_url taxon.key)
+    ~at
+
+(* The sources a plant ref can be pasted for (5a): all but the GBIF link,
+   which {!link} itself writes. *)
+let pasted_source = function
+  | Source.Gbif -> false
+  | Source.(
+      ( Wikidata | Wikipedia | Powo | Ipni | Taxref | Tela | Eppo | Inat
+      | Plantnet )) ->
+      true
+
+let fetch_if_online t id key =
+  match online t with true -> start_fetch t id key | false -> ()
+
+let link t ?name id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
   let open Fut.Syntax in
   let* plant = Db.find t.db (Plants.get id) in
   match plant with
@@ -397,7 +415,8 @@ let link t id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
   | Ok (Some plant) -> (
       let at = Ptime_clock.now () in
       (* Every fetched source, not the rows read now: a branch of the old
-         key's fetch may still save before [supersede] below. *)
+         key's fetch may still save before [supersede] below. The pasted
+         links named the old taxon too, so they go with it. *)
       let removes =
         match Plant_link.retires_references plant taxon with
         | false -> []
@@ -405,13 +424,13 @@ let link t id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
             List.map
               (fun source -> References.remove ~plant:id ~source ~at)
               Herbier_refs.Fanout.sources
+            @ List.map
+                (fun source -> References.unlink ~plant:id ~source ~at)
+                (List.filter pasted_source Source.all)
       in
       let edits =
-        Plants.upsert (Plant_link.apply ~at plant taxon)
-        :: References.link ~plant:id ~source:Source.Gbif
-             ~external_id:(string_of_int taxon.key)
-             ~url:(Herbier_refs.Sources.Gbif.species_url taxon.key)
-             ~at
+        Plants.upsert (Plant_link.apply ~at ?name plant taxon)
+        :: gbif_ref ~plant:id ~at taxon
         :: removes
       in
       let was_fetching = is_fetching t id in
@@ -424,7 +443,20 @@ let link t id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
           Error (Store e)
       | Ok (_ : int) ->
           (* Offline, the next fiche opening fetches: the plant is due. *)
-          (match online t with
-          | true -> start_fetch t id taxon.key
-          | false -> ());
+          fetch_if_online t id taxon.key;
           Ok ())
+
+let create_linked t ?(extra = []) (plant : Herbier_domain.Plant.t)
+    (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
+  let open Fut.Syntax in
+  let edits =
+    Plants.upsert plant
+    :: gbif_ref ~plant:plant.id ~at:plant.updated_at taxon
+    :: extra
+  in
+  let+ saved = save t edits in
+  match saved with
+  | Error e -> Error e
+  | Ok (_ : int) ->
+      fetch_if_online t plant.id taxon.key;
+      Ok ()

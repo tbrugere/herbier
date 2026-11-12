@@ -19,6 +19,11 @@ type t = {
 val of_plant : Herbier_domain.Plant.t -> Herbier_domain.Tag.t list -> t
 (** The form as the plant is now, with its live tags. *)
 
+val same_text : string -> string -> bool
+(** Equal once trimmed and ASCII-lowercased, like the store's [collate nocase]:
+    « FORÊT » and « forêt » differ. The comparison of every name, alias and tag
+    rule here and in {!Plant_link}. *)
+
 val add_alias : string -> t -> t
 (** Trimmed; ignored when blank or already there. Comparisons here fold ASCII
     case only, like the store's [collate nocase]: « FORÊT » and « forêt »

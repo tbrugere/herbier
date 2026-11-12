@@ -6,6 +6,7 @@ module Link = Herbier_domain.Link
 module Decode = Herbier_refs.Decode
 module Payload = Herbier_refs.Payload
 module Projection = Herbier_refs.Projection
+module Source_url = Herbier_refs.Source_url
 module Gbif = Herbier_refs.Sources.Gbif
 
 (* ---------- fixtures, ids and times ---------- *)
@@ -651,6 +652,29 @@ let plant_ref_rules () =
     (Some "https://www.inaturalist.org/taxa/53983")
     (link_url Source.Inat proj.links)
 
+let source_url_classification () =
+  List.iter
+    (fun (url, expected) ->
+      Alcotest.(check bool)
+        (url ^ " classifies back") true
+        (Link.equal (Link.classify url) expected))
+    [
+      (Source_url.taxref 94959, Link.Inpn 94959);
+      (Source_url.tela 22437, Link.Tela 22437);
+      (Source_url.inat 53983, Link.Inat 53983);
+      ( Source_url.powo "urn:lsid:ipni.org:names:802077-1",
+        Link.Powo "urn:lsid:ipni.org:names:802077-1" );
+      (Source_url.powo "abc 1", Link.Powo "abc 1");
+      ( Source_url.plantnet "Digitalis purpurea L.",
+        Link.Plantnet "Digitalis purpurea L." );
+      ( Source_url.wikipedia ~lang:"fr" "Ail (plante)",
+        Link.Wikipedia {lang = "fr"; title = "Ail (plante)"} );
+    ];
+  Alcotest.(check string)
+    "an IPNI lsid is written as is"
+    "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:802077-1"
+    (Source_url.powo "urn:lsid:ipni.org:names:802077-1")
+
 let link_classification () =
   let case ~what url expected =
     Alcotest.(check bool)
@@ -1222,6 +1246,8 @@ let rules_tests =
       plant_ref_rules;
     case "every derived link classifies to the matching Domain.Link constructor"
       link_classification;
+    case "Source_url: every builder classifies back to its link"
+      source_url_classification;
     case "toxicity: an en summary gives its first toxic sentence"
       toxicity_en_summary;
     case "toxicity: a disambiguation page gives None and no Wikipedia link"

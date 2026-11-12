@@ -66,12 +66,6 @@ let visible db ~counts ~photos ~text ~tags =
             {plant = p; observations = Filter.count counts p.id; cover_preview})
     plants
 
-let apply handle =
-  List.iter (function
-    | List_patch.Remove i -> RList.remove i handle
-    | List_patch.Insert (i, v) -> RList.insert v i handle
-    | List_patch.Update (i, v) -> RList.update v i handle)
-
 let v app =
   let db = App.db app and state = App.state app in
   let grid, grid_handle = RList.create [] in
@@ -128,7 +122,7 @@ let v app =
             "Recherche impossible : la grille montre le résultat précédent."
       | Ok next when mine = !seq ->
           set_failure "";
-          apply grid_handle (List_patch.diff ~same ~equal !shown next);
+          Rb.patch grid_handle (List_patch.diff ~same ~equal !shown next);
           shown := next
       | Error _ | Ok _ -> ())
   in

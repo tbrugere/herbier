@@ -60,6 +60,11 @@ val view :
     again on each change, the previous rendering's bindings released (an
     {!rlist} of one item). *)
 
+val patch : 'a ReactiveData.RList.handle -> 'a List_patch.edit list -> unit
+(** [patch handle edits] applies [edits] (from {!List_patch.diff}) to the list
+    once, in order. Not a binding: it runs from outside an update step, as
+    {!act} or a resolved future does. *)
+
 val ev : Brr.El.t -> 'a Brr.Ev.type' -> 'a Brr.Ev.t React.event * binding
 (** [ev el type'] is an event fired by each DOM event [type'] on [el], outside
     any update step as long as the browser dispatches [type'] asynchronously.

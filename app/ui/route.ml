@@ -16,10 +16,29 @@ type modal =
   | Record
   | Saved of Observation_id.t
   | Viewer of Photo_id.t
+  | Search of string
+  | Link_species of Plant_id.t
 
 type t = Tab of Tab_bar.tab | Modal of modal | Dev of string
 
 let dev_prefix = "dev/"
+let search_prefix = "chercher/"
+
+let after prefix f =
+  let n = String.length prefix in
+  String.sub f n (String.length f - n)
+
+(* A malformed escape (« 50% ») keeps the text as typed rather than losing it. *)
+let search_query q =
+  match Uri.decode_component (Jstr.v q) with
+  | Ok d -> Jstr.to_string d
+  | Error _ -> q
+
+(* Cannot fail: a string from OCaml has no lone surrogate. *)
+let encoded q =
+  match Uri.encode_component (Jstr.v q) with
+  | Ok q -> Jstr.to_string q
+  | Error _ -> ""
 
 let of_fragment = function
   | "" | "collection" -> Tab Tab_bar.Collection
@@ -30,9 +49,11 @@ let of_fragment = function
   | "tags/gerer" -> Modal Manage_tags
   | "plante/nouvelle" -> Modal New_plant
   | "noter" -> Modal Record
-  | f when String.starts_with ~prefix:dev_prefix f ->
-      let n = String.length dev_prefix in
-      Dev (String.sub f n (String.length f - n))
+  | "chercher" -> Modal (Search "")
+  | f when String.starts_with ~prefix:dev_prefix f -> Dev (after dev_prefix f)
+  (* The query may hold a '/', so it is taken whole, before the split. *)
+  | f when String.starts_with ~prefix:search_prefix f ->
+      Modal (Search (search_query (after search_prefix f)))
   | f -> (
       let plant id k =
         match Plant_id.of_string id with
@@ -47,6 +68,7 @@ let of_fragment = function
       match String.split_on_char '/' f with
       | ["plante"; id] -> plant id (fun id -> Plant id)
       | ["plante"; id; "modifier"] -> plant id (fun id -> Edit_plant id)
+      | ["plante"; id; "lier"] -> plant id (fun id -> Link_species id)
       | ["observation"; id] -> observation id (fun id -> Observation id)
       | ["observation"; id; "espece"] ->
           observation id (fun id -> Change_species id)
@@ -75,6 +97,9 @@ let to_fragment = function
   | Modal Record -> "noter"
   | Modal (Saved id) -> "noter/enregistre/" ^ Observation_id.to_string id
   | Modal (Viewer id) -> "photo/" ^ Photo_id.to_string id
+  | Modal (Search "") -> "chercher"
+  | Modal (Search q) -> search_prefix ^ encoded q
+  | Modal (Link_species id) -> "plante/" ^ Plant_id.to_string id ^ "/lier"
   | Dev name -> dev_prefix ^ name
 
 let fragment () = Jstr.to_string (Uri.fragment (Window.location G.window))

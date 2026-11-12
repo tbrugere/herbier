@@ -79,6 +79,11 @@ let page app =
       ()
   in
   let resolve_button = button "Résoudre" in
+  let search_button = button "Chercher" in
+  on_click search_button (fun () ->
+      Route.go
+        (Route.Modal
+           (Route.Search (Jstr.to_string (El.prop El.Prop.value input)))));
   let result = El.p [] in
   let select =
     El.select ~at:[At.v (Jstr.v "aria-label") (Jstr.v "Plante")] []
@@ -124,7 +129,7 @@ let page app =
   [
     El.h1 [El.txt' "Link check"];
     El.p [examples_button];
-    El.p [input; resolve_button];
+    El.p [input; resolve_button; search_button];
     result;
     El.p [select; link_button];
     log;

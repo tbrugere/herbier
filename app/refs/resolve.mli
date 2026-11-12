@@ -57,6 +57,36 @@ val resolve : Herbier_domain.Link.t -> outcome Step.t
     lookup → [No_species]; a [Failed] one or an undecodable body →
     [Unavailable msg]. [query] as documented on {!outcome}. *)
 
+module Candidate : sig
+  type t = {
+    taxon : Taxon.t;
+    french : string list;
+        (** The French names GBIF's vernacular search gave for [taxon.key]: of
+            that key's first result in the vernacular page, the
+            [vernacularNames] rows of language ["fra"], each [name] split on
+            [','], pieces trimmed, blank ones dropped, deduplicated by
+            [String.lowercase_ascii] keeping the first spelling, payload order.
+            [[]] when the vernacular page did not list the key, or when that
+            call failed. *)
+  }
+
+  val equal : t -> t -> bool
+end
+
+val search : q:string -> (Candidate.t list, unresolved) result Step.t
+(** 4i / 4k / 5c reference search: the calls, order, key dedup and failure rules
+    of {!candidates}, each taxon with its French names. When only the vernacular
+    call fails, suggest's taxa come back with [french = []] for every row and
+    the failure is not reported. A blank [q] → [Ok []] without a call. *)
+
+val chosen : Taxon.t -> (Taxon.t, unresolved) result Step.t
+(** The taxon to store when a search row is chosen. [status = Some Synonym]
+    (whatever [accepted_key]: GBIF's suggest omits [acceptedKey]) →
+    [Gbif.species ~key] then the one-hop synonym rule of {!resolve}: the
+    accepted taxon. [Absent] → [Error No_species]; [Failed] or an undecodable
+    body → [Error (Unavailable msg)]. Any other status, or [None] → [Ok t]
+    without a call. *)
+
 val candidates : q:string -> (Taxon.t list, unresolved) result Step.t
 (** [Gbif.suggest ~q] then [Gbif.vernacular_search ~q]: suggest's taxa, then the
     vernacular results' taxa whose key is not already listed (each key once),

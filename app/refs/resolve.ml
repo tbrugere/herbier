@@ -101,6 +101,35 @@ let taxa request decode =
   | Step.Absent -> Error (Unavailable "not found")
   | Step.Failed msg -> Error (Unavailable msg)
 
+module Candidate = struct
+  type t = {taxon : Taxon.t; french : string list}
+
+  let equal (a : t) b = a = b
+end
+
+(* The pieces of the French rows, first spelling of each kept: TAXREF joins
+   several names in one row. *)
+let french (names : Gbif.Vernacular.t list) =
+  let pieces =
+    List.concat_map
+      (fun (v : Gbif.Vernacular.t) ->
+        match v.language with
+        | Some "fra" ->
+            List.filter_map
+              (fun piece -> Decode.non_blank (String.trim piece))
+              (String.split_on_char ',' v.name)
+        | Some _ | None -> [])
+      names
+  in
+  List.rev
+    (List.fold_left
+       (fun acc name ->
+         let lower = String.lowercase_ascii name in
+         match List.exists (fun n -> String.lowercase_ascii n = lower) acc with
+         | true -> acc
+         | false -> name :: acc)
+       [] pieces)
+
 (* [extra] in order, without the keys of [listed] nor its own repeats. *)
 let distinct ~listed extra =
   let has (t : Taxon.t) = List.exists (fun (u : Taxon.t) -> u.key = t.key) in
@@ -110,22 +139,53 @@ let distinct ~listed extra =
          match has t listed || has t acc with true -> acc | false -> t :: acc)
        [] extra)
 
-let candidates ~q =
+(* Both calls whatever [q]: {!search} adds the blank check, {!candidates}
+   has none. *)
+let searched ~q =
   let open Step.Syntax in
   let* suggested = taxa (Gbif.suggest ~q) Gbif.suggest_of_json in
   let+ vernacular =
     taxa (Gbif.vernacular_search ~q) (fun json ->
         Result.map
-          (fun (page : _ Gbif.page) -> List.map fst page.results)
+          (fun (page : _ Gbif.page) -> page.results)
           (Gbif.vernacular_search_of_json json))
   in
-  match (suggested, vernacular) with
-  | Ok s, Ok v -> Ok (s @ distinct ~listed:s v)
-  (* An empty answer next to a failure is not "nothing found". *)
-  | Ok [], Error e | Error e, Ok [] -> Error e
-  | Ok s, Error _ -> Ok s
-  | Error _, Ok v -> Ok (distinct ~listed:[] v)
-  | Error e, Error _ -> Error e
+  let names (t : Taxon.t) =
+    match vernacular with
+    | Error _ -> []
+    | Ok results -> (
+        match
+          List.find_opt (fun ((u : Taxon.t), _) -> u.key = t.key) results
+        with
+        | None -> []
+        | Some (_, names) -> french names)
+  in
+  let candidate taxon = {Candidate.taxon; french = names taxon} in
+  let taxa = Result.map (List.map fst) vernacular in
+  Result.map (List.map candidate)
+    (match (suggested, taxa) with
+    | Ok s, Ok v -> Ok (s @ distinct ~listed:s v)
+    (* An empty answer next to a failure is not "nothing found". *)
+    | Ok [], Error e | Error e, Ok [] -> Error e
+    | Ok s, Error _ -> Ok s
+    | Error _, Ok v -> Ok (distinct ~listed:[] v)
+    | Error e, Error _ -> Error e)
+
+let search ~q =
+  match Decode.non_blank q with
+  | None -> Step.return (Ok [])
+  | Some _ -> searched ~q
+
+let candidates ~q =
+  Step.map
+    (Result.map (List.map (fun (c : Candidate.t) -> c.taxon)))
+    (searched ~q)
+
+let chosen (t : Taxon.t) =
+  match t.status with
+  | Some Gbif.Status.Synonym -> species t.key
+  | Some (Gbif.Status.Accepted | Doubtful | Other _) | None ->
+      Step.return (Ok t)
 
 let outcome ~query result =
   Step.map
