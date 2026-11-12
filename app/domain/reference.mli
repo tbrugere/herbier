@@ -70,13 +70,18 @@ end
 type id = Ids.Reference_id.t
 (** The id of the reference row: [Ids.Reference_id.t] under a local name. *)
 
+val id_of_key : plant:Ids.Plant_id.t -> source:Source.t -> id
+(** [Ids.Reference_id.of_key ~plant ~source:(Source.to_string source)]: the id
+    every install derives for the row of [(plant, source)]. *)
+
 type t = {
   id : id;
   plant_id : Ids.Plant_id.t;
   source : Source.t;
   fetched_at : Ptime.t;
-  payload : string;
-      (** JSON text as returned, lightly normalised; parsed in [refs/]. *)
+  payload : Yojson.Safe.t;
+      (** A JSON object, one member per call made to the source (architecture
+          §6). Never [`Null]. *)
   status : Status.t;
   created_at : Ptime.t;
   updated_at : Ptime.t;
@@ -90,6 +95,9 @@ type t = {
 module Plant_ref : sig
   type id = Ids.Plant_ref_id.t
   (** The id of the link row: [Ids.Plant_ref_id.t] under a local name. *)
+
+  val id_of_key : plant:Ids.Plant_id.t -> source:Source.t -> id
+  (** [Ids.Plant_ref_id.of_key ~plant ~source:(Source.to_string source)]. *)
 
   type t = {
     id : id;

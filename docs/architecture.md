@@ -69,8 +69,9 @@ Photo        id, observation_id, taken_at, width, height,
 Tag          id, name, created_at, updated_at, deleted_at?
 PlantTag     id, plant_id, tag_id, created_at, updated_at, deleted_at?;
              unique (plant_id, tag_id): re-adding a tag revives its row
-Reference    id, plant_id, source, fetched_at, payload (JSON as returned,
-             lightly normalised), status (complete|partial|missing|failed),
+Reference    id, plant_id, source, fetched_at, payload (one JSON object per
+             source: each call's body, pruned to the fields read), status
+             (complete|partial|missing|failed),
              created_at, updated_at, deleted_at?; unique (plant_id, source)
 RefImage     plant_id, source, organ? (flower|leaf|fruit|habit), remote_url,
              licence, attribution, thumb_path? (device, ~300 px); device-only
@@ -223,7 +224,8 @@ reference` with:
   `tag_id` or `source`, under the Herbier namespace
   `b85c6db9-9479-4fb1-af57-3ff6ad665b62`, of the name
   `<table>/<plant_id>/<tag_id or source>` in canonical lowercase, e.g.
-  `plant_tags/<plant_id>/<tag_id>`: `Ids.Plant_tag_id.of_key`), not a random one:
+  `plant_tags/<plant_id>/<tag_id>`; `Ids.Plant_tag_id.of_key`,
+  `Ids.Plant_ref_id.of_key`, `Ids.Reference_id.of_key`), not a random one:
   two installs that create the same link before syncing produce the same
   id, so the second push merges instead of failing on the unique constraint;
 - server-only columns, `owner_id` (defaulted to the caller) and
@@ -337,15 +339,32 @@ gbif_key
              /redLists/entries
 ```
 
-- Each call writes its own `reference` row (source, payload, status), so a
+- Each source writes its own `reference` row (source, payload, status), so a
   failing source never blanks the others and every row in the UI cites its
   source (handoff 4f: "Une ligne sans donnée disparaît. Toute donnée cite sa
-  source.").
+  source."). The payload (`refs/payload.ml`) is an object with one member per
+  call, holding that call's body as returned, pruned to the fields the
+  decoders read (≈ 100 KB per plant instead of ≈ 700 KB), so the decoders
+  read stored payloads unchanged: `gbif` {species, vernacular_names,
+  distributions, occurrence_count}, `plantnet` {media} (the Pl@ntNet dataset's
+  occurrences, fetched from GBIF but cited as Pl@ntNet, hence its own row),
+  `wikidata` {search, entity}, `wikipedia` {summary}. A failed call's member
+  is absent.
 - The species page reads a **projection** of the reference rows into the
   handoff's `ReferenceSnapshot` fields (vernacular per language, family, life
   form, native/introduced range, FR status, protection, red list, flowering
   months, habitat/ecology chips, toxicity, organ photos, links). Altitude is
-  dropped; height is parsed from Coste text when present.
+  dropped; height is parsed from Coste text when present. The projection
+  (`refs/projection.ml`) reads whatever parts a row holds, whatever its
+  status, and a part that fails to decode degrades its fields only. Rules:
+  vernacular names from GBIF rows and Wikidata P1843 in fr, en, de, it, top
+  three by votes (case-insensitive); native/introduced ranges from the WCVP
+  rows of GBIF distributions; red list from the global IUCN row only
+  (national lists are the regional layer); toxicity is the first sentence of
+  the Wikipedia summary naming toxicity; organ photos one per organ; links are
+  the plant's `plant_refs` URLs when they are https and point at their source
+  (else ignored), else URLs derived from the GBIF key, the
+  summary page and the Wikidata ids (POWO, INPN, Tela, iNat, EPPO).
 - Organ photos: four thumbnails (fleur/feuille/fruit/port) picked from the
   GBIF Pl@ntNet dataset media by `title` suffix, downloaded to `refthumbs/`
   with licence and attribution kept for display.

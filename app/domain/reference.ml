@@ -86,12 +86,15 @@ end
 
 type id = Ids.Reference_id.t
 
+let id_of_key ~plant ~source =
+  Ids.Reference_id.of_key ~plant ~source:(Source.to_string source)
+
 type t = {
   id : id;
   plant_id : Ids.Plant_id.t;
   source : Source.t;
   fetched_at : Ptime.t;
-  payload : string;
+  payload : Yojson.Safe.t;
   status : Status.t;
   created_at : Ptime.t;
   updated_at : Ptime.t;
@@ -100,6 +103,9 @@ type t = {
 
 module Plant_ref = struct
   type id = Ids.Plant_ref_id.t
+
+  let id_of_key ~plant ~source =
+    Ids.Plant_ref_id.of_key ~plant ~source:(Source.to_string source)
 
   type t = {
     id : id;

@@ -92,7 +92,7 @@ app/
   domain/                 types and rules; Stdlib + ptime (+ clock for Ids.fresh) + uuidm + yojson; no Brr
     plant.ml  observation.ml  photo.ml  tag.ml  reference.ml   row records and their enums
                           (tag: + plant_tag; reference: + plant_ref, image, source/status/organ;
-                          the 4f snapshot arrives with refs/projection.ml)
+                          the 4f snapshot is Refs.Projection.t)
     ids.ml                UUID generation, one typed id per synced table (Ids.S); store/tables.ml
                           declares id columns over Ids.*.to_json/of_json, not a second decoder
     merge.ml              last-write-wins on updated_at, outbox-wins rule
@@ -147,12 +147,14 @@ app/
     preview_size.ml       pure: the preview's size rule and JPEG quality
     jpeg.ml               pure: JPEG segment reading (is there an EXIF APP1)
     drive.ml (files.create, folders, trashed check)  upload_queue.ml  health.ml
-  refs/                   §6–7 of architecture, pure part: domain + yojson, no Brr
+  refs/                   §6–7 of architecture, pure part: domain + yojson + ptime, no Brr
     request.ml            Request.t: source + URL of one GET; percent-encoding, URL assembly
     decode.ml             decode error variant, JSON parsing, field helpers shared by sources/
     qid.ml                Wikidata item id (Q<digits>)
     sources/              gbif.ml  wikidata.ml  wikipedia.ml: request descriptions + payload decoders
                           tela.ml  inpn.ml: later, once the region is decided
+    payload.ml            one reference row's payload: an object of each call's body, pruned to the fields
+                          the decoders read; shared by the projection (reader) and the pipeline (writer)
     projection.ml         reference rows → ReferenceSnapshot fields (4f), pure over JSON
   refs_io/                §6–7 of architecture, Brr part
     http.ml               fetch identified as Herbier/<version> (Api-User-Agent to
@@ -192,10 +194,12 @@ app/
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
-                          serialisation, park/delete); seed_check.ml (#dev/seed): applies store/dev_seed.ml
+                          serialisation, park/delete) and the reference payload column (put, link, unlink);
+                          seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
-                          purpurea fetched and decoded; photo_check.ml (#dev/photos): gallery pick, then per photo
+                          purpurea fetched and decoded, then both spike species projected live (filled and
+                          empty 4f fields, payload sizes); photo_check.ml (#dev/photos): gallery pick, then per photo
                           exifr → Exif, sha256, Preview.make → dev/preview.jpg written, read back (sizes compared,
                           EXIF segment checked) and shown as a blob: URL; one GPS fix; rb_check.ml (#dev/rb):
                           self-checks every Rb binding, rlist's in-place patches, item bindings and anchors, then a
@@ -229,7 +233,7 @@ domain    ← ptime, ptime.clock.os, uuidm, yojson
 postgrest ← yojson, ptime, uri           (lib/; no domain, no Brr, no ppxlib)
 postgrest-codegen ← ppxlib, ppx_deriving_yojson, yojson (lib/postgrest/codegen/, its own package; a build-time tool, no app library links it;
                                          postgrest only as an opam version constraint, = version: the output targets its API)
-refs      ← domain, yojson               (no Brr)
+refs      ← domain, yojson, ptime        (no Brr)
 bindings  ← brr
 store     ← domain, bindings, postgrest, yojson, ptime, brr (for Fut)
 sync      ← domain, store, bindings, postgrest, brr (for Fut)
@@ -373,11 +377,13 @@ test/
                 responses compared to expected values
     codegen/    native, alcotest: catalog decoding, every metadata rule and error, the emitted AST;
                 cli.t (cram) runs the executable
-  refs/         native, alcotest: request URLs, payload decoders and projection over fixtures/
-    jsoo/       js_of_ocaml build of the decoders run under node: GBIF occurrence keys above 2^31
+  refs/         native, alcotest: request URLs, payload decoders, stored payloads (pruning keeps decoding)
+                and the projection of the two spike species over fixtures/
+    jsoo/       js_of_ocaml build of the decoders run under node: GBIF occurrence keys above 2^31,
+                also through a pruned Pl@ntNet payload
   ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune)
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
-                the per-table queries, settings, search, dev_seed); schema SQL, queries, FTS triggers and
+                the per-table queries, references included, settings, search, dev_seed); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
                 (that is #dev/store)
   photos/       native, alcotest: the pure modules of app/photos/ copied in (exif, over recorded

@@ -9,8 +9,10 @@
   test_request
   test_gbif
   test_wikidata
-  test_wikipedia)
- (libraries herbier_refs herbier_domain yojson alcotest)
+  test_wikipedia
+  test_payload
+  test_projection)
+ (libraries herbier_refs herbier_domain yojson ptime alcotest)
  (deps
   (glob_files %{project_root}/test/fixtures/*.json)
   %{project_root}/scripts/record-refs-fixtures.sh))

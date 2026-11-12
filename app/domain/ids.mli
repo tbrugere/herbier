@@ -69,5 +69,23 @@ module Plant_tag_id : sig
       two uuids gives a different id. Never raises. *)
 end
 
-module Plant_ref_id : S
-module Reference_id : S
+module Plant_ref_id : sig
+  include S
+
+  val of_key : plant:Plant_id.t -> source:string -> t
+  (** The id of the [plant_refs] row for [(plant, source)] (architecture §4):
+      the UUID v5 under the Herbier namespace of the name
+      ["plant_refs/" ^ Plant_id.to_string plant ^ "/" ^ source]. [source] is the
+      stored label, used as given (no trimming, no case folding): callers go
+      through [Reference.Plant_ref.id_of_key], which takes a [Source.t].
+      Deterministic across installs; never raises. *)
+end
+
+module Reference_id : sig
+  include S
+
+  val of_key : plant:Plant_id.t -> source:string -> t
+  (** Same, of the name ["reference/" ^ Plant_id.to_string plant ^ "/" ^ source]
+      (the table is [reference], singular); callers go through
+      [Reference.id_of_key]. *)
+end

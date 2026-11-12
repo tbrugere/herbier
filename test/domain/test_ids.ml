@@ -1,5 +1,5 @@
 (* Compile-time property, not tested here: the [t] types are pairwise
-   distinct and abstract (each module is sealed with [: S] in ids.mli), so a
+   distinct and abstract (each [t] is abstract in ids.mli), so a
    Plant_id.t passed where an Observation_id.t is expected is a type error. *)
 
 let v = "123e4567-e89b-42d3-a456-426614174000"
@@ -309,10 +309,126 @@ module Key = struct
       ]
 end
 
+(* Reference_id.of_key / Plant_ref_id.of_key: same namespace and generator as
+   Plant_tag_id.of_key, vectors from Python's uuid.uuid5(ns, name). *)
+module Derived_key = struct
+  module Ids = Herbier_domain.Ids
+
+  let plant s =
+    match Ids.Plant_id.of_string s with
+    | Some x -> x
+    | None -> Alcotest.failf "Plant_id.of_string %S gave None" s
+
+  let plant_a = "00000000-0000-4000-8000-00000000000a"
+  let plant_b = "00000000-0000-4000-8000-00000000000b"
+
+  let reference_str ~plant:p ~source =
+    Ids.Reference_id.to_string
+      (Ids.Reference_id.of_key ~plant:(plant p) ~source)
+
+  let plant_ref_str ~plant:p ~source =
+    Ids.Plant_ref_id.to_string
+      (Ids.Plant_ref_id.of_key ~plant:(plant p) ~source)
+
+  let vectors () =
+    Alcotest.(check string)
+      "Reference_id.of_key plant ...0a source gbif is the uuid5 vector"
+      "6dbeba6a-0c34-5e61-9d98-367c37ddeff8"
+      (reference_str ~plant:plant_a ~source:"gbif");
+    Alcotest.(check string)
+      "Reference_id.of_key plant ...0a source wikipedia is the uuid5 vector"
+      "516bce03-f23c-5e1c-b536-3331be61ba72"
+      (reference_str ~plant:plant_a ~source:"wikipedia");
+    Alcotest.(check string)
+      "Reference_id.of_key plant ...0b source gbif is the uuid5 vector"
+      "07aa50c5-90c9-583d-975d-317939e21bc8"
+      (reference_str ~plant:plant_b ~source:"gbif");
+    Alcotest.(check string)
+      "Plant_ref_id.of_key plant ...0a source gbif is the uuid5 vector"
+      "683c5eee-0829-53c9-be5e-a2ce094ef086"
+      (plant_ref_str ~plant:plant_a ~source:"gbif");
+    Alcotest.(check string)
+      "Plant_ref_id.of_key plant ...0a source wikipedia is the uuid5 vector"
+      "d5834cd6-3eb5-5d5e-af3e-cdd6b5d5fec6"
+      (plant_ref_str ~plant:plant_a ~source:"wikipedia");
+    Alcotest.(check string)
+      "Plant_ref_id.of_key plant ...0b source gbif is the uuid5 vector"
+      "2144c05e-bf9f-5c8a-9f54-f65b6abdc9c3"
+      (plant_ref_str ~plant:plant_b ~source:"gbif")
+
+  let deterministic () =
+    Alcotest.(check string)
+      "two calls with the same pair give the same Reference_id"
+      (reference_str ~plant:plant_a ~source:"gbif")
+      (reference_str ~plant:plant_a ~source:"gbif");
+    Alcotest.(check string)
+      "two calls with the same pair give the same Plant_ref_id"
+      (plant_ref_str ~plant:plant_a ~source:"gbif")
+      (plant_ref_str ~plant:plant_a ~source:"gbif")
+
+  let version_5 () =
+    List.iter
+      (fun s ->
+        Alcotest.(check char) (s ^ ": version nibble is 5") '5' s.[14];
+        Alcotest.(check bool)
+          (Printf.sprintf "%s: variant nibble %C is one of 8 9 a b" s s.[19])
+          true
+          (String.contains "89ab" s.[19]))
+      [
+        reference_str ~plant:plant_a ~source:"gbif";
+        plant_ref_str ~plant:plant_a ~source:"gbif";
+      ]
+
+  let uppercase_plant_id_parses_the_same () =
+    Alcotest.(check string)
+      "an uppercase plant id string gives the same Reference_id"
+      (reference_str ~plant:plant_a ~source:"gbif")
+      (reference_str ~plant:(String.uppercase_ascii plant_a) ~source:"gbif");
+    Alcotest.(check string)
+      "an uppercase plant id string gives the same Plant_ref_id"
+      (plant_ref_str ~plant:plant_a ~source:"gbif")
+      (plant_ref_str ~plant:(String.uppercase_ascii plant_a) ~source:"gbif")
+
+  let reference_and_plant_ref_differ () =
+    Alcotest.(check bool)
+      "Reference_id.of_key and Plant_ref_id.of_key of the same pair differ"
+      false
+      (String.equal
+         (reference_str ~plant:plant_a ~source:"gbif")
+         (plant_ref_str ~plant:plant_a ~source:"gbif"))
+
+  let distinct_sources_differ () =
+    Alcotest.(check bool)
+      "distinct sources give distinct Reference_id" false
+      (String.equal
+         (reference_str ~plant:plant_a ~source:"gbif")
+         (reference_str ~plant:plant_a ~source:"wikipedia"));
+    Alcotest.(check bool)
+      "distinct sources give distinct Plant_ref_id" false
+      (String.equal
+         (plant_ref_str ~plant:plant_a ~source:"gbif")
+         (plant_ref_str ~plant:plant_a ~source:"wikipedia"))
+
+  let tests =
+    List.map
+      (fun (fact, f) -> ("of_key: " ^ fact, `Quick, f))
+      [
+        ("matches the uuid5 test vectors", vectors);
+        ("is deterministic", deterministic);
+        ("is a version 5 UUID", version_5);
+        ( "ignores the letter case of the plant id",
+          uppercase_plant_id_parses_the_same );
+        ( "Reference_id and Plant_ref_id of the same pair differ",
+          reference_and_plant_ref_differ );
+        ("gives distinct ids to distinct sources", distinct_sources_differ);
+      ]
+end
+
 let tests =
   List.concat
     [
       Key.tests;
+      Derived_key.tests;
       Plant.tests "Plant_id";
       Observation.tests "Observation_id";
       Photo.tests "Photo_id";

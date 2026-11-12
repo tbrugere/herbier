@@ -9,6 +9,9 @@ module Observation_queries = Herbier_store.Observations
 module Outbox = Herbier_store.Outbox
 module Search = Herbier_store.Search
 module Settings = Herbier_store.Settings
+module References = Herbier_store.References
+module Reference = Herbier_domain.Reference
+module Reference_id = Herbier_domain.Ids.Reference_id
 module Row = Postgrest.Row
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Photo_id = Herbier_domain.Ids.Photo_id
@@ -350,10 +353,11 @@ type count
 let count_row : (count, int) Row.t = Row.col {ty = Not_Null Integer; name = "n"}
 let print_ints rows = String.concat ", " (List.map string_of_int rows)
 
-(* 2 from round-trip, 2 from search, 3 from the outbox group. *)
+(* 2 from round-trip, 2 from search, 3 from the outbox group, 1 from the
+   references group. *)
 let check_count log db =
-  step log "7 plants rows" ~detail:no_detail
-    (expect print_ints [7]
+  step log "8 plants rows" ~detail:no_detail
+    (expect print_ints [8]
        (Db.query db ~json:[] count_row "select count(*) as n from plants" []))
 
 let outbox_count db = Db.all db Outbox.count
@@ -507,6 +511,92 @@ let check_outbox log db =
           (expect_changed (Db.write db (Outbox.delete first.seq)))
       in
       check_outbox_count log db 4
+
+(* The payload column holds JSON text that only the device's plugin stores
+   and returns: test/store cannot show it round-trips there. An [`Intlit]
+   because js_of_ocaml reads an occurrence key above 2^31 back as one. *)
+let reference_payload n =
+  `Assoc
+    [
+      ( "species",
+        `Assoc
+          [
+            ("key", `Int 5414995);
+            ("vernacularName", `String "Digitale pourprée");
+            ("results", `List [`Assoc [("key", `Intlit "5110295086")]; `Null]);
+          ] );
+      ("occurrence_count", `Int n);
+    ]
+
+let expect_reference ~id ~payload ~updated_at fut =
+  Fut.map
+    (fun r ->
+      Result.bind r (function
+        | Some (got : Reference.t)
+          when Reference_id.equal got.id id
+               && Yojson.Safe.equal got.payload payload
+               && Ptime.equal got.updated_at updated_at ->
+            Ok got
+        | Some got ->
+            Error
+              (Mismatch
+                 {
+                   expected = Yojson.Safe.to_string payload;
+                   got =
+                     Printf.sprintf "%s %s %s"
+                       (Reference_id.to_string got.id)
+                       (Ptime.to_rfc3339 got.updated_at)
+                       (Yojson.Safe.to_string got.payload);
+                 })
+        | None -> Error (Mismatch {expected = "a row"; got = "none"})))
+    (store fut)
+
+let check_references log db =
+  let open Fut.Result_syntax in
+  let p = search_plant "References" None in
+  let plant = p.id in
+  let t1 = time "2026-10-28T17:00:00Z" and t2 = time "2026-10-28T18:00:00Z" in
+  let id = Reference.id_of_key ~plant ~source:Gbif in
+  let put n at =
+    References.put ~plant ~source:Gbif ~fetched_at:at
+      ~payload:(reference_payload n) ~status:Complete ~at
+  in
+  let entries n label edits =
+    step log label ~detail:no_detail (expect string_of_int n (Db.edit db edits))
+  in
+  let* (_ : int) = entries 1 "edit: plant" [Plant_queries.upsert p] in
+  let* (_ : int) = entries 1 "put gbif" [put 1 t1] in
+  let* (_ : Reference.t) =
+    step log "get = put" ~detail:no_detail
+      (expect_reference ~id ~payload:(reference_payload 1) ~updated_at:t1
+         (Db.find db (References.get plant Gbif)))
+  in
+  let* (_ : int) = entries 1 "put gbif again" [put 2 t2] in
+  let* (_ : Reference.t) =
+    step log "same id, new payload, updated_at moved" ~detail:no_detail
+      (expect_reference ~id ~payload:(reference_payload 2) ~updated_at:t2
+         (Db.find db (References.get plant Gbif)))
+  in
+  let link =
+    References.link ~plant ~source:Gbif ~external_id:"5414995"
+      ~url:"https://www.gbif.org/species/5414995" ~at:t1
+  in
+  let* (_ : int) = entries 1 "link" [link] in
+  let* (_ : int) = entries 0 "same link" [link] in
+  let* (_ : int) =
+    entries 1 "unlink" [References.unlink ~plant ~source:Gbif ~at:t2]
+  in
+  step log "last outbox entries"
+    ~detail:(fun names -> Some (print_names names))
+    (expect print_names
+       ["plants"; "reference"; "reference"; "plant_refs"; "plant_refs"]
+       (Fut.map
+          (Result.map (fun entries ->
+               List.map (fun (e : Outbox.entry) -> e.table_name) entries
+               |> List.rev
+               |> List.take 5
+               |> List.rev))
+          (Db.all db (Outbox.next ~limit:100))))
 
 (* Runs [f db], then closes [db] when [f] failed, keeping [f]'s error: the
    next group then starts with no connection left open. *)
@@ -681,6 +771,8 @@ let fresh_then_reuse log database =
   let* (_ : bool option) = closing_on_error db (check_settings log) in
   heading log "outbox";
   let* (_ : int list) = closing_on_error db (check_outbox log) in
+  heading log "references";
+  let* (_ : string list) = closing_on_error db (check_references log) in
   heading log "reopen";
   reopen log db database
 
