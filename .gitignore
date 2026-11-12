@@ -44,3 +44,6 @@ __pycache__/
 
 # direnv: local env and secrets
 .envrc
+# production build settings: never committed (see .env.prod.example)
+.env.prod
+.env.*.local
