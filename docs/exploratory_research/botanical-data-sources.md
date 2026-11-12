@@ -1,6 +1,6 @@
 # Herbier — External botanical data sources
 
-Date of research: **2026-09-15**. Every endpoint below was hit live on that date with `curl` (User-Agent `Herbier-research/0.1 (67050900+tbrugere@users.noreply.github.com)`) for *Digitalis purpurea* (GBIF 5414995, TaxRef 94959, Tela bdtfx nn 22437, Wikidata Q157555) and, where useful, *Arnica montana* (GBIF 5405976, TaxRef 83874, Tela nn 6646, Q207848). Raw responses are kept in the session scratchpad (`research/raw/`). Anything not directly observed is marked **UNVERIFIED**.
+Date of research: **2026-09-15**. Every endpoint below was hit live on that date with `curl` (User-Agent `Herbier-research/0.1 (https://github.com/tbrugere/herbier)`) for *Digitalis purpurea* (GBIF 5414995, TaxRef 94959, Tela bdtfx nn 22437, Wikidata Q157555) and, where useful, *Arnica montana* (GBIF 5405976, TaxRef 83874, Tela nn 6646, Q207848). Raw responses are kept in the session scratchpad (`research/raw/`). Anything not directly observed is marked **UNVERIFIED**.
 
 ---
 
