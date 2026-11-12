@@ -1,5 +1,6 @@
 type point = {lat : float; lon : float}
 
+let equal_point a b = Float.equal a.lat b.lat && Float.equal a.lon b.lon
 let of_position ({lat; lon; accuracy_m = _} : Observation.position) = {lat; lon}
 let earth_radius_m = 6_371_000.
 let radius_m = 500.

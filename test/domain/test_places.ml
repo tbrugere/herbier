@@ -714,8 +714,22 @@ let rename_result_names_the_place () =
     "the renamed cluster's label is Named Jardin" (named "Jardin")
     (Places.label (List.map replace cluster.members))
 
+let equal_point_cases () =
+  let check what expected a b =
+    Alcotest.(check bool) what expected (Places.equal_point a b)
+  in
+  check "same coordinates" true o {lat = 45.0; lon = 5.0};
+  check "another lat" false o {lat = 45.000001; lon = 5.0};
+  check "another lon" false o {lat = 45.0; lon = 5.000001};
+  check "nan equals nan" true
+    {lat = Float.nan; lon = 5.0}
+    {lat = Float.nan; lon = 5.0}
+
 let tests =
   [
+    ( "equal_point compares both coordinates with Float.equal",
+      `Quick,
+      equal_point_cases );
     ( "distance_m of a point to itself is 0",
       `Quick,
       distance_zero_for_equal_points );

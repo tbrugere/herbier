@@ -52,8 +52,8 @@ let modal app = function
   | Herbier_ui.Route.New_plant ->
       Herbier_ui.Screens.Edit_plant.v app Herbier_ui.Screens.Edit_plant.New
 
-(* [online] and the theme are read once, here: no online or offline listener
-   updates the first, and app.css is loaded by now. *)
+(* The theme is read once, here: app.css is loaded by now. [online] starts
+   from the navigator and {!watch_network} keeps it current. *)
 let create_app db (storage, wifi_only) =
   let state =
     Herbier_ui.State.create
@@ -61,6 +61,27 @@ let create_app db (storage, wifi_only) =
       ~account:{google_signed_in = false; storage; wifi_only}
   in
   Herbier_ui.App.create ~db ~state ~theme:(Herbier_ui.Theme.load ())
+
+(* The window's online and offline events update [State.network]; coming
+   back online geocodes what was saved meanwhile (architecture §8). The
+   window holds the listeners for the app's lifetime. *)
+let watch_network app =
+  let state = Herbier_ui.App.state app in
+  let set online (_ : Ev.Type.void Ev.t) =
+    let network = React.S.value (Herbier_ui.State.network state) in
+    Herbier_ui.State.set_network state {network with online};
+    match online with true -> Herbier_ui.App.geocode_pending app | false -> ()
+  in
+  let listen name online =
+    ignore
+      (Ev.listen
+         (Ev.Type.void (Jstr.v name))
+         (set online)
+         (Window.as_target G.window)
+        : Ev.listener)
+  in
+  listen "online" true;
+  listen "offline" false
 
 (* What the router gets: the database for the dev pages and the app for the
    tabs, or why there is none. An exception while building the app (a bug)
@@ -105,7 +126,9 @@ let () =
     [El.p ~at:[At.class' (Jstr.v "screen")] [El.txt' "Chargement…"]];
   Fut.await (start ()) (fun (db, app) ->
       (match app with
-      | Ok (_ : Herbier_ui.App.t) -> ()
+      | Ok app ->
+          watch_network app;
+          Herbier_ui.App.geocode_pending app
       | Error reason -> Console.(error [str "herbier: startup"; str reason]));
       Herbier_ui.Router.start ~root ~tab:(or_unavailable tab app)
         ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db app))

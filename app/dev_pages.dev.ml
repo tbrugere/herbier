@@ -27,4 +27,5 @@ let find db app =
   | "spike" -> Some (page (fun () -> D.Spike_check.el db))
   | "capture" -> Some (page D.Capture_check.el)
   | "map" -> Some (page (fun () -> D.Map_check.el db))
+  | "geocode" -> Some (page D.Geocode_check.el)
   | _ -> None

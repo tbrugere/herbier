@@ -503,7 +503,30 @@ the classifier must accept both a bare URL and text containing one.
   the accuracy circle (`Widgets.Mini_map`); tapping it opens 4b centred on the
   observation, through a one-shot framing in `State.map_view`.
 - Reverse geocoding for `place_derived`: Photon (or Géoplateforme in France),
-  called once per observation when online, cached in the row.
+  called once per observation when online, cached in the row
+  (`Geo.Geocode.reverse`, run by `Geo.Geocoder`, triggered by `App`):
+  - inside a coarse box of metropolitan France and Corsica, the nearest
+    Géoplateforme lieu-dit (habité or not) within 500 m, else the commune
+    containing the point, else Photon; outside the box, Photon only. Photon's
+    name counts only when it is an OSM `place` (city … islet), else its
+    district, else its city;
+  - the row stores the phrase « Près de … » with the French contraction
+    (du, des, de la, de l’, d’), which 4c, 4e and 4h print as is;
+  - written by a conditional `Observations.set_place_derived` (live, same
+    position, still unnamed) through `App` with its outbox entry, so a late
+    answer never overwrites a move or a newer name;
+  - triggered at startup, when the window comes back online (main.ml's
+    `online`/`offline` listener keeps `State.network` current), and after
+    every `App.save` that changed rows, when `State.network` says online,
+    newest observation first, one at a time;
+  - a miss, or a payload or HTTP error, is not retried in the same session;
+    the next app start asks again (up to three requests per unnamed point in
+    France; the providers' data also changes over time). A transient error
+    (network, timeout, 429, 5xx) stops the run and leaves the observation to
+    the next trigger;
+  - one request in flight, at least 1 s between two starts to the same
+    provider, coordinates sent with 5 decimals (about 1 m, no coarser than a
+    phone fix), names over 200 bytes dropped.
 
 ## 9. Repository layout (sketch; `layout.md` is the decided version)
 

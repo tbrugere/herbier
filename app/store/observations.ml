@@ -55,6 +55,12 @@ let between ~from ~until =
   query " and at >= ? and at < ?"
     [Codec.param O.at from; Codec.param O.at until]
 
+let to_geocode =
+  query
+    " and lat is not null and lon is not null and (place_derived is null or \
+     trim(place_derived) = '')"
+    []
+
 let input (o : Observation.t) : (O.t, [`Full]) Postgrest.Input.t =
   let lat, lon, accuracy_m =
     match o.position with
@@ -95,3 +101,22 @@ let upsert (o : Observation.t) =
 
 let soft_delete id ~at =
   edit id (Stmt.soft_delete ~table:O.table ~id:(Codec.param O.id id) ~at)
+
+(* The position and "still unnamed" conditions make a name computed before a
+   move or a concurrent edit a no-op instead of overwriting newer data. *)
+let set_place_derived id ~lat ~lon name ~at =
+  edit id
+    {
+      Stmt.sql =
+        "update observations set place_derived = ?, updated_at = ? where id = \
+         ? and deleted_at is null and lat = ? and lon = ? and (place_derived \
+         is null or trim(place_derived) = '')";
+      params =
+        [
+          Codec.param O.place_derived (Some name);
+          Codec.param O.updated_at at;
+          Codec.param O.id id;
+          Codec.param O.lat (Some lat);
+          Codec.param O.lon (Some lon);
+        ];
+    }

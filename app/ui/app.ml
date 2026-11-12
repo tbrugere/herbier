@@ -3,6 +3,14 @@ module Plants = Herbier_store.Plants
 module References = Herbier_store.References
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Source = Herbier_domain.Reference.Source
+module Observations = Herbier_store.Observations
+module Observation_id = Herbier_domain.Ids.Observation_id
+module Places = Herbier_domain.Places
+
+type geocode_run =
+  | Idle
+  | Geocoding
+  | Geocoding_again (* a trigger came during the run: read the list again *)
 
 (* A plant's running thumbnail sync, and whether another was asked for
    meanwhile. *)
@@ -24,6 +32,14 @@ type t = {
          or superseded, by generation; [fetching] is set from it. *)
   fetching : Plant_id.t list React.signal;
   set_fetching : Plant_id.t list -> unit;
+  geocode_tried : (Observation_id.t * Places.point) list ref;
+      (* style: mutable because a geocode run settles in a future's
+         callback, outside any reaction; nothing outside this module sees
+         it. The observations not to try again this session, with the
+         position they were tried at (a moved one is tried again). *)
+  geocode_run : geocode_run ref;
+      (* style: mutable for the same reason: whether a run is going, and
+         whether a trigger came during it. *)
   thumbs : (Plant_id.t * thumb_sync) list ref;
       (* style: mutable for the same reason: a thumbnail sync settles in a
          future's callback. The plants with a sync running. *)
@@ -44,6 +60,8 @@ let create ~db ~state ~theme =
     running = ref [];
     fetching;
     set_fetching = (fun ids -> set_fetching ids);
+    geocode_tried = ref [];
+    geocode_run = ref Idle;
     thumbs = ref [];
   }
 
@@ -53,10 +71,96 @@ let theme t = t.theme
 let saved t = t.saved
 
 (* [saved] fires from its own reaction on the result, so a subscriber that
-   raises cannot keep the caller's future from being determined. *)
-let save t edits =
+   raises cannot keep the caller's future from being determined. [commit]
+   does not geocode: the geocoder's own writes and the reference branches
+   (no observation in them) use it. *)
+let commit t edits =
   let r = Db.edit t.db edits in
   Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> t.send_saved ());
+  r
+
+let log parts = Brr.Console.(log [str (String.concat " " parts)])
+let online t = (React.S.value (State.network t.state)).online
+
+(* Place names (architecture §8). *)
+
+let geocode_error parts = Brr.Console.(error [str (String.concat " " parts)])
+
+let tried t (o : Herbier_domain.Observation.t) p =
+  List.exists
+    (fun (id, q) -> Observation_id.equal id o.id && Places.equal_point q p)
+    !(t.geocode_tried)
+
+let mark_tried t (o : Herbier_domain.Observation.t) p =
+  t.geocode_tried := (o.id, p) :: !(t.geocode_tried)
+
+let pending t (o : Herbier_domain.Observation.t) =
+  Option.bind o.position (fun pos ->
+      let p = Places.of_position pos in
+      match tried t o p with true -> None | false -> Some (o, p))
+
+let rec geocode_pending t =
+  match (online t, !(t.geocode_run)) with
+  | false, _ -> ()
+  | true, (Geocoding | Geocoding_again) -> t.geocode_run := Geocoding_again
+  | true, Idle ->
+      t.geocode_run := Geocoding;
+      Fut.await (Db.all t.db Observations.to_geocode) (function
+        | Error e ->
+            geocode_error ["geocode: read"; Db.error_to_string e];
+            geocode_end t
+        | Ok observations ->
+            geocode_each t (List.filter_map (pending t) observations))
+
+and geocode_end t =
+  let again = !(t.geocode_run) in
+  t.geocode_run := Idle;
+  match again with
+  | Geocoding_again -> geocode_pending t
+  | Idle | Geocoding -> ()
+
+and geocode_each t = function
+  | [] -> geocode_end t
+  | _ :: _ when not (online t) -> geocode_end t
+  | ((o : Herbier_domain.Observation.t), (p : Places.point)) :: rest ->
+      let id = Observation_id.to_string o.id in
+      Fut.await (Herbier_geo.Geocoder.reverse p) (function
+        | Error e ->
+            (* A transient error leaves the observation to the next
+               trigger; any other would fail the same way again. *)
+            (match Herbier_geo.Geocoder.transient e with
+            | true -> ()
+            | false -> mark_tried t o p);
+            geocode_error
+              ["geocode:"; id; Herbier_geo.Geocoder.error_to_string e];
+            geocode_end t
+        | Ok None ->
+            mark_tried t o p;
+            log ["geocode:"; id; "no place"];
+            geocode_each t rest
+        | Ok (Some name) ->
+            let edit =
+              Observations.set_place_derived o.id ~lat:p.lat ~lon:p.lon name
+                ~at:(Ptime_clock.now ())
+            in
+            Fut.await (commit t [edit]) (function
+              | Error e ->
+                  mark_tried t o p;
+                  geocode_error ["geocode: save"; id; Db.error_to_string e];
+                  geocode_end t
+              | Ok 0 ->
+                  (* Moved, named or deleted meanwhile: nothing to retry at
+                     this position. *)
+                  mark_tried t o p;
+                  log ["geocode:"; id; "unchanged"];
+                  geocode_each t rest
+              | Ok (_ : int) ->
+                  log ["geocode:"; id; "named"];
+                  geocode_each t rest))
+
+let save t edits =
+  let r = commit t edits in
+  Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> geocode_pending t);
   r
 
 let save_photos t ~(observation : Herbier_domain.Observation.t) shots =
@@ -92,8 +196,6 @@ let save_photos t ~(observation : Herbier_domain.Observation.t) shots =
 type link_error = Plant_gone | Store of Db.error
 
 let fetching t = t.fetching
-let log parts = Brr.Console.(log [str (String.concat " " parts)])
-let online t = (React.S.value (State.network t.state)).online
 
 let generation t id =
   Option.value ~default:0
@@ -203,7 +305,9 @@ let start_fetch t id gbif_key =
   let label = Plant_id.to_string id in
   log ["refs: fetch"; label; string_of_int gbif_key];
   let save edits =
-    match generation t id = g with true -> Some (save t edits) | false -> None
+    match generation t id = g with
+    | true -> Some (commit t edits)
+    | false -> None
   in
   Fut.await (Herbier_refs_io.Pipeline.fetch t.db ~save ~plant:id ~gbif_key)
     (fun result ->

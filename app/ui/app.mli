@@ -24,7 +24,8 @@ val save :
   (int, Herbier_store.Db.error) result Fut.t
 (** {!Herbier_store.Db.edit}: the edits and their outbox entries in one
     transaction. After a commit that appended at least one entry, {!saved} fires
-    (outside any update step, once the future is determined). *)
+    (outside any update step, once the future is determined) and
+    {!geocode_pending} runs. *)
 
 val saved : t -> unit React.event
 (** Something was saved: screens showing store data reload on it. *)
@@ -92,3 +93,22 @@ val fetching : t -> Herbier_domain.Ids.Plant_id.t list React.signal
 (** The plants with a fetch running (4f's « mise à jour… »), each once; set
     outside any update step when a fetch starts and ends. A primitive signal:
     releasing a screen's bindings on it never stops it. *)
+
+(** {1 Place names} *)
+
+val geocode_pending : t -> unit
+(** Fills [place_derived] in the background (architecture §8): when
+    {!State.network} says online and no run is going, reads
+    [Observations.to_geocode], drops the observations already tried at their
+    current position in this session, and for each in order: [Geocoder.reverse]
+    of its position → [Ok (Some s)] → one
+    [Observations.set_place_derived ~at:now] commit ({!saved} fires when it
+    changed the row; a commit that changed nothing marks it tried; a failed
+    commit is logged, marks it tried and stops the run); [Ok None] → nothing
+    written, the observation is not tried again this session (the next app start
+    asks again); [Error e] → logged ([geocode: …] on the console) and the run
+    stops (the rest wait for the next trigger); the observation is not tried
+    again this session unless the error is [Geocoder.transient]. Triggers: the
+    app's start and the window's [online] event (main.ml), and {!save} after a
+    commit that changed rows. A call while a run is going makes that run read
+    the list again when it ends. Never raises; nothing awaits it. *)

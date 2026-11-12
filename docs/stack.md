@@ -285,7 +285,9 @@ are Cloudflare R2 beyond 10 GB of originals and Supabase Pro, both optional.
 
 1. **Region**. Still open. Decided 2026-09-16 that the offline PMTiles
    extract is v2 and the France-only sources (INPN, Tela, IGN) stay unwired
-   until a region is named. The handoff's Alsace/Vosges examples are
+   until a region is named. Exception (M5.43): the IGN Géoplateforme reverse
+   geocoder is wired, chosen per point (« when in France »), which needs no
+   region; INPN and Tela stay unwired. The handoff's Alsace/Vosges examples are
    placeholders.
 2. **Google account**: a personal Gmail is assumed. A Workspace account would
    make the OAuth app "internal" and lift all verification questions, but is

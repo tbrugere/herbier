@@ -469,6 +469,33 @@ let observations_and_photos () =
     ];
   check_count "one entry per changing write" 7 db
 
+let observations_set_place_derived () =
+  let db = Cli.migrated_db () in
+  let lat = 48.0625 and lon = 7.0625 in
+  let o =
+    observation 0x31 t1 ~position:{lat; lon; accuracy_m = Some 5.} ~note:"l'eau"
+  in
+  check_edit "observation upsert" 1 db [Observations.upsert o];
+  check_edit "set_place_derived of a live, unnamed observation appends 1 entry"
+    1 db
+    [
+      Observations.set_place_derived (observation_id 0x31) ~lat ~lon
+        "Près du Lac Blanc" ~at:t2;
+    ];
+  check_entry "the filled observation's entry" ~table:"observations"
+    ~row_id:(uuid 0x31)
+    ~payload:
+      (Input.to_json
+         (Observations.input
+            {o with place_derived = Some "Près du Lac Blanc"; updated_at = t2}))
+    (last db);
+  check_edit "set_place_derived again (already named) appends nothing" 0 db
+    [
+      Observations.set_place_derived (observation_id 0x31) ~lat ~lon
+        "Près d'ailleurs" ~at:t3;
+    ];
+  check_count "one entry, from the fill only" 2 db
+
 let tags_and_links () =
   let db = Cli.migrated_db () in
   let p = plant 0xa "Thym" in
@@ -1038,6 +1065,10 @@ let () =
         [
           case "observations and photos append on upsert and soft_delete"
             observations_and_photos;
+          case
+            "set_place_derived appends 1 entry carrying the whole row when it \
+             fills the name, none when already named"
+            observations_set_place_derived;
           case "tag, untag and revive append; no-op links append nothing"
             tags_and_links;
           case "a link's entry carries the stored id, not of_key"

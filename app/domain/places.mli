@@ -12,6 +12,9 @@
 type point = {lat : float; lon : float}
 (** WGS84 degrees. *)
 
+val equal_point : point -> point -> bool
+(** [Float.equal] on both coordinates (so [nan] equals [nan]). *)
+
 val of_position : Observation.position -> point
 (** Drops [accuracy_m]. *)
 

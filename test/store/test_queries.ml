@@ -29,6 +29,9 @@ module Observations = struct
 
   let upsert o = Outbox.without_entry (upsert o)
   let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+
+  let set_place_derived id ~lat ~lon name ~at =
+    Outbox.without_entry (set_place_derived id ~lat ~lon name ~at)
 end
 
 module Photos = struct
@@ -839,6 +842,96 @@ let observations_soft_delete () =
   Alcotest.(check (option observation_t))
     "get of an absent id is None" None
     (find db (Observations.get (observation_id 0x99)))
+
+let observations_to_geocode () =
+  let db = Cli.migrated_db () in
+  let positioned : Observation.position =
+    {lat = 48.0625; lon = 7.0625; accuracy_m = None}
+  in
+  let no_derived = observation 0x31 t1 ~position:positioned in
+  let blank_derived =
+    observation 0x32 t2 ~position:positioned ~place_derived:"  "
+  in
+  let named_derived =
+    observation 0x33 t3 ~position:positioned ~place_derived:"Près de Colmar"
+  in
+  let deleted =
+    observation 0x34
+      (time "2026-10-29T00:00:00Z")
+      ~position:positioned
+      ~deleted_at:(time "2026-10-29T00:00:00Z")
+  in
+  let no_position = observation 0x35 t1 in
+  let with_label =
+    observation 0x36
+      (time "2026-10-29T06:00:00Z")
+      ~position:positioned ~place_label:"Lac Blanc"
+  in
+  writes "observations" db
+    (List.map Observations.upsert
+       [
+         no_derived;
+         blank_derived;
+         named_derived;
+         deleted;
+         no_position;
+         with_label;
+       ]);
+  Alcotest.(check (list string))
+    "no/blank place_derived, with a position, live; place_label does not \
+     exclude; newest first"
+    [uuid 0x36; uuid 0x32; uuid 0x31]
+    (List.map
+       (fun (o : Observation.t) -> Ids.Observation_id.to_string o.id)
+       (all db Observations.to_geocode))
+
+let observations_set_place_derived () =
+  let db = Cli.migrated_db () in
+  let lat = 48.0625 and lon = 7.0625 in
+  let o =
+    observation 0x31 t1
+      ~position:{lat; lon; accuracy_m = Some 5.}
+      ~note:"l'eau" ~place_label:"Lac Blanc"
+  in
+  writes "observation" db [Observations.upsert o];
+  check_changes "a matching, unnamed, live observation changes 1 row" 1 db
+    (Observations.set_place_derived (observation_id 0x31) ~lat ~lon
+       "Près du Lac Blanc" ~at:t2);
+  Alcotest.(check (option observation_t))
+    "get gives it back with the new name and updated_at, nothing else changed"
+    (Some {o with place_derived = Some "Près du Lac Blanc"; updated_at = t2})
+    (find db (Observations.get (observation_id 0x31)));
+  check_changes "set_place_derived again (already named) changes 0 rows" 0 db
+    (Observations.set_place_derived (observation_id 0x31) ~lat ~lon
+       "Près d'ailleurs" ~at:t3);
+  let blank =
+    observation 0x34 t1
+      ~position:{lat; lon; accuracy_m = None}
+      ~place_derived:"  "
+  in
+  writes "an observation with a blank place_derived" db
+    [Observations.upsert blank];
+  check_changes "a blank place_derived counts as unnamed: 1 row" 1 db
+    (Observations.set_place_derived (observation_id 0x34) ~lat ~lon
+       "Près d'ailleurs" ~at:t2);
+  let moved = observation 0x32 t1 ~position:{lat; lon; accuracy_m = None} in
+  let deleted =
+    observation 0x33 t1 ~position:{lat; lon; accuracy_m = None} ~deleted_at:t1
+  in
+  writes "a second and a deleted observation" db
+    [Observations.upsert moved; Observations.upsert deleted];
+  check_changes "a different lat changes 0 rows" 0 db
+    (Observations.set_place_derived (observation_id 0x32) ~lat:(lat +. 1.) ~lon
+       "Près d'ailleurs" ~at:t3);
+  check_changes "a different lon changes 0 rows" 0 db
+    (Observations.set_place_derived (observation_id 0x32) ~lat ~lon:(lon +. 1.)
+       "Près d'ailleurs" ~at:t3);
+  check_changes "a deleted observation changes 0 rows" 0 db
+    (Observations.set_place_derived (observation_id 0x33) ~lat ~lon
+       "Près d'ailleurs" ~at:t3);
+  check_changes "an absent observation changes 0 rows" 0 db
+    (Observations.set_place_derived (observation_id 0x99) ~lat ~lon
+       "Près d'ailleurs" ~at:t3)
 
 let observations_upsert_overwrites () =
   check_upsert_overwrites "Observations" observation_t
@@ -1942,6 +2035,14 @@ let () =
             observations_unidentified;
           case "between includes from, excludes until" observations_between;
           case "soft_delete gives 1 then 0" observations_soft_delete;
+          case
+            "to_geocode is live, positioned observations without a derived \
+             name, newest first"
+            observations_to_geocode;
+          case
+            "set_place_derived changes 1 row when live, unnamed and at the \
+             given position, else 0"
+            observations_set_place_derived;
           case "upsert over an existing id rewrites every column"
             observations_upsert_overwrites;
           case "upsert is insert on conflict, never replace"

@@ -26,6 +26,12 @@ val between : from:Ptime.t -> until:Ptime.t -> Observation.t Stmt.query
 (** Live observations with [from <= at < until]. For a Journal day the caller
     passes the UTC instants of local midnight. Empty when [until <= from]. *)
 
+val to_geocode : Observation.t Stmt.query
+(** Live observations with [lat] and [lon] set and [place_derived] null or blank
+    after trimming ([trim(place_derived) = '']); same order as every list here
+    (the newest, usually the one just recorded, first). Whether [place_label] is
+    set does not matter. *)
+
 val input : Observation.t -> (Tables.Observations.t, [`Full]) Postgrest.Input.t
 (** Every column of [Tables.Observations], in its declaration order;
     [position = None] gives [lat], [lon] and [accuracy_m] null. The upsert's
@@ -42,3 +48,19 @@ val soft_delete : Observation_id.t -> at:Ptime.t -> Outbox.edit
 (** {!Stmt.soft_delete}; read back by [id] whatever [deleted_at]. Appends an
     entry (payload with [deleted_at = at]) when the observation was live,
     nothing when it is absent or already deleted. Its photos are untouched. *)
+
+val set_place_derived :
+  Observation_id.t ->
+  lat:float ->
+  lon:float ->
+  string ->
+  at:Ptime.t ->
+  Outbox.edit
+(** [update observations set place_derived = ?, updated_at = ? where id = ? and
+     deleted_at is null and lat = ? and lon = ? and (place_derived is null or
+     trim(place_derived) = '')], read back by [id]. One change (and one outbox
+    entry carrying the whole row, [place_derived] and [updated_at = at] set)
+    when the observation is live, still at [lat]/[lon] (the position the name
+    was computed for) and still without a derived name; no change and no entry
+    when it was deleted, moved or got a name meanwhile. No other column is
+    touched. *)

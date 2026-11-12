@@ -1,5 +1,6 @@
-; MapLibre map over the facade binding, map style and GeoJSON (style and
-; features are pure, copied into test/geo).
+; MapLibre map over the facade binding, map style, GeoJSON and geocoding
+; (style, features and geocode are pure, copied into test/geo; geocoder runs
+; geocode over Brr fetch).
 (library
  (name herbier_geo)
  (public_name herbier.geo)

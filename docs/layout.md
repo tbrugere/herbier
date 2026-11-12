@@ -182,7 +182,11 @@ app/
                           box, 4h's point, the places of 4b (filtered clusters, their points, the selection, tap
                           decoding); pure, tested in test/geo/
     tiles.ml              region extract download and storage (v2, with the offline map)
-    geocode.ml            Photon / Géoplateforme forward and reverse
+    geocode.ml            Photon forward and reverse, Géoplateforme reverse in France: request URLs,
+                          decoders, the « Près de … » phrase and the reverse rule as a program; pure,
+                          tested in test/geo/
+    geocoder.ml           runs geocode programs: fetch with timeout, one request in flight, ≥ 1 s between
+                          two starts to the same provider; reverse, search
   ui/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
     theme.ml              reads the custom properties OCaml needs (map colours, status bar) once at startup
@@ -228,7 +232,9 @@ app/
                           a dropped-frame meter; spike_check.ml (#dev/spike): 4 rounds of 50 enter/leave cycles of 4a,
                           binding count, stale-update check against a live control, heap per round; capture_check.ml
                           (#dev/capture): viewfinder, shutter and gallery → preview file; map_check.ml (#dev/map):
-                          the positron map over the herbier db (spike 3, online half); fixture.ml: the dev pages'
+                          the positron map over the herbier db (spike 3, online half); geocode_check.ml
+                          (#dev/geocode): reverse of five points with request start times, Photon search;
+                          fixture.ml: the dev pages'
                           State; hooks.ml: herbierDev.live(), the leak count; linked only outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
@@ -290,6 +296,11 @@ Notes:
   `settings`) declare their columns next to their queries.
 - Cross-service orchestration (save ⇒ outbox push ⇒ reference fetch ⇒
   geocode) lives in `ui/app.ml`, which keeps the siblings independent.
+- Known copies between siblings, kept because they never import each other:
+  `geo/geocoder.ml`'s timed fetch and queue guard mirror `refs_io/http.ml`,
+  and `geo/geocode.ml`'s `encode` is `refs/request.ml`'s. A fix to one goes
+  to the other; when `sync/transport.ml` needs the same timed fetch, it
+  moves to a shared library below the three.
 - `ui/` uses `(include_subdirs qualified)`: `Screens.Collection`,
   `Widgets.Chip`. `map_tab.ml` avoids [shadowing](shadowing) `Stdlib.Map` in `Screens`.
 - The map, camera `<video>` and pinch viewer are ordinary widgets holding a
@@ -411,10 +422,11 @@ test/
   photos/       native, alcotest: the pure modules of app/photos/ copied in (exif, over recorded
                 exifr output in fixtures/exifr_*.json; preview_size; jpeg)
   geo/          native, alcotest: the pure modules of app/geo/ copied in (features, style over the
-                recorded web/map/positron.json)
+                recorded web/map/positron.json; geocode over fixtures/{photon,geoplateforme}_*.json)
   fixtures/     recorded payloads only: API responses (<source>_<endpoint>_<id>.json, e.g.
                 gbif_species_5414995.json, wikidata_entity_Q157555.json, recorded by
-                scripts/record-refs-fixtures.sh) and exifr output (exifr_<name>.json,
+                scripts/record-refs-fixtures.sh; photon_* and geoplateforme_* by
+                scripts/record-geo-fixtures.sh) and exifr output (exifr_<name>.json,
                 scripts/exifr-fixture.mjs); never app rows
   js/           browser-side tests; added only if the UI spike's leak check fails
 ```
@@ -429,7 +441,7 @@ CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the
 serialisation), and sync,
 photos (except the pure `exif`, `preview_size` and `jpeg`, tested in `test/photos/`), refs_io and geo
-(except the pure `features` and `style`, tested in `test/geo/`), are thin over device-only plugins and have no unit
+(except the pure `features`, `style` and `geocode`, tested in `test/geo/`), are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 
 ## 7. `scripts/` and CI
@@ -448,7 +460,9 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   `test/fixtures/exifr_<name>.json`, with the options of
   `app/bindings/exifr.ml` and `pick` = `Exif.tags`), `record-refs-fixtures.sh`
   (curl of every reference-source fixture `test/fixtures/{gbif,wikidata,wikipedia}_*.json`
-  at the exact URL of its request description; skips existing files unless `--force`).
+  at the exact URL of its request description; skips existing files unless `--force`),
+  `record-geo-fixtures.sh` (the same for `test/fixtures/{photon,geoplateforme}_*.json`,
+  spaced by 1.2 s).
 - `ci.yml`: `dune build`, `dune test`, the formatting check (`dune build @fmt`,
   ocamlformat installed from opam on the runner), `dune build @web` and checks on
   its output. From M1.9: `dune test` also checks `app/store/tables.ml` against the catalog, and `schema-dump.py --check`,

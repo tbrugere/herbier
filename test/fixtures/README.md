@@ -20,6 +20,17 @@ empty Pl@ntNet media page (`gbif_plantnet_media_1`), the iNat / TaxRef / Tela
 Wikidata searches (`wikidata_search_p3151_*`, `_p3186_*`, `_p3105_*`) and
 Arnica's frwiki sitelink summary (`wikipedia_summary_fr_Arnica_des_montagnes`).
 
+`photon_*`, `geoplateforme_*.json`: recorded by
+`scripts/record-geo-fixtures.sh` (`[--force]` to re-record; it pauses 1.2 s
+between fetches, since both APIs answer bursts with empty bodies), one file per
+request: Photon reverse and search (`photon_reverse_<point>`,
+`photon_search_<query>`) and IGN Géoplateforme reverse
+(`geoplateforme_lieu_dit_<point>`, `geoplateforme_commune_<point>`). The points
+are the Schlucht pass and a Landes forest (France), Lausanne (inside the coarse
+France box, outside France), Kew (outside the box) and a point of the Atlantic
+(nothing found). See `test/geo/test_geocode.ml` for the exact request each file
+records.
+
 `exifr_<name>.json`: what `Herbier_bindings.Exifr.parse ~pick:Exif.tags`
 returns for one photo, never edited:
 
