@@ -21,6 +21,8 @@
   test_ref_images
   test_commune_packs)
  (libraries herbier_domain herbier_refs postgrest yojson ptime alcotest)
+ (preprocess
+  (pps ppx_deriving.eq))
  (deps %{bin:sqlite3})
  (action
   (setenv

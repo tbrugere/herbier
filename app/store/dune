@@ -7,7 +7,9 @@
 (library
  (name herbier_store)
  (public_name herbier.store)
- (libraries herbier_domain herbier_bindings postgrest yojson ptime brr))
+ (libraries herbier_domain herbier_bindings postgrest yojson ptime brr)
+ (preprocess
+  (pps ppx_deriving.eq)))
 
 ; tables.ml is generated from the committed catalog by postgrest-codegen
 ; and committed. `dune test` fails when it is stale; `dune promote` (or

@@ -4,7 +4,9 @@
 (library
  (name herbier_domain)
  (public_name herbier.domain)
- (libraries ptime ptime.clock.os uuidm yojson))
+ (libraries ptime ptime.clock.os uuidm yojson)
+ (preprocess
+  (pps ppx_deriving.eq)))
 
 ; version.ml: `let git = "<git describe>"` for the User-Agent string.
 (rule

@@ -7,4 +7,6 @@
 (library
  (name herbier_refs)
  (public_name herbier.refs)
- (libraries herbier_domain yojson ptime))
+ (libraries herbier_domain yojson ptime)
+ (preprocess
+  (pps ppx_deriving.eq)))

@@ -302,10 +302,10 @@ dashboard. Recording is unaffected.
 
 Auth on device: Google sign-in via Credential Manager → Supabase's id-token
 grant (supabase-js's `signInWithIdToken`) → session in Capacitor
-Preferences, refreshed as below. No supabase-js: `sync/auth.ml`
+Preferences, refreshed as below. No supabase-js: `sync/auth/auth.ml`
 makes GoTrue's three calls over fetch (`POST /auth/v1/token?grant_type=id_token`,
 `grant_type=refresh_token`, `/logout?scope=local`), described and decoded
-sans IO in `sync/gotrue.ml`.
+sans IO in `sync/auth/gotrue.ml`.
 
 - Nonce: 32 random bytes as hex are the raw nonce, sent to GoTrue; their
   SHA-256 hex goes to the plugin, which puts it verbatim in the id token's
@@ -313,7 +313,7 @@ sans IO in `sync/gotrue.ml`.
   (`skip_nonce_check = false`). The plugin's `standard` style always shows
   the account chooser.
 - Session: one Preferences key, `auth.session`, a versioned JSON object
-  (`sync/session.ml`), written before the in-memory session is replaced.
+  (`sync/auth/session.ml`), written before the in-memory session is replaced.
   Every write of the key (sign-in, refresh, sign-out, a revoked session)
   runs after the previous one has resolved, so a refresh that lands during
   a sign-in or a sign-out cannot write over it. A refresh rotates the

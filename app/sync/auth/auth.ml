@@ -1,13 +1,19 @@
+module Session = Session
+module Gotrue = Gotrue
+module Nonce = Nonce
 module Cap_error = Herbier_bindings.Cap_error
 module Cap_preferences = Herbier_bindings.Cap_preferences
 module Cap_social_login = Herbier_bindings.Cap_social_login
 module Cap_app = Herbier_bindings.Cap_app
+module Timed_fetch = Herbier_bindings.Timed_fetch
+module Web_crypto = Herbier_bindings.Web_crypto
 
 type status =
   | Unconfigured
   | Restoring
   | Signed_out
   | Signed_in of {email : string option}
+[@@deriving eq]
 
 type error =
   | Not_configured
@@ -33,15 +39,6 @@ let error_to_string = function
   | Crypto m -> "crypto: " ^ m
   | No_session -> "signed out"
 
-let equal_status a b =
-  match (a, b) with
-  | Unconfigured, Unconfigured | Restoring, Restoring | Signed_out, Signed_out
-    ->
-      true
-  | Signed_in {email = a}, Signed_in {email = b} ->
-      Option.equal String.equal a b
-  | (Unconfigured | Restoring | Signed_out | Signed_in _), _ -> false
-
 (* [Off]: this build cannot sign in. [Reading]: Preferences not read yet.
    The status is derived from it, so that the two cannot disagree. *)
 type phase = Off | Reading | Ready of Session.t option
@@ -51,28 +48,42 @@ type phase = Off | Reading | Ready of Session.t option
    reaction; nothing outside this module sees them. *)
 type t = {
   mutable phase : phase;
-  mutable on_change : status -> unit;
-  mutable started : bool;
+  mutable on_change : (status -> unit) option; (* [None]: not started *)
   mutable foreground : bool;
   mutable sign_in_attempt : int;
       (* The latest [sign_in] call: an older one's result is dropped, so that
          a flight that never ends cannot block the next one. *)
   mutable generation : int;
       (* Bumped when a sign-in, a sign-out or a revoked refresh replaces the
-         session: a refresh or restore that resolves under an older
-         generation changes nothing. *)
+         session ({!replace}): a refresh or restore that resolves under an
+         older generation changes nothing. *)
   mutable refreshing : (Session.t, error) result Fut.t option;
+      (* The refresh in flight: callers share it (single flight). *)
   mutable failed_refreshes : int;
   mutable timer : Brr.G.timer_id option;
   mutable initialized : (unit, Cap_error.t) result Fut.t option;
+      (* The plugin's initialisation, once per process; cleared on failure. *)
   mutable writes : unit Fut.t;
 }
 
-let key = "auth.session"
-let timeout_ms = 15_000
 let log m = Brr.Console.(log [str ("auth: " ^ m)])
 let warn m = Brr.Console.(warn [str ("auth: " ^ m)])
 let console_error m = Brr.Console.(error [str ("auth: " ^ m)])
+
+module Stored = struct
+  let key = "auth.session"
+  let read () = Cap_preferences.get ~key
+  let write s = Cap_preferences.set ~key ~value:(Session.to_string s)
+  let remove () = Cap_preferences.remove ~key
+
+  let remove_logged () =
+    Fut.map
+      (function
+        | Ok () -> ()
+        | Error e ->
+            console_error ("session not removed: " ^ Cap_error.to_string e))
+      (remove ())
+end
 
 let create () =
   let configured =
@@ -86,8 +97,7 @@ let create () =
   in
   {
     phase = (match configured with true -> Reading | false -> Off);
-    on_change = ignore;
-    started = false;
+    on_change = None;
     foreground = true;
     sign_in_attempt = 0;
     generation = 0;
@@ -114,8 +124,11 @@ let set_phase t phase =
   let before = status t in
   t.phase <- phase;
   let after = status t in
-  match equal_status before after with true -> () | false -> t.on_change after
+  match (equal_status before after, t.on_change) with
+  | false, Some on_change -> on_change after
+  | true, _ | false, None -> ()
 
+let stale t ~generation = not (Int.equal t.generation generation)
 let now () = Ptime_clock.now ()
 
 let expiry_line (s : Session.t) =
@@ -130,80 +143,24 @@ let serially t step =
   t.writes <- Fut.map ignore run;
   run
 
-let message e = Jstr.to_string (Jv.Error.message e)
-
-(* A non-2xx status is not an [Error]: the {!Gotrue} decoders classify it.
-   Building the headers throws on a value fetch refuses (a control character
-   in the build's key): that is an [Error] too, not an exception that would
-   leave the caller's future pending. *)
+(* A non-2xx status is not an [Error]: the {!Gotrue} decoders classify it. *)
 let post (r : Gotrue.request) =
-  match
-    Brr_io.Fetch.Headers.of_assoc
-      (List.map (fun (k, v) -> (Jstr.v k, Jstr.v v)) r.headers)
-  with
-  | exception Jv.Error e -> Fut.return (Error (message e))
-  | headers ->
-      let abort = Brr.Abort.controller () in
-      let timed_out = ref false in
-      let timer =
-        Brr.G.set_timeout ~ms:timeout_ms (fun () ->
-            timed_out := true;
-            Brr.Abort.abort abort)
-      in
-      let failed e =
-        match !timed_out with true -> "timeout" | false -> message e
-      in
-      let init =
-        Brr_io.Fetch.Request.init ~method':(Jstr.v "POST") ~headers
-          ?body:
-            (Option.map (fun b -> Brr_io.Fetch.Body.of_jstr (Jstr.v b)) r.body)
-          ~signal:(Brr.Abort.signal abort) ()
-      in
-      let open Fut.Syntax in
-      let+ result =
-        let* response = Brr_io.Fetch.url ~init (Jstr.v r.url) in
-        match response with
-        | Error e -> Fut.return (Error (failed e))
-        | Ok response -> (
-            let+ body =
-              Brr_io.Fetch.Body.text (Brr_io.Fetch.Response.as_body response)
-            in
-            match body with
-            | Ok body ->
-                Ok (Brr_io.Fetch.Response.status response, Jstr.to_string body)
-            | Error e -> Error (failed e))
-      in
-      Brr.G.stop_timer timer;
-      result
+  Timed_fetch.request ~meth:`POST ~url:r.url ~headers:r.headers ~body:r.body
 
-let bytes_of a =
-  let b = Brr.Tarray.to_bigarray1 a in
-  String.init (Bigarray.Array1.dim b) (fun i ->
-      Char.chr (Bigarray.Array1.get b i))
+(* The id-token or refresh grant: [now] is read when it is sent;
+   [server_error] classifies GoTrue's answer when it is not a session. *)
+let grant ~server_error request =
+  let sent = now () in
+  Fut.map
+    (function
+      | Error e -> Error (Network (Timed_fetch.error_to_string e))
+      | Ok {Timed_fetch.status; body; _} ->
+          Result.map_error server_error
+            (Gotrue.decode_session ~now:sent ~status body))
+    (post request)
 
-let random_hex n =
-  let a = Brr.Tarray.create Brr.Tarray.Uint8 n in
-  match Brr_webcrypto.Crypto.(set_random_values crypto a) with
-  | () -> Ok (Nonce.hex (bytes_of a))
-  | exception Jv.Error e -> Error (Crypto (message e))
-
-let sha256_hex text =
-  let subtle = Brr_webcrypto.Crypto.(subtle crypto) in
-  let algo = Brr_webcrypto.Crypto_algo.(v sha_256) in
-  match
-    Brr_webcrypto.Subtle_crypto.digest subtle algo
-      (Brr.Tarray.of_jstr (Jstr.v text))
-  with
-  | fut ->
-      Fut.map
-        (function
-          | Ok digest ->
-              Ok
-                (Nonce.hex
-                   (bytes_of (Brr.Tarray.of_buffer Brr.Tarray.Uint8 digest)))
-          | Error e -> Error (Crypto (message e)))
-        fut
-  | exception Jv.Error e -> Fut.return (Error (Crypto (message e)))
+let base_url = Backend.supabase_url
+let apikey = Backend.publishable_key
 
 let stop_timer t =
   Option.iter Brr.G.stop_timer t.timer;
@@ -212,14 +169,6 @@ let stop_timer t =
 let ms_of span =
   let ms = Ptime.Span.to_float_s span *. 1000. in
   Float.to_int (Float.max 0. (Float.min ms 1e9))
-
-let remove_logged () =
-  Fut.map
-    (function
-      | Ok () -> ()
-      | Error e ->
-          console_error ("session not removed: " ^ Cap_error.to_string e))
-    (Cap_preferences.remove ~key)
 
 let rec schedule t span =
   stop_timer t;
@@ -231,6 +180,20 @@ let rec schedule t span =
           (Brr.G.set_timeout ~ms:(ms_of span) (fun () ->
                t.timer <- None;
                Fut.await (refresh t) ignore))
+
+(* The timer for the current session, if any. *)
+and reschedule t =
+  match session t with
+  | Some s -> schedule t (Session.refresh_in ~now:(now ()) s)
+  | None -> stop_timer t
+
+(* The one way a sign-in, a sign-out or a revoked refresh replaces the
+   session: older flights become stale. *)
+and replace t next =
+  t.generation <- t.generation + 1;
+  t.failed_refreshes <- 0;
+  set_phase t (Ready next);
+  reschedule t
 
 and refresh t =
   match (t.refreshing, session t) with
@@ -244,33 +207,22 @@ and refresh t =
 
 and run_refresh t (s : Session.t) =
   let generation = t.generation in
-  let sent = now () in
-  let open Fut.Syntax in
-  let* answer =
-    post
-      (Gotrue.refresh_grant ~base_url:Backend.supabase_url
-         ~apikey:Backend.publishable_key ~refresh_token:s.refresh_token)
-  in
-  let decoded =
-    match answer with
-    | Error m -> Error (Network m)
-    | Ok (status, body) ->
-        Result.map_error
-          (fun e -> Server e)
-          (Gotrue.decode_session ~now:sent ~status body)
-  in
-  serially t (fun () -> refreshed t ~generation decoded)
+  Fut.bind
+    (grant
+       ~server_error:(fun e -> Server e)
+       (Gotrue.refresh_grant ~base_url ~apikey ~refresh_token:s.refresh_token))
+    (fun decoded -> serially t (fun () -> refreshed t ~generation decoded))
 
 and refreshed t ~generation decoded =
   let open Fut.Syntax in
-  match (t.generation = generation, decoded) with
-  | false, _ -> (
+  match (stale t ~generation, decoded) with
+  | true, _ -> (
       (* A sign-in or sign-out happened meanwhile: its session stands. *)
       match session t with
       | Some current -> Fut.return (Ok current)
       | None -> Fut.return (Error No_session))
-  | true, Ok fresh ->
-      let+ stored = Cap_preferences.set ~key ~value:(Session.to_string fresh) in
+  | false, Ok fresh ->
+      let+ stored = Stored.write fresh in
       (match stored with
       | Ok () -> ()
       | Error e ->
@@ -281,17 +233,14 @@ and refreshed t ~generation decoded =
       t.failed_refreshes <- 0;
       set_phase t (Ready (Some fresh));
       log ("refreshed, " ^ expiry_line fresh);
-      schedule t (Session.refresh_in ~now:(now ()) fresh);
+      reschedule t;
       Ok fresh
-  | true, Error (Server e) when Gotrue.revokes_session e ->
+  | false, Error (Server e) when Gotrue.revokes_session e ->
       warn ("session revoked: " ^ Gotrue.error_to_string e);
-      t.generation <- t.generation + 1;
-      t.failed_refreshes <- 0;
-      stop_timer t;
-      set_phase t (Ready None);
-      let+ () = remove_logged () in
+      replace t None;
+      let+ () = Stored.remove_logged () in
       Error No_session
-  | true, Error e ->
+  | false, Error e ->
       t.failed_refreshes <- t.failed_refreshes + 1;
       let delay = Session.retry_delay ~attempt:t.failed_refreshes in
       warn
@@ -308,7 +257,7 @@ let resume t =
   | Some s -> (
       match Session.due ~now:(now ()) s with
       | true -> Fut.await (refresh t) ignore
-      | false -> schedule t (Session.refresh_in ~now:(now ()) s))
+      | false -> reschedule t)
 
 let pause t =
   t.foreground <- false;
@@ -348,43 +297,43 @@ let debug_expire t =
           let s = Session.with_expiry at s in
           set_phase t (Ready (Some s));
           log ("expiry moved, " ^ expiry_line s);
-          schedule t (Session.refresh_in ~now:(now ()) s))
+          reschedule t)
         at
 
 let restore t =
   let generation = t.generation in
   Fut.map
     (fun stored ->
-      match t.generation = generation with
-      | false -> ()
-      | true -> (
-          match stored with
-          | Error e ->
-              console_error ("session not read: " ^ Cap_error.to_string e);
-              set_phase t (Ready None)
-          | Ok None -> set_phase t (Ready None)
-          | Ok (Some text) -> (
-              match Session.of_string text with
-              | Ok s ->
-                  set_phase t (Ready (Some s));
-                  log ("session restored, " ^ expiry_line s)
-              | Error reason ->
-                  warn ("stored session dropped: " ^ reason);
-                  set_phase t (Ready None);
-                  Fut.await
-                    (serially t (fun () ->
-                         match t.generation = generation with
-                         | false -> Fut.return ()
-                         | true -> remove_logged ()))
-                    ignore)))
-    (Cap_preferences.get ~key)
+      match (stale t ~generation, stored) with
+      | true, _ -> ()
+      | false, Error e ->
+          console_error ("session not read: " ^ Cap_error.to_string e);
+          set_phase t (Ready None)
+      | false, Ok None -> set_phase t (Ready None)
+      | false, Ok (Some text) -> (
+          match Session.of_string text with
+          | Ok s ->
+              set_phase t (Ready (Some s));
+              log ("session restored, " ^ expiry_line s)
+          | Error reason ->
+              warn ("stored session dropped: " ^ reason);
+              set_phase t (Ready None);
+              Fut.await
+                (serially t (fun () ->
+                     match stale t ~generation with
+                     | true -> Fut.return ()
+                     | false -> Stored.remove_logged ()))
+                ignore))
+    (Stored.read ())
 
 let start t ~on_change =
-  match (t.started, t.phase) with
-  | true, _ | false, Off -> t.started <- true
-  | false, (Reading | Ready _) ->
-      t.started <- true;
-      t.on_change <- on_change;
+  match (t.on_change, t.phase) with
+  | Some _, _ -> ()
+  | None, Off ->
+      (* Stored, never called: an [Off] phase never changes. *)
+      t.on_change <- Some on_change
+  | None, (Reading | Ready _) ->
+      t.on_change <- Some on_change;
       Fut.await (restore t) (fun () ->
           Fut.await
             (Cap_app.on_state_change (fun s -> on_state s t))
@@ -407,39 +356,33 @@ let initialize t =
 
 let logout_server (s : Session.t) =
   Fut.await
-    (post
-       (Gotrue.logout ~base_url:Backend.supabase_url
-          ~apikey:Backend.publishable_key ~access_token:s.access_token))
+    (post (Gotrue.logout ~base_url ~apikey ~access_token:s.access_token))
     (function
-      | Error m -> warn ("server logout: network: " ^ m)
-      | Ok (status, body) -> (
+      | Error e ->
+          warn ("server logout: network: " ^ Timed_fetch.error_to_string e)
+      | Ok {Timed_fetch.status; body; _} -> (
           match Gotrue.decode_empty ~status body with
           | Ok () -> ()
           | Error e -> warn ("server logout: " ^ Gotrue.error_to_string e)))
 
 let exchange ~raw ~id_token =
-  let sent = now () in
-  Fut.map
-    (function
-      | Error m -> Error (Network m)
-      | Ok (status, body) ->
-          Result.map_error
-            (fun e ->
-              match Gotrue.signup_disabled e with
-              | true -> Not_allowed
-              | false -> Server e)
-            (Gotrue.decode_session ~now:sent ~status body))
-    (post
-       (Gotrue.id_token_grant ~base_url:Backend.supabase_url
-          ~apikey:Backend.publishable_key ~id_token ~nonce:raw))
+  grant
+    ~server_error:(fun e ->
+      match Gotrue.signup_disabled e with
+      | true -> Not_allowed
+      | false -> Server e)
+    (Gotrue.id_token_grant ~base_url ~apikey ~id_token ~nonce:raw)
 
 let map_error f fut = Fut.map (Result.map_error f) fut
 
 let new_session t =
   let open Fut.Result_syntax in
   let* () = map_error (fun e -> Google e) (initialize t) in
-  let* raw = Fut.return (random_hex 32) in
-  let* hashed = sha256_hex raw in
+  let crypto r =
+    Result.map_error (fun m -> Crypto m) (Result.map Nonce.hex r)
+  in
+  let* raw = Fut.return (crypto (Web_crypto.random_bytes 32)) in
+  let* hashed = Fut.map crypto (Web_crypto.sha256 raw) in
   let* id_token =
     map_error
       (fun e ->
@@ -453,7 +396,7 @@ let new_session t =
 (* A session made but not kept is logged out, so that no live refresh token
    is left on the server with nobody holding it. *)
 let keep t ~attempt (s : Session.t) =
-  match t.sign_in_attempt = attempt with
+  match Int.equal t.sign_in_attempt attempt with
   | false ->
       logout_server s;
       Fut.return (Error Replaced)
@@ -465,14 +408,11 @@ let keep t ~attempt (s : Session.t) =
               Error (Storage e)
           | Ok () ->
               let previous = session t in
-              t.generation <- t.generation + 1;
-              t.failed_refreshes <- 0;
-              set_phase t (Ready (Some s));
+              replace t (Some s);
               log ("signed in, " ^ expiry_line s);
-              schedule t (Session.refresh_in ~now:(now ()) s);
               Option.iter logout_server previous;
               Ok ())
-        (Cap_preferences.set ~key ~value:(Session.to_string s))
+        (Stored.write s)
 
 let sign_in t =
   match t.phase with
@@ -485,7 +425,7 @@ let sign_in t =
       match made with
       | Ok s -> serially t (fun () -> keep t ~attempt s)
       | Error e -> (
-          match t.sign_in_attempt = attempt with
+          match Int.equal t.sign_in_attempt attempt with
           | true -> Fut.return (Error e)
           | false -> Fut.return (Error Replaced)))
 
@@ -501,17 +441,14 @@ let sign_out t =
       | Ok () -> ()
       | Error e -> warn ("google logout: " ^ Cap_error.to_string e));
       serially t (fun () ->
-          match t.generation = generation with
-          | false ->
+          match stale t ~generation with
+          | true ->
               (* A sign-in landed meanwhile: its session stands. *)
               Fut.return (Ok ())
-          | true ->
-              let+ removed = Cap_preferences.remove ~key in
+          | false ->
+              let+ removed = Stored.remove () in
               Result.map
                 (fun () ->
-                  t.generation <- t.generation + 1;
-                  t.failed_refreshes <- 0;
-                  stop_timer t;
-                  set_phase t (Ready None);
+                  replace t None;
                   log "signed out")
                 (Result.map_error (fun e -> Storage e) removed))

@@ -1,4 +1,5 @@
-; Jv/Brr bindings to Capacitor plugins and JS libraries. No domain, no logic.
+; Jv/Brr bindings to Capacitor plugins, JS libraries and web APIs, and thin
+; wrappers that turn one JS API into a result. No domain.
 (library
  (name herbier_bindings)
  (public_name herbier.bindings)

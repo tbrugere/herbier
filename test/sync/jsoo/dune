@@ -1,0 +1,26 @@
+; js_of_ocaml build of app/sync/auth/session.ml and gotrue.ml, run under
+; node: under jsoo's 32-bit int, Yojson.Safe reads an integer past 2038 as
+; `Intlit, which the native suite never sees. The stored form must be the same
+; bytes as natively, and a token answer carrying such an integer must still
+; decode. NODE_OPTIONS is cleared so a preload in the developer's shell cannot
+; alter the run.
+
+(copy_files# ../../../app/sync/auth/{session,gotrue}.{ml,mli})
+
+(copy_files# ../stored_v1.ml)
+
+(executable
+ (name smoke)
+ (modes js)
+ (modules smoke session gotrue stored_v1)
+ (libraries yojson ptime)
+ (preprocess
+  (pps ppx_deriving.eq ppx_deriving_yojson)))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run node %{dep:smoke.bc.js}))))

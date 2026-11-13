@@ -1,20 +1,12 @@
 module Places = Herbier_domain.Places
 
-type provider = Photon | Geoplateforme
+type provider = Photon | Geoplateforme [@@deriving eq]
 
 let provider_to_string = function
   | Photon -> "photon"
   | Geoplateforme -> "geoplateforme"
 
-type request = {provider : provider; url : string}
-
-let equal_provider a b =
-  match (a, b) with
-  | Photon, Photon | Geoplateforme, Geoplateforme -> true
-  | (Photon | Geoplateforme), _ -> false
-
-let equal_request a b =
-  equal_provider a.provider b.provider && String.equal a.url b.url
+type request = {provider : provider; url : string} [@@deriving eq]
 
 let request_to_string {provider; url} = provider_to_string provider ^ " " ^ url
 
@@ -160,18 +152,12 @@ let near name =
 type error =
   | Not_json of string
   | Unexpected of {path : string; expected : string}
+[@@deriving eq]
 
 let error_to_string = function
   | Not_json msg -> "not JSON: " ^ msg
   | Unexpected {path; expected} ->
       Printf.sprintf "unexpected payload at %S: expected %s" path expected
-
-let equal_error a b =
-  match (a, b) with
-  | Not_json a, Not_json b -> String.equal a b
-  | Unexpected a, Unexpected b ->
-      String.equal a.path b.path && String.equal a.expected b.expected
-  | (Not_json _ | Unexpected _), _ -> false
 
 let json_of_string s =
   match Yojson.Safe.from_string s with
@@ -262,11 +248,7 @@ let geoplateforme_name json =
     (first_properties json)
 
 type place = {name : string; context : string option; point : Places.point}
-
-let equal_place a b =
-  String.equal a.name b.name
-  && Option.equal String.equal a.context b.context
-  && Places.equal_point a.point b.point
+[@@deriving eq]
 
 let number = function
   | `Int i -> Some (Float.of_int i)

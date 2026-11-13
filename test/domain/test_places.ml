@@ -723,7 +723,10 @@ let equal_point_cases () =
   check "another lon" false o {lat = 45.0; lon = 5.000001};
   check "nan equals nan" true
     {lat = Float.nan; lon = 5.0}
-    {lat = Float.nan; lon = 5.0}
+    {lat = Float.nan; lon = 5.0};
+  check "nan lon equals nan lon" true
+    {lat = 45.0; lon = Float.nan}
+    {lat = 45.0; lon = Float.nan}
 
 let place_name () =
   let o ?label ?derived () = obs ?label ?derived ~id:1 ~at:0 None in

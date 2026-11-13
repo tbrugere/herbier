@@ -9,14 +9,7 @@ type t = {
   communes : int;
   downloaded_at : Ptime.t;
 }
-
-let equal a b =
-  String.equal a.departement b.departement
-  && String.equal a.name b.name
-  && String.equal a.path b.path
-  && Int.equal a.size_bytes b.size_bytes
-  && Int.equal a.communes b.communes
-  && Ptime.equal a.downloaded_at b.downloaded_at
+[@@deriving eq]
 
 (* A local-only table: its columns live next to its queries (layout §2), not
    in Tables. *)

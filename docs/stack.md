@@ -68,6 +68,12 @@ evidence. Open decisions are listed at the end.
   fetch patch off) for reference thumbnails. Camera
   viewfinder via `getUserMedia` in the WebView, with
   `@capacitor-community/camera-preview` as fallback.
+- **ppx_deriving in app libraries** (decided 2026-11-13): `ppx_deriving.eq`
+  and `ppx_deriving_yojson` may be used (their runtime is plain OCaml,
+  checked under js_of_ocaml). Not `show` in app code: it links Format and the
+  printers into the bundle (tests only). Not `ppx_deriving_yojson` on closed
+  sets sent to PostgREST: it encodes a constructor `Drive` as `["Drive"]`, so
+  their `to_json`/`of_json` stay hand-written. Rules: style guide §5.5.
 - A **small Kotlin layer** is expected: the `intent-filter`s in the manifest
   and possibly a WorkManager tweak. Nothing else native.
 - Screens from the design handoff are recreated in HTML/CSS from OCaml, not in

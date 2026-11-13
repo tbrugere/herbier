@@ -99,45 +99,62 @@ let rejected ~status body =
       | _ -> text)
   | Ok _ | Error _ -> text
 
-let field fields name = List.assoc_opt name fields
+type user = {
+  id : string;
+  email : string option;
+      [@default None]
+      (* Its error is the path [user.email], which [malformed] reads as it
+         reads a derived one. *)
+      [@of_yojson
+        fun j ->
+          Result.map_error
+            (fun (_ : string) -> "user.email")
+            (Session.email_of_json j)]
+}
+[@@deriving of_yojson {strict = false}]
 
-let string_field fields name =
-  match field fields name with
-  | Some (`String s) -> Ok s
-  | Some _ | None -> Error (Malformed name)
+type answer = {
+  access_token : string;
+  refresh_token : string;
+  expires_in : int;
+  user : user;
+}
+[@@deriving of_yojson {strict = false}]
+
+(* The derived decoder's errors are paths: [<Module>.answer] or
+   [<Module>.user] for a value that is not an object, [<Module>.answer.<field>]
+   or [<Module>.user.<field>] for a missing or ill-typed field, kept as the
+   field, [user.] prefixed. The tests pin each reason. *)
+let malformed e =
+  Malformed
+    (match List.rev (String.split_on_char '.' e) with
+    | "answer" :: _ -> "not an object"
+    | "user" :: _ -> "user"
+    | f :: "answer" :: _ -> f
+    | f :: "user" :: _ -> "user." ^ f
+    | _ -> e)
 
 (* The expiry is [now + expires_in], not the answer's [expires_at]: both are
    compared with the device clock, which may be set wrong. *)
-let session_of_json ~now = function
-  | `Assoc fields -> (
-      let open Result.Syntax in
-      let* access_token = string_field fields "access_token" in
-      let* refresh_token = string_field fields "refresh_token" in
-      let* expires_at =
-        match field fields "expires_in" with
-        | Some (`Int n) when n > 0 ->
-            Option.to_result ~none:(Malformed "expires_in")
-              (Ptime.add_span
-                 (Ptime.truncate ~frac_s:0 now)
-                 (Ptime.Span.of_int_s n))
-        | Some _ | None -> Error (Malformed "expires_in")
-      in
-      match field fields "user" with
-      | Some (`Assoc user) ->
-          let* user_id =
-            Result.map_error
-              (fun (_ : error) -> Malformed "user.id")
-              (string_field user "id")
-          in
-          let+ email =
-            match field user "email" with
-            | None | Some `Null | Some (`String "") -> Ok None
-            | Some (`String e) -> Ok (Some e)
-            | Some _ -> Error (Malformed "user.email")
-          in
-          {Session.access_token; refresh_token; expires_at; user_id; email}
-      | Some _ | None -> Error (Malformed "user"))
-  | _ -> Error (Malformed "not an object")
+let session_of_json ~now json =
+  let open Result.Syntax in
+  let* a = Result.map_error malformed (answer_of_yojson json) in
+  let+ expires_at =
+    match a.expires_in > 0 with
+    | false -> Error (Malformed "expires_in")
+    | true ->
+        Option.to_result ~none:(Malformed "expires_in")
+          (Ptime.add_span
+             (Ptime.truncate ~frac_s:0 now)
+             (Ptime.Span.of_int_s a.expires_in))
+  in
+  {
+    Session.access_token = a.access_token;
+    refresh_token = a.refresh_token;
+    expires_at;
+    user_id = a.user.id;
+    email = a.user.email;
+  }
 
 let decode_session ~now ~status body =
   match success status with

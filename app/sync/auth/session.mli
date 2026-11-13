@@ -11,16 +11,22 @@ type t = {
 
 val equal : t -> t -> bool
 
+val email_of_json : Yojson.Safe.t -> (string option, string) result
+(** The email rule of the stored value and of GoTrue's [user.email]: [null] and
+    [""] are [None], a string is [Some], anything else an [Error]. *)
+
 val to_string : t -> string
 (** JSON object
     [{"v":1,"access_token":…,"refresh_token":…,"expires_at":<int s>,
      "user_id":…,"email":<string|null>}], the Preferences value. *)
 
 val of_string : string -> (t, string) result
-(** Inverse of {!to_string}. [Error] (a short reason, never containing a token)
-    for non-JSON, a non-object, ["v"] absent or not [1], a missing or ill-typed
-    field, an [expires_at] that is not an int or out of Ptime's range. Unknown
-    extra fields are ignored. Never raises. *)
+(** Inverse of {!to_string}. [Error] with a short reason that names a field,
+    never its value: ["not JSON"], ["not an object"], ["no version"],
+    ["unknown version"] (["v"] not [1]), ["<field> missing or ill-typed"],
+    ["expires_at is not an int"], ["expires_at out of range"] (Ptime's),
+    ["email is not a string"]. Unknown extra fields are ignored. Never raises.
+*)
 
 val refresh_margin : Ptime.Span.t
 (** 90 s: a session is refreshed this long before its access token expires. *)

@@ -17,6 +17,8 @@ depends: [
   "ptime"
   "uuidm"
   "yojson"
+  "ppx_deriving" {>= "6.2"}
+  "ppx_deriving_yojson" {>= "3.10"}
   "postgrest" {= version}
   "postgrest-codegen" {with-test & = version}
   "alcotest" {with-test}

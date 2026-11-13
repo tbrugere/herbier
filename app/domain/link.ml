@@ -9,8 +9,7 @@ type t =
   | Powo of string
   | Inat of int
   | Text of string
-
-let equal (a : t) (b : t) = a = b
+[@@deriving eq]
 
 let to_string = function
   | Gbif k -> Printf.sprintf "gbif %d" k

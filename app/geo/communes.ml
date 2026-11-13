@@ -27,10 +27,7 @@ module Code = struct
   let compare = String.compare
 end
 
-type departement = {code : Code.t; name : string}
-
-let equal_departement a b =
-  Code.equal a.code b.code && String.equal a.name b.name
+type departement = {code : Code.t; name : string} [@@deriving eq]
 
 (* No département has close to this many communes (Pas-de-Calais: 887): a
    page this full is taken as truncated. *)
@@ -85,24 +82,13 @@ let departements json =
 let available ~downloaded =
   List.filter (fun d -> not (List.exists (Code.equal d.code) downloaded))
 
-type ring = (float * float) array
+type ring = ((float[@equal Float.equal]) * (float[@equal Float.equal])) array
+[@@deriving eq]
+
 type commune = {insee : string; name : string; polygons : ring list list}
-type pack = {departement : Code.t; communes : commune list}
+[@@deriving eq]
 
-let equal_ring (a : ring) (b : ring) =
-  Array.length a = Array.length b
-  && Array.for_all2
-       (fun (x, y) (x', y') -> Float.equal x x' && Float.equal y y')
-       a b
-
-let equal_commune a b =
-  String.equal a.insee b.insee
-  && String.equal a.name b.name
-  && List.equal (List.equal equal_ring) a.polygons b.polygons
-
-let equal_pack a b =
-  Code.equal a.departement b.departement
-  && List.equal equal_commune a.communes b.communes
+type pack = {departement : Code.t; communes : commune list} [@@deriving eq]
 
 let tolerance_m = 20.
 let edge_m = 50.

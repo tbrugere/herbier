@@ -1,15 +1,7 @@
 module Places = Herbier_domain.Places
 module Observation = Herbier_domain.Observation
 
-type source = Ign_offline | Ign_online | Photon_online
-
-let equal_source a b =
-  match (a, b) with
-  | Ign_offline, Ign_offline
-  | Ign_online, Ign_online
-  | Photon_online, Photon_online ->
-      true
-  | (Ign_offline | Ign_online | Photon_online), _ -> false
+type source = Ign_offline | Ign_online | Photon_online [@@deriving eq]
 
 let order = [Ign_offline; Ign_online; Photon_online]
 
@@ -98,13 +90,7 @@ let own observations p =
       |> List.fold_left pick None
       |> Option.map (fun (_, _, l) -> l)
 
-type outcome = Named of string | Unknown | Deferred
-
-let equal_outcome a b =
-  match (a, b) with
-  | Named a, Named b -> String.equal a b
-  | Unknown, Unknown | Deferred, Deferred -> true
-  | (Named _ | Unknown | Deferred), _ -> false
+type outcome = Named of string | Unknown | Deferred [@@deriving eq]
 
 let outcome_to_string = function
   | Named s -> "named " ^ s

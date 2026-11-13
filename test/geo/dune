@@ -6,6 +6,8 @@
 (tests
  (names test_geo test_geocode test_place_name test_communes)
  (libraries herbier_domain yojson alcotest ptime)
+ (preprocess
+  (pps ppx_deriving.eq))
  (deps
   %{project_root}/web/map/positron.json
   (glob_files %{project_root}/test/fixtures/*.json)

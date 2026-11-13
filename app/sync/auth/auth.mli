@@ -5,6 +5,15 @@
     is in the foreground (from {!start} on; cleared on background, the refresh
     done at once on resume when due). *)
 
+module Session = Session
+(** The stored session and its refresh timing. *)
+
+module Gotrue = Gotrue
+(** GoTrue's requests and answers, sans IO. *)
+
+module Nonce = Nonce
+(** Hex encoding of the sign-in nonce. *)
+
 type status =
   | Unconfigured  (** this build has no Supabase URL/key or Google client id *)
   | Restoring  (** before {!start} has read Preferences *)

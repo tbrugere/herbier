@@ -2,21 +2,13 @@ type error =
   | Not_json of string
   | Unexpected of {path : string; expected : string}
   | Api_error of {code : string; info : string}
+[@@deriving eq]
 
 let error_to_string = function
   | Not_json msg -> "not JSON: " ^ msg
   | Unexpected {path; expected} ->
       Printf.sprintf "unexpected payload at %S: expected %s" path expected
   | Api_error {code; info} -> Printf.sprintf "API error %s: %s" code info
-
-let equal_error a b =
-  match (a, b) with
-  | Not_json a, Not_json b -> String.equal a b
-  | Unexpected a, Unexpected b ->
-      String.equal a.path b.path && String.equal a.expected b.expected
-  | Api_error a, Api_error b ->
-      String.equal a.code b.code && String.equal a.info b.info
-  | (Not_json _ | Unexpected _ | Api_error _), _ -> false
 
 let json_of_string s =
   match Yojson.Safe.from_string s with

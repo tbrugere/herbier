@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Record the Supabase Auth (GoTrue) answers of test/fixtures/gotrue_*.json
-# from the local stack (`npx supabase start`): the bodies app/sync/gotrue.ml
+# from the local stack (`npx supabase start`): the bodies app/sync/auth/gotrue.ml
 # decodes. The file name ends with the HTTP status the request must answer;
 # another status fails the script. A throwaway user, fixtures@herbier.local,
 # is created through the admin API for the refresh chain and deleted at the
@@ -86,7 +86,7 @@ post link 200 "$service" "$api/auth/v1/admin/generate_link" \
 post verify 200 "$anon" "$api/auth/v1/verify" \
   "$(jq -c '{type:"magiclink", token_hash:.hashed_token}' "$tmp/link")"
 
-# 3. A refresh: the session app/sync/gotrue.ml decodes.
+# 3. A refresh: the session app/sync/auth/gotrue.ml decodes.
 post refresh 200 "$anon" "$api/auth/v1/token?grant_type=refresh_token" \
   "$(jq -c '{refresh_token}' "$tmp/verify")"
 keep refresh gotrue_token_refresh_200.json

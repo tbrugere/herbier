@@ -51,6 +51,8 @@ library so that the library does not depend on ppxlib.")
   ptime
   uuidm
   yojson
+  (ppx_deriving (>= 6.2))
+  (ppx_deriving_yojson (>= 3.10))
   (postgrest (= :version))
   (postgrest-codegen (and :with-test (= :version)))
   (alcotest :with-test)

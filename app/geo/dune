@@ -5,4 +5,6 @@
 (library
  (name herbier_geo)
  (public_name herbier.geo)
- (libraries herbier_domain herbier_store herbier_bindings brr yojson))
+ (libraries herbier_domain herbier_store herbier_bindings brr yojson)
+ (preprocess
+  (pps ppx_deriving.eq)))

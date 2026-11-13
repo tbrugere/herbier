@@ -1,9 +1,10 @@
-(* Native checks of app/sync/session.ml, nonce.ml and gotrue.ml (copied into
-   this directory by test/sync/dune, hence the unqualified [Session],
-   [Nonce] and [Gotrue] module names). Fixture bodies are read from
-   test/fixtures/; the status that goes with each is given by the test,
-   matching the fixture's name. No test sends a request or touches
-   Preferences: auth.ml, the binding and the screen are device-checked. *)
+(* Native checks of app/sync/auth/session.ml, nonce.ml and gotrue.ml (copied
+   into this directory by test/sync/dune, hence the unqualified [Session],
+   [Nonce] and [Gotrue] module names, Auth.Session etc. in the app). Fixture
+   bodies are read from test/fixtures/; the status that goes with each is
+   given by the test, matching the fixture's name. No test sends a request or
+   touches Preferences: auth.ml, the binding and the screen are
+   device-checked. *)
 
 (* ---------- small helpers ---------- *)
 
@@ -105,30 +106,37 @@ let of_string_reads_an_empty_or_absent_email_as_none () =
        {|{"v":1,"access_token":"a","refresh_token":"r","expires_at":1,"user_id":"u"}|})
 
 let of_string_rejects_bad_input () =
-  let bad name input =
+  let bad name ~reason input =
     match Session.of_string input with
-    | Error _ -> ()
+    | Error e -> Alcotest.(check string) (name ^ ": reason") reason e
     | Ok _ -> Alcotest.failf "%s: expected Error, got Ok" name
   in
-  bad "not json" "not json";
-  bad "a JSON array" "[]";
-  bad "no \"v\""
+  bad "not json" ~reason:"not JSON" "not json";
+  bad "a JSON array" ~reason:"not an object" "[]";
+  bad "no \"v\"" ~reason:"no version"
     {|{"access_token":"a","refresh_token":"r","expires_at":1,"user_id":"u","email":null}|};
-  bad "\"v\":2"
+  bad "\"v\":2" ~reason:"unknown version"
     {|{"v":2,"access_token":"a","refresh_token":"r","expires_at":1,"user_id":"u","email":null}|};
-  bad "missing refresh_token"
+  bad "missing access_token" ~reason:"access_token missing or ill-typed"
+    {|{"v":1,"refresh_token":"r","expires_at":1,"user_id":"u","email":null}|};
+  bad "access_token as a number" ~reason:"access_token missing or ill-typed"
+    {|{"v":1,"access_token":1,"refresh_token":"r","expires_at":1,"user_id":"u","email":null}|};
+  bad "missing refresh_token" ~reason:"refresh_token missing or ill-typed"
     {|{"v":1,"access_token":"a","expires_at":1,"user_id":"u","email":null}|};
-  bad "expires_at as a string"
+  bad "missing expires_at" ~reason:"expires_at missing or ill-typed"
+    {|{"v":1,"access_token":"a","refresh_token":"r","user_id":"u","email":null}|};
+  bad "expires_at as a string" ~reason:"expires_at is not an int"
     {|{"v":1,"access_token":"a","refresh_token":"r","expires_at":"soon","user_id":"u","email":null}|};
-  bad "expires_at as a float"
+  bad "expires_at as a float" ~reason:"expires_at is not an int"
     {|{"v":1,"access_token":"a","refresh_token":"r","expires_at":1.5,"user_id":"u","email":null}|};
   bad "expires_at past Ptime's range (year 10000 and later)"
+    ~reason:"expires_at out of range"
     {|{"v":1,"access_token":"a","refresh_token":"r","expires_at":253402300800,"user_id":"u","email":null}|};
-  bad "expires_at too large for an int"
+  bad "expires_at too large for an int" ~reason:"expires_at out of range"
     {|{"v":1,"access_token":"a","refresh_token":"r","expires_at":99999999999999999999,"user_id":"u","email":null}|};
-  bad "missing user_id"
+  bad "missing user_id" ~reason:"user_id missing or ill-typed"
     {|{"v":1,"access_token":"a","refresh_token":"r","expires_at":1,"email":null}|};
-  bad "email as a number"
+  bad "email as a number" ~reason:"email is not a string"
     {|{"v":1,"access_token":"a","refresh_token":"r","expires_at":1,"user_id":"u","email":3}|}
 
 let of_string_ignores_an_unknown_extra_field () =
@@ -256,6 +264,66 @@ let session_tests =
     ( "with_expiry changes only expires_at",
       `Quick,
       with_expiry_changes_only_expires_at );
+  ]
+
+(* ---------- Session: stored format (v1) ---------- *)
+
+let at_s secs =
+  match Ptime.of_float_s secs with
+  | Some t -> t
+  | None -> Alcotest.failf "%.0f s is not a Ptime" secs
+
+let to_string_writes_the_recorded_v1_bytes () =
+  Alcotest.(check string)
+    "email Some" Stored_v1.with_email
+    (Session.to_string (session ~expires_at:t0 ()));
+  Alcotest.(check string)
+    "email None" Stored_v1.without_email
+    (Session.to_string (session ~email:None ~expires_at:t0 ()));
+  Alcotest.(check string)
+    "expiry in 2100: digits, no exponent or .0" Stored_v1.in_2100
+    (Session.to_string (session ~expires_at:(at_s 4_102_444_800.) ()));
+  Alcotest.(check string)
+    "t0 + 0.6 s written as t0 + 1 s"
+    {|{"v":1,"access_token":"AT-token","refresh_token":"RT-token","expires_at":1800000001,"user_id":"user-1","email":"person@example.com"}|}
+    (Session.to_string (session ~expires_at:(at_s 1_800_000_000.6) ()))
+
+let of_string_reads_recorded_v1_values () =
+  let read name input expected =
+    match Session.of_string input with
+    | Ok s -> Alcotest.(check session_t) name expected s
+    | Error e -> Alcotest.failf "%s: expected Ok, got Error %S" name e
+  in
+  read "email string" Stored_v1.with_email (session ~expires_at:t0 ());
+  read "email null" Stored_v1.without_email
+    (session ~email:None ~expires_at:t0 ());
+  read "expiry in 2100" Stored_v1.in_2100
+    (session ~expires_at:(at_s 4_102_444_800.) ());
+  read "email \"\""
+    {|{"v":1,"access_token":"AT-token","refresh_token":"RT-token","expires_at":1800000000,"user_id":"user-1","email":""}|}
+    (session ~email:None ~expires_at:t0 ());
+  read "email absent"
+    {|{"v":1,"access_token":"AT-token","refresh_token":"RT-token","expires_at":1800000000,"user_id":"user-1"}|}
+    (session ~email:None ~expires_at:t0 ());
+  read "small expires_at"
+    {|{"v":1,"access_token":"AT-token","refresh_token":"RT-token","expires_at":1000,"user_id":"user-1","email":null}|}
+    (session ~email:None ~expires_at:(at_s 1000.) ());
+  read "unknown field"
+    {|{"v":1,"access_token":"AT-token","refresh_token":"RT-token","expires_at":1800000000,"user_id":"user-1","email":null,"later":{"x":[1]}}|}
+    (session ~email:None ~expires_at:t0 ());
+  read "keys in another order"
+    {|{"email":"person@example.com","user_id":"user-1","expires_at":1800000000,"refresh_token":"RT-token","access_token":"AT-token","v":1}|}
+    (session ~expires_at:t0 ())
+
+let session_stored_format_tests =
+  [
+    ( "to_string writes the recorded v1 bytes",
+      `Quick,
+      to_string_writes_the_recorded_v1_bytes );
+    ( "of_string reads recorded v1 values (email null/\"\"/absent, any key \
+       order, extra fields)",
+      `Quick,
+      of_string_reads_recorded_v1_values );
   ]
 
 (* ---------- Nonce ---------- *)
@@ -644,6 +712,22 @@ let decode_session_200_without_user_id_is_malformed () =
 let decode_session_200_json_array_is_malformed () =
   check_malformed ~reason:"not an object" "a JSON array with status 200" "[]"
 
+let decode_session_200_names_each_bad_field () =
+  let with_top name key value =
+    check_malformed ~reason:key name
+      (Yojson.Safe.to_string (set_top_field key value fixture_200_json))
+  in
+  check_malformed ~reason:"access_token" "access_token removed"
+    (Yojson.Safe.to_string (remove_top_field "access_token" fixture_200_json));
+  with_top "access_token a number" "access_token" (`Int 1);
+  with_top "refresh_token null" "refresh_token" `Null;
+  with_top "expires_in a float" "expires_in" (`Float 3600.5);
+  with_top "expires_in negative" "expires_in" (`Int (-1));
+  with_top "user a string" "user" (`String "u");
+  check_malformed ~reason:"user.id" "user.id a number"
+    (Yojson.Safe.to_string
+       (set_top_field "user" (`Assoc [("id", `Int 7)]) fixture_200_json))
+
 (* The .mli's constructor is public: pattern-matched directly, no wildcard
    on our own [Gotrue.error]. [Rejected]'s payload is an inline record, which
    cannot escape a match as a value, hence the tuple. *)
@@ -891,6 +975,9 @@ let gotrue_response_tests =
     ( "decode_session: a 200 JSON array is Malformed",
       `Quick,
       decode_session_200_json_array_is_malformed );
+    ( "decode_session: a Malformed 200 names the bad field",
+      `Quick,
+      decode_session_200_names_each_bad_field );
     ( "decode_session: refresh_token_not_found is Rejected with its recorded \
        fields",
       `Quick,
@@ -932,6 +1019,7 @@ let () =
   Alcotest.run "sync"
     [
       ("Session", session_tests);
+      ("Session: stored format (v1)", session_stored_format_tests);
       ("Nonce", nonce_tests);
       ("Gotrue requests", gotrue_request_tests);
       ("Gotrue responses", gotrue_response_tests);

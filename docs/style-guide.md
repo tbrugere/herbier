@@ -127,6 +127,18 @@ type _ key =
 val get : 'a key -> 'a
 ```
 
+5.5 **Deriving.** Derive `equal` (`[@@deriving eq]`) when it is field-wise
+structural equality. A float field keeps `[@equal Float.equal]` (the derived
+one uses `=` on floats, for which nan ≠ nan); a `Ptime.t` field gets
+`Ptime.equal` without an attribute (the derive is type-directed). Hand-write
+only an equality that is deliberately partial (e.g. `same_plant`, id and
+`updated_at`) and say so in a comment. Derive yojson for a stored or
+transport record only when the derived wire format is the existing one,
+pinned by a test on a recorded encoding; never put `[@default]` on a field
+that is encoded (the derived `to_yojson` then omits it when it equals the
+default). Keep the `val equal…` lines, with their docs, in the `.mli`; the
+derived `to_yojson`/`of_yojson` are not exported unless callers need them.
+
 ## 6. Binding operators
 
 6.1 Use `let*` / `let+` / `and+` instead of nested `map`/`bind`. Every
