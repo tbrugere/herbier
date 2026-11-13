@@ -19,6 +19,7 @@ depends: [
   "yojson"
   "ppx_deriving" {>= "6.2"}
   "ppx_deriving_yojson" {>= "3.10"}
+  "uri" {>= "4.0"}
   "postgrest" {= version}
   "postgrest-codegen" {with-test & = version}
   "alcotest" {with-test}

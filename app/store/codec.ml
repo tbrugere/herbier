@@ -44,14 +44,17 @@ type error =
 (* Yojson's messages span two lines ("Line 1, bytes 0-4:\nInvalid token"). *)
 let one_line s = String.map (function '\n' | '\r' -> ' ' | c -> c) s
 
+let row_error_to_string : Row.error -> string = function
+  | `Missing -> "missing column"
+  | `NotAnObject -> "not an object"
+  | `WrongType -> "wrong type"
+  | `UnexpectedNull -> "unexpected null"
+  | `DummyRow -> "dummy row spec"
+
 let error_to_string = function
   | Invalid_row msg -> "invalid row: " ^ one_line msg
   | Invalid_json_column name -> "column " ^ name ^ " is not JSON text"
-  | Row `Missing -> "missing column"
-  | Row `NotAnObject -> "not an object"
-  | Row `WrongType -> "wrong type"
-  | Row `UnexpectedNull -> "unexpected null"
-  | Row `DummyRow -> "dummy row spec"
+  | Row e -> row_error_to_string e
 
 let parse_object text =
   match Yojson.Safe.from_string text with
@@ -67,12 +70,15 @@ let parse_json_column fields name =
       | exception Yojson.Json_error _ -> Error (Invalid_json_column name))
   | Some _ | None -> Ok fields
 
-let decode_object spec fields =
+let decode_value spec json =
   (* Row.decode calls int_of_string on an integer literal too large for an
      int; database data must not raise (style 8.3). *)
-  match Row.decode spec (`Assoc fields) with
-  | result -> Result.map_error (fun e -> Row e) result
-  | exception Failure _ -> Error (Row `WrongType)
+  match Row.decode spec json with
+  | result -> result
+  | exception Failure _ -> Error `WrongType
+
+let decode_object spec fields =
+  Result.map_error (fun e -> Row e) (decode_value spec (`Assoc fields))
 
 let parse_json_columns fields json =
   List.fold_left

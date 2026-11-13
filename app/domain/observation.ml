@@ -1,5 +1,11 @@
-type position = {lat : float; lon : float; accuracy_m : float option}
-type id = Ids.Observation_id.t
+type position = {
+  lat : float; [@equal Float.equal]
+  lon : float; [@equal Float.equal]
+  accuracy_m : float option; [@equal Option.equal Float.equal]
+}
+[@@deriving eq]
+
+type id = Ids.Observation_id.t [@@deriving eq]
 
 type t = {
   id : id;
@@ -13,3 +19,4 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
+[@@deriving eq]

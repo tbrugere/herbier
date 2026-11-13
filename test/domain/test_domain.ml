@@ -31,4 +31,5 @@ let () =
       ("places", Test_places.tests);
       ("link", Test_link.tests);
       ("schema dump", Test_schema_dump.tests);
+      ("merge", Test_merge.tests);
     ]

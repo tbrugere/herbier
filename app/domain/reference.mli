@@ -14,6 +14,8 @@ module Source : sig
     | Inat
     | Plantnet
 
+  val equal : t -> t -> bool
+
   val all : t list
   (** Every constructor, in declaration order. *)
 
@@ -35,6 +37,8 @@ end
 
 module Status : sig
   type t = Complete | Partial | Missing | Failed
+
+  val equal : t -> t -> bool
 
   val all : t list
   (** Every constructor, in declaration order. *)
@@ -90,6 +94,11 @@ type t = {
 (** Row of [reference]: what one source said about the plant. At most one row
     per [(plant_id, source)]. *)
 
+val equal : t -> t -> bool
+(** Field by field, [Ptime.equal] on instants (no truncation); [payload] by
+    [Yojson.Safe.equal]: object key order ignored, as [jsonb] reorders keys, and
+    [`Int 1] differs from [`Float 1.]. *)
+
 (** Row of [plant_refs]: the plant's identifier at one source. At most one row
     per [(plant_id, source)]. *)
 module Plant_ref : sig
@@ -110,6 +119,9 @@ module Plant_ref : sig
     updated_at : Ptime.t;
     deleted_at : Ptime.t option;  (** [Some] = soft-deleted. *)
   }
+
+  val equal : t -> t -> bool
+  (** Field by field: [Ptime.equal] on instants (no truncation). *)
 end
 
 (** A reference image (handoff 4f organ photos). Device-local row: not synced.

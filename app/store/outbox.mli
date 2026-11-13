@@ -6,9 +6,9 @@
 
 type op =
   | Upsert
-      (** Stored as ["upsert"]. Push always upserts the whole row on [id]
-          ([on_conflict=id], architecture §4); a soft delete is an upsert
-          carrying [deleted_at]. *)
+      (** Stored as ["upsert"]. Push always upserts the whole row on [id] (no
+          [on_conflict] parameter: PostgREST's default primary-key target,
+          architecture §4); a soft delete is an upsert carrying [deleted_at]. *)
 
 type seq
 (** An entry's position: [seq] of the table, increasing in append order among

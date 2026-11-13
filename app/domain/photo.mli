@@ -26,6 +26,8 @@ end
 module Upload_state : sig
   type t = Pending | Uploaded | Failed | Original_missing
 
+  val equal : t -> t -> bool
+
   val all : t list
   (** Every constructor, in declaration order. *)
 
@@ -67,6 +69,9 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;  (** [Some] = soft-deleted. *)
 }
+
+val equal : t -> t -> bool
+(** Field by field: [Ptime.equal] on instants (no truncation). *)
 
 val awaiting_drive : t -> bool
 (** Whether the original is bound for Drive and not there yet: [Pending], or

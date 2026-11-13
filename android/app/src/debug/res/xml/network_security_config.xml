@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only. Outside the release profile the app talks to the
+     local Supabase stack at http://127.0.0.1:54321 (adb reverse on the
+     emulator); Android refuses cleartext HTTP by default, the WebView with
+     net::ERR_CLEARTEXT_NOT_PERMITTED. Loopback only; every other host
+     keeps the default (HTTPS only). Release builds have no such file. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

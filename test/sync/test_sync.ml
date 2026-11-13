@@ -6,24 +6,6 @@
    touches Preferences: auth.ml, the binding and the screen are
    device-checked. *)
 
-(* ---------- small helpers ---------- *)
-
-let fixture name =
-  let path = Filename.concat "../fixtures" name in
-  In_channel.with_open_bin path In_channel.input_all
-
-let contains ~needle haystack =
-  let n = String.length needle and h = String.length haystack in
-  let rec at i =
-    match i > h - n with
-    | true -> false
-    | false -> (
-        match String.equal (String.sub haystack i n) needle with
-        | true -> true
-        | false -> at (i + 1))
-  in
-  match n with 0 -> true | _ -> at 0
-
 (* ---------- Session ---------- *)
 
 let t0 =
@@ -165,10 +147,10 @@ let of_string_error_never_contains_the_tokens () =
   | Error msg ->
       Alcotest.(check bool)
         "no access token in the error" false
-        (contains ~needle:"AT_SECRET_TOKEN_VALUE" msg);
+        (Support.contains ~needle:"AT_SECRET_TOKEN_VALUE" msg);
       Alcotest.(check bool)
         "no refresh token in the error" false
-        (contains ~needle:"RT_SECRET_TOKEN_VALUE" msg)
+        (Support.contains ~needle:"RT_SECRET_TOKEN_VALUE" msg)
 
 let due_near_the_90s_margin () =
   let s = session ~expires_at:t0 () in
@@ -536,14 +518,20 @@ let expected_session_of_fixture_json ?(now = sent) (json : Yojson.Safe.t) :
       | _ -> Alcotest.fail "fixture is missing a field decode_session needs")
   | _ -> Alcotest.fail "fixture is not a JSON object"
 
-let fixture_200_text = fixture "gotrue_token_refresh_200.json"
+let fixture_200_text = Support.fixture "gotrue_token_refresh_200.json"
 let fixture_200_json = Yojson.Safe.from_string fixture_200_text
-let fixture_not_found_text = fixture "gotrue_token_refresh_not_found_400.json"
-let fixture_invalid_text = fixture "gotrue_token_refresh_invalid_400.json"
-let fixture_signup_disabled_text = fixture "gotrue_signup_disabled_422.json"
+
+let fixture_not_found_text =
+  Support.fixture "gotrue_token_refresh_not_found_400.json"
+
+let fixture_invalid_text =
+  Support.fixture "gotrue_token_refresh_invalid_400.json"
+
+let fixture_signup_disabled_text =
+  Support.fixture "gotrue_signup_disabled_422.json"
 
 let fixture_id_token_invalid_text =
-  fixture "gotrue_token_id_token_invalid_request_400.json"
+  Support.fixture "gotrue_token_id_token_invalid_request_400.json"
 
 (* Derives a variant of the 200 fixture's top-level JSON, never a file. *)
 let remove_top_field key json =
@@ -679,7 +667,7 @@ let decode_session_malformed_never_quotes_the_body () =
   | Error e ->
       Alcotest.(check bool)
         "no body text in error_to_string" false
-        (contains ~needle:"SECRET" (Gotrue.error_to_string e))
+        (Support.contains ~needle:"SECRET" (Gotrue.error_to_string e))
   | Ok _ -> Alcotest.fail "expected Error, got Ok"
 
 let decode_session_200_with_a_null_user_is_malformed () =
@@ -896,10 +884,12 @@ let revokes_session_cases () =
 
 let error_to_string_names_the_status_and_code () =
   let s = Gotrue.error_to_string error_not_found in
-  Alcotest.(check bool) "mentions the status" true (contains ~needle:"400" s);
+  Alcotest.(check bool)
+    "mentions the status" true
+    (Support.contains ~needle:"400" s);
   Alcotest.(check bool)
     "mentions the error code" true
-    (contains ~needle:"refresh_token_not_found" s)
+    (Support.contains ~needle:"refresh_token_not_found" s)
 
 let error_to_string_cases () =
   let rejected message = Gotrue.Rejected {status = 400; code = None; message} in

@@ -2,7 +2,7 @@
    not one [taxon option], because the record mirrors the [plants] row column
    for column and the store reads it through flat [Postgrest] columns, whose
    row specs cannot fail. *)
-type id = Ids.Plant_id.t
+type id = Ids.Plant_id.t [@@deriving eq]
 
 type t = {
   id : id;
@@ -18,6 +18,7 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
+[@@deriving eq]
 
 let v ~id ~at display_name =
   {

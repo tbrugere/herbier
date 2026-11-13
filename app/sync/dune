@@ -1,10 +1,11 @@
-; Supabase auth and the outbox push/pull over PostgREST; transport.ml is
-; the Brr fetch adapter for Postgrest.Request.t.
+; Supabase auth and the outbox push/pull over PostgREST.
 ; Sub-directories are qualified: auth/auth.ml is the group's main module, so
-; auth/session.ml is Auth.Session (re-exported by auth.ml).
-; The pure modules (auth/session.ml, auth/nonce.ml, auth/gotrue.ml) must not
-; reference Brr, Fut, Jv or Herbier_bindings: test/sync compiles them
-; natively through copy_files.
+; auth/session.ml is Auth.Session (re-exported by auth.ml); net/ has no main
+; module, so net/rest.ml is Net.Rest and net/transport.ml (the
+; Postgrest.Client.HTTP over Herbier_bindings.Timed_fetch) Net.Transport.
+; The pure modules (auth/session.ml, auth/nonce.ml, auth/gotrue.ml,
+; synced.ml, net/rest.ml) must not reference Brr, Fut, Jv or
+; Herbier_bindings: test/sync compiles them natively through copy_files.
 (include_subdirs qualified)
 
 (library
@@ -15,12 +16,13 @@
   herbier_store
   herbier_bindings
   postgrest
+  uri
   yojson
   ptime
   ptime.clock.os
   brr)
  (preprocess
-  (pps ppx_deriving.eq ppx_deriving_yojson)))
+  (pps ppx_deriving.eq ppx_deriving.show ppx_deriving_yojson)))
 
 ; backend.ml: where this build signs in (Supabase URL, publishable key,
 ; Google web client id), from the environment at build time. Outside the

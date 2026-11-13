@@ -12,11 +12,10 @@
 # chain needs their answers): fixtures are recorded once, never edited. The
 # 200 file holds a local-stack JWT and the throwaway address, nothing real.
 set -euo pipefail
-# One check per tool: `command -v jq curl` succeeds when either exists.
-for tool in curl jq; do
-  command -v "$tool" >/dev/null || { echo "needs $tool" >&2; exit 1; }
-done
 root="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+# shellcheck source=lib/local-stack.sh
+. "$root/scripts/lib/local-stack.sh"
+require_tools curl jq
 out="$root/test/fixtures"
 force=0
 case "$#:${1:-}" in
@@ -25,13 +24,7 @@ case "$#:${1:-}" in
   *) echo "usage: $0 [--force]" >&2; exit 2 ;;
 esac
 
-env_out="$(cd "$root" && env -u NODE_OPTIONS npx supabase status -o env)"
-value() { sed -n "s/^$1=\"\(.*\)\"$/\1/p" <<<"$env_out"; }
-api="$(value API_URL)"
-anon="$(value PUBLISHABLE_KEY)"
-service="$(value SERVICE_ROLE_KEY)"
-[ -n "$api" ] && [ -n "$anon" ] && [ -n "$service" ] \
-  || { echo "local stack not running (npx supabase start)" >&2; exit 1; }
+local_stack_keys "$root"
 
 tmp="$(mktemp -d)"
 user_id=""

@@ -73,5 +73,17 @@ val decode :
     integer literal out of range and also a [Failure] raised by a mapper of
     [spec], so mappers must be total. *)
 
+val decode_value :
+  ('table, 'a) Postgrest.Row.t ->
+  Yojson.Safe.t ->
+  ('a, Postgrest.Row.error) result
+(** [Postgrest.Row.decode] that never raises: a [Failure] escaping it (an
+    integer literal out of range, a mapper of the spec) is [`WrongType]. The
+    last step of {!decode}. *)
+
+val row_error_to_string : Postgrest.Row.error -> string
+(** ["missing column"], ["not an object"], ["wrong type"], ["unexpected null"],
+    ["dummy row spec"]. *)
+
 val error_to_string : error -> string
 (** One line for logs and the dev page. *)

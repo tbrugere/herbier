@@ -10,6 +10,7 @@ module Source = struct
     | Eppo
     | Inat
     | Plantnet
+  [@@deriving eq]
 
   let all =
     [Gbif; Wikidata; Wikipedia; Powo; Ipni; Taxref; Tela; Eppo; Inat; Plantnet]
@@ -44,7 +45,7 @@ module Source = struct
 end
 
 module Status = struct
-  type t = Complete | Partial | Missing | Failed
+  type t = Complete | Partial | Missing | Failed [@@deriving eq]
 
   let all = [Complete; Partial; Missing; Failed]
 
@@ -84,7 +85,7 @@ module Organ = struct
     | _ -> None
 end
 
-type id = Ids.Reference_id.t
+type id = Ids.Reference_id.t [@@deriving eq]
 
 let id_of_key ~plant ~source =
   Ids.Reference_id.of_key ~plant ~source:(Source.to_string source)
@@ -100,9 +101,10 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
+[@@deriving eq]
 
 module Plant_ref = struct
-  type id = Ids.Plant_ref_id.t
+  type id = Ids.Plant_ref_id.t [@@deriving eq]
 
   let id_of_key ~plant ~source =
     Ids.Plant_ref_id.of_key ~plant ~source:(Source.to_string source)
@@ -117,6 +119,7 @@ module Plant_ref = struct
     updated_at : Ptime.t;
     deleted_at : Ptime.t option;
   }
+  [@@deriving eq]
 end
 
 module Image = struct

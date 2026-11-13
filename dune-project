@@ -53,6 +53,7 @@ library so that the library does not depend on ppxlib.")
   yojson
   (ppx_deriving (>= 6.2))
   (ppx_deriving_yojson (>= 3.10))
+  (uri (>= 4.0))
   (postgrest (= :version))
   (postgrest-codegen (and :with-test (= :version)))
   (alcotest :with-test)

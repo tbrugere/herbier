@@ -1,13 +1,7 @@
 module Original_target = struct
-  type t = App_only | Drive
+  type t = App_only | Drive [@@deriving eq]
 
   let all = [App_only; Drive]
-
-  let equal a b =
-    match (a, b) with
-    | App_only, App_only | Drive, Drive -> true
-    | (App_only | Drive), _ -> false
-
   let to_string = function App_only -> "app_only" | Drive -> "drive"
 
   let of_string = function
@@ -20,7 +14,7 @@ module Original_target = struct
 end
 
 module Upload_state = struct
-  type t = Pending | Uploaded | Failed | Original_missing
+  type t = Pending | Uploaded | Failed | Original_missing [@@deriving eq]
 
   let all = [Pending; Uploaded; Failed; Original_missing]
 
@@ -45,7 +39,7 @@ end
    fields, not one [App_only | Drive of ...] variant, because the record
    mirrors the [photos] row column for column and the store reads it through
    flat [Postgrest] columns, whose row specs cannot fail. *)
-type id = Ids.Photo_id.t
+type id = Ids.Photo_id.t [@@deriving eq]
 
 type t = {
   id : id;
@@ -63,6 +57,7 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
+[@@deriving eq]
 
 let awaiting_drive p =
   match (p.original_target, p.upload_state) with

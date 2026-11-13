@@ -85,6 +85,37 @@ its sessions are deleted at the end (also on error). The JWT in the 200 file
 is a local-stack token (issuer `http://127.0.0.1:54321/auth/v1`), not a
 secret.
 
+`sync_<verb>_<table>[_<case>]_<status>.json`: PostgREST (Supabase, local
+stack) answers for the sync requests of `app/sync/net/rest.ml`, read by
+`test/sync/test_rest.ml`, recorded by `scripts/record-sync-fixtures.sh
+[--force]` against the local stack (`npx supabase start`) with a throwaway
+user `sync-fixtures@herbier.local`, deleted at the end with its rows (also on
+error); no real account, no real token in any file. The script's requests
+are written by hand to match those `Rest` renders (paths, `select=`,
+`order=updated_at,id`, `Prefer`, `Range`, `Accept`), not checked against
+them; it writes the answers byte for byte. It upserts one row
+per table first, parents first (plants, tags, observations, photos,
+plant_tags, plant_refs, reference; ids `01965d4e-0000-7000-8000-00000000000<1..7>`),
+then the plant again with `notes` and its cover (the update path, answered
+200). The row values are literal in the script and mirrored by the tests;
+only `updated_at` is the server's. Then:
+
+- `sync_select_<table>_200.json` ×7: each table, no filter.
+- `sync_upsert_plants_bad_jwt_401.json`: `Authorization: Bearer
+  not-a-jwt` (`PGRST301`).
+- `sync_upsert_plants_anon_401.json`: no `Authorization` header (the
+  `apikey` alone): `42501`, permission denied, answered 401 by this
+  PostgREST version (the file is named after the status answered).
+- `sync_upsert_observations_fk_409.json`: an observation whose
+  `plant_id` points at no plant (`23503`).
+- `sync_upsert_observations_check_400.json`: `lat` set without `lon`
+  (`23514`, `observations_position_both_or_neither`).
+
+The reference row's `payload` is sent with `vernacular` before `species` and
+`rank` before `key` inside it; `sync_select_reference_200.json` shows
+`jsonb`'s reorder (`species` first, `key` first inside it), which the
+structural-equality tests of `test_rest.ml` and `test_merge.ml` rely on.
+
 `web/map/positron.json` (not in this directory: it is also the style the app
 ships) is a recorded payload, read by `test/geo` as the fixture of its
 `Style.with_overlays` tests; never hand-edited. It is re-recorded on demand

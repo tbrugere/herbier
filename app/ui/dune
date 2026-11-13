@@ -16,6 +16,7 @@
   herbier_refs_io
   herbier_geo
   postgrest
+  uri
   brr
   react
   reactiveData

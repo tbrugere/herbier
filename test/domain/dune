@@ -8,7 +8,8 @@
   test_photo
   test_places
   test_link
-  test_schema_dump)
+  test_schema_dump
+  test_merge)
  (libraries
   herbier_domain
   postgrest-codegen

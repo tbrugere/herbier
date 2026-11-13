@@ -11,6 +11,9 @@ type t = {
   deleted_at : Ptime.t option;  (** [Some] = soft-deleted. *)
 }
 
+val equal : t -> t -> bool
+(** Field by field: [Ptime.equal] on instants (no truncation). *)
+
 (** Row of [plant_tags]: one tag on one plant. Soft-deleted when the tag is
     removed so the removal syncs; at most one row per [(plant_id, tag_id)], and
     re-adding a removed tag revives its row. *)
@@ -26,4 +29,7 @@ module Plant_tag : sig
     updated_at : Ptime.t;
     deleted_at : Ptime.t option;  (** [Some] = soft-deleted. *)
   }
+
+  val equal : t -> t -> bool
+  (** Field by field: [Ptime.equal] on instants (no truncation). *)
 end

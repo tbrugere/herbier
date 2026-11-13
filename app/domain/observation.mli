@@ -27,3 +27,10 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;  (** [Some] = soft-deleted. *)
 }
+
+val equal_position : position -> position -> bool
+(** [Float.equal] on each coordinate: exact, except that [nan] equals [nan] and
+    [0.] equals [-0.]. *)
+
+val equal : t -> t -> bool
+(** Field by field: [Ptime.equal] on instants (no truncation). *)

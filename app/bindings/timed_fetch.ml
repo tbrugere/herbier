@@ -12,7 +12,9 @@ let meth_to_string : meth -> string = function
 type error = Timeout | Failed of string
 
 let error_to_string = function Timeout -> "timeout" | Failed m -> m
-let message e = Jstr.to_string (Jv.Error.message e)
+
+let message e =
+  Jstr.to_string (Jv.Error.name e) ^ ": " ^ Jstr.to_string (Jv.Error.message e)
 
 let header_list response =
   List.map

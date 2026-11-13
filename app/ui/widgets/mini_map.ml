@@ -13,11 +13,6 @@ let padding_px = 16
    surroundings readable. *)
 let max_zoom = 17.
 
-let equal_position (a : Observation.position) (b : Observation.position) =
-  Float.equal a.lat b.lat
-  && Float.equal a.lon b.lon
-  && Option.equal Float.equal a.accuracy_m b.accuracy_m
-
 let framing pos =
   Option.bind pos (fun p ->
       Option.map (fun b -> (p, b)) (Features.accuracy_bounds p))
@@ -37,7 +32,7 @@ let show m ((p : Observation.position), bounds) =
 
 let v ~colours position =
   let position =
-    React.S.map ~eq:(Option.equal equal_position) Fun.id position
+    React.S.map ~eq:(Option.equal Observation.equal_position) Fun.id position
   in
   (* The tap target is a button laid over the canvas, not [el]: MapLibre fills
      [el] with its attribution (a toggle and links), which must stay outside

@@ -239,33 +239,38 @@ reference` with:
   tables, so it is backed up, not refetched on a new device;
 - the natural keys of §2 (`plant_refs`, `plant_tags`, `reference`) as unique
   constraints next to the `id` primary key: the store looks a row up by its
-  natural key and reuses its `id`, so push stays `on_conflict=id` for every
-  table and the outbox keeps one `row_id` per row. A new row of these three
-  tables gets an id derived from its natural key (UUID v5 of `plant_id` and
-  `tag_id` or `source`, under the Herbier namespace
+  natural key and reuses its `id`, so push upserts on the primary key `id` for
+  every table (PostgREST's default conflict target; no `on_conflict` query
+  parameter is sent) and the outbox keeps one `row_id` per row. A new row of
+  these three tables gets an id derived from its natural key (UUID v5 of
+  `plant_id` and `tag_id` or `source`, under the Herbier namespace
   `b85c6db9-9479-4fb1-af57-3ff6ad665b62`, of the name
   `<table>/<plant_id>/<tag_id or source>` in canonical lowercase, e.g.
   `plant_tags/<plant_id>/<tag_id>`; `Ids.Plant_tag_id.of_key`,
-  `Ids.Plant_ref_id.of_key`, `Ids.Reference_id.of_key`), not a random one:
-  two installs that create the same link before syncing produce the same
-  id, so the second push merges instead of failing on the unique constraint;
+  `Ids.Plant_ref_id.of_key`, `Ids.Reference_id.of_key`), not a random one: two
+  installs that create the same link before syncing produce the same id, so the
+  second push merges instead of failing on the unique constraint;
 - server-only columns, `owner_id` (defaulted to the caller) and
   `observations.loc` (set by the trigger), carry `metadata: server_only`
   in their column comment and are left out of the generated
   `app/store/tables.ml`: the app never sends or reads them;
+- integer columns (`gbif_key`, `width`, `height`) stay `integer`, never
+  `bigint`: under js_of_ocaml an `int` is 32 bits, and `Postgrest.Col`
+  raises on a wider literal inside the select's future, which would leave
+  the pull pending instead of failing;
 - foreign keys are checked without RLS, so a row may reference another
   owner's row by id. Accepted: there is one account and sign-ups are off.
 
 `updated_at` has no default and the device always sends it, as its local
-last-write-wins clock, but the server's `set_updated_at` trigger replaces it
-by server time (`now()`) on every insert and update. The pull cursor
-therefore never compares a device clock: a row created offline and pushed
-hours later still sorts after every other install's last pull. The device
-adopts the server value from the push response (`Prefer:
-return=representation`) or the next pull. `now()` is the transaction start,
-so a long transaction can commit behind a cursor already advanced; the pull
-asks for a few seconds of overlap (`updated_at=gt.<last_pulled_at - 5 s>`),
-which LWW makes idempotent.
+last-write-wins clock, but the server's `set_updated_at` trigger replaces it by
+server time (`now()`) on every insert and update. The pull cursor therefore
+never compares a device clock: a row created offline and pushed hours later
+still sorts after every other install's last pull. The push does not ask for the
+row back (no `return=` preference; PostgREST's default is `minimal`): the device
+adopts the server value at the next pull. `now()` is the transaction start, so a
+long transaction can commit behind a cursor already advanced; the pull asks for
+a few seconds of overlap (`updated_at=gt.<last_pulled_at - 5 s>`), which LWW
+makes idempotent.
 
 The local store keeps timestamps to the microsecond, as `timestamptz` does,
 but `Postgrest.Col` encodes a `TimestampTz` with whole seconds
@@ -277,28 +282,59 @@ fractional digits and the next pull brings back the truncated value.
 Protocol, run on app start, on resume, and after each local write when
 online:
 
-1. **Push**: for each outbox row in `seq` order, `POST …?on_conflict=id`
-   with `Prefer: resolution=merge-duplicates` (upsert). On 2xx delete the
-   outbox row; on 4xx park it with `last_error` (shown in Settings); on
-   network error stop and retry later with exponential backoff. Foreign keys
+1. **Push**: for each outbox row in `seq` order, one request per row,
+   `POST /rest/v1/<table>` with `Prefer:
+   resolution=merge-duplicates,missing=default` (upsert on `id`; one row per
+   request so that a 4xx names exactly one entry and each row gets its own
+   `now()`). On 2xx delete the outbox row. Statuses are classified by
+   `sync/net/rest.ml`: 540 paused project (below); 401 unauthorized (refresh the
+   session, never park); 408, 429 and 5xx transient (stop, retry later with
+   exponential backoff); any other 4xx rejected (park it with `last_error`,
+   the status, shown in Settings: the library's error carries no body). A
+   network error is transient too. Foreign keys
    are not deferrable, so `seq` order (parents first) is load-bearing and a
    parked row also parks the rows that reference it.
-2. **Pull**: per table, `GET …?updated_at=gt.<last_pulled_at - overlap>&order=updated_at`
-   and apply with last-write-wins on `updated_at`; local rows with a pending
-   outbox entry win. Update `last_pulled_at`. Local foreign keys are
-   enforced, and a parent created elsewhere between the pull of its table and
-   the pull of its child's table reaches the device after the child. So the
-   tables are applied parents first (plants, tags, observations, photos, then
-   the link and reference tables) in one transaction with `pragma
-   defer_foreign_keys = on`; if the commit fails on a foreign key, the whole
-   pull rolls back with its cursors and the next cycle, which now sees the
-   parent, retries.
+2. **Pull**: per table, `GET …?updated_at=gt.<last_pulled_at - overlap>&select=<columns>&order=updated_at,id`
+   with `Range-Unit: items` and pages of 500 rows (`Range: 0-499`, then
+   `500-999`, …), below Supabase's `max_rows` (1000), so a full page means
+   "ask for the next page" whatever the server's cap. The whole pull of a
+   table keeps the same filter and moves only the `Range`: asking again from
+   the last row's `updated_at` would return the same page forever when more
+   than 500 rows share one `updated_at` window (one transaction stamps all
+   its rows with one `now()`, and the bound is rendered in whole seconds), and
+   a keyset cursor on `(updated_at, id)` needs the bound to the microsecond,
+   which `Postgrest.Col` does not render yet. Offsets have one race: a row of
+   an already-read page that another install updates during the pull moves
+   to the end, so the rows behind it shift back by one and the first row of
+   the next page is skipped. That row's id then comes back twice in the same
+   pull; when a pull sees an id twice it keeps its old `last_pulled_at`, and
+   the next cycle reads the window again. Each row is merged by
+   `domain/merge.ml`: no local row → insert; a pending outbox entry (one
+   that is not parked) → keep the local row (outbox wins: its push lands
+   after this version and wins on the server; a parked entry never lands,
+   so its row takes the remote version and the parked payload stays in the
+   outbox, listed in Settings); equal to the local row (each entity's `equal`;
+   `reference.payload` structurally, as `jsonb` reorders keys) → nothing;
+   else the remote row replaces the local one. Last write wins in the server's
+   order: the row the server returns is the last write any install pushed,
+   stamped by the trigger, so the device's own `updated_at` (its clock until the
+   next pull) is never compared with it; a device clock ahead of the server's
+   would otherwise keep a stale row over another install's later edit, for good.
+   This requires push and pull never to run at the same time, so that a pull
+   never applies an answer older than a push already done. Update
+   `last_pulled_at`. Local foreign keys are enforced, and a parent created
+   elsewhere between the pull of its table and the pull of its child's table
+   reaches the device after the child. So the tables are applied parents first
+   (plants, tags, observations, photos, then the link and reference tables) in
+   one transaction with `pragma defer_foreign_keys = on`; if the commit fails on
+   a foreign key, the whole pull rolls back with its cursors and the next cycle,
+   which now sees the parent, retries.
 3. Previews are not synced (no Storage bucket; M6.49 dropped 2026-11-12):
    a new device rebuilds them from the originals (Drive).
 
-Pausing: if PostgREST answers with the paused-project error, the outbox just
-waits; the user sees "serveur en pause" in Settings with a link to the
-dashboard. Recording is unaffected.
+Pausing: Supabase answers HTTP 540 to every request for a paused project; the
+outbox then just waits; the user sees "serveur en pause" in Settings with a link
+to the dashboard. Recording is unaffected.
 
 Auth on device: Google sign-in via Credential Manager → Supabase's id-token
 grant (supabase-js's `signInWithIdToken`) → session in Capacitor
@@ -353,7 +389,8 @@ sans IO in `sync/auth/gotrue.ml`.
   later; unset, the stack starts and refuses every Google id token).
   Outside the release profile the first two default to the local stack
   (`http://127.0.0.1:54321`, reached from the emulator through `adb reverse
-  tcp:54321 tcp:54321`, which `scripts/emulator.sh start` sets up); a build
+  tcp:54321 tcp:54321`, which `scripts/emulator.sh start` sets up; the debug
+  APK's network security config allows cleartext HTTP to loopback only); a build
   without all three shows « Connexion indisponible dans cette version. » in
   4m. Dev builds (`dune build`, `scripts/dev.sh`, `scripts/emulator.sh`)
   read no file and so get the local stack, unless the shell exports the

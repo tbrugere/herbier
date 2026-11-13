@@ -142,6 +142,12 @@ let tests =
       equal_cases "Photo.Original_target" ~all:Photo.Original_target.all
         ~to_string:Photo.Original_target.to_string
         ~equal:Photo.Original_target.equal;
+      equal_cases "Photo.Upload_state" ~all:Photo.Upload_state.all
+        ~to_string:Photo.Upload_state.to_string ~equal:Photo.Upload_state.equal;
+      equal_cases "Reference.Source" ~all:Reference.Source.all
+        ~to_string:Reference.Source.to_string ~equal:Reference.Source.equal;
+      equal_cases "Reference.Status" ~all:Reference.Status.all
+        ~to_string:Reference.Status.to_string ~equal:Reference.Status.equal;
       json_cases "Photo.Original_target" ~all:Photo.Original_target.all
         ~to_string:Photo.Original_target.to_string
         ~to_json:Photo.Original_target.to_json
