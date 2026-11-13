@@ -84,3 +84,43 @@
 .settings__intro
   margin: 0
   padding: 12px 16px
+
+// « IGN hors-ligne »: the downloaded packs and the département picker.
+// Rb.view always leaves one child: an empty one hides its holder, so the
+// card draws no stray separator.
+.packs, .pack-picker__list
+  &:has(> :empty)
+    display: none
+
+.packs__list
+  display: flex
+  flex-direction: column
+  > * + *
+    border-top: 1px solid var(--line)
+
+.pack-row .text-button
+  flex: none
+
+.settings__row .text-button[aria-disabled]
+  pointer-events: none
+
+.pack-picker__list
+  max-height: 50vh
+  overflow-y: auto
+  > div
+    display: flex
+    flex-direction: column
+  .list-row
+    padding-left: 16px
+    padding-right: 16px
+    &:active
+      background: var(--sand-deep)
+    // The card draws the line under the list (.settings__card > * + *).
+    &:last-child
+      border-bottom: none
+
+.settings__card > .text-field
+  margin: 10px 16px
+  background: var(--paper)
+  &[hidden]
+    display: none

@@ -71,3 +71,9 @@ fetch geoplateforme_commune_atlantic.json geoplateforme "https://data.geopf.fr/g
 fetch photon_search_col_de_la_schlucht.json photon "https://photon.komoot.io/api?q=col%20de%20la%20schlucht&lang=fr&limit=8"
 fetch photon_search_schlucht_near.json photon "https://photon.komoot.io/api?q=schlucht&lang=fr&limit=3&lat=48.06330&lon=7.00810"
 fetch photon_search_zzzzqqq.json photon "https://photon.komoot.io/api?q=zzzzqqq&lang=fr&limit=8"
+
+# IGN hors-ligne: the département list and the communes of Territoire de Belfort (WFS).
+fetch geoplateforme_wfs_departements.json geoplateforme "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&OUTPUTFORMAT=application%2Fjson&TYPENAMES=ADMINEXPRESS-COG-CARTO.LATEST%3Adepartement&PROPERTYNAME=code_insee%2Cnom_officiel&SORTBY=code_insee&COUNT=5000"
+fetch geoplateforme_wfs_communes_90.json geoplateforme "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&OUTPUTFORMAT=application%2Fjson&TYPENAMES=ADMINEXPRESS-COG-CARTO.LATEST%3Acommune&PROPERTYNAME=code_insee%2Cnom_officiel%2Cgeometrie&SORTBY=code_insee&COUNT=5000&CQL_FILTER=code_insee_du_departement%3D%2790%27"
+# An unknown code: an empty collection.
+fetch geoplateforme_wfs_communes_99.json geoplateforme "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&OUTPUTFORMAT=application%2Fjson&TYPENAMES=ADMINEXPRESS-COG-CARTO.LATEST%3Acommune&PROPERTYNAME=code_insee%2Cnom_officiel%2Cgeometrie&SORTBY=code_insee&COUNT=5000&CQL_FILTER=code_insee_du_departement%3D%2799%27"

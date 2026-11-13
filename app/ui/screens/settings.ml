@@ -44,6 +44,272 @@ let radio ~title ~detail selected =
         (React.S.map (fun v -> Some (string_of_bool v)) selected);
     ] )
 
+(* « IGN hors-ligne »: the downloaded packs and the département picker. *)
+
+type picker =
+  | Closed
+  | Loading
+  | List_failed of string
+  | Choosing of Herbier_geo.Communes.departement list
+
+let disabled el on =
+  Rb.attr el "aria-disabled"
+    (React.S.map (function true -> Some "true" | false -> None) on)
+
+let pack_row app ~deleting ~set_deleting ~set_message (p : App.pack) =
+  let remove = W.Button.text ~tone:`Danger "Supprimer" in
+  let code = p.code in
+  let busy =
+    React.S.map ~eq:Bool.equal
+      (List.exists (Herbier_geo.Communes.Code.equal code))
+      deleting
+  in
+  let el =
+    El.div
+      ~at:[cls "settings__row"; cls "pack-row"]
+      [
+        El.span
+          ~at:[cls "settings__text"]
+          [
+            El.span
+              ~at:[cls "settings__title"]
+              [
+                El.txt'
+                  (Pack_text.title ~code:p.row.departement ~name:p.row.name);
+              ];
+            El.span
+              ~at:[cls "t-meta"]
+              [
+                El.txt'
+                  (match p.usable with
+                  | true ->
+                      Pack_text.detail ~size_bytes:p.row.size_bytes
+                        ~communes:p.row.communes
+                  | false -> Pack_text.unreadable);
+              ];
+          ];
+        remove.el;
+      ]
+  in
+  let act () =
+    match React.S.value busy with
+    | true -> ()
+    | false ->
+        set_deleting (code :: React.S.value deleting);
+        set_message None;
+        Fut.await (App.delete_pack app code) (fun r ->
+            set_deleting
+              (List.filter
+                 (fun c -> not (Herbier_geo.Communes.Code.equal c code))
+                 (React.S.value deleting));
+            match r with
+            | Ok () -> ()
+            | Error e -> set_message (Some (App.pack_error_to_string e)))
+  in
+  (el, disabled remove.el busy :: Rb.act remove.click act :: remove.bindings)
+
+let picker_list_id = "pack-picker-list"
+
+let ign_offline_block app =
+  let state = App.state app in
+  let on =
+    React.S.map ~eq:Bool.equal
+      (fun (s : Place_name.sources) -> s.ign_offline)
+      (State.place_sources state)
+  in
+  let deleting, set_deleting =
+    React.S.create ~eq:(List.equal Herbier_geo.Communes.Code.equal) []
+  in
+  let set_deleting l = set_deleting l in
+  let message, set_message =
+    React.S.create ~eq:(Option.equal String.equal) None
+  in
+  let set_message m = set_message m in
+  let picker, set_picker = React.S.create ~eq:( == ) Closed in
+  let set_picker p = set_picker p in
+  (* style: the list fetched once per screen, kept for a reopened picker. *)
+  let fetched = ref None in
+  let packs_el = El.div ~at:[cls "packs"] [] in
+  let render (packs, on) =
+    let rows =
+      List.map (pack_row app ~deleting ~set_deleting ~set_message) packs
+    in
+    let none =
+      match (packs, on) with
+      | [], true ->
+          [
+            El.p
+              ~at:[cls "t-meta"; cls "settings__intro"]
+              [El.txt' Pack_text.no_pack];
+          ]
+      | [], false | _ :: _, _ -> []
+    in
+    ( El.div ~at:[cls "packs__list"] (List.map fst rows @ none),
+      List.concat_map snd rows )
+  in
+  let add = W.Button.text "Ajouter un département" in
+  (* App-wide, so a screen opened again during a download still says so. *)
+  let downloading =
+    React.S.map ~eq:Bool.equal Option.is_some (App.downloading app)
+  in
+  let field =
+    W.Text_field.v ~icon:W.Icon.Search ~placeholder:"Département" ()
+  in
+  let choosing departements =
+    set_picker (Choosing departements);
+    El.set_has_focus true field.input
+  in
+  let open_picker () =
+    match (React.S.value downloading, React.S.value picker) with
+    | true, _ -> ()
+    | false, (Loading | Choosing _ | List_failed _) -> set_picker Closed
+    | false, Closed -> (
+        set_message None;
+        match !fetched with
+        | Some departements -> choosing departements
+        | None ->
+            set_picker Loading;
+            Fut.await (App.departements app) (function
+              | Ok departements ->
+                  fetched := Some departements;
+                  choosing departements
+              | Error e -> set_picker (List_failed (App.pack_error_to_string e)))
+        )
+  in
+  (* The error goes to [message_el], outside the scrolled list: at the end of
+     about a hundred rows it would be out of sight. *)
+  let choose (d : Herbier_geo.Communes.departement) =
+    set_message None;
+    Fut.await (App.download_pack app d) (function
+      | Ok () ->
+          field.set "";
+          set_picker Closed
+      | Error e -> set_message (Some (App.pack_error_to_string e)))
+  in
+  let list_el =
+    El.div ~at:[cls "pack-picker__list"; At.id (Jstr.v picker_list_id)] []
+  in
+  let render_picker (picker, query, packs, downloading) =
+    let downloaded = List.map (fun (p : App.pack) -> p.code) packs in
+    let line text =
+      El.p ~at:[cls "t-meta"; cls "settings__intro"] [El.txt' text]
+    in
+    match (picker, downloading) with
+    | _, true | Closed, false -> (El.div [], [])
+    | Loading, false -> (El.div [line "Chargement…"], [])
+    | List_failed text, false ->
+        let retry = W.Button.text "Réessayer" in
+        ( El.div [line text; El.div ~at:[cls "settings__row"] [retry.el]],
+          Rb.act retry.click (fun () ->
+              set_picker Closed;
+              open_picker ())
+          :: retry.bindings )
+    | Choosing departements, false ->
+        let shown =
+          Herbier_geo.Communes.available ~downloaded departements
+          |> List.filter (fun (d : Herbier_geo.Communes.departement) ->
+              match String.trim query with
+              | "" -> true
+              | _ ->
+                  Herbier_store.Search.matches ~query
+                    (Herbier_geo.Communes.Code.to_string d.code ^ " " ^ d.name))
+        in
+        let rows =
+          List.map
+            (fun (d : Herbier_geo.Communes.departement) ->
+              let row =
+                W.List_row.v
+                  ~title:
+                    (Pack_text.title
+                       ~code:(Herbier_geo.Communes.Code.to_string d.code)
+                       ~name:d.name)
+                  ~meta:"Télécharger ses communes" ()
+              in
+              (row.el, Rb.act row.click (fun () -> choose d) :: row.bindings))
+            shown
+        in
+        (El.div (List.map fst rows), List.concat_map snd rows)
+  in
+  let field_shown =
+    React.S.l2 ~eq:Bool.equal
+      (fun picker downloading ->
+        match (picker, downloading) with
+        | Choosing _, false -> true
+        | (Closed | Loading | List_failed _), _ | Choosing _, true -> false)
+      picker downloading
+  in
+  let status_line () =
+    El.p
+      ~at:
+        [
+          cls "t-meta";
+          cls "settings__intro";
+          At.v (Jstr.v "role") (Jstr.v "status");
+        ]
+      []
+  in
+  let progress_el = status_line () in
+  let message_el = status_line () in
+  let shown_text el text =
+    [
+      Rb.text el (React.S.map (Option.value ~default:"") text);
+      Rb.attr el "hidden"
+        (React.S.map
+           (function None -> Some "" | Some (_ : string) -> None)
+           text);
+    ]
+  in
+  let progress =
+    React.S.map
+      ~eq:(Option.equal String.equal)
+      (Option.map (fun (d : Herbier_geo.Communes.departement) ->
+           Printf.sprintf "Téléchargement de %s…" d.name))
+      (App.downloading app)
+  in
+  let els =
+    [
+      packs_el;
+      El.div ~at:[cls "settings__row"] [add.el];
+      field.el;
+      list_el;
+      progress_el;
+      message_el;
+      El.p
+        ~at:[cls "t-meta"; cls "settings__intro"]
+        [El.txt' Pack_text.attribution];
+    ]
+  in
+  El.set_at (Jstr.v "aria-controls") (Some (Jstr.v picker_list_id)) add.el;
+  let bindings =
+    [
+      Rb.view packs_el render
+        (React.S.l2
+           ~eq:(fun (a, b) (c, d) ->
+             List.equal App.equal_pack a c && Bool.equal b d)
+           (fun p o -> (p, o))
+           (App.packs app) on);
+      Rb.view list_el render_picker
+        (React.S.l4 ~eq:( == )
+           (fun p q packs d -> (p, q, packs, d))
+           picker field.value (App.packs app) downloading);
+      disabled add.el downloading;
+      Rb.attr add.el "aria-expanded"
+        (React.S.map
+           (function
+             | Closed -> Some "false"
+             | Loading | Choosing _ | List_failed _ -> Some "true")
+           picker);
+      Rb.act add.click open_picker;
+      Rb.attr field.el "hidden"
+        (React.S.map (function true -> None | false -> Some "") field_shown);
+    ]
+    @ shown_text progress_el progress
+    @ shown_text message_el message
+    @ add.bindings
+    @ field.bindings
+  in
+  (els, bindings)
+
 let v app =
   let db = App.db app and state = App.state app in
   let storage =
@@ -134,11 +400,13 @@ let v app =
           W.Switch.v ~label:(Place_name.label src)
             ~detail:(Place_name.detail src) on ()
         in
-        ( switch,
+        ( src,
+          switch,
           Rb.act switch.toggle (fun () ->
               App.set_place_source app src (not (React.S.value on))) ))
       Place_name.order
   in
+  let offline_els, offline_bindings = ign_offline_block app in
   let source_error =
     El.p
       ~at:
@@ -206,7 +474,12 @@ let v app =
                       moins de 500 m, sans réseau ; sinon les sources activées \
                       ci-dessous ; sinon « Lieu inconnu ».";
                  ]
-               :: List.map (fun ((s : W.Switch.t), _) -> s.el) source_switches
+               :: List.concat_map
+                    (fun (src, (s : W.Switch.t), _) ->
+                      match src with
+                      | Place_name.Ign_offline -> s.el :: offline_els
+                      | Place_name.(Ign_online | Photon_online) -> [s.el])
+                    source_switches
               @ [source_error]);
           ];
         section "File d'envoi"
@@ -259,8 +532,9 @@ let v app =
           compressed.bindings;
           wifi_switch.bindings;
           List.concat_map
-            (fun ((s : W.Switch.t), act) -> act :: s.bindings)
+            (fun (_, (s : W.Switch.t), act) -> act :: s.bindings)
             source_switches;
+          offline_bindings;
           free.bindings;
           send.bindings;
         ];

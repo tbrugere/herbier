@@ -240,11 +240,27 @@ let v3 =
 )|};
   ]
 
+(* Migration 4: the device-only commune packs of « IGN hors-ligne »
+   (Commune_packs, architecture §3, §8). Never synced: re-downloadable from
+   the Géoplateforme. *)
+let v4 =
+  [
+    {|create table commune_packs (
+  departement text primary key not null,
+  name text not null check (length(trim(name)) > 0),
+  path text not null unique,
+  size_bytes integer not null check (size_bytes >= 0),
+  communes integer not null check (communes > 0),
+  downloaded_at text not null
+)|};
+  ]
+
 let migrations =
   [
     {version = 1; statements = v1};
     {version = 2; statements = v2};
     {version = 3; statements = v3};
+    {version = 4; statements = v4};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

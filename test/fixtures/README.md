@@ -34,6 +34,17 @@ France box, outside France), Kew (outside the box) and a point of the Atlantic
 (nothing found). See `test/geo/test_geocode.ml` for the exact request each file
 records.
 
+`geoplateforme_wfs_*.json`: « IGN hors-ligne », recorded by
+`scripts/record-geo-fixtures.sh` from the Géoplateforme WFS (Admin Express COG
+carto): the full département list (`geoplateforme_wfs_departements.json`), the
+101 communes of Territoire de Belfort (`geoplateforme_wfs_communes_90.json`,
+the smallest metropolitan département with real towns, used for the point
+lookups too), and an unknown code's empty answer
+(`geoplateforme_wfs_communes_99.json`). See `test/geo/test_communes.ml` for the
+exact request each file records. Admin Express COG carto is Etalab 2.0
+(Licence Ouverte), attribution required: « Limites communales : IGN, Admin
+Express COG carto (Licence Ouverte 2.0) ».
+
 `exifr_<name>.json`: what `Herbier_bindings.Exifr.parse ~pick:Exif.tags`
 returns for one photo, never edited:
 

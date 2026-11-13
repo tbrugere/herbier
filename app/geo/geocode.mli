@@ -57,6 +57,13 @@ val geoplateforme_commune : Places.point -> request
     [https://data.geopf.fr/geocodage/reverse?index=poi&lon=<lon>&lat=<lat>&limit=1&category=commune&searchgeom=<encode
      {"type":"Point","coordinates":[<lon>,<lat>]}>]. Empty outside France. *)
 
+val geoplateforme_wfs : (string * string) list -> request
+(** [{provider = Geoplateforme; url}] with
+    [url = "https://data.geopf.fr/wfs/ows?k1=v1&k2=v2…"], each key and value
+    through {!encode}, in the given order: the IGN commune packs of [Communes].
+    The only way to build a WFS request ([request] stays private: a
+    Géoplateforme request always targets data.geopf.fr). Never raises. *)
+
 val in_france : Places.point -> bool
 (** Coarse box of metropolitan France and Corsica: [41.3 <= lat <= 51.2] and
     [-5.5 <= lon <= 9.7], inclusive. It also holds parts of the neighbours
@@ -92,6 +99,34 @@ val equal_error : error -> error -> bool
 val json_of_string : string -> (Yojson.Safe.t, error) result
 (** [Yojson.Safe.from_string], any exception → [Not_json]. *)
 
+(** {1 Payload helpers}
+
+    Shared by the decoders here and by [Communes]'s WFS decoders. *)
+
+val member : string -> Yojson.Safe.t -> Yojson.Safe.t option
+(** The field of an object; a missing field, [null] or a non-object → [None]. *)
+
+val max_value_bytes : int
+(** [200]: a longer provider string is not a place name (it would be synced as
+    is). *)
+
+val non_blank : string -> string option
+(** [String.trim s] when it is non-empty and at most {!max_value_bytes} bytes;
+    else [None]. *)
+
+val string : string -> Yojson.Safe.t -> string option
+(** The field [name] when a string passing {!non_blank}, trimmed. *)
+
+val properties : Yojson.Safe.t -> Yojson.Safe.t
+(** A feature's [properties], [`Assoc []] when absent. *)
+
+val features : Yojson.Safe.t -> (Yojson.Safe.t list, error) result
+(** A FeatureCollection's [features];
+    [Unexpected {path = "/features"; expected = "array"}] when not an array. *)
+
+val number : Yojson.Safe.t -> float option
+(** An [`Int] or a finite [`Float]; anything else → [None]. *)
+
 val photon_name : Yojson.Safe.t -> (string option, error) result
 (** A Photon reverse payload. [features] must be an array
     ([Unexpected {path = "/features"; expected = "array"}] otherwise). [Ok None]
@@ -100,8 +135,8 @@ val photon_name : Yojson.Safe.t -> (string option, error) result
     hamlet, isolated_dwelling, farm, suburb, quarter, neighbourhood, borough,
     locality, island, islet; else [district]; else [city]; else [Ok None]. Each
     of these fields is optional: missing, [null], not a string, or blank after
-    trimming or longer than 200 bytes counts as absent; the string is returned
-    as given. *)
+    trimming or longer than 200 bytes counts as absent ({!string}); the string
+    is returned trimmed. *)
 
 val geoplateforme_name : Yojson.Safe.t -> (string option, error) result
 (** A Géoplateforme reverse payload. [features] must be an array (as above);

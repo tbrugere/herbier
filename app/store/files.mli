@@ -12,6 +12,19 @@ val refthumb :
 (** ["refthumbs/<plant id>/<source>-<organ>.jpg"], e.g.
     ["refthumbs/0190…/plantnet-flower.jpg"]. *)
 
+val commune_pack : departement:string -> stamp:string -> string
+(** ["communes/<departement>-<stamp>.json"]: a commune pack of « IGN hors-ligne
+    », a fresh path per download. *)
+
+val write_text :
+  path:string -> string -> (unit, Herbier_bindings.Cap_error.t) result Fut.t
+(** Writes UTF-8 text at [path], replacing the file and creating missing
+    directories. Not atomic, as {!write_blob}. *)
+
+val read_text :
+  path:string -> (string, Herbier_bindings.Cap_error.t) result Fut.t
+(** The file's content as UTF-8 text; a missing file is [Error (Rejected _)]. *)
+
 val blob_of_base64 :
   type':string -> string -> (Brr.Blob.t, Herbier_bindings.Cap_error.t) result
 (** Base64 → blob of MIME type [type']; invalid base64 is [Error (Rejected _)].

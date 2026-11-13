@@ -1360,6 +1360,7 @@ let settings_storage_target () =
 
 let place_source_keys =
   [
+    ("place_source_ign_offline", Settings.Place_source_ign_offline);
     ("place_source_ign_online", Settings.Place_source_ign_online);
     ("place_source_photon_online", Settings.Place_source_photon_online);
     ("location_notice_seen", Settings.Location_notice_seen);

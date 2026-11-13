@@ -115,14 +115,16 @@ val fetching : t -> Herbier_domain.Ids.Plant_id.t list React.signal
 
 val geocode_pending : t -> unit
 (** Fills [place_derived] in the background (architecture §8), online or not.
-    When no run is going: reads [Observations.to_geocode] then
+    When no run is going: waits for the startup load of the « IGN hors-ligne »
+    packs (see {!packs}), reads [Observations.to_geocode] then
     [Observations.labelled] (a read error is logged, [geocode: read …], and ends
     the run), and for each pending observation in order (newest first), reading
     {!State.place_sources} and {!State.network} at that moment: runs
-    [Place_name.resolve ~sources ~online ~labelled p] through [Geocoder.run],
-    where [sources] is [Place_name.none] for an observation already tried at its
-    current position this session (its own-place lookup still runs, its remote
-    sources are not asked again);
+    [Place_name.resolve ~sources ~online ~labelled ~communes p] through
+    [Geocoder.run], [communes] the packs' index at that moment, where [sources]
+    is [Place_name.offline_only] of the switches for an observation already
+    tried at its current position this session (its own-place and pack lookups
+    still run, its remote sources are not asked again);
     - [Ok (Named s)] → one [Observations.set_place_derived ~at:now] commit
       ({!saved} fires when it changed the row; unchanged → marked tried; a
       failed commit is logged, marks it tried and stops the run);
@@ -138,24 +140,27 @@ val geocode_pending : t -> unit
       [Geocoder.transient e].
 
     Triggers: the app's start and the window's [online] event (main.ml), {!save}
-    after a commit that changed rows, and {!set_place_source} turning a source
-    on. A call during a run makes it read the lists again when it ends. No
-    remote request is ever made for a source that is off. Never raises; nothing
-    awaits it. *)
+    after a commit that changed rows, {!set_place_source} turning a source on,
+    and {!download_pack} succeeding while « IGN hors-ligne » is on. A call
+    during a run makes it read the lists again when it ends. No remote request
+    is ever made for a source that is off. Never raises; nothing awaits it. *)
 
 val settings_key :
   Herbier_geo.Place_name.source -> bool Herbier_store.Settings.key
-(** The local setting of each source: [Place_source_ign_online],
-    [Place_source_photon_online]. main.ml reads them at startup through it. *)
+(** The local setting of each source: [Place_source_ign_offline],
+    [Place_source_ign_online], [Place_source_photon_online]. main.ml reads them
+    at startup through it. *)
 
 val set_place_source : t -> Herbier_geo.Place_name.source -> bool -> unit
 (** A 4m switch: sets {!State.place_sources} at once (so a second tap while the
     write runs flips it back), then [Db.write] of its {!settings_key}.
     - Write ok → remembered as stored; clears {!place_error} when it is the
       source's latest write and the error shown is this source's (another
-      source's success keeps it); when the value is [true], the session's tried
-      list is cleared (a newly enabled source asks again for points tried with
-      other sources) and {!geocode_pending} runs.
+      source's success keeps it); when the value is [true], {!geocode_pending}
+      runs, after clearing the session's tried list when the source
+      [Place_name.is_online] (a newly enabled online source asks again for
+      points tried with other sources; the offline one is asked for them
+      anyway).
     - Write error → logged ([réglages: noms de lieux …]); when it is the
       source's latest write (an earlier one failing while a later one is queued
       changes nothing), State takes the stored value back, except that a failed
@@ -170,3 +175,60 @@ val place_error : t -> string option React.signal
     for the session while the stored value is still on, a text saying it will be
     on again at the next start. [None] after that source's next successful
     latest write; another source's success keeps it. A primitive signal. *)
+
+(** {1 « IGN hors-ligne » packs} *)
+
+type pack = {
+  code : Herbier_geo.Communes.Code.t;
+  row : Herbier_store.Commune_packs.t;  (** [row.departement] is [code] *)
+  usable : bool;
+}
+
+val equal_pack : pack -> pack -> bool
+
+val packs : t -> pack list React.signal
+(** The downloaded packs, in département order; [usable = false] when its file
+    did not load ({!Herbier_geo.Commune_packs.load}, started by {!create} in the
+    background; a failed load is logged and leaves []). A primitive signal; []
+    until the load ends. *)
+
+type pack_error =
+  | Busy  (** another download runs, or this pack is being downloaded *)
+  | Offline  (** {!State.network} says offline: nothing was sent *)
+  | Pack of Herbier_geo.Commune_packs.error
+
+val pack_error_to_string : pack_error -> string
+(** French, for 4m: « Un téléchargement est déjà en cours. » ([Busy]), « Hors
+    ligne : réessayez une fois connecté. » ([Offline], [Network], [Timeout]), «
+    Service de l’IGN indisponible : réessayez plus tard. » (a [Status] that is
+    [Geocoder.transient]: 429, 5xx), « Réponse de l’IGN inattendue. »
+    ([Payload], any other [Status]), « Enregistrement impossible. » ([File],
+    [Store]), « Téléchargement non envoyé. Réessayez. » ([Refused], which no
+    download asks for). *)
+
+val departements :
+  t -> (Herbier_geo.Communes.departement list, pack_error) result Fut.t
+(** 4m's picker list ({!Herbier_geo.Commune_packs.departements}, its error as
+    [Pack]); offline per {!State.network} → [Error Offline] with no request. *)
+
+val downloading : t -> Herbier_geo.Communes.departement option React.signal
+(** The département being downloaded, from the tap to the end; one download at a
+    time. A primitive signal. *)
+
+val download_pack :
+  t -> Herbier_geo.Communes.departement -> (unit, pack_error) result Fut.t
+(** [Busy] while {!downloading} is [Some _]. Else {!downloading} is set at once,
+    and once the startup load of the packs has ended (it replaces the index and
+    {!packs} wholesale), {!Herbier_geo.Commune_packs.download}; on success, in
+    one step, {!packs} gains the row (usable, replacing one of the same code)
+    and {!downloading} returns to [None], the index gains the pack; then, when «
+    IGN hors-ligne » is off, [set_place_source t Ign_offline true] (which runs
+    {!geocode_pending}), else {!geocode_pending}. An error is logged
+    ([communes: download …]). Never raises. *)
+
+val delete_pack :
+  t -> Herbier_geo.Communes.Code.t -> (unit, pack_error) result Fut.t
+(** [Busy] while that code is downloading. Else
+    {!Herbier_geo.Commune_packs.delete}; on success the index and {!packs} drop
+    it. Names already stored stay (a [place_derived] is a snapshot); the switch
+    is not touched. An error is logged ([communes: delete …]). Never raises. *)

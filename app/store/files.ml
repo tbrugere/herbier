@@ -10,6 +10,16 @@ let refthumb ~plant ~source ~organ =
     (Reference.Source.to_string source)
     (Reference.Organ.to_string organ)
 
+let commune_pack ~departement ~stamp =
+  Printf.sprintf "communes/%s-%s.json" departement stamp
+
+let write_text ~path text =
+  Fut.map
+    (Result.map (fun (_ : string) -> ()))
+    (Cap_filesystem.write_text ~path text)
+
+let read_text ~path = Cap_filesystem.read_text ~path
+
 (* The filesystem plugin takes binary data as base64. *)
 let base64_of_blob blob =
   Fut.map

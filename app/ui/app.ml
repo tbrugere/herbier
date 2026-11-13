@@ -7,6 +7,10 @@ module Observations = Herbier_store.Observations
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Places = Herbier_domain.Places
 module Place_name = Herbier_geo.Place_name
+module Communes = Herbier_geo.Communes
+module Commune_packs = Herbier_geo.Commune_packs
+module Pack_rows = Herbier_store.Commune_packs
+module Code = Communes.Code
 
 type geocode_run =
   | Idle
@@ -16,6 +20,12 @@ type geocode_run =
 (* A plant's running thumbnail sync, and whether another was asked for
    meanwhile. *)
 type thumb_sync = Running | Rerun_requested
+type pack = {code : Code.t; row : Pack_rows.t; usable : bool}
+
+let equal_pack a b =
+  Code.equal a.code b.code
+  && Pack_rows.equal a.row b.row
+  && Bool.equal a.usable b.usable
 
 type t = {
   db : Db.t;
@@ -57,10 +67,48 @@ type t = {
   thumbs : (Plant_id.t * thumb_sync) list ref;
       (* style: mutable for the same reason: a thumbnail sync settles in a
          future's callback. The plants with a sync running. *)
+  communes : Communes.t ref;
+      (* style: mutable because the packs load and download in futures'
+         callbacks; a geocode run reads it at each observation. *)
+  communes_loaded : unit Fut.t;
+      (* the startup load of the packs: a geocode run waits for it, so an
+         observation saved meanwhile is not skipped past the offline source *)
+  packs : pack list React.signal;
+  set_packs : ?step:React.step -> pack list -> unit;
+  downloading : Communes.departement option React.signal;
+  set_downloading : ?step:React.step -> Communes.departement option -> unit;
 }
+
+let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
+
+(* The packs' load, started once by [create]: its result fills the index and
+   [packs]; a failure leaves them empty. *)
+let load_packs db ~communes ~set_packs =
+  Fut.map
+    (function
+      | Error e -> log_error ["communes:"; Commune_packs.error_to_string e]
+      | Ok (l : Commune_packs.loaded) ->
+          communes := l.index;
+          set_packs
+            (List.map
+               (fun (code, row) ->
+                 {
+                   code;
+                   row;
+                   usable = not (List.exists (Code.equal code) l.unreadable);
+                 })
+               l.rows))
+    (Commune_packs.load db)
 
 let create ~db ~state ~theme =
   let saved, send = React.E.create () in
+  let packs, set_packs = React.S.create ~eq:(List.equal equal_pack) [] in
+  let set_packs ?step p = set_packs ?step p in
+  let downloading, set_downloading =
+    React.S.create ~eq:(Option.equal Communes.equal_departement) None
+  in
+  let set_downloading ?step d = set_downloading ?step d in
+  let communes = ref Communes.empty in
   let fetching, set_fetching =
     React.S.create ~eq:(List.equal Plant_id.equal) []
   in
@@ -86,6 +134,12 @@ let create ~db ~state ~theme =
     set_place_error = (fun e -> set_place_error e);
     place_error_source = ref None;
     thumbs = ref [];
+    communes;
+    communes_loaded = load_packs db ~communes ~set_packs:(fun p -> set_packs p);
+    packs;
+    set_packs;
+    downloading;
+    set_downloading;
   }
 
 let db t = t.db
@@ -107,8 +161,6 @@ let online t = (React.S.value (State.network t.state)).online
 
 (* Place names (architecture §8). *)
 
-let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
-
 let tried t (o : Herbier_domain.Observation.t) p =
   List.exists
     (fun (id, q) -> Observation_id.equal id o.id && Places.equal_point q p)
@@ -127,7 +179,8 @@ let rec geocode_pending t =
       t.geocode_run := Geocoding;
       let open Fut.Result_syntax in
       Fut.await
-        (let* observations = Db.all t.db Observations.to_geocode in
+        (let* () = Fut.map Result.ok t.communes_loaded in
+         let* observations = Db.all t.db Observations.to_geocode in
          let+ labelled = Db.all t.db Observations.labelled in
          (observations, labelled))
         (function
@@ -148,13 +201,15 @@ and geocode_each t ~labelled = function
   | [] -> geocode_end t
   | ((o : Herbier_domain.Observation.t), (p : Places.point)) :: rest ->
       let id = Observation_id.to_string o.id in
-      (* A point already asked at this position keeps its own-place lookup
-         (free, and a place labelled since may name it) but its remote
-         sources are not asked again until a source is turned on. *)
+      (* A point already asked at this position keeps its local lookups
+         (own places and commune packs: free, and a place labelled or a pack
+         downloaded since may name it) but its remote sources are not asked
+         again until an online source is turned on. *)
+      let current = React.S.value (State.place_sources t.state) in
       let sources =
         match tried t o p with
-        | true -> Place_name.none
-        | false -> React.S.value (State.place_sources t.state)
+        | true -> Place_name.offline_only current
+        | false -> current
       in
       let online = online t in
       let asked = Place_name.any_online sources && online in
@@ -165,7 +220,8 @@ and geocode_each t ~labelled = function
       in
       Fut.await
         (Herbier_geo.Geocoder.run ~allow
-           (Place_name.resolve ~sources ~online ~labelled p))
+           (Place_name.resolve ~sources ~online ~labelled
+              ~communes:!(t.communes) p))
         (function
           | Error (Herbier_geo.Geocoder.Refused _) ->
               (* Its source was turned off while the request waited: not a
@@ -209,6 +265,7 @@ and geocode_each t ~labelled = function
                   geocode_each t ~labelled rest))
 
 let settings_key = function
+  | Place_name.Ign_offline -> Herbier_store.Settings.Place_source_ign_offline
   | Place_name.Ign_online -> Herbier_store.Settings.Place_source_ign_online
   | Place_name.Photon_online ->
       Herbier_store.Settings.Place_source_photon_online
@@ -272,11 +329,15 @@ let set_place_source t source value =
               t.place_error_source := None;
               t.set_place_error None
           | _ -> ());
-          match value with
-          | true ->
+          (* Points already tried were tried remotely: only a newly enabled
+             source that sends the position is a reason to ask them again;
+             the offline source is asked for them anyway. *)
+          match (value, Place_name.is_online source) with
+          | true, true ->
               t.geocode_tried := [];
               geocode_pending t
-          | false -> ()))
+          | true, false -> geocode_pending t
+          | false, _ -> ()))
 
 let save t edits =
   let r = commit t edits in
@@ -580,3 +641,97 @@ let create_linked t ?(extra = []) (plant : Herbier_domain.Plant.t)
   | Ok (_ : int) ->
       fetch_if_online t plant.id taxon.key;
       Ok ()
+
+(* « IGN hors-ligne » packs (architecture §8). *)
+
+let packs t = t.packs
+let downloading t = t.downloading
+
+type pack_error = Busy | Offline | Pack of Commune_packs.error
+
+let pack_error_to_string = function
+  | Busy -> "Un téléchargement est déjà en cours."
+  | Offline
+  | Pack (Commune_packs.Fetch Herbier_geo.Geocoder.(Network _ | Timeout)) ->
+      "Hors ligne : réessayez une fois connecté."
+  | Pack (Commune_packs.Fetch (Herbier_geo.Geocoder.Refused _)) ->
+      "Téléchargement non envoyé. Réessayez."
+  | Pack (Commune_packs.Fetch (Herbier_geo.Geocoder.Status _ as e))
+    when Herbier_geo.Geocoder.transient e ->
+      "Service de l’IGN indisponible : réessayez plus tard."
+  | Pack (Commune_packs.Fetch Herbier_geo.Geocoder.(Payload _ | Status _)) ->
+      "Réponse de l’IGN inattendue."
+  | Pack (Commune_packs.File _ | Commune_packs.Store _) ->
+      "Enregistrement impossible."
+
+let departements t =
+  match online t with
+  | false -> Fut.return (Error Offline)
+  | true ->
+      Fut.map
+        (Result.map_error (fun e -> Pack e))
+        (Commune_packs.departements ())
+
+let without_pack code = List.filter (fun p -> not (Code.equal p.code code))
+
+let download_pack t (d : Communes.departement) =
+  match React.S.value t.downloading with
+  | Some (_ : Communes.departement) -> Fut.return (Error Busy)
+  | None ->
+      t.set_downloading (Some d);
+      Fut.map
+        (function
+          | Error e ->
+              log_error
+                [
+                  "communes: download";
+                  Code.to_string d.code;
+                  Commune_packs.error_to_string e;
+                ];
+              t.set_downloading None;
+              Error (Pack e)
+          | Ok ((row : Pack_rows.t), pack) ->
+              t.communes := Communes.add !(t.communes) pack;
+              let packs =
+                List.sort
+                  (fun a b -> Code.compare a.code b.code)
+                  ({code = d.code; row; usable = true}
+                  :: without_pack d.code (React.S.value t.packs))
+              in
+              let step = React.Step.create () in
+              t.set_packs ~step packs;
+              t.set_downloading ~step None;
+              React.Step.execute step;
+              log ["communes: downloaded"; Code.to_string d.code];
+              (* Downloading a département is choosing this source. *)
+              (match
+                 (React.S.value (State.place_sources t.state)).ign_offline
+               with
+              | false -> set_place_source t Place_name.Ign_offline true
+              | true -> geocode_pending t);
+              Ok ())
+        (* Wait for the startup load: it replaces the index and [packs]
+           wholesale, so a download finished before it would be lost. *)
+        (Fut.bind t.communes_loaded (fun () ->
+             Commune_packs.download t.db ~now:(Ptime_clock.now ()) d))
+
+let delete_pack t code =
+  match React.S.value t.downloading with
+  | Some (d : Communes.departement) when Code.equal d.code code ->
+      Fut.return (Error Busy)
+  | Some _ | None ->
+      Fut.map
+        (function
+          | Error e ->
+              log_error
+                [
+                  "communes: delete";
+                  Code.to_string code;
+                  Commune_packs.error_to_string e;
+                ];
+              Error (Pack e)
+          | Ok () ->
+              t.communes := Communes.remove !(t.communes) code;
+              t.set_packs (without_pack code (React.S.value t.packs));
+              Ok ())
+        (Commune_packs.delete t.db code)

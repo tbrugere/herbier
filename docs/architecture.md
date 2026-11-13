@@ -146,7 +146,10 @@ the mean of the positions. Details in `app/domain/places.mli`.
   `RefImage` (§2) is not in migration 1: migration 3 (M4.37) creates its
   device-only table `ref_images` (`store/ref_images.ml`, not synced, no
   outbox entry, hard deletes) and the local lookup table `reference_organs`
-  its `organ` column references. The schema version is SQLite's `user_version`; a file at a
+  its `organ` column references. Migration 4 (M5.58) creates the device-only
+  table `commune_packs` (`store/commune_packs.ml`: département code, name,
+  file path, size, commune count, download time; not synced, hard deletes),
+  one row per « IGN hors-ligne » pack. The schema version is SQLite's `user_version`; a file at a
   version above the app's is refused, not migrated. A migration is a list of
   statements (`Schema.migration`), applied with its `user_version` bump in one
   transaction by the plugin's `executeSet`, which prepares each string as
@@ -160,6 +163,14 @@ the mean of the positions. Details in `app/domain/places.mli`.
     if the row still holds the downloaded URL (the syncs of one plant never
     overlap). The thumbnails of a deleted plant stay until "Libérer" sweeps
     `refthumbs/` against `ref_images`.
+  - `communes/<département>-<ms>.json`, an « IGN hors-ligne » pack
+    (`Geo.Communes.to_string`: the communes of one département, rings
+    simplified to 20 m, integer coordinates at 1e-5°). A new download writes
+    a fresh path, then its row, then deletes the old file, so a row never
+    points to a half-written file (a failed write or row deletes the new
+    file; a crash in between leaves an orphan, for a future "Libérer" sweep of
+    `communes/` against `commune_packs`, as for `refthumbs/`); « Supprimer »
+    deletes the row, then the file.
   - `tiles/<region>.pmtiles`, downloaded once from Settings.
 - The binding (`Cap_sqlite.query`) returns each row as the JSON text of the
   plugin's row object; `store/db.ml` parses it and decodes it with
@@ -563,11 +574,14 @@ the classifier must accept both a bare URL and text containing one.
      name), so it never reaches a remote source; clearing its label makes it
      pending again;
   2. each place-name source the user turned on in 4m « Noms de lieux », in
-     order « IGN en ligne » (Géoplateforme, `Geo.Geocode.reverse_ign`) then
-     « Photon en ligne » (`Geo.Geocode.reverse_photon`). Both are **off by
-     default** (local `settings` keys `place_source_ign_online`,
+     order « IGN hors-ligne » (the downloaded commune packs,
+     `Geo.Communes.name`, no request, online or not), « IGN en ligne »
+     (Géoplateforme, `Geo.Geocode.reverse_ign`) then « Photon en ligne »
+     (`Geo.Geocode.reverse_photon`). All are **off by default** (local
+     `settings` keys `place_source_ign_offline`, `place_source_ign_online`,
      `place_source_photon_online`; unset or unreadable = off), mirrored in
-     `State.place_sources`. « IGN hors-ligne » (M5.58) comes first;
+     `State.place_sources`. With both IGN switches on, a point in a
+     downloaded département gets its commune, never the online lieu-dit;
   3. else nothing is stored, and 4c, 4b's sheet, 4h and 4e print
      « Lieu inconnu » (`Places.unknown_name`, never stored: a stored
      placeholder would sync as a fake name and stop later sources).
@@ -591,8 +605,8 @@ the classifier must accept both a bare URL and text containing one.
     observation first, one at a time;
   - a remote miss, or a payload or HTTP error, is not asked again in the same
     session (the own-place lookup still runs); the next app start, or
-    turning a source on (once its setting is saved, which clears that list),
-    asks again. A switch whose write fails falls back to the stored value,
+    turning an online source on (once its setting is saved, which clears that
+    list; turning « IGN hors-ligne » on keeps it), asks again. A switch whose write fails falls back to the stored value,
     except an opt-out, which stays off for the session; 4m says so. A
     transient error (network, timeout, 429, 5xx) stops the run and leaves
     the observation to the next trigger;
@@ -607,6 +621,27 @@ the classifier must accept both a bare URL and text containing one.
     string: no coordinates or search text in logcat) and, in dev builds only,
     in the list behind the dev hook `herbierDev.geocodeRequests()` (whole
     URLs), so "no request left the phone" is checkable;
+  - « IGN hors-ligne » (M5.58): 4m « Ajouter un département » fetches the
+    list of départements from the Géoplateforme WFS (layer
+    `ADMINEXPRESS-COG-CARTO.LATEST:departement`), then a tap downloads that
+    département's communes (`…:commune`, `CQL_FILTER` on the département
+    code, which only a valid code shape reaches; one page of at most 5000,
+    a truncated answer refused) through `Geo.Geocoder` (logged like every
+    request; it sends a département code, no position, so no switch gates
+    it). The download holds the geocoder's one in-flight slot for its whole
+    transfer (at most 120 s): reverses and 5b searches wait behind it. The
+    phone simplifies each ring (Douglas–Peucker, 20 m) and stores the pack
+    (§3); a successful download turns the switch on. Packs load into memory
+    at startup; a geocode run and a download wait for that load. The lookup
+    is point-in-polygon (even–odd, holes excluded), else the commune whose
+    boundary is nearest within 50 m (slivers between independently
+    simplified neighbours, and a point just outside a downloaded
+    département's outer edge, which simplification also moves: a point truly
+    inside can land there, so the fallback crosses that edge, into a
+    département not downloaded or abroad, by up to 50 m), else the next
+    source. A point already tried
+    remotely this session still gets the pack lookup. Data: IGN Admin
+    Express COG carto, Licence Ouverte 2.0, credited in 4m;
   - a one-time dialog at first opening (`Ui.Location_notice`, flag
     `location_notice_seen`) says positions stay on the phone, lists each
     source with what it sends to whom, and that the map's background tiles

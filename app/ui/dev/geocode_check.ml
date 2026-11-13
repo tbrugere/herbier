@@ -10,6 +10,7 @@ module Db = Herbier_store.Db
 
 let append log text = El.append_children log [El.div [El.txt' text]]
 let schlucht = {Places.lat = 48.0633; lon = 7.0081}
+let belfort = {Places.lat = 47.6380; lon = 6.8628}
 
 let points =
   [
@@ -32,7 +33,8 @@ let outcome = function
   | Ok o -> Place_name.outcome_to_string o
   | Error e -> "error: " ^ Geocoder.error_to_string e
 
-let all_on = {Place_name.ign_online = true; photon_online = true}
+let online_sources =
+  {Place_name.ign_offline = false; ign_online = true; photon_online = true}
 
 let run_reverse log =
   let t0 = now_ms () in
@@ -41,7 +43,8 @@ let run_reverse log =
     (fun (name, p) ->
       Fut.await
         (Geocoder.run ~on_start:(on_start log t0)
-           (Place_name.resolve ~sources:all_on ~online:true ~labelled:[] p))
+           (Place_name.resolve ~sources:online_sources ~online:true ~labelled:[]
+              ~communes:Herbier_geo.Communes.empty p))
         (fun r ->
           append log
             (Printf.sprintf "%6.0f ms %s: %s"
@@ -70,9 +73,19 @@ let status app ~opened =
   let state = App.state app in
   let s = React.S.value (State.place_sources state) in
   let on = function true -> "on" | false -> "off" in
+  let packs = React.S.value (App.packs app) in
+  let codes = function [] -> "aucun" | l -> String.concat ", " l in
   Printf.sprintf
-    "IGN en ligne: %s · Photon en ligne: %s · %s · %d requêtes depuis \
-     l’ouverture de la page (Inverse et Chercher compris)"
+    "IGN hors-ligne: %s (packs : %s ; illisibles : %s) · IGN en ligne: %s · \
+     Photon en ligne: %s · %s · %d requêtes depuis l’ouverture de la page \
+     (Inverse et Chercher compris)"
+    (on s.ign_offline)
+    (codes (List.map (fun (p : App.pack) -> p.row.departement) packs))
+    (codes
+       (List.filter_map
+          (fun (p : App.pack) ->
+            match p.usable with true -> None | false -> Some p.row.departement)
+          packs))
     (on s.ign_online) (on s.photon_online)
     (match (React.S.value (State.network state)).online with
     | true -> "en ligne"
@@ -162,6 +175,8 @@ let place_names app =
   let out = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "status")] [] in
   let single = button "Observation à la Schlucht" in
   on_click single (fun () -> save_all app ~out [observation schlucht]);
+  let belfort_button = button "Observation à Belfort" in
+  on_click belfort_button (fun () -> save_all app ~out [observation belfort]);
   let pair = button "Lieu nommé + voisine" in
   on_click pair (fun () ->
       save_all app ~out
@@ -169,7 +184,12 @@ let place_names app =
           observation ~label:"Lieu test" {lat = 44.25; lon = -0.85};
           observation {lat = 44.2518; lon = -0.85};
         ]);
-  [El.h2 [El.txt' "Noms de lieux"]; line; El.p [refresh; single; pair]; out]
+  [
+    El.h2 [El.txt' "Noms de lieux"];
+    line;
+    El.p [refresh; single; belfort_button; pair];
+    out;
+  ]
 
 let el app =
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in

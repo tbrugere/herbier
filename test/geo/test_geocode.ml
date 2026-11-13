@@ -48,6 +48,11 @@ let name_opt_result = Alcotest.result (Alcotest.option Alcotest.string) error
 
 (* ---------- recorded requests: file, and the request that fetched it ---------- *)
 
+let force_communes_request departement =
+  match Communes.Code.of_string departement with
+  | Some departement -> Communes.communes_request ~departement
+  | None -> Alcotest.failf "%S is not a département code" departement
+
 let recorded_requests =
   [
     ("photon_reverse_schlucht.json", Geocode.photon_reverse schlucht);
@@ -71,6 +76,11 @@ let recorded_requests =
     ( "photon_search_schlucht_near.json",
       Geocode.photon_search ~near:schlucht ~limit:3 "schlucht" );
     ("photon_search_zzzzqqq.json", Geocode.photon_search "zzzzqqq");
+    ("geoplateforme_wfs_departements.json", Communes.departements_request);
+    ("geoplateforme_wfs_communes_90.json", force_communes_request "90");
+    (* geoplateforme_wfs_communes_99.json (the unknown-code fixture) is
+       checked in test_communes.ml: "99" is not a département code, so
+       [communes_request] cannot build its request. *)
   ]
 
 (* ---------- request URLs ---------- *)
@@ -203,6 +213,16 @@ let url_tests =
         Alcotest.(check string)
           "provider" "photon"
           (Geocode.provider_to_string (Geocode.photon_search "lac").provider) );
+    ( "geoplateforme_wfs: keys and values encoded, in order; provider \
+       Geoplateforme",
+      `Quick,
+      fun () ->
+        let r = Geocode.geoplateforme_wfs [("A", "b c"); ("K", "x:y,z")] in
+        Alcotest.(check string)
+          "url" "https://data.geopf.fr/wfs/ows?A=b%20c&K=x%3Ay%2Cz" r.url;
+        Alcotest.(check string)
+          "provider" "geoplateforme"
+          (Geocode.provider_to_string r.provider) );
   ]
 
 (* ---------- the recording script names every fixture URL verbatim ---------- *)

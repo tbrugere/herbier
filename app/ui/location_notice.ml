@@ -15,9 +15,7 @@ let body () =
     El.ul
       ~at:[At.class' (Jstr.v "confirm__list"); At.class' (Jstr.v "t-body")]
       (List.map
-         (fun src ->
-           El.li
-             [El.txt' (Place_name.label src ^ " : " ^ Place_name.detail src)])
+         (fun src -> El.li [El.txt' (Place_name.notice_line src)])
          Place_name.order);
     p
       "Par défaut, toutes sont désactivées : un lieu sans nom s’affiche « Lieu \

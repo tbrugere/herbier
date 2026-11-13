@@ -1,6 +1,7 @@
 ; MapLibre map over the facade binding, map style, GeoJSON and geocoding
-; (style, features, geocode and place_name are pure, copied into test/geo;
-; geocoder runs geocode over Brr fetch).
+; (style, features, geocode, place_name and communes are pure, copied into
+; test/geo; geocoder runs geocode over Brr fetch; commune_packs downloads and
+; stores packs through store).
 (library
  (name herbier_geo)
  (public_name herbier.geo)

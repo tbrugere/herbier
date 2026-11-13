@@ -23,6 +23,22 @@ let atlantic : Places.point = {lat = 46.2; lon = -5.0}
 let landes : Places.point = {lat = 44.25; lon = -0.85}
 let all_points = [schlucht; lausanne; kew; atlantic; landes]
 
+(* ---------- the 90 (Territoire de Belfort) offline pack, for the
+   Ign_offline tests ---------- *)
+
+let belfort : Places.point = {lat = 47.6380; lon = 6.8628}
+
+let idx_90 =
+  lazy
+    (match
+       Communes.pack_of_payload
+         ~departement:(Option.get (Communes.Code.of_string "90"))
+         (json_fixture "geoplateforme_wfs_communes_90.json")
+     with
+    | Ok p -> Communes.add Communes.empty p
+    | Error e ->
+        Alcotest.failf "pack_of_payload 90: %s" (Geocode.error_to_string e))
+
 (* ---------- recorded requests, as test_geocode.ml's ---------- *)
 
 let recorded_requests =
@@ -125,8 +141,8 @@ let error =
 let sources =
   Alcotest.testable
     (fun f (s : Place_name.sources) ->
-      Format.fprintf f "{ign_online = %b; photon_online = %b}" s.ign_online
-        s.photon_online)
+      Format.fprintf f "{ign_offline = %b; ign_online = %b; photon_online = %b}"
+        s.ign_offline s.ign_online s.photon_online)
     Place_name.equal_sources
 
 let outcome =
@@ -139,11 +155,15 @@ let outcome_result = Alcotest.result outcome error
 (* ---------- sources: none, set/enabled, can_search, order, label ---------- *)
 
 let sources_none_defaults () =
+  Alcotest.(check bool) "ign_offline" false Place_name.none.ign_offline;
   Alcotest.(check bool) "ign_online" false Place_name.none.ign_online;
   Alcotest.(check bool) "photon_online" false Place_name.none.photon_online;
   Alcotest.(check bool)
     "any_online none" false
     (Place_name.any_online Place_name.none);
+  Alcotest.(check bool)
+    "any_enabled none" false
+    (Place_name.any_enabled Place_name.none);
   Alcotest.(check bool)
     "can_search none" false
     (Place_name.can_search Place_name.none)
@@ -161,15 +181,29 @@ let sources_set_enabled_round_trip () =
         [true; false])
     Place_name.order;
   Alcotest.(check sources)
-    "setting Ign_online leaves photon_online at false"
-    {ign_online = true; photon_online = false}
+    "setting Ign_online leaves the others at false"
+    {ign_offline = false; ign_online = true; photon_online = false}
     (Place_name.set Place_name.none Place_name.Ign_online true);
   Alcotest.(check sources)
     "clearing Photon_online leaves ign_online at true"
-    {ign_online = true; photon_online = false}
+    {ign_offline = false; ign_online = true; photon_online = false}
     (Place_name.set
-       {ign_online = true; photon_online = true}
-       Place_name.Photon_online false)
+       {ign_offline = false; ign_online = true; photon_online = true}
+       Place_name.Photon_online false);
+  Alcotest.(check sources)
+    "setting Ign_offline leaves the others at false"
+    {ign_offline = true; ign_online = false; photon_online = false}
+    (Place_name.set Place_name.none Place_name.Ign_offline true)
+
+let sources_combinations : Place_name.sources list =
+  [
+    Place_name.none;
+    {ign_offline = false; ign_online = true; photon_online = false};
+    {ign_offline = false; ign_online = false; photon_online = true};
+    {ign_offline = false; ign_online = true; photon_online = true};
+    {ign_offline = true; ign_online = false; photon_online = false};
+    {ign_offline = true; ign_online = true; photon_online = true};
+  ]
 
 let sources_can_search_order_and_labels () =
   List.iter
@@ -177,21 +211,27 @@ let sources_can_search_order_and_labels () =
       Alcotest.(check bool)
         "can_search s = s.photon_online" s.photon_online
         (Place_name.can_search s))
-    [
-      Place_name.none;
-      {ign_online = true; photon_online = false};
-      {ign_online = false; photon_online = true};
-      {ign_online = true; photon_online = true};
-    ];
+    sources_combinations;
   (match Place_name.order with
-  | [Place_name.Ign_online; Place_name.Photon_online] -> ()
-  | _ -> Alcotest.fail "order is not exactly [Ign_online; Photon_online]");
+  | [Place_name.Ign_offline; Place_name.Ign_online; Place_name.Photon_online] ->
+      ()
+  | _ ->
+      Alcotest.fail
+        "order is not exactly [Ign_offline; Ign_online; Photon_online]");
+  Alcotest.(check string)
+    "label Ign_offline" "IGN hors-ligne"
+    (Place_name.label Place_name.Ign_offline);
   Alcotest.(check string)
     "label Ign_online" "IGN en ligne"
     (Place_name.label Place_name.Ign_online);
   Alcotest.(check string)
     "label Photon_online" "Photon en ligne"
     (Place_name.label Place_name.Photon_online);
+  Alcotest.(check string)
+    "detail Ign_offline"
+    "N’envoie aucune position ; nomme d’après les communes des départements \
+     téléchargés (IGN, data.geopf.fr)."
+    (Place_name.detail Place_name.Ign_offline);
   Alcotest.(check string)
     "detail Ign_online" "Envoie la position à l’IGN (data.geopf.fr), en France."
     (Place_name.detail Place_name.Ign_online);
@@ -200,6 +240,34 @@ let sources_can_search_order_and_labels () =
     "Envoie la position à komoot (photon.komoot.io), et la recherche « \
      Chercher un lieu »."
     (Place_name.detail Place_name.Photon_online)
+
+(* The notice prints its items alone, after « Vous pouvez activer, dans
+   Réglages › Noms de lieux : »: one colon each, nothing pointing at the page
+   around it. *)
+let notice_lines () =
+  Alcotest.(check (list string))
+    "notice lines"
+    [
+      "IGN hors-ligne : N’envoie aucune position ; nomme d’après les communes \
+       des départements téléchargés (IGN, data.geopf.fr).";
+      "IGN en ligne : Envoie la position à l’IGN (data.geopf.fr), en France.";
+      "Photon en ligne : Envoie la position à komoot (photon.komoot.io), et la \
+       recherche « Chercher un lieu ».";
+    ]
+    (List.map Place_name.notice_line Place_name.order);
+  List.iter
+    (fun src ->
+      let line = Place_name.notice_line src in
+      Alcotest.(check int)
+        (line ^ ": one colon") 1
+        (List.length (String.split_on_char ':' line) - 1);
+      Alcotest.(check bool)
+        (line ^ ": no « ci-dessous »")
+        false
+        (List.exists
+           (String.equal "ci-dessous")
+           (String.split_on_char ' ' line)))
+    Place_name.order
 
 let sources_allows_by_provider () =
   List.iter
@@ -210,12 +278,34 @@ let sources_allows_by_provider () =
       Alcotest.(check bool)
         "allows s Photon = s.photon_online" s.photon_online
         (Place_name.allows s Geocode.Photon))
-    [
-      Place_name.none;
-      {ign_online = true; photon_online = false};
-      {ign_online = false; photon_online = true};
-      {ign_online = true; photon_online = true};
-    ]
+    sources_combinations
+
+let sources_any_online_ignores_offline_any_enabled_offline_only () =
+  let offline_alone =
+    {Place_name.ign_offline = true; ign_online = false; photon_online = false}
+  in
+  Alcotest.(check bool) "any_online" false (Place_name.any_online offline_alone);
+  Alcotest.(check bool)
+    "any_enabled" true
+    (Place_name.any_enabled offline_alone);
+  let full : Place_name.sources =
+    {ign_offline = true; ign_online = true; photon_online = true}
+  in
+  Alcotest.(check sources)
+    "offline_only keeps only ign_offline" offline_alone
+    (Place_name.offline_only full);
+  Alcotest.(check sources)
+    "offline_only of none stays none" Place_name.none
+    (Place_name.offline_only Place_name.none);
+  List.iter
+    (fun src ->
+      Alcotest.(check bool)
+        (Place_name.label src ^ ": is_online")
+        (match src with
+        | Place_name.Ign_offline -> false
+        | Place_name.(Ign_online | Photon_online) -> true)
+        (Place_name.is_online src))
+    Place_name.order
 
 let sources_tests =
   [
@@ -228,9 +318,15 @@ let sources_tests =
     ( "can_search is photon_online; order, label and detail strings",
       `Quick,
       sources_can_search_order_and_labels );
+    ( "the first-opening notice's lines: one colon, no « ci-dessous »",
+      `Quick,
+      notice_lines );
     ( "allows: Géoplateforme with ign_online, Photon with photon_online",
       `Quick,
       sources_allows_by_provider );
+    ( "any_online ignores ign_offline; any_enabled and offline_only",
+      `Quick,
+      sources_any_online_ignores_offline_any_enabled_offline_only );
   ]
 
 (* ---------- own ---------- *)
@@ -351,11 +447,20 @@ let own_tests =
 
 (* ---------- resolve ---------- *)
 
-let all_on : Place_name.sources = {ign_online = true; photon_online = true}
-let ign_only : Place_name.sources = {ign_online = true; photon_online = false}
+(* [~communes:Communes.empty] everywhere below: these cases exercise the
+   online chain, unaffected by an empty offline index. The
+   Ign_offline-specific behaviour has its own group further down, with the
+   90 (Territoire de Belfort) index. *)
+let no_communes = Communes.empty
+
+let all_on : Place_name.sources =
+  {ign_offline = false; ign_online = true; photon_online = true}
+
+let ign_only : Place_name.sources =
+  {ign_offline = false; ign_online = true; photon_online = false}
 
 let photon_only : Place_name.sources =
-  {ign_online = false; photon_online = true}
+  {ign_offline = false; ign_online = false; photon_online = true}
 
 let resolve_all_off_is_unknown_with_no_request () =
   List.iter
@@ -365,7 +470,7 @@ let resolve_all_off_is_unknown_with_no_request () =
           let result, reqs =
             run_program ~answer:answer_from_fixtures
               (Place_name.resolve ~sources:Place_name.none ~online ~labelled:[]
-                 point)
+                 ~communes:no_communes point)
           in
           Alcotest.(check outcome_result)
             (Printf.sprintf "all off, online = %b" online)
@@ -379,7 +484,7 @@ let resolve_own_place_online () =
   let result, reqs =
     run_program ~answer:answer_from_fixtures
       (Place_name.resolve ~sources:all_on ~online:true ~labelled:[jardin]
-         schlucht)
+         ~communes:no_communes schlucht)
   in
   Alcotest.(check outcome_result)
     "own place wins over every online source" (Ok (Place_name.Named "Jardin"))
@@ -391,7 +496,7 @@ let resolve_own_place_offline () =
   let result, reqs =
     run_program ~answer:answer_from_fixtures
       (Place_name.resolve ~sources:all_on ~online:false ~labelled:[jardin]
-         schlucht)
+         ~communes:no_communes schlucht)
   in
   Alcotest.(check outcome_result)
     "own place names it, offline" (Ok (Place_name.Named "Jardin")) result;
@@ -407,7 +512,8 @@ let resolve_neighbour_names_it_whatever_the_sources () =
         (fun online ->
           let result, reqs =
             run_program ~answer:answer_from_fixtures
-              (Place_name.resolve ~sources ~online ~labelled:[jardin] schlucht)
+              (Place_name.resolve ~sources ~online ~labelled:[jardin]
+                 ~communes:no_communes schlucht)
           in
           Alcotest.(check outcome_result)
             (Printf.sprintf "%s, online = %b: named by the neighbour" name
@@ -415,14 +521,21 @@ let resolve_neighbour_names_it_whatever_the_sources () =
             (Ok (Place_name.Named "Jardin")) result;
           Alcotest.(check int) "zero requests" 0 (List.length reqs))
         [true; false])
-    [("all off", Place_name.none); ("all on", all_on)]
+    [
+      ("all off", Place_name.none);
+      ("all on", all_on);
+      ( "offline on too",
+        {Place_name.ign_offline = true; ign_online = true; photon_online = true}
+      );
+    ]
 
 let resolve_deferred_when_a_source_is_on_but_offline () =
   List.iter
     (fun (name, sources) ->
       let result, reqs =
         run_program ~answer:answer_from_fixtures
-          (Place_name.resolve ~sources ~online:false ~labelled:[] schlucht)
+          (Place_name.resolve ~sources ~online:false ~labelled:[]
+             ~communes:no_communes schlucht)
       in
       Alcotest.(check outcome_result)
         (name ^ ": deferred") (Ok Place_name.Deferred) result;
@@ -433,7 +546,8 @@ let resolve_ign_only () =
   let named point name reqs =
     let result, got_reqs =
       run_program ~answer:answer_from_fixtures
-        (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[] point)
+        (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[]
+           ~communes:no_communes point)
     in
     Alcotest.(check outcome_result) "result" (Ok (Place_name.Named name)) result;
     Alcotest.(check (list string))
@@ -449,14 +563,16 @@ let resolve_ign_only () =
     ];
   let result, reqs =
     run_program ~answer:answer_from_fixtures
-      (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[] kew)
+      (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[]
+         ~communes:no_communes kew)
   in
   Alcotest.(check outcome_result)
     "kew: unknown, outside the box" (Ok Place_name.Unknown) result;
   Alcotest.(check int) "kew: zero requests" 0 (List.length reqs);
   let result, reqs =
     run_program ~answer:answer_from_fixtures
-      (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[] lausanne)
+      (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[]
+         ~communes:no_communes lausanne)
   in
   Alcotest.(check outcome_result)
     "lausanne: unknown" (Ok Place_name.Unknown) result;
@@ -472,7 +588,8 @@ let resolve_ign_only () =
 let resolve_photon_only () =
   let result, reqs =
     run_program ~answer:answer_from_fixtures
-      (Place_name.resolve ~sources:photon_only ~online:true ~labelled:[] kew)
+      (Place_name.resolve ~sources:photon_only ~online:true ~labelled:[]
+         ~communes:no_communes kew)
   in
   Alcotest.(check outcome_result)
     "kew" (Ok (Place_name.Named "Près de Kew")) result;
@@ -483,7 +600,7 @@ let resolve_photon_only () =
   let result, reqs =
     run_program ~answer:answer_from_fixtures
       (Place_name.resolve ~sources:photon_only ~online:true ~labelled:[]
-         lausanne)
+         ~communes:no_communes lausanne)
   in
   Alcotest.(check outcome_result)
     "lausanne" (Ok (Place_name.Named "Près de Lausanne")) result;
@@ -494,7 +611,7 @@ let resolve_photon_only () =
   let result, reqs =
     run_program ~answer:answer_from_fixtures
       (Place_name.resolve ~sources:photon_only ~online:true ~labelled:[]
-         atlantic)
+         ~communes:no_communes atlantic)
   in
   Alcotest.(check outcome_result)
     "atlantic: unknown" (Ok Place_name.Unknown) result;
@@ -511,7 +628,7 @@ let resolve_photon_only () =
   let result, reqs =
     run_program ~answer:answer_from_fixtures
       (Place_name.resolve ~sources:photon_only ~online:true ~labelled:[]
-         schlucht)
+         ~communes:no_communes schlucht)
   in
   Alcotest.(check outcome_result)
     "schlucht, in France: Photon's name" (Ok (Place_name.Named photon_name))
@@ -525,7 +642,8 @@ let resolve_both_on_matches_m543 () =
   let check_case point expected_outcome expected_reqs =
     let result, reqs =
       run_program ~answer:answer_from_fixtures
-        (Place_name.resolve ~sources:all_on ~online:true ~labelled:[] point)
+        (Place_name.resolve ~sources:all_on ~online:true ~labelled:[]
+           ~communes:no_communes point)
     in
     Alcotest.(check outcome_result) "result" (Ok expected_outcome) result;
     Alcotest.(check (list string))
@@ -557,7 +675,8 @@ let resolve_errors_stop_the_chain () =
   let result, reqs =
     run_program
       ~answer:(fun _ -> `Assoc [("features", `Int 3)])
-      (Place_name.resolve ~sources:all_on ~online:true ~labelled:[] schlucht)
+      (Place_name.resolve ~sources:all_on ~online:true ~labelled:[]
+         ~communes:no_communes schlucht)
   in
   Alcotest.(check outcome_result)
     "bad payload at the first request"
@@ -571,7 +690,8 @@ let resolve_errors_stop_the_chain () =
         match Geocode.equal_request req lieu_dit with
         | true -> answer_from_fixtures req
         | false -> `Assoc [("features", `Int 3)])
-      (Place_name.resolve ~sources:all_on ~online:true ~labelled:[] landes)
+      (Place_name.resolve ~sources:all_on ~online:true ~labelled:[]
+         ~communes:no_communes landes)
   in
   Alcotest.(check outcome_result)
     "bad payload at the commune step"
@@ -586,6 +706,7 @@ let resolve_nonfinite_point_is_unknown () =
   let result, reqs =
     run_program ~answer:answer_from_fixtures
       (Place_name.resolve ~sources:all_on ~online:true ~labelled:[]
+         ~communes:no_communes
          {Places.lat = Float.nan; lon = 7.})
   in
   Alcotest.(check outcome_result) "nan latitude" (Ok Place_name.Unknown) result;
@@ -599,7 +720,14 @@ let no_feature (_ : Geocode.request) : Yojson.Safe.t =
 
 let resolve_privacy_invariant () =
   let all_sources_combinations =
-    [Place_name.none; ign_only; photon_only; all_on]
+    [
+      Place_name.none;
+      ign_only;
+      photon_only;
+      all_on;
+      {Place_name.ign_offline = true; ign_online = false; photon_online = false};
+      {Place_name.ign_offline = true; ign_online = true; photon_online = true};
+    ]
   in
   List.iter
     (fun (sources : Place_name.sources) ->
@@ -609,51 +737,168 @@ let resolve_privacy_invariant () =
             (fun point ->
               List.iter
                 (fun labelled ->
-                  let _, reqs =
-                    run_program ~answer:no_feature
-                      (Place_name.resolve ~sources ~online ~labelled point)
-                  in
-                  (match online with
-                  | false ->
-                      Alcotest.(check int)
-                        "offline: no request is ever issued" 0
-                        (List.length reqs)
-                  | true -> ());
-                  (* Schlucht is in France and no own place names it: every
-                     enabled source is asked, since none finds a feature. *)
-                  (match
-                     (online, labelled, Places.equal_point point schlucht)
-                   with
-                  | true, [], true ->
-                      let ign (r : Geocode.request) =
-                        match r.provider with
-                        | Geocode.Geoplateforme -> true
-                        | Geocode.Photon -> false
-                      in
-                      Alcotest.(check bool)
-                        "schlucht: Géoplateforme asked iff ign_online"
-                        sources.ign_online (List.exists ign reqs);
-                      Alcotest.(check bool)
-                        "schlucht: Photon asked iff photon_online"
-                        sources.photon_online
-                        (List.exists (fun r -> not (ign r)) reqs)
-                  | _ -> ());
                   List.iter
-                    (fun (r : Geocode.request) ->
-                      match r.provider with
-                      | Geocode.Geoplateforme ->
+                    (fun communes ->
+                      let _, reqs =
+                        run_program ~answer:no_feature
+                          (Place_name.resolve ~sources ~online ~labelled
+                             ~communes point)
+                      in
+                      (match online with
+                      | false ->
+                          Alcotest.(check int)
+                            "offline: no request is ever issued" 0
+                            (List.length reqs)
+                      | true -> ());
+                      (* Schlucht is in France and no own place names it: every
+                     enabled online source is asked, since none finds a
+                     feature and neither index (empty, or the 90 pack) holds
+                     it. *)
+                      (match
+                         (online, labelled, Places.equal_point point schlucht)
+                       with
+                      | true, [], true ->
+                          let ign (r : Geocode.request) =
+                            match r.provider with
+                            | Geocode.Geoplateforme -> true
+                            | Geocode.Photon -> false
+                          in
                           Alcotest.(check bool)
-                            "a Geoplateforme request implies ign_online" true
-                            sources.ign_online
-                      | Geocode.Photon ->
+                            "schlucht: Géoplateforme asked iff ign_online"
+                            sources.ign_online (List.exists ign reqs);
                           Alcotest.(check bool)
-                            "a Photon request implies photon_online" true
-                            sources.photon_online)
-                    reqs)
+                            "schlucht: Photon asked iff photon_online"
+                            sources.photon_online
+                            (List.exists (fun r -> not (ign r)) reqs)
+                      | _ -> ());
+                      List.iter
+                        (fun (r : Geocode.request) ->
+                          match r.provider with
+                          | Geocode.Geoplateforme ->
+                              Alcotest.(check bool)
+                                "a Geoplateforme request implies ign_online"
+                                true sources.ign_online
+                          | Geocode.Photon ->
+                              Alcotest.(check bool)
+                                "a Photon request implies photon_online" true
+                                sources.photon_online)
+                        reqs)
+                    [no_communes; Lazy.force idx_90])
                 [[]; [far_labelled]])
-            all_points)
+            (belfort :: all_points))
         [true; false])
     all_sources_combinations
+
+(* ---------- Ign_offline: the 90 (Territoire de Belfort) pack ---------- *)
+
+let offline_only_src : Place_name.sources =
+  {ign_offline = true; ign_online = false; photon_online = false}
+
+let offline_with_photon : Place_name.sources =
+  {ign_offline = true; ign_online = false; photon_online = true}
+
+let offline_and_both_online : Place_name.sources =
+  {ign_offline = true; ign_online = true; photon_online = true}
+
+let resolve_offline_in_the_pack_names_it_with_no_request () =
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:offline_only_src ~online:false ~labelled:[]
+         ~communes:(Lazy.force idx_90) belfort)
+  in
+  Alcotest.(check outcome_result)
+    "belfort" (Ok (Place_name.Named "Près de Belfort")) result;
+  Alcotest.(check int) "no request" 0 (List.length reqs)
+
+let resolve_offline_outside_the_pack_is_unknown_whatever_online () =
+  List.iter
+    (fun online ->
+      let result, reqs =
+        run_program ~answer:answer_from_fixtures
+          (Place_name.resolve ~sources:offline_only_src ~online ~labelled:[]
+             ~communes:(Lazy.force idx_90) landes)
+      in
+      Alcotest.(check outcome_result)
+        (Printf.sprintf "landes, online = %b" online)
+        (Ok Place_name.Unknown) result;
+      Alcotest.(check int) "no request" 0 (List.length reqs))
+    [true; false]
+
+let resolve_offline_and_photon_outside_the_pack () =
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:offline_with_photon ~online:false
+         ~labelled:[] ~communes:(Lazy.force idx_90) kew)
+  in
+  Alcotest.(check outcome_result)
+    "offline, deferred" (Ok Place_name.Deferred) result;
+  Alcotest.(check int) "no request offline" 0 (List.length reqs);
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:offline_with_photon ~online:true ~labelled:[]
+         ~communes:(Lazy.force idx_90) kew)
+  in
+  Alcotest.(check outcome_result)
+    "online" (Ok (Place_name.Named "Près de Kew")) result;
+  Alcotest.(check (list string))
+    "one photon request"
+    (List.map request_line [Geocode.photon_reverse kew])
+    (List.map request_line reqs)
+
+let resolve_offline_wins_over_online_in_the_pack () =
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:offline_and_both_online ~online:true
+         ~labelled:[] ~communes:(Lazy.force idx_90) belfort)
+  in
+  Alcotest.(check outcome_result)
+    "result" (Ok (Place_name.Named "Près de Belfort")) result;
+  Alcotest.(check int) "no request: offline first" 0 (List.length reqs)
+
+let resolve_offline_off_ignores_the_pack () =
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:Place_name.none ~online:true ~labelled:[]
+         ~communes:(Lazy.force idx_90) belfort)
+  in
+  Alcotest.(check outcome_result) "result" (Ok Place_name.Unknown) result;
+  Alcotest.(check int) "no request" 0 (List.length reqs)
+
+let resolve_own_place_wins_over_the_pack () =
+  let jardin = obs ~label:"Jardin" ~id:1 ~at:0 (Some (north_of belfort 200.)) in
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:offline_and_both_online ~online:true
+         ~labelled:[jardin] ~communes:(Lazy.force idx_90) belfort)
+  in
+  Alcotest.(check outcome_result)
+    "result" (Ok (Place_name.Named "Jardin")) result;
+  Alcotest.(check int) "no request" 0 (List.length reqs)
+
+let offline_tests =
+  [
+    ( "Belfort, in the pack, offline alone: named with no request",
+      `Quick,
+      resolve_offline_in_the_pack_names_it_with_no_request );
+    ( "Landes, outside the pack, nothing else on: Unknown with no request, \
+       online or not",
+      `Quick,
+      resolve_offline_outside_the_pack_is_unknown_whatever_online );
+    ( "Kew, outside the pack, Photon also on: deferred offline, one Photon \
+       request online",
+      `Quick,
+      resolve_offline_and_photon_outside_the_pack );
+    ( "Belfort, in the pack, every source on: the offline answer wins, zero \
+       requests",
+      `Quick,
+      resolve_offline_wins_over_online_in_the_pack );
+    ( "Ign_offline off: the pack is ignored even when it holds the point",
+      `Quick,
+      resolve_offline_off_ignores_the_pack );
+    ( "a labelled place within 500 m wins over the offline pack",
+      `Quick,
+      resolve_own_place_wins_over_the_pack );
+  ]
 
 let resolve_tests =
   [
@@ -693,4 +938,9 @@ let resolve_tests =
 
 let () =
   Alcotest.run "place_name"
-    [("sources", sources_tests); ("own", own_tests); ("resolve", resolve_tests)]
+    [
+      ("sources", sources_tests);
+      ("own", own_tests);
+      ("resolve", resolve_tests);
+      ("Ign_offline", offline_tests);
+    ]

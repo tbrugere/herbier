@@ -128,16 +128,18 @@ app/
     codec.ml              pure half of db.ml: Col values → bound params, plugin row text → Row (JSON text columns),
                           timestamp format; no Brr, tested natively in test/store/
     schema.ml             ordered migrations, each a list of SQL statements; `user_version`; migration 2 is the FTS5 index and its triggers;
-                          migration 3 the device-only ref_images and its reference_organs lookup
+                          migration 3 the device-only ref_images and its reference_organs lookup;
+                          migration 4 the device-only commune_packs
     stmt.ml               statements as pure values (SQL, params, row decoder), run by db.ml (all, find, write)
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
-    outbox.ml  sync_state.ml  settings.ml  ref_images.ml   local-only tables, columns declared next to their queries;
+    outbox.ml  sync_state.ml  settings.ml  ref_images.ml  commune_packs.ml   local-only tables, columns declared
+                          next to their queries (commune_packs: « IGN hors-ligne » packs, one row per département);
                           outbox.ml also holds `edit`, the value every synced write is (statement, read-back, payload)
     cascade.ml            soft deletes that take a plant's or an observation's dependents with it
     search.ml             FTS5 query text (folding, endings) and the plant search query
     dev_seed.ml           fixed development rows for M2, applied only by ui/dev/seed_check.ml
-    files.ml              paths under Directory.Data (previews/, refthumbs/, tiles/); blob write, read, delete
-                          over cap_filesystem; base64 → blob
+    files.ml              paths under Directory.Data (previews/, refthumbs/, communes/, tiles/); blob and text
+                          write, read, delete over cap_filesystem; base64 → blob
   sync/                   Supabase (§4 of architecture)
     auth.ml               Google id token → signInWithIdToken, session, auto-refresh
     transport.ml          Postgrest.Request.t → Brr fetch, body to the decoder; JWT, paused-project detection
@@ -190,8 +192,14 @@ app/
                           decoders, the « Près de … » phrase and one reverse program per source
                           (reverse_ign, reverse_photon, chained by or_else); pure, tested in test/geo/
     place_name.ml         where a point's name comes from (M5.57): own labelled places, then the
-                          place-name sources turned on in 4m, in order; the gate as a program; pure,
-                          tested in test/geo/
+                          place-name sources turned on in 4m, in order (« IGN hors-ligne » first, a lookup in
+                          the loaded packs); the gate as a program; pure, tested in test/geo/
+    communes.ml           « IGN hors-ligne » (M5.58): the Géoplateforme WFS requests of Admin Express COG
+                          carto per département, their decoding, Douglas–Peucker simplification, the stored
+                          pack format, and the in-memory index (point-in-polygon, nearest edge within 50 m);
+                          pure, tested in test/geo/
+    commune_packs.ml      a pack downloaded through the geocoder, written to communes/<code>-<ms>.json with
+                          its commune_packs row, deleted, and every pack loaded at startup
     geocoder.ml           runs geocode programs: fetch with timeout, one request in flight, ≥ 1 s between
                           two starts to the same provider; search; logs every request it starts
                           (console, and observers: the dev hook); reads no setting
@@ -231,6 +239,7 @@ app/
     tag_usage.ml          live tags with their plants (4l, 5d), from Tags.list and Tags.links
     locate.ml             the device fix and the world camera shared by 4b and 5b
     snap.ml               the sheet's snap points: nearest, clamp, release projection; pure, tested in test/ui/
+    pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail); pure, tested in test/ui/
     app.ml                wires services: after-save → outbox push + reference fetch, …
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
@@ -257,8 +266,9 @@ app/
                           (#dev/capture): viewfinder, shutter and gallery → preview file; map_check.ml (#dev/map):
                           the positron map over the herbier db (spike 3, online half); geocode_check.ml
                           (#dev/geocode): Place_name.resolve of five points with both sources on and request
-                          start times, Photon search, and « Noms de lieux »: the switches, the request count,
-                          observations saved through App with their place_derived and the requests since;
+                          start times, Photon search, and « Noms de lieux »: the switches, the loaded packs,
+                          the request count, observations saved through App (« Observation à Belfort » for
+                          pack 90) with their place_derived and the requests since;
                           fixture.ml: the dev pages'
                           State; hooks.ml: herbierDev.live(), the leak count, and
                           herbierDev.geocodeRequests(); linked only outside the release profile
@@ -443,14 +453,15 @@ test/
   ui/           native, alcotest: the pure modules of app/ui/ copied in (listed in test/ui/dune); 4f's rows
                 (ref_block) for the two spike species projected from fixtures/; 5b's move plan (test_move_plan)
   store/        native, alcotest: the pure modules of app/store/ copied in (codec, schema, tables, stmt,
-                the per-table queries, references included, settings, ref_images, search, dev_seed); schema SQL, queries, FTS triggers and
+                the per-table queries, references included, settings, ref_images, commune_packs, search, dev_seed);
+                schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
                 (that is #dev/store)
   photos/       native, alcotest: the pure modules of app/photos/ copied in (exif, over recorded
                 exifr output in fixtures/exifr_*.json; preview_size; jpeg)
   geo/          native, alcotest: the pure modules of app/geo/ copied in (features, style over the
-                recorded web/map/positron.json; geocode and place_name over
-                fixtures/{photon,geoplateforme}_*.json)
+                recorded web/map/positron.json; geocode, place_name and communes over
+                fixtures/{photon,geoplateforme}_*.json, the WFS ones geoplateforme_wfs_*.json)
   fixtures/     recorded payloads only: API responses (<source>_<endpoint>_<id>.json, e.g.
                 gbif_species_5414995.json, wikidata_entity_Q157555.json, recorded by
                 scripts/record-refs-fixtures.sh; photon_* and geoplateforme_* by
@@ -469,7 +480,7 @@ CLI (`test/store/sqlite_cli.ml` emulates `Db.edit` without its
 transaction). The rest of store (`db.ml`: the transaction, its rollback, the
 serialisation), and sync,
 photos (except the pure `exif`, `preview_size` and `jpeg`, tested in `test/photos/`), refs_io and geo
-(except the pure `features`, `style`, `geocode` and `place_name`, tested in `test/geo/`), are thin over device-only plugins and have no unit
+(except the pure `features`, `style`, `geocode`, `place_name` and `communes`, tested in `test/geo/`), are thin over device-only plugins and have no unit
 tests; the spikes (architecture §10), dev pages and manual runs cover them.
 
 ## 7. `scripts/` and CI

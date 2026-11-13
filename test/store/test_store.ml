@@ -181,6 +181,15 @@ let local_tables : (string * (string * string) list) list =
         ("attribution", "text");
         ("thumb_path", "text");
       ] );
+    ( "commune_packs",
+      [
+        ("departement", "text");
+        ("name", "text");
+        ("path", "text");
+        ("size_bytes", "integer");
+        ("communes", "integer");
+        ("downloaded_at", "text");
+      ] );
   ]
 
 (* Each lookup table and the values it must hold: the to_string of every
@@ -224,7 +233,7 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  Alcotest.(check int) "latest is 3" 3 Schema.latest;
+  Alcotest.(check int) "latest is 4" 4 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -244,13 +253,18 @@ let pending_at_latest () =
 
 let pending_from_one () =
   Alcotest.(check string)
-    "pending from 1 is migrations 2 and 3" "Ok [2; 3]"
+    "pending from 1 is migrations 2, 3 and 4" "Ok [2; 3; 4]"
     (string_of_pending (Schema.pending ~current:1))
 
 let pending_from_two () =
   Alcotest.(check string)
-    "pending from 2 is migration 3 alone" "Ok [3]"
+    "pending from 2 is migrations 3 and 4" "Ok [3; 4]"
     (string_of_pending (Schema.pending ~current:2))
+
+let pending_from_three () =
+  Alcotest.(check string)
+    "pending from 3 is migration 4 alone" "Ok [4]"
+    (string_of_pending (Schema.pending ~current:3))
 
 let pending_above_latest () =
   Alcotest.(check string)
@@ -323,7 +337,7 @@ let check_at_latest what db =
     (what ^ ": user_version is latest")
     Schema.latest (user_version db);
   Alcotest.(check (list string))
-    (what ^ ": the sixteen tables exist")
+    (what ^ ": the seventeen tables exist")
     all_tables (table_names db);
   Alcotest.(check (list string))
     (what ^ ": the search triggers exist")
@@ -474,8 +488,9 @@ let plant_sql ?(cover = "NULL") id =
      created_at, updated_at) values ('%s', 'p', '[]', '', %s, %s, %s);\n"
     id cover t0 t0
 
-(* Migration 3 adds ref_images and reference_organs only: a database at
-   version 2 with a row keeps it after upgrading to 3. *)
+(* Migrations 3 and 4 add only device-only tables and columns (ref_images,
+   reference_organs, commune_packs): a database at version 2 with a row keeps
+   it after upgrading to the latest version. *)
 let upgrade_from_version_2_keeps_rows () =
   let db = fresh_db () in
   (match Schema.migrations with
@@ -1229,8 +1244,9 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
-          case "pending from 1 is migrations 2 and 3" pending_from_one;
-          case "pending from 2 is migration 3" pending_from_two;
+          case "pending from 1 is migrations 2, 3 and 4" pending_from_one;
+          case "pending from 2 is migrations 3 and 4" pending_from_two;
+          case "pending from 3 is migration 4 alone" pending_from_three;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
@@ -1239,14 +1255,16 @@ let () =
       ( "Schema in sqlite3",
         [
           case
-            "a fresh install reaches the latest version with sixteen tables, \
+            "a fresh install reaches the latest version with seventeen tables, \
              the search table and its triggers"
             fresh_install;
           case "an empty database upgrades to the latest version"
             upgrade_from_empty;
           case "a version 1 database upgrades to the latest version"
             upgrade_from_version_1;
-          case "a version 2 database upgrades to 3 and keeps its rows"
+          case
+            "a version 2 database upgrades to the latest version and keeps its \
+             rows"
             upgrade_from_version_2_keeps_rows;
           case "each statement string is one SQL statement"
             one_statement_per_string;

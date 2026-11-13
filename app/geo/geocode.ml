@@ -106,6 +106,9 @@ let geoplateforme_commune ({lat; lon} as p : Places.point) =
          (coordinate lon) (coordinate lat))
     p
 
+let geoplateforme_wfs query =
+  make Geoplateforme "https://data.geopf.fr/wfs/ows" query
+
 (* Comparisons with nan are false, so a nan coordinate is outside. *)
 let in_france ({lat; lon} : Places.point) =
   41.3 <= lat && lat <= 51.2 && -5.5 <= lon && lon <= 9.7
@@ -192,8 +195,8 @@ let max_value_bytes = 200
 let non_blank s =
   match String.trim s with
   | "" -> None
-  | _ when String.length s > max_value_bytes -> None
-  | _ -> Some s
+  | s when String.length s > max_value_bytes -> None
+  | s -> Some s
 
 let string name json =
   match member name json with Some (`String s) -> non_blank s | _ -> None

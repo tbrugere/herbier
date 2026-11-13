@@ -28,7 +28,8 @@ val migrations : migration list
     SQLCipher build has it): without it, version 2 fails and {!Db.open_} returns
     [Migration {version = 2; _}]. Version 3 creates the local lookup table
     [reference_organs] (values [Reference.Organ.all] labels) and the device-only
-    table [ref_images] of {!Ref_images}. *)
+    table [ref_images] of {!Ref_images}. Version 4 creates the device-only table
+    [commune_packs] of {!Commune_packs}. *)
 
 val latest : int
 (** Version of the last migration. *)
