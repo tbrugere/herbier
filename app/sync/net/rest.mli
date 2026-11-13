@@ -1,13 +1,16 @@
 (** The PostgREST requests of sync (architecture §4) over any
-    {!Postgrest.Client.HTTP}: Brr fetch on the device ({!Transport}), a recorder
-    in tests. One row per push request; pull by [updated_at]. Pure: no Brr, Fut,
-    Jv or bindings (test/sync copies it). *)
+    {!Postgrest.Client.HTTP}: Brr fetch on the device ({!Transport}), a mock in
+    tests, and {!Keepalive.Wire}'s recorder, which renders the keep-alive job's
+    requests instead of sending them. One row per push request; pull by
+    [updated_at]. Pure: no Brr, Fut, Jv or bindings (test/sync copies it). *)
+
+val base_url : string -> string
+(** [supabase_url] without a single trailing ['/']. *)
 
 val conn :
   supabase_url:string -> apikey:string -> token:string -> Postgrest.Client.conn
-(** [Postgrest.Client.supabase_conn] on [<supabase_url>/rest/v1] (a single
-    trailing ['/'] of [supabase_url] is dropped), headers
-    [Authorization: Bearer <token>] and [apikey: <apikey>]. *)
+(** [Postgrest.Client.supabase_conn] on [<base_url supabase_url>/rest/v1],
+    headers [Authorization: Bearer <token>] and [apikey: <apikey>]. *)
 
 val page_size : int
 (** 500 rows: page [n] of a select asks for [Range: <500 n>-<500 n + 499>]

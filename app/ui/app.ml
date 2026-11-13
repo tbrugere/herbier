@@ -33,6 +33,7 @@ type t = {
   theme : (Theme.t, Theme.error) result;
   auth : Herbier_sync.Auth.t;
   engine : Herbier_sync.Engine.t;
+  keepalive : Herbier_sync.Keepalive.t;
   saved : unit React.event;
   send_saved : unit -> unit;
   synced : unit React.event;
@@ -116,8 +117,9 @@ let create ~db ~state ~theme ~auth =
   let saved, send = React.E.create () in
   let synced, send_synced = React.E.create () in
   let send_saved () = send () in
+  let keepalive = Herbier_sync.Keepalive.create ~db in
   let engine =
-    Herbier_sync.Engine.create ~db ~auth
+    Herbier_sync.Engine.create ~db ~auth ~keepalive
       ~on_cycle:(on_cycle ~send_saved ~send_synced:(fun () -> send_synced ()))
   in
   let packs, set_packs = React.S.create ~eq:(List.equal equal_pack) [] in
@@ -139,6 +141,7 @@ let create ~db ~state ~theme ~auth =
     theme;
     auth;
     engine;
+    keepalive;
     saved;
     send_saved;
     synced;
@@ -169,6 +172,7 @@ let theme t = t.theme
 let saved t = t.saved
 let auth t = t.auth
 let engine t = t.engine
+let keepalive t = t.keepalive
 let synced t = t.synced
 
 let changed t =
@@ -186,6 +190,15 @@ let start_auth t =
       | Unconfigured | Restoring | Signed_out -> ())
 
 let start_sync t = Herbier_sync.Engine.start t.engine
+
+(* Auth calls the hook from future callbacks; Keepalive logs every
+   failure. *)
+let start_keepalive t =
+  let module K = Herbier_sync.Keepalive in
+  let ignore_result (_ : (unit, K.error) result) = () in
+  Herbier_sync.Auth.on_job_session t.auth (function
+    | Dropped -> Fut.await (K.drop_session t.keepalive) ignore_result
+    | Granted s -> Fut.await (K.replace_session t.keepalive s) ignore_result)
 
 (* [saved] fires from its own reaction on the result, so a subscriber that
    raises cannot keep the caller's future from being determined. [commit]

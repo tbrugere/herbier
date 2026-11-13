@@ -1,10 +1,12 @@
 ; Supabase auth and the outbox push/pull over PostgREST; engine.ml runs the
 ; cycles on the device. Sub-directories are qualified: auth/auth.ml is the
-; group's main module (Auth, with Auth.Session, Auth.Nonce, Auth.Gotrue);
-; net/ and cycle/ have none (Net.Rest, Net.Transport; Cycle.Push, Cycle.Pull,
-; Cycle.Schedule, …). The pure modules (auth/session, auth/nonce,
-; auth/gotrue, synced, net/rest and all of cycle/) must not reference Brr,
-; Fut, Jv or Herbier_bindings: test/sync compiles them natively through
+; group's main module (Auth, with Auth.Session, Auth.Nonce, Auth.Gotrue,
+; Auth.Server), keepalive/keepalive.ml too (Keepalive, with Keepalive.Wire,
+; Keepalive.Report); net/ and cycle/ have none (Net.Rest, Net.Transport;
+; Cycle.Push, Cycle.Pull, Cycle.Schedule, …). The pure modules
+; (auth/session, auth/nonce, auth/gotrue, synced, json_read, net/rest,
+; keepalive/wire, keepalive/report and all of cycle/) must not reference
+; Brr, Fut, Jv or Herbier_bindings: test/sync compiles them natively through
 ; copy_files.
 (include_subdirs qualified)
 

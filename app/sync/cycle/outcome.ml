@@ -8,6 +8,7 @@ type stop =
   | Rejected of int
   | Bad_response of string
   | Store of string
+  | Held of string
 [@@deriving eq, show]
 
 let to_string = function
@@ -19,14 +20,16 @@ let to_string = function
   | Transient s | Rejected s -> Printf.sprintf "HTTP %d" s
   | Bad_response m -> "bad response: " ^ m
   | Store m -> "store: " ^ m
+  | Held m -> "push held: " ^ m
 
 let retries = function
   | Signed_out -> false
   | Auth _ | Offline _ | Paused | Unauthorized | Transient _ | Rejected _
-  | Bad_response _ | Store _ ->
+  | Bad_response _ | Store _ | Held _ ->
       true
 
 let persistent = function
   | Rejected _ | Bad_response _ | Store _ -> true
-  | Signed_out | Auth _ | Offline _ | Paused | Unauthorized | Transient _ ->
+  | Signed_out | Auth _ | Offline _ | Paused | Unauthorized | Transient _
+  | Held _ ->
       false

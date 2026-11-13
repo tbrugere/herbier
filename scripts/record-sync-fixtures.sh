@@ -175,6 +175,15 @@ keep fk sync_upsert_observations_fk_409.json
 upsert check observations '{"id":"01965d4e-0000-7000-8000-000000000023","plant_id":null,"at":"2026-11-12T08:45:00Z","lat":45.5,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null}' 400
 keep check sync_upsert_observations_check_400.json
 
+# The keep-alive job's ping (Keepalive.Wire.ping_request): the nil tag id,
+# which no row has, with a session and with a token that is not a JWT.
+ping_url="$rest/tags?select=id&id=eq.00000000-0000-0000-0000-000000000000"
+call ping 200 GET "$ping_url" "$anon" "" -H "Authorization: Bearer $token"
+keep ping sync_select_tags_keepalive_200.json
+call ping_bad_jwt 401 GET "$ping_url" "$anon" "" \
+  -H 'Authorization: Bearer not-a-jwt'
+keep ping_bad_jwt sync_select_tags_keepalive_401.json
+
 # 5. Pull cases, after every recording above, which they leave as they
 #    are. The five files share this run's server timestamps (the tests
 #    compare page 0's and page 1's), so they are recorded together: one

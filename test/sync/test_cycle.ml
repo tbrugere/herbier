@@ -1572,6 +1572,7 @@ let outcome_retries_false_only_for_signed_out () =
       Rejected 404;
       Bad_response "x";
       Store "x";
+      Held "x";
     ]
   in
   List.iter
@@ -1583,7 +1584,7 @@ let outcome_retries_false_only_for_signed_out () =
         (match s with
         | Outcome.Signed_out -> false
         | Auth _ | Offline _ | Paused | Unauthorized | Transient _ | Rejected _
-        | Bad_response _ | Store _ ->
+        | Bad_response _ | Store _ | Held _ ->
             true)
         (Outcome.retries s))
     cases
@@ -1610,6 +1611,7 @@ let outcome_to_string_of_each_constructor () =
       ("offline: x", Outcome.Offline "x");
       ("bad response: x", Outcome.Bad_response "x");
       ("store: x", Outcome.Store "x");
+      ("push held: x", Outcome.Held "x");
     ]
 
 let outcome_persistent_only_for_rejected_bad_response_store () =
@@ -1627,6 +1629,7 @@ let outcome_persistent_only_for_rejected_bad_response_store () =
       (Rejected 404, true);
       (Bad_response "x", true);
       (Store "x", true);
+      (Held "x", false);
     ]
 
 let outcome_tests =
@@ -1794,6 +1797,14 @@ let report_tests =
         Alcotest.(check (option string))
           "pull_stop" (Some "HTTP 404")
           (Option.map Outcome.to_string (Report.pull_stop r)));
+    case "a held push: the hold once, then the pull" (fun () ->
+        check "held, pulled"
+          "resume; push held: keep-alive: x; pulled tags 3 (+1 ~1 =0 kept 1, \
+           repeated)"
+          (Held ("keep-alive: x", Done [table]));
+        check "held, pull stopped"
+          "resume; push held: keep-alive: x; stopped: HTTP 404"
+          (Held ("keep-alive: x", Stopped (Rejected 404))));
     case "stop, pull_stop and pulled_writes on every shape" (fun () ->
         let stop =
           Alcotest.(option (testable Outcome.pp_stop Outcome.equal_stop))
@@ -1814,6 +1825,13 @@ let report_tests =
             ( "pulled, nothing written",
               Pushed ({pushed = 0; parked = 0}, Done [no_writes]),
               (None, None, false) );
+            ( "held, pulled",
+              Held ("x", Done [table]),
+              (Some (Outcome.Held "x"), None, true) );
+            ( "held, pull stopped",
+              Held ("x", Stopped (Rejected 404)),
+              (Some (Outcome.Rejected 404), Some (Outcome.Rejected 404), false)
+            );
           ]
         in
         List.iter

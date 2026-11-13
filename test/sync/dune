@@ -3,19 +3,36 @@
 ; session/nonce/gotrue suites; test_rest those of synced.ml and net/rest.ml,
 ; with test_synced's and test_push_order's; test_cycle those of cycle/ (and
 ; 4m's parked_entry.ml), over cli_local.ml's Local.S (the sqlite3 CLI,
-; Mock_http's identity IO). The store modules they use are copied from
-; app/store/ (herbier_store links Brr and cannot be linked natively). The
-; shims give the copies the paths they use: herbier_store.ml
-; `Herbier_store.`, net.ml `Net.Rest`, herbier_sync.ml parked_entry.ml's
+; Mock_http's identity IO); test_keepalive those of keepalive/ (see its
+; stanza). The store modules they use are copied from app/store/
+; (herbier_store links Brr and cannot be linked natively). The shims give the
+; copies the paths they use: herbier_store.ml `Herbier_store.`, net.ml
+; `Net.Rest`, auth.ml `Auth.Session` and `Auth.Gotrue`, keepalive.ml
+; `Keepalive.Wire` and `Keepalive.Report`, herbier_sync.ml parked_entry.ml's
 ; `Herbier_sync.`.
+;
+; The copies, the shims and the shared helpers form herbier_sync_copy,
+; unwrapped so that they keep their bare names: the tests and
+; handoff_sample.exe both link them, and a module belongs to one stanza.
+; handoff_sample prints the hand-off test/runner reads.
 (copy_files# ../../app/sync/auth/{session,nonce,gotrue}.{ml,mli})
 
-(copy_files# ../../app/sync/synced.{ml,mli})
+(copy_files# ../../app/sync/{synced,json_read}.{ml,mli})
 
 (copy_files# ../../app/sync/net/rest.{ml,mli})
 
 (copy_files#
  ../../app/sync/cycle/{outcome,last_error,local,io,schedule,push,pull,report}.{ml,mli})
+
+(copy_files# ../../app/sync/keepalive/wire.{ml,mli})
+
+; keepalive/report.ml under another name: cycle/report.ml is copied as
+; report.ml.
+(rule
+ (copy ../../app/sync/keepalive/report.ml keepalive_report.ml))
+
+(rule
+ (copy ../../app/sync/keepalive/report.mli keepalive_report.mli))
 
 (copy_files# ../../app/ui/screens/settings/parked_entry.{ml,mli})
 
@@ -28,9 +45,40 @@
 
 (copy_files# ../store/sqlite_cli.ml)
 
+(library
+ (name herbier_sync_copy)
+ (wrapped false)
+ (modules
+  :standard
+  \
+  test_sync
+  test_rest
+  test_cycle
+  test_keepalive
+  test_push_order
+  test_synced
+  handoff_sample)
+ (libraries
+  herbier_domain
+  postgrest
+  postgrest-codegen
+  yojson
+  ptime
+  uri
+  alcotest)
+ (preprocess
+  (pps ppx_deriving.eq ppx_deriving.show ppx_deriving_yojson)))
+
+(executable
+ (name handoff_sample)
+ (modules handoff_sample)
+ (libraries herbier_sync_copy herbier_domain postgrest yojson ptime uri))
+
 (tests
  (names test_sync test_rest test_cycle)
+ (modules test_sync test_rest test_cycle test_push_order test_synced)
  (libraries
+  herbier_sync_copy
   herbier_domain
   postgrest
   postgrest-codegen
@@ -45,5 +93,24 @@
   %{project_root}/supabase/schema/catalog.json
   (glob_files %{project_root}/test/fixtures/gotrue_*.json)
   (glob_files %{project_root}/test/fixtures/sync_*.json))
+ (action
+  (setenv SQLITE3 %{bin:sqlite3} (run %{test}))))
+
+; test_keepalive in a stanza of its own: it alone needs what test/runner's
+; node test writes, hence node.
+(test
+ (name test_keepalive)
+ (modules test_keepalive)
+ (libraries herbier_sync_copy herbier_domain postgrest yojson ptime uri alcotest)
+ (deps
+  %{bin:sqlite3}
+  %{project_root}/capacitor.config.ts
+  %{project_root}/web/runner/keepalive.js
+  (glob_files %{project_root}/test/fixtures/gotrue_*.json)
+  (glob_files %{project_root}/test/fixtures/sync_*.json)
+  %{project_root}/test/runner/kv_after.json
+  %{project_root}/test/runner/report.json
+  %{project_root}/test/runner/report_with_session.json
+  %{project_root}/test/runner/lines.json)
  (action
   (setenv SQLITE3 %{bin:sqlite3} (run %{test}))))

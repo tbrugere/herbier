@@ -5,9 +5,20 @@
 type t
 
 val create :
-  db:Herbier_store.Db.t -> auth:Auth.t -> on_cycle:(Cycle.Report.t -> unit) -> t
+  db:Herbier_store.Db.t ->
+  auth:Auth.t ->
+  keepalive:Keepalive.t ->
+  on_cycle:(Cycle.Report.t -> unit) ->
+  t
 (** No IO, no listener. Triggers before {!start} are ignored (dev pages build
-    apps that never sync). *)
+    apps that never sync).
+
+    Every cycle awaits {!Keepalive.before_push} before its first request and
+    {!Keepalive.hand_off} once its push has ended (whatever its result), before
+    the pull, so that the job never holds an entry the engine has pushed.
+    [before_push] answering [Error e] holds the push back: nothing is pushed, no
+    hand-off, the pull runs (it sends no write), and the cycle ends
+    [Cycle.Report.Held ("keep-alive: " ^ Keepalive.error_to_string e, pull)]. *)
 
 val start : t -> unit
 (** Once per process (a second call is ignored): registers

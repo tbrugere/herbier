@@ -14,6 +14,9 @@ module Gotrue = Gotrue
 module Nonce = Nonce
 (** Hex encoding of the sign-in nonce. *)
 
+module Server = Server
+(** The GoTrue calls, shared with the keep-alive job's session. *)
+
 type status =
   | Unconfigured  (** this build has no Supabase URL/key or Google client id *)
   | Restoring  (** before {!start} has read Preferences *)
@@ -76,8 +79,28 @@ val sign_in : t -> (unit, error) result Fut.t
     not kept. Failures leave the previous status and session untouched: cancel →
     [Cancelled]; other plugin error → [Google e]; fetch failure → [Network];
     [signup_disabled] → [Not_allowed]; other GoTrue error → [Server];
-    Preferences write → [Storage] (the new session logged out server-side).
-    Never raises. *)
+    Preferences write → [Storage] (the new session logged out server-side). A
+    sign-in that ends [Ok ()] also grants the keep-alive job a session of its
+    own ({!on_job_session}). Never raises. *)
+
+type job_session = Granted of Session.t | Dropped
+
+val on_job_session : t -> (job_session -> unit) -> unit
+(** Sets the one hook for the keep-alive job's session (a later call replaces
+    it; until the first, a granted session is logged out at once). Called from
+    future callbacks, never synchronously from the call that triggers it:
+    - {!sign_in}: once it has ended [Ok ()] (the app's session stored,
+      [Signed_in] emitted), a second [Gotrue.id_token_grant] with the same id
+      token and raw nonce (GoTrue keeps no record of used ones): its session →
+      [Granted s]; its failure → logged (["auth: job session …"]) and [Dropped],
+      [sign_in]'s result unchanged (the app is signed in, the job has no session
+      until the next sign-in). When another {!sign_in}, a {!sign_out} or a
+      revoked refresh has happened meanwhile, the second session is logged out
+      and nothing is called. A sign-in that does not end [Ok ()] calls nothing.
+    - {!sign_out} that reaches [Signed_out], and a refresh that drops a revoked
+      session → [Dropped].
+    - {!debug_import} → nothing (#dev/keepalive imports the job's own session).
+*)
 
 val sign_out : t -> (unit, error) result Fut.t
 (** Signed in: POST {!Gotrue.logout} (its failure is logged, not returned),

@@ -19,6 +19,7 @@ module Remote_pull = Cycle.Pull.Make (Net.Transport) (Device)
 type t = {
   db : Db.t;
   auth : Auth.t;
+  keepalive : Keepalive.t;
   on_cycle : Report.t -> unit;
   mutable started : bool;
   mutable state : Schedule.state;
@@ -26,10 +27,11 @@ type t = {
   mutable last : Report.t option;
 }
 
-let create ~db ~auth ~on_cycle =
+let create ~db ~auth ~keepalive ~on_cycle =
   {
     db;
     auth;
+    keepalive;
     on_cycle;
     started = false;
     state = Schedule.initial;
@@ -66,7 +68,7 @@ let after_stop t = function
         (Auth.refresh_now t.auth)
   | Some
       ( Outcome.Signed_out | Auth _ | Offline _ | Paused | Transient _
-      | Rejected _ | Bad_response _ | Store _ )
+      | Rejected _ | Bad_response _ | Store _ | Held _ )
   | None ->
       Fut.return ()
 
@@ -98,14 +100,23 @@ and cycle t trigger =
   let conn = conn t.auth in
   let open Fut.Syntax in
   Fut.await
-    (let* push = Remote_push.run t.db ~conn in
-     let* cycle =
-       match push with
-       | Done p ->
+    (let* cycle =
+       let* gate = Keepalive.before_push t.keepalive in
+       match gate with
+       | Error e ->
+           let why = "keep-alive: " ^ Keepalive.error_to_string e in
            Fut.map
-             (fun pull -> Report.Pushed (p, pull))
+             (fun pull -> Report.Held (why, pull))
              (Remote_pull.run t.db ~conn)
-       | Stopped (p, s) -> Fut.return (Report.Push_stopped (p, s))
+       | Ok () -> (
+           let* push = Remote_push.run t.db ~conn in
+           let* () = Keepalive.hand_off t.keepalive in
+           match push with
+           | Done p ->
+               Fut.map
+                 (fun pull -> Report.Pushed (p, pull))
+                 (Remote_pull.run t.db ~conn)
+           | Stopped (p, s) -> Fut.return (Report.Push_stopped (p, s)))
      in
      let report = {Report.trigger; started; cycle} in
      let+ () = after_stop t (Report.stop report) in

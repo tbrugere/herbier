@@ -1,11 +1,11 @@
 module Session = Session
 module Gotrue = Gotrue
 module Nonce = Nonce
+module Server = Server
 module Cap_error = Herbier_bindings.Cap_error
 module Cap_preferences = Herbier_bindings.Cap_preferences
 module Cap_social_login = Herbier_bindings.Cap_social_login
 module Cap_app = Herbier_bindings.Cap_app
-module Timed_fetch = Herbier_bindings.Timed_fetch
 module Web_crypto = Herbier_bindings.Web_crypto
 
 type status =
@@ -42,6 +42,7 @@ let error_to_string = function
 (* [Off]: this build cannot sign in. [Reading]: Preferences not read yet.
    The status is derived from it, so that the two cannot disagree. *)
 type phase = Off | Reading | Ready of Session.t option
+type job_session = Granted of Session.t | Dropped
 
 (* style: mutable fields because the session, its timer and the flights in
    progress change from future, timer and app-state callbacks, outside any
@@ -63,7 +64,8 @@ type t = {
   mutable timer : Brr.G.timer_id option;
   mutable initialized : (unit, Cap_error.t) result Fut.t option;
       (* The plugin's initialisation, once per process; cleared on failure. *)
-  mutable writes : unit Fut.t;
+  writes : Serial.t;
+  mutable on_job_session : (job_session -> unit) option;
 }
 
 let log m = Brr.Console.(log [str ("auth: " ^ m)])
@@ -105,8 +107,12 @@ let create () =
     failed_refreshes = 0;
     timer = None;
     initialized = None;
-    writes = Fut.return ();
+    writes = Serial.create ();
+    on_job_session = None;
   }
+
+let on_job_session t f = t.on_job_session <- Some f
+let job_dropped t = Option.iter (fun f -> f Dropped) t.on_job_session
 
 let status t =
   match t.phase with
@@ -138,29 +144,13 @@ let expiry_line (s : Session.t) =
    resolved, together with the in-memory change that goes with it: a write
    never lands after a later one, and each step sees what the earlier steps
    did. *)
-let serially t step =
-  let run = Fut.bind t.writes step in
-  t.writes <- Fut.map ignore run;
-  run
+let serially t step = Serial.run t.writes step
 
-(* A non-2xx status is not an [Error]: the {!Gotrue} decoders classify it. *)
-let post (r : Gotrue.request) =
-  Timed_fetch.request ~meth:`POST ~url:r.url ~headers:r.headers ~body:r.body
-
-(* The id-token or refresh grant: [now] is read when it is sent;
-   [server_error] classifies GoTrue's answer when it is not a session. *)
-let grant ~server_error request =
-  let sent = now () in
-  Fut.map
-    (function
-      | Error e -> Error (Network (Timed_fetch.error_to_string e))
-      | Ok {Timed_fetch.status; body; _} ->
-          Result.map_error server_error
-            (Gotrue.decode_session ~now:sent ~status body))
-    (post request)
-
-let base_url = Backend.supabase_url
-let apikey = Backend.publishable_key
+(* A grant's failure as an [error]: [server_error] classifies GoTrue's answer
+   when it is not a session. *)
+let of_server ~server_error = function
+  | Server.Network m -> Network m
+  | Rejected e -> server_error e
 
 let stop_timer t =
   Option.iter Brr.G.stop_timer t.timer;
@@ -208,9 +198,9 @@ and refresh t =
 and run_refresh t (s : Session.t) =
   let generation = t.generation in
   Fut.bind
-    (grant
-       ~server_error:(fun e -> Server e)
-       (Gotrue.refresh_grant ~base_url ~apikey ~refresh_token:s.refresh_token))
+    (Fut.map
+       (Result.map_error (of_server ~server_error:(fun e -> Server e)))
+       (Server.refresh s))
     (fun decoded -> serially t (fun () -> refreshed t ~generation decoded))
 
 and refreshed t ~generation decoded =
@@ -238,6 +228,7 @@ and refreshed t ~generation decoded =
   | false, Error (Server e) when Gotrue.revokes_session e ->
       warn ("session revoked: " ^ Gotrue.error_to_string e);
       replace t None;
+      job_dropped t;
       let+ () = Stored.remove_logged () in
       Error No_session
   | false, Error e ->
@@ -354,26 +345,25 @@ let initialize t =
       Fut.await f (function Ok () -> () | Error _ -> t.initialized <- None);
       f
 
-let logout_server (s : Session.t) =
-  Fut.await
-    (post (Gotrue.logout ~base_url ~apikey ~access_token:s.access_token))
-    (function
-      | Error e ->
-          warn ("server logout: network: " ^ Timed_fetch.error_to_string e)
-      | Ok {Timed_fetch.status; body; _} -> (
-          match Gotrue.decode_empty ~status body with
-          | Ok () -> ()
-          | Error e -> warn ("server logout: " ^ Gotrue.error_to_string e)))
+let logout_server s =
+  Fut.await (Server.logout s) (function
+    | Ok () -> ()
+    | Error e -> warn ("server logout: " ^ Server.error_to_string e))
 
-let exchange ~raw ~id_token =
-  grant
-    ~server_error:(fun e ->
-      match Gotrue.signup_disabled e with
-      | true -> Not_allowed
-      | false -> Server e)
-    (Gotrue.id_token_grant ~base_url ~apikey ~id_token ~nonce:raw)
+let exchange ~raw_nonce ~id_token =
+  Fut.map
+    (Result.map_error
+       (of_server ~server_error:(fun e ->
+            match Gotrue.signup_disabled e with
+            | true -> Not_allowed
+            | false -> Server e)))
+    (Server.id_token_grant ~raw_nonce ~id_token)
 
 let map_error f fut = Fut.map (Result.map_error f) fut
+
+(* The id token and the raw nonce come back with the session: the
+   keep-alive job's own session is a second grant of the same pair. *)
+type made = {raw_nonce : string; id_token : string; session : Session.t}
 
 let new_session t =
   let open Fut.Result_syntax in
@@ -391,7 +381,8 @@ let new_session t =
         | false -> Google e)
       (Cap_social_login.login_google ~nonce:hashed)
   in
-  exchange ~raw ~id_token
+  let+ session = exchange ~raw_nonce:raw ~id_token in
+  {raw_nonce = raw; id_token; session}
 
 (* A session made but not kept is logged out, so that no live refresh token
    is left on the server with nobody holding it. *)
@@ -414,6 +405,27 @@ let keep t ~attempt (s : Session.t) =
               Ok ())
         (Stored.write s)
 
+(* A second session, not the app's: two holders of one rotating refresh
+   token would revoke each other. Another sign-in, a sign-out or a revoke
+   meanwhile moves [attempt] or [generation]: the grant is then stale. *)
+let grant_job_session t ~attempt ~generation {raw_nonce; id_token; _} =
+  Fut.await (exchange ~raw_nonce ~id_token) (fun made ->
+      let current =
+        Int.equal t.sign_in_attempt attempt && Int.equal t.generation generation
+      in
+      match (current, made) with
+      | false, Ok s -> logout_server s
+      | false, Error _ -> ()
+      | true, Ok s -> (
+          match t.on_job_session with
+          | Some f ->
+              log "job session granted";
+              f (Granted s)
+          | None -> logout_server s (* nobody to hand it to *))
+      | true, Error e ->
+          warn ("job session not granted: " ^ error_to_string e);
+          job_dropped t)
+
 let sign_in t =
   match t.phase with
   | Off -> Fut.return (Error Not_configured)
@@ -423,7 +435,12 @@ let sign_in t =
       let open Fut.Syntax in
       let* made = new_session t in
       match made with
-      | Ok s -> serially t (fun () -> keep t ~attempt s)
+      | Ok made ->
+          let+ kept = serially t (fun () -> keep t ~attempt made.session) in
+          (match kept with
+          | Ok () -> grant_job_session t ~attempt ~generation:t.generation made
+          | Error _ -> ());
+          kept
       | Error e -> (
           match Int.equal t.sign_in_attempt attempt with
           | true -> Fut.return (Error e)
@@ -450,7 +467,8 @@ let sign_out t =
               Result.map
                 (fun () ->
                   replace t None;
-                  log "signed out")
+                  log "signed out";
+                  job_dropped t)
                 (Result.map_error (fun e -> Storage e) removed))
 
 let debug_import t text =

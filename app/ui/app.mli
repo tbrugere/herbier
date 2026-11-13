@@ -13,7 +13,8 @@ val create :
   t
 (** [theme]: {!Theme.load}'s result, read once at startup. [auth] is not started
     here (see {!start_auth}); the sync engine is built but not started (see
-    {!start_sync}). No IO. *)
+    {!start_sync}), and so is the keep-alive's side ({!keepalive}, started by
+    {!start_keepalive}). No IO. *)
 
 val db : t -> Herbier_store.Db.t
 val state : t -> State.t
@@ -32,6 +33,17 @@ val start_sync : t -> unit
 
 val engine : t -> Herbier_sync.Engine.t
 (** For #dev/sync. *)
+
+val keepalive : t -> Herbier_sync.Keepalive.t
+(** The keep-alive job's side in the app, built by {!create} and wired to the
+    engine's push ({!Herbier_sync.Keepalive.before_push},
+    {!Herbier_sync.Keepalive.hand_off}). For #dev/keepalive. *)
+
+val start_keepalive : t -> unit
+(** [Auth.on_job_session]: [Granted s] → [Keepalive.replace_session s];
+    [Dropped] → [Keepalive.drop_session]. Failures are logged by
+    {!Herbier_sync.Keepalive}. Called once by main, after {!start_sync}; dev
+    pages never call it. *)
 
 val synced : t -> unit React.event
 (** Fires after every sync cycle, outside any update step. *)

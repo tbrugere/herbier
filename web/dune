@@ -13,6 +13,7 @@
   (source_tree img)
   (source_tree js)
   (source_tree map)
+  (source_tree runner)
   ../app/main.bc.js
   %{project_root}/scripts/build-web.sh
   ; build-web.sh reads node_modules, outside dune's view: the lock stands in.

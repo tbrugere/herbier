@@ -20,12 +20,19 @@ val to_string : t -> string
     [{"v":1,"access_token":…,"refresh_token":…,"expires_at":<int s>,
      "user_id":…,"email":<string|null>}], the Preferences value. *)
 
+val to_json : t -> Yojson.Safe.t
+(** {!to_string}'s object, not yet printed. *)
+
 val of_string : string -> (t, string) result
 (** Inverse of {!to_string}. [Error] with a short reason that names a field,
     never its value: ["not JSON"], ["not an object"], ["no version"],
     ["unknown version"] (["v"] not [1]), ["<field> missing or ill-typed"],
     ["expires_at is not an int"], ["expires_at out of range"] (Ptime's),
     ["email is not a string"]. Unknown extra fields are ignored. Never raises.
+*)
+
+val of_json : Yojson.Safe.t -> (t, string) result
+(** {!of_string} on an already parsed value: the same reasons but ["not JSON"].
 *)
 
 val refresh_margin : Ptime.Span.t

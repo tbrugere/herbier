@@ -158,8 +158,10 @@ blocked: nothing.
 - **Pausing**: inactive after 7 days without user DB activity; one-click
   restore with data intact for up to a year. The keep-alive is a **background
   job in the app** (WorkManager through `@capacitor/background-runner`) that
-  syncs about twice a week, app closed or not (pg_cron alone is reported not
-  to count, unverified). **No dumps and no backup repo** (decision
+  syncs every 12 h, app closed or not: Supabase's docs (2026-11-12) say
+  requests from the app count as activity and that « a few user requests to
+  the database each day » usually keep a project up (pg_cron alone is
+  reported not to count, unverified). **No dumps and no backup repo** (decision
   2026-11-12): personal data (coordinates, notes) stays off GitHub, the device
   is the source of truth and Supabase its copy; originals are on Drive.
 - **Auth**: one Google sign-in on the device through Credential Manager,

@@ -1,12 +1,11 @@
 module Client = Postgrest.Client
 
-let rest_base supabase_url =
-  let trimmed =
-    match String.ends_with ~suffix:"/" supabase_url with
-    | true -> String.sub supabase_url 0 (String.length supabase_url - 1)
-    | false -> supabase_url
-  in
-  Uri.of_string (trimmed ^ "/rest/v1")
+let base_url supabase_url =
+  match String.ends_with ~suffix:"/" supabase_url with
+  | true -> String.sub supabase_url 0 (String.length supabase_url - 1)
+  | false -> supabase_url
+
+let rest_base supabase_url = Uri.of_string (base_url supabase_url ^ "/rest/v1")
 
 let conn ~supabase_url ~apikey ~token =
   Client.supabase_conn (rest_base supabase_url) ~apikey ~token:(fun () ->

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android 11 and lower. Capacitor Preferences holds the Supabase session
-     (refresh token): it stays on the device. Same rule as
+     (refresh token), and the keep-alive job's KV (named after its runner
+     label) holds its own session: both stay on the device. Same rules as
      data_extraction_rules.xml. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    <exclude domain="sharedpref" path="re.bruge.herbier.keepalive.xml" />
 </full-backup-content>

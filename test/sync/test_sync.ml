@@ -53,6 +53,15 @@ let session_round_trips_through_its_string_form () =
   | Ok s -> Alcotest.(check session_t) "email None round-trips" no_email s
   | Error e -> Alcotest.failf "of_string (to_string _) gave Error %S" e
 
+let session_of_json () =
+  let s = session ~email:(Some "a@b.example") ~expires_at:t0 () in
+  Alcotest.(check (result session_t string))
+    "of_json (to_json s)" (Ok s)
+    (Session.of_json (Session.to_json s));
+  Alcotest.(check (result session_t string))
+    "not an object" (Error "not an object")
+    (Session.of_json (`Int 5))
+
 let session_rounds_expires_at_to_the_nearest_second () =
   let s = session ~expires_at:t0 () in
   let at_fraction f =
@@ -216,6 +225,9 @@ let session_tests =
     ( "to_string then of_string gives back an equal session",
       `Quick,
       session_round_trips_through_its_string_form );
+    ( "of_json reads to_json back; anything but an object is an error",
+      `Quick,
+      session_of_json );
     ( "expires_at is stored rounded to the nearest second",
       `Quick,
       session_rounds_expires_at_to_the_nearest_second );

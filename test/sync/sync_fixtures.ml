@@ -1,6 +1,7 @@
-(* Helpers shared by test_rest and test_push_order: the mock backend, a
-   connection on it, times, the fixture ids and one row builder per synced
-   table (optional fields unset, every instant [at]). *)
+(* Helpers shared by test_rest, test_push_order, test_keepalive and
+   handoff_sample: the mock backend, a connection on it, times, the fixture
+   ids, one row builder per synced table (optional fields unset, every
+   instant [at]) and a row's outbox entry. *)
 
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
@@ -127,3 +128,8 @@ let reference ~at ~plant n : Reference.t =
     updated_at = at;
     deleted_at = None;
   }
+
+(* The outbox entry of [row] in [t], as the store writes it. *)
+let entry_stmt t row =
+  Outbox.entry_stmt ~table_name:(Synced.name t) ~row_id:(Synced.id t row)
+    (Postgrest.Input.to_json (Synced.input t row))

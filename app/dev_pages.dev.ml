@@ -21,6 +21,7 @@ let find db app =
   | "auth" -> Some (page (fun () -> D.Auth_check.el app))
   | "rest" -> Some (page (fun () -> D.Rest_check.el app))
   | "sync" -> Some (page (fun () -> D.Sync_check.el app))
+  | "keepalive" -> Some (page (fun () -> D.Keepalive_check.el app))
   | "photos" -> Some (page D.Photo_check.el)
   | "rb" -> Some (page D.Rb_check.el)
   | "theme" -> Some (page D.Theme_check.el)

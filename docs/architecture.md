@@ -27,8 +27,8 @@ fit and what the data looks like end to end.
                            originals                  OpenFreeMap tiles
                                                       Photon / Géoplateforme
         ▲
-        │ background job on the phone, about twice a week: light sync
-        │ = keep-alive (no dumps; Supabase is the device's only copy)
+        │ background job on the phone, every 12 h: light sync (push +
+        │ one query) = keep-alive (no dumps; Supabase is the device's only copy)
 ```
 
 Principles:
@@ -360,12 +360,82 @@ Pausing: Supabase answers HTTP 540 to every request for a paused project; the
 outbox then just waits; the user sees "serveur en pause" in Settings with a link
 to the dashboard. Recording is unaffected.
 
+Keep-alive job (plan M6.50). A Free project is paused after a week without
+« sufficient user database activity »; Supabase's docs say that requests
+from the app count and that « a few user requests to the database each day »
+usually suffice (quotes and links in plan.md, M6.50). So the phone itself
+keeps the project up: `@capacitor/background-runner` has WorkManager run
+`web/runner/keepalive.js` every 12 h (`interval: 720` in
+capacitor.config.ts, `Keepalive.Wire.interval_minutes`; Doze may stretch it),
+with a network, app closed or not. The script runs in the plugin's own JS
+engine (no WebView, no OCaml, no SQLite: a fresh context per event, state in
+`CapacitorKV`, the SharedPreferences file named after the runner's label).
+One run: refresh its session when it expires within 90 s
+(`Session.refresh_margin`; GoTrue's 4xx with a code drops it, anything else
+keeps it for the next run; a session the app set or took during the refresh
+stands, and the refreshed one is logged out), push the handed queue unless
+the app is active, then one authenticated query, a select of
+`tags` by the nil UUID (one index probe, `[]` whatever the data, so no
+personal data in its log). It logs each run (`keepalive: …` in logcat, the
+last 20 in its KV, shown on `#dev/keepalive`), never a token.
+
+- Its own session. Refresh tokens rotate, so two holders of one session
+  break each other (the second to refresh presents a revoked token and GoTrue
+  revokes the family). At each sign-in `Auth` exchanges the same Google id
+  token and raw nonce a second time (GoTrue keeps no record of used ones):
+  a second, independent session, handed to the job (`setSession`) right
+  after the previous job session is taken back (`takeSession`), in one step
+  of the app's dispatch chain; the taken one is then logged out. A grant
+  that answers after a sign-out, a revoke or another sign-in is logged out,
+  and so is one the job could not take (no plugin, a failed dispatch), so
+  that no live refresh token is left with nobody holding it. Sign-out and a
+  revoked app session take the job's back too; a take that timed out is
+  still followed, and the session it returns late is logged out. A take the
+  plugin refused leaves the job its session (it keeps running as the same
+  user) until the next sign-in replaces it. A failed second grant leaves the
+  app signed in and the job without a session (its runs log `none`).
+- The queue. The job pushes the app's pending outbox entries as requests
+  the app rendered with the same `Net.Rest` code as the engine (a recording
+  `Postgrest.Client.HTTP`), each with its bearer added, in `seq` order,
+  stopping at the first failure; the app keeps its entries and the engine
+  pushes them again (an upsert of the same payload is idempotent). The job
+  must never push an entry once the engine has pushed a newer one of the
+  same row: the server stamps every write newest, so the stale payload would
+  win for good, and the next pull would then replace the local row with it
+  too (no outbox entry protects it any more). Hence the engine hands the
+  queue off at the end of each push (`Keepalive.hand_off`, when entries
+  remain) and takes it back before the next one (`Keepalive.before_push`),
+  the first push of every process included (a queue handed by an earlier
+  process survives in the KV). A take-back that is not confirmed holds the
+  push back (`Held "keep-alive: …"`, retried with backoff, not shown as
+  persistent) while the pull still runs: it sends no write. A hand-off the
+  plugin refused stored nothing and needs no take-back; one that timed out
+  may have landed and does. The app's dispatches run one after the other,
+  and the job re-reads its queue and the app state before each request. A
+  request in flight is marked in the KV (`inflight`) before those checks,
+  and `reclaim` answers only once none is (10 s at most: past that, the push
+  is held and retried); a mark older than 10 minutes is a run that died. A
+  queue pushed to the end is forgotten by the job, so it is not pushed again
+  every run. The job sends its requests only under the backend's URL. The
+  hand-off is not done on going to the background: Android shuts the runner
+  down in the same `onStop` that fires `appStateChange`, so a dispatch made
+  then always fails; a push still running at that moment hands off after the
+  runner stopped, so the job has no queue until the next open (the entries
+  stay in the outbox). Known limit: the runner's `fetch` has no timeout, so a
+  request that hangs keeps its run waiting until WorkManager stops the
+  worker, and its `inflight` mark holds the engine's push back for up to
+  10 minutes.
+- The job's KV is left out of Android's backups like `auth.session` (a
+  refresh token), and the permissions the plugin merges in but the job does
+  not use (background location, notifications, exact alarms) are removed in
+  the app's manifest.
+
 Auth on device: Google sign-in via Credential Manager → Supabase's id-token
 grant (supabase-js's `signInWithIdToken`) → session in Capacitor
-Preferences, refreshed as below. No supabase-js: `sync/auth/auth.ml`
+Preferences, refreshed as below. No supabase-js: `sync/auth/server.ml`
 makes GoTrue's three calls over fetch (`POST /auth/v1/token?grant_type=id_token`,
-`grant_type=refresh_token`, `/logout?scope=local`), described and decoded
-sans IO in `sync/auth/gotrue.ml`.
+`grant_type=refresh_token`, `/logout?scope=local`) for `sync/auth/auth.ml` and
+the keep-alive, described and decoded sans IO in `sync/auth/gotrue.ml`.
 
 - Nonce: 32 random bytes as hex are the raw nonce, sent to GoTrue; their
   SHA-256 hex goes to the plugin, which puts it verbatim in the id token's

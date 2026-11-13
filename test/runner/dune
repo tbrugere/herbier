@@ -1,0 +1,38 @@
+; Node test of web/runner/keepalive.js: the background runner's script is a
+; separate runtime (QuickJS, no Brr/jsoo, no npm package reachable from
+; it), tested with node:test + node:vm and stubbed runner globals
+; (CapacitorKV, CapacitorApp.getState, fetch, console, addEventListener,
+; Date.now). node >= 19, as test/domain/jsoo; node:test, node:assert,
+; node:vm only.
+;
+; handoff.json is produced by ../sync/handoff_sample.exe (see its header).
+; The node test writes kv_after.json, report.json,
+; report_with_session.json and lines.json, which test/sync/test_keepalive.ml
+; decodes back: the cross-language contract is tested both ways, with no
+; hand-written JSON. The empty default alias keeps both rules out of a plain
+; `dune build` (no node or sqlite3 needed there); `dune test` runs them.
+
+(alias
+ (name default)
+ (deps))
+
+(rule
+ (target handoff.json)
+ (deps %{bin:sqlite3})
+ (action
+  (setenv
+   SQLITE3
+   %{bin:sqlite3}
+   (with-stdout-to handoff.json (run %{exe:../sync/handoff_sample.exe})))))
+
+(rule
+ (alias runtest)
+ (targets kv_after.json report.json report_with_session.json lines.json)
+ (deps
+  handoff.json
+  %{project_root}/web/runner/keepalive.js
+  (glob_files %{project_root}/test/fixtures/gotrue_token_refresh_*.json)
+  (glob_files %{project_root}/test/fixtures/sync_select_tags_keepalive_*.json)
+  (glob_files %{project_root}/test/fixtures/sync_upsert_*.json))
+ (action
+  (setenv NODE_OPTIONS "" (run node --test %{dep:test_keepalive.mjs}))))

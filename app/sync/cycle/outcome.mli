@@ -18,6 +18,9 @@ type stop =
   | Store of string
       (** a local read or write failed; for the pull, the whole transaction
           rolled back (a foreign key, checked before the commit) *)
+  | Held of string
+      (** {!Report.stop} of a [Held] cycle whose pull completed: the push was
+          held back (the keep-alive job's queue not confirmed taken back) *)
 [@@deriving eq, show]
 
 val to_string : stop -> string
@@ -32,4 +35,4 @@ val persistent : stop -> bool
     will most likely meet again (a schema or a row this build cannot read, a
     local write that fails), until the app or the server changes; 4m shows it
     when the pull stopped on it. [false] for the passing ones (network, pause,
-    token, sign-in). *)
+    token, sign-in, a held push). *)

@@ -12,7 +12,7 @@ rm -rf "$out"
 mkdir -p "$out"
 out_abs="$(cd "$out" >/dev/null && pwd)"
 cp "$web/index.html" "$out_abs/"
-for d in fonts img map; do
+for d in fonts img map runner; do
   [ -d "$web/$d" ] && cp -R "$web/$d" "$out_abs/$d"
 done
 # Developer notes of web/fonts (the licences do ship with the fonts).
@@ -26,4 +26,8 @@ worker="$root/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs"
 cp "$worker" "$out_abs/maplibre-gl-worker.js"
 test -s "$out_abs/maplibre-gl-worker.js"
 test -f "$out_abs/vendor.css"
+# The keep-alive job, loaded by @capacitor/background-runner from
+# public/runner/keepalive.js (capacitor.config.ts): a plain script, not
+# bundled, since its engine has no module loader.
+test -s "$out_abs/runner/keepalive.js"
 cp "$app_js" "$out_abs/app.js"
