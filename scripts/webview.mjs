@@ -18,7 +18,8 @@
 //                                 through the others, lift at the last; ms is the pause after
 //                                 reaching that point (default 16), so a rest before lifting is
 //                                 `x,y,200` last
-import { writeFileSync } from "node:fs";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 
 const usage = () => {
   console.error("usage: webview.mjs [--port N] targets | eval <js> | text | screenshot <file> | heap | wait-for <js> [ms] | wait-stable [quiet-ms] [ms] | drag <x,y[,ms]>...");
@@ -33,6 +34,20 @@ if (args[0] === "--port") {
 }
 const [command, ...rest] = args;
 if (!command) usage();
+
+// Driving the WebView is activity on the device lock (see emulator.sh): its
+// last file is refreshed now and on exit, so a long wait counts too.
+const lockDir = process.env.HERBIER_LOCK_DIR || `${homedir()}/.cache/herbier/emulator.lock`;
+const touchLock = () => {
+  if (!existsSync(lockDir)) return;
+  try {
+    const tmp = `${lockDir}/last.${process.pid}`;
+    writeFileSync(tmp, `${Math.floor(Date.now() / 1000)}\n`);
+    renameSync(tmp, `${lockDir}/last`);
+  } catch {}
+};
+touchLock();
+process.on("exit", touchLock);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

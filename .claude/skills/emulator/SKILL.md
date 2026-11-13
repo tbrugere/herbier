@@ -7,8 +7,8 @@ description: Run the app on a headless Android emulator and drive its WebView ov
 
 Two scripts do the work; this skill is how to use them and what goes wrong.
 
-- `scripts/emulator.sh` (bash): `lock [label]`, `unlock [label]`,
-  `lock-status`, `start`, `stop`, `install`, `install-web`, `launch`,
+- `scripts/emulator.sh` (bash): `lock [label]`, `unlock <label>`,
+  `unlock --force`, `lock-status`, `start`, `stop`, `install`, `install-web`, `launch`,
   `kill-app`, `forward`, `open [fragment]`, `webview <cmd>…`, `env`.
   Run with no argument for the usage text.
 - `scripts/webview.mjs` (Node 22+, no dependency): `targets`, `eval <js>`,
@@ -25,18 +25,31 @@ the Mac has 16 GB. So every agent and worktree shares one emulator, AVD
 ```sh
 scripts/emulator.sh lock "<step or PR, e.g. M5.44 #46>"   # first, before start
 # ... start, install-web, open, screenshots ...
-scripts/emulator.sh unlock                                # last, also on failure
+scripts/emulator.sh unlock "<same label>"                 # last, also on failure
 ```
 
 - `lock` waits until it holds the lock, printing the holder (label, PID,
-  start time) every minute. It can wait long: run it in the background and
-  poll, or set `HERBIER_LOCK_TIMEOUT=<s>` (exit 1 when still held). The lock
-  is a directory, `~/.cache/herbier/emulator.lock` (`HERBIER_LOCK_DIR`);
-  one older than 90 min is stale, and the next `lock` takes it over with a
-  warning. `lock-status` prints the holder or `free`.
+  start time, age, idle time) every minute. It can wait long: run it in the
+  background and poll, or set `HERBIER_LOCK_TIMEOUT=<s>` (exit 1 when still
+  held). The lock is a directory, `~/.cache/herbier/emulator.lock`
+  (`HERBIER_LOCK_DIR`).
+- Use the step or PR as the label, the same on every attempt: `lock` with
+  the label that already holds the lock succeeds at once ("re-entered"), so
+  the retry of a killed or stalled run takes over its own lock instead of
+  waiting for it.
+- Staleness is by activity, not age: every device subcommand (`start`,
+  `stop`, `install`, `install-web`, `launch`, `kill-app`, `forward`,
+  `open`, `webview`) and every `scripts/webview.mjs` call refreshes the
+  lock's `last` file, at start and at exit. A lock idle for 20 min
+  (`HERBIER_LOCK_IDLE=<s>`) is stale, and the next `lock` takes it over
+  with a warning. A long check keeps it simply by using the device; a
+  pause of more than 20 min (a long build elsewhere) loses it.
+  `lock-status` prints the holder, age and idle time, or `free`.
 - Release it on every path out, failure included (a trap in a script:
-  `trap 'scripts/emulator.sh unlock' EXIT`). `unlock "<label>"` refuses when
-  another label holds it.
+  `trap 'scripts/emulator.sh unlock "$label"' EXIT`). `unlock` needs the
+  label and refuses when another label holds it (or with no label).
+  `unlock --force` releases whoever holds it: for a human clearing a
+  stuck lock, never from a check.
 - Never boot a second AVD and never set `HERBIER_AVD` or
   `HERBIER_EMULATOR_PORT` for a check. `start` refuses to boot while
   another emulator runs (`HERBIER_ALLOW_SECOND_EMULATOR=1` overrides, for
@@ -101,7 +114,7 @@ booting or the map goes blank after an emulator update,
      `devicePixelRatio`, plus the status bar);
    - fresh install state: `adb shell pm clear re.bruge.herbier`;
    - app files: `adb shell run-as re.bruge.herbier ls databases`.
-5. `scripts/emulator.sh unlock` at the end, also when a check failed or the
+5. `scripts/emulator.sh unlock "<label>"` at the end, also when a check failed or the
    run was aborted. Then `scripts/emulator.sh stop` if `lock-status` says
    `free` (kills the emulator, removes the forward); the AVD stays for next
    time.

@@ -5,10 +5,13 @@
 # lock and unlock.
 #
 #   scripts/emulator.sh lock [label]     wait until this caller holds the device lock (prints the
-#                                        holder while waiting); a lock older than 90 min is stale
-#                                        and taken over with a warning
-#   scripts/emulator.sh unlock [label]   release the lock (with a label: only if that label holds it)
-#   scripts/emulator.sh lock-status      print the holder, or "free"
+#                                        holder while waiting); held by the same label already:
+#                                        re-enter it at once; idle for HERBIER_LOCK_IDLE (20 min,
+#                                        no device subcommand or webview.mjs call): stale, taken
+#                                        over with a warning
+#   scripts/emulator.sh unlock <label>   release the lock, only if that label holds it
+#   scripts/emulator.sh unlock --force   release the lock whoever holds it (humans only)
+#   scripts/emulator.sh lock-status      print the holder, its age and idle time, or "free"
 #   scripts/emulator.sh start            create the AVD if missing, boot it headless, wait for boot
 #   scripts/emulator.sh stop             remove the devtools forward, kill the emulator
 #   scripts/emulator.sh install          dune build @web, cap sync, assembleDebug, adb install
@@ -37,7 +40,9 @@
 # ($TMPDIR/herbier-emulator.log), HERBIER_EMULATOR_PORT (5554),
 # HERBIER_EMULATOR_GPU (host: the -gpu mode; see the skill), HERBIER_LOCK_DIR
 # (~/.cache/herbier/emulator.lock), HERBIER_LOCK_TIMEOUT (0: wait forever;
-# else seconds before lock gives up, exit 1).
+# else seconds before lock gives up, exit 1), HERBIER_LOCK_IDLE (1200: seconds
+# without activity after which a lock is stale), HERBIER_LOCK_POLL (5: seconds
+# between two tries of a waiting lock).
 #
 # Each emulator costs about 5 GB of host memory: start refuses to boot while
 # another emulator runs, unless HERBIER_ALLOW_SECOND_EMULATOR=1 (with its own
@@ -71,7 +76,7 @@ log="${HERBIER_EMULATOR_LOG:-${TMPDIR:-/tmp}/herbier-emulator.log}"
 console_port="${HERBIER_EMULATOR_PORT:-5554}"
 gpu="${HERBIER_EMULATOR_GPU:-host}"
 lock_dir="${HERBIER_LOCK_DIR:-$HOME/.cache/herbier/emulator.lock}"
-lock_stale_s=$((90 * 60))
+lock_idle_s="${HERBIER_LOCK_IDLE:-1200}"
 
 die() { echo "emulator.sh: $*" >&2; exit 1; }
 
@@ -347,23 +352,32 @@ cmd_open() {
   fi
 }
 
-# The device lock: an mkdir'd directory (atomic) holding who took it.
-# Agents call from a fresh shell each time, so the caller's PID is a hint
-# for humans, not a liveness test: only age makes a lock stale.
+# The device lock: an mkdir'd directory (atomic) holding who took it
+# (label, pid, since) and its last activity (last). Agents call from a fresh
+# shell each time, so the caller's PID is a hint for humans, not a liveness
+# test: a lock is stale once nothing used the emulator for lock_idle_s.
+# Every device subcommand and every webview.mjs call refreshes last.
+lock_touch() {
+  [[ -d "$lock_dir" ]] || return 0
+  date +%s >"$lock_dir/last.$$" 2>/dev/null && mv -f "$lock_dir/last.$$" "$lock_dir/last" 2>/dev/null || true
+}
+
+# Seconds since the last activity (or since the lock was taken).
+lock_idle() {
+  local t
+  t="$(cat "$lock_dir/last" 2>/dev/null || cat "$lock_dir/since" 2>/dev/null || true)"
+  # A lock dir without its files is one being written: young.
+  [[ "$t" =~ ^[0-9]+$ ]] || { echo 0; return; }
+  echo $(( $(date +%s) - t ))
+}
+
 lock_info() {
-  local label pid since
+  local label pid since now
   label="$(cat "$lock_dir/label" 2>/dev/null || echo '?')"
   pid="$(cat "$lock_dir/pid" 2>/dev/null || echo '?')"
   since="$(cat "$lock_dir/since" 2>/dev/null || echo 0)"
-  echo "\"$label\" (pid $pid, since $(date -r "$since" '+%H:%M:%S' 2>/dev/null || echo '?'), $(( $(date +%s) - since ))s)"
-}
-
-lock_age() {
-  local since
-  since="$(cat "$lock_dir/since" 2>/dev/null || true)"
-  # A lock dir without its files is one being written: young.
-  [[ -n "$since" ]] || { echo 0; return; }
-  echo $(( $(date +%s) - since ))
+  now="$(date +%s)"
+  echo "\"$label\" (pid $pid, since $(date -r "$since" '+%H:%M:%S' 2>/dev/null || echo '?'), age $(( now - since ))s, idle $(lock_idle)s)"
 }
 
 cmd_lock() {
@@ -372,12 +386,18 @@ cmd_lock() {
   start="$(date +%s)"
   mkdir -p "$(dirname "$lock_dir")"
   while ! mkdir "$lock_dir" 2>/dev/null; do
-    if (( $(lock_age) > lock_stale_s )); then
+    # The retry of a killed run of the same step takes over its own lock.
+    if [[ "$(cat "$lock_dir/label" 2>/dev/null)" == "$label" ]]; then
+      lock_touch
+      echo "locked: \"$label\" (re-entered, it already held the lock)"
+      return
+    fi
+    if (( $(lock_idle) > lock_idle_s )); then
       # Rename first: of two callers taking over, one mv wins, so the other
       # cannot remove the lock the winner then makes.
       local old="$lock_dir.stale.$$"
       if mv "$lock_dir" "$old" 2>/dev/null; then
-        echo "emulator.sh: warning: taking over a stale lock (> 90 min): $(lock_dir="$old" lock_info)" >&2
+        echo "emulator.sh: warning: taking over a stale lock (idle > ${lock_idle_s}s): $(lock_dir="$old" lock_info)" >&2
         rm -rf "$old"
       fi
       continue
@@ -390,11 +410,12 @@ cmd_lock() {
     if (( timeout > 0 && waited >= timeout )); then
       die "device lock still held after ${timeout}s by $(lock_info)"
     fi
-    sleep 5
+    sleep "${HERBIER_LOCK_POLL:-5}"
   done
   echo "$label" >"$lock_dir/label"
   echo "$PPID" >"$lock_dir/pid"
   date +%s >"$lock_dir/since"
+  lock_touch
   echo "locked: \"$label\""
 }
 
@@ -404,7 +425,10 @@ cmd_unlock() {
     echo "not locked"
     return
   fi
-  if [[ -n "$label" ]] && [[ "$(cat "$lock_dir/label" 2>/dev/null)" != "$label" ]]; then
+  if [[ -z "$label" ]]; then
+    die "unlock needs the label the lock was taken with (held by $(lock_info)); a human clearing someone else's lock: unlock --force"
+  fi
+  if [[ "$label" != "--force" ]] && [[ "$(cat "$lock_dir/label" 2>/dev/null)" != "$label" ]]; then
     die "the lock is held by $(lock_info), not \"$label\""
   fi
   echo "unlocked $(lock_info)"
@@ -412,7 +436,11 @@ cmd_unlock() {
 }
 
 cmd_lock_status() {
-  if [[ -d "$lock_dir" ]]; then echo "held by $(lock_info)"; else echo "free"; fi
+  if [[ -d "$lock_dir" ]]; then
+    echo "held by $(lock_info); stale after ${lock_idle_s}s idle"
+  else
+    echo "free"
+  fi
 }
 
 cmd_env() {
@@ -426,6 +454,13 @@ ENV
   # Plain adb then targets this emulator too.
   echo "export ANDROID_SERIAL=emulator-$console_port"
 }
+
+# Using the device counts as activity on the lock: refresh it now and when
+# the command ends (a long install or wait).
+case "${1:-}" in
+  start|stop|install|install-web|launch|kill-app|forward|open|webview)
+    lock_touch; trap lock_touch EXIT ;;
+esac
 
 case "${1:-}" in
   start) cmd_start ;;
