@@ -15,6 +15,7 @@ type error =
   | Migration of {version : int; error : Cap_error.t}
   | Not_migrated of {expected : int; found : int}
   | Unexpected_rows of {sql : string; count : int}
+  | Foreign_key of {table : string; parent : string; count : int}
   | Raised of string
 
 let error_to_string = function
@@ -32,6 +33,9 @@ let error_to_string = function
         expected
   | Unexpected_rows {sql; count} ->
       Printf.sprintf "%S returned %d rows, expected one" sql count
+  | Foreign_key {table; parent; count} ->
+      Printf.sprintf "%d foreign key violation(s), first: %s → %s" count table
+        parent
   | Raised exn -> Printf.sprintf "raised %s" exn
 
 let plugin fut = Fut.map (Result.map_error (fun e -> Plugin e)) fut
@@ -124,18 +128,19 @@ let open_ ~database =
           let+ (_ : (unit, Cap_error.t) result) = Cap_sqlite.close db in
           Error e)
 
+(* [f x], with a raise while starting it turned into [Raised]. *)
+let guarded f x =
+  match f x with
+  | fut -> fut
+  | exception exn -> Fut.error (Raised (Printexc.to_string exn))
+
 (* Runs [f conn] once the previous operation on [db] has settled; the next
    one waits for this one. Fut never fails, and a raise while starting [f] is
    turned into [Raised], so the chain cannot break on either. A raise inside
    one of [f]'s own continuations would leave its future, and so every later
    operation, pending: [f] relies on Cap_call and Codec never raising. *)
 let queued db f =
-  let start () =
-    match f db.conn with
-    | fut -> fut
-    | exception exn -> Fut.error (Raised (Printexc.to_string exn))
-  in
-  let fut = Fut.bind db.tail start in
+  let fut = Fut.bind db.tail (fun () -> guarded f db.conn) in
   db.tail <- Fut.map (fun (_ : (_, error) result) -> ()) fut;
   fut
 
@@ -166,17 +171,6 @@ let find db q =
 
 let write db {Stmt.sql; params} = run db sql params
 
-let write_all db stmts =
-  queued db (fun conn ->
-      let open Fut.Result_syntax in
-      let rec go = function
-        | [] -> Fut.ok ()
-        | {Stmt.sql; params} :: rest ->
-            let* (_ : int) = run_on conn sql params in
-            go rest
-      in
-      go stmts)
-
 let one_row sql = function
   | [text] -> Ok text
   | ([] | _ :: _ :: _) as rows ->
@@ -190,7 +184,7 @@ let apply conn edits =
   let rec go appended = function
     | [] -> Fut.ok appended
     | e :: rest -> (
-        let {Stmt.sql; params} = Outbox.without_entry e in
+        let {Stmt.sql; params} = Outbox.bare_stmt (Outbox.without_entry e) in
         let* changed = run_on ~transaction:false conn sql params in
         match changed with
         | 0 -> go appended rest
@@ -211,23 +205,26 @@ let apply conn edits =
   in
   go 0 edits
 
-let in_transaction conn edits =
+(* [body] runs between begin and commit; any error, its own or the commit's,
+   rolls back. A raise while starting [body] is turned into [Raised] here,
+   not by [queued], so that the transaction is still rolled back. *)
+let in_transaction ~label conn body =
   let open Fut.Syntax in
   let* begun = plugin (Cap_sqlite.begin_transaction conn) in
   match begun with
   | Error e -> Fut.error e
   | Ok () -> (
-      let* applied = apply conn edits in
+      let* applied = guarded body () in
       let* committed =
         match applied with
         | Error e -> Fut.error e
-        | Ok appended ->
+        | Ok v ->
             Fut.map
-              (Result.map (fun () -> appended))
+              (Result.map (fun () -> v))
               (plugin (Cap_sqlite.commit_transaction conn))
       in
       match committed with
-      | Ok appended -> Fut.ok appended
+      | Ok v -> Fut.ok v
       | Error e ->
           (* The first error is the one returned; a failed rollback may
              leave the transaction open (the next begin then fails), so it
@@ -239,7 +236,7 @@ let in_transaction conn edits =
               Brr.Console.(
                 error
                   [
-                    str "Db.edit: rollback failed";
+                    str (label ^ ": rollback failed");
                     str (Cap_error.to_string r);
                     str "after";
                     str (error_to_string e);
@@ -248,4 +245,56 @@ let in_transaction conn edits =
 
 let edit db = function
   | [] -> Fut.ok 0
-  | _ :: _ as edits -> queued db (fun conn -> in_transaction conn edits)
+  | _ :: _ as edits ->
+      queued db (fun conn ->
+          in_transaction ~label:"Db.edit" conn (fun () -> apply conn edits))
+
+type tx = Cap_sqlite.t
+type fk_check
+
+let fk_check_row : (fk_check, string * string) Postgrest.Row.t =
+  Postgrest.Row.pair
+    (Postgrest.Row.col {ty = Not_Null Str; name = "table"})
+    (Postgrest.Row.col {ty = Not_Null Str; name = "parent"})
+
+(* The deferred foreign keys are checked here, before the commit, so that a
+   violation fails while the transaction can still be rolled back. On Android
+   a failed COMMIT leaves SQLite's transaction open while the platform's
+   session already counts it as ended: the plugin's rollback is then a no-op
+   and every later write on the connection fails with "cannot start a
+   transaction within a transaction". *)
+let check_foreign_keys conn =
+  let open Fut.Result_syntax in
+  let* violations =
+    all_on conn (Stmt.query ~json:[] fk_check_row "pragma foreign_key_check" [])
+  in
+  match violations with
+  | [] -> Fut.ok ()
+  | (table, parent) :: _ ->
+      Fut.error (Foreign_key {table; parent; count = List.length violations})
+
+(* SQLite resets defer_foreign_keys at commit and rollback, so the pragma
+   never outlives the transaction. *)
+let bare_transaction db f =
+  queued db (fun conn ->
+      in_transaction ~label:"Db.bare_transaction" conn (fun () ->
+          let open Fut.Result_syntax in
+          let* (_ : int) =
+            run_on ~transaction:false conn "pragma defer_foreign_keys = on" []
+          in
+          (* [f] starts in a continuation of the pragma's future, out of
+             [in_transaction]'s reach: its raise is caught here. *)
+          let* v = guarded f conn in
+          let+ () = check_foreign_keys conn in
+          v))
+
+module Tx = struct
+  let all = all_on
+
+  let write conn bare =
+    let {Stmt.sql; params} = Outbox.bare_stmt bare in
+    run_on ~transaction:false conn sql params
+
+  let write_local conn {Stmt.sql; params} =
+    run_on ~transaction:false conn sql params
+end

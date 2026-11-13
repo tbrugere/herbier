@@ -613,7 +613,7 @@ let link_keeps_stored_id () =
   let stored = plant_tag_id 0xd1 in
   check_edit "plant and tag" 2 db [Plants.upsert p; Tags.upsert t];
   let (_ : int) =
-    Cli.write_ok "a pulled link" db
+    Cli.write_bare_ok "a pulled link" db
       (Tags.upsert_plant_tag
          {
            id = stored;
@@ -710,7 +710,7 @@ let several_edits_in_order () =
 
 let dev_seed_appends_nothing () =
   let db = Cli.migrated_db () in
-  Cli.write_all_ok "seed" db Dev_seed.statements;
+  Cli.write_all_bare_ok "seed" db Dev_seed.statements;
   Alcotest.(check int)
     "the seed plants are present"
     (List.length Dev_seed.plants)
@@ -866,6 +866,92 @@ let delete () =
     "delete again changes 0 rows" 0
     (Cli.write_ok "delete again" db (Outbox.delete second.seq))
 
+(* ---------- parked ---------- *)
+
+let parked_lists_only_the_parked_entry_with_its_error_and_attempts () =
+  let db = three_entries () in
+  let entries = next db ~limit:10 in
+  let second =
+    match entries with
+    | _ :: e :: _ -> e
+    | _ -> Alcotest.fail "expected 3 entries"
+  in
+  let (_ : int) =
+    Cli.write_ok "park" db (Outbox.park second.seq ~error:"409 conflict")
+  in
+  let parked = Cli.all db Outbox.parked in
+  Alcotest.(check (list int))
+    "exactly the parked entry"
+    [Outbox.seq_to_int second.seq]
+    (List.map (fun (e : Outbox.entry) -> Outbox.seq_to_int e.seq) parked);
+  (match parked with
+  | [e] ->
+      Alcotest.(check (option string))
+        "last_error" (Some "409 conflict") e.last_error;
+      Alcotest.(check int) "attempts" 1 e.attempts
+  | _ -> Alcotest.fail "expected exactly one parked entry");
+  Alcotest.(check (list int))
+    "next no longer lists it"
+    (List.filter (fun s -> s <> Outbox.seq_to_int second.seq) (seqs entries))
+    (seqs (next db ~limit:10))
+
+(* ---------- pending_ids ---------- *)
+
+let pending_ids_only_the_table_s_unparked_rows_once () =
+  let db = Cli.migrated_db () in
+  let a = plant 0x1 "A" and b = plant 0x2 "B" and c = plant 0x3 "C" in
+  check_edit "three plants" 3 db
+    [Plants.upsert a; Plants.upsert b; Plants.upsert c];
+  (* A second entry on A's row: it ends up with one parked and one unparked
+     entry, and must still be listed once. *)
+  check_edit "A renamed" 1 db [Plants.upsert {a with display_name = "A2"}];
+  check_edit "a tag, another table" 1 db [Tags.upsert (tag 0xc1 "Jardin")];
+  let entries = Cli.all db (Outbox.next ~limit:10) in
+  let of_row row_id =
+    List.filter (fun (e : Outbox.entry) -> String.equal e.row_id row_id) entries
+  in
+  (match of_row (Ids.Plant_id.to_string a.id) with
+  | [first; _second] ->
+      let (_ : int) =
+        Cli.write_ok "park A's first entry" db
+          (Outbox.park first.seq ~error:"x")
+      in
+      ()
+  | es -> Alcotest.failf "expected 2 entries for A, got %d" (List.length es));
+  (match of_row (Ids.Plant_id.to_string b.id) with
+  | [only] ->
+      let (_ : int) =
+        Cli.write_ok "park B's only entry" db (Outbox.park only.seq ~error:"x")
+      in
+      ()
+  | es -> Alcotest.failf "expected 1 entry for B, got %d" (List.length es));
+  Alcotest.(check (list string))
+    "A (its remaining unparked entry) and C, by row_id; B excluded (only entry \
+     parked); the tag's row excluded (another table)"
+    [Ids.Plant_id.to_string a.id; Ids.Plant_id.to_string c.id]
+    (Cli.all db (Outbox.pending_ids ~table_name:"plants"))
+
+let pending_ids_of_an_empty_table_is_empty () =
+  let db = Cli.migrated_db () in
+  check_edit "a plant" 1 db [Plants.upsert (plant 0x1 "A")];
+  Alcotest.(check (list string))
+    "no observations entry" []
+    (Cli.all db (Outbox.pending_ids ~table_name:"observations"))
+
+(* ---------- write_bare ---------- *)
+
+let write_bare_changes_a_row_and_appends_no_entry () =
+  let db = Cli.migrated_db () in
+  let p = plant 0x1 "Pissenlit" in
+  Alcotest.(check int)
+    "write_bare (without_entry (Plants.upsert p)) changes 1 row" 1
+    (Cli.write_bare_ok "bare upsert" db
+       (Outbox.without_entry (Plants.upsert p)));
+  check_count "no outbox entry was appended" 0 db;
+  Alcotest.(check int)
+    "the row is there" 1
+    (Cli.count db "select count(*) as n from plants;\n")
+
 (* payload_json is in next's ~json, so text that is not JSON is
    Invalid_json_column. *)
 let next_decode_errors () =
@@ -896,6 +982,23 @@ let next_decode_errors () =
     "a row with last_error set is not in next" []
     (seqs (next db ~limit:10))
 
+(* entry_stmt: an entry with no row behind it, read back as written. *)
+let entry_stmt_is_read_back_by_next () =
+  let db = Cli.migrated_db () in
+  let payload = `Assoc [("anything", `Int 1)] in
+  let (_ : int) =
+    Cli.write_ok "entry_stmt" db
+      (Outbox.entry_stmt ~table_name:"nope" ~row_id:(uuid 7) payload)
+  in
+  match next db ~limit:10 with
+  | [e] ->
+      Alcotest.(check string) "table_name" "nope" e.table_name;
+      Alcotest.(check string) "row_id" (uuid 7) e.row_id;
+      Alcotest.check Cli.yojson "payload" payload e.payload;
+      Alcotest.(check int) "attempts" 0 e.attempts;
+      Alcotest.(check (option string)) "last_error" None e.last_error
+  | es -> Alcotest.failf "expected 1 entry, got %d" (List.length es)
+
 (* ---------- append ---------- *)
 
 let append_errors () =
@@ -923,7 +1026,8 @@ let reread_finds_deleted_row () =
   let db = Cli.migrated_db () in
   let p = plant 0x1 "Pissenlit" ~deleted_at:t1 in
   let (_ : int) =
-    Cli.write_ok "a deleted plant" db (Outbox.without_entry (Plants.upsert p))
+    Cli.write_bare_ok "a deleted plant" db
+      (Outbox.without_entry (Plants.upsert p))
   in
   Alcotest.(check int)
     "the read-back of a soft-deleted row gives it" 1
@@ -1159,6 +1263,32 @@ let () =
           case "delete removes exactly one entry" delete;
           case "next rejects an unknown op or a non-JSON payload, skips parked"
             next_decode_errors;
+          case "entry_stmt is read back by next as written"
+            entry_stmt_is_read_back_by_next;
+        ] );
+      ( "Outbox.parked",
+        [
+          case
+            "after three edits and park of the second: exactly that entry, \
+             last_error and attempts = 1, absent from next"
+            parked_lists_only_the_parked_entry_with_its_error_and_attempts;
+        ] );
+      ( "Outbox.pending_ids",
+        [
+          case
+            "only the given table's row ids, a row with a parked and an \
+             unparked entry listed once, a row whose only entry is parked \
+             absent, order by row_id"
+            pending_ids_only_the_table_s_unparked_rows_once;
+          case "a table with no entry is []"
+            pending_ids_of_an_empty_table_is_empty;
+        ] );
+      ( "Outbox.bare",
+        [
+          case
+            "write_bare (without_entry (Plants.upsert p)) changes 1 row and \
+             appends no entry"
+            write_bare_changes_a_row_and_appends_no_entry;
         ] );
       ( "Outbox.append and reread",
         [

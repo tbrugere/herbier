@@ -47,7 +47,8 @@ let plant n display_name : Plant.t =
 
 let seed_plant db p =
   let (_ : int) =
-    Cli.write_ok "seed plant" db (Outbox.without_entry (Plants.upsert p))
+    Cli.write_ok "seed plant" db
+      (Outbox.bare_stmt (Outbox.without_entry (Plants.upsert p)))
   in
   ()
 

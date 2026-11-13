@@ -31,13 +31,25 @@ let search db =
   | None -> Fut.ok []
   | Some q -> Db.all db q
 
+(* One transaction: the seed is applied whole or not at all. *)
+let apply db =
+  let open Fut.Result_syntax in
+  Db.bare_transaction db (fun tx ->
+      let rec go = function
+        | [] -> Fut.ok ()
+        | bare :: rest ->
+            let* (_ : int) = Db.Tx.write tx bare in
+            go rest
+      in
+      go Dev_seed.statements)
+
 let steps log db =
   let open Fut.Result_syntax in
   let* () =
     step log "apply seed"
       ~detail:(fun () ->
         Printf.sprintf "%d statements" (List.length Dev_seed.statements))
-      (Db.write_all db Dev_seed.statements)
+      (apply db)
   in
   let* (_ : Plant.t list) =
     step log "live plants" ~detail:count (Db.all db Plants.list)

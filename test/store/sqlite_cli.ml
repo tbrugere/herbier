@@ -275,6 +275,17 @@ let write_ok what db s =
 let write_all_ok what db stmts =
   List.iter (fun s -> ignore (write_ok what db s : int)) stmts
 
+(* One statement per CLI call, no transaction: only its SQL is under test. *)
+let write_bare db (b : Outbox.bare) = write db (Outbox.bare_stmt b)
+
+let write_bare_ok what db b =
+  match write_bare db b with
+  | Ok n -> n
+  | Error e -> Alcotest.failf "%s: bare write failed: %s" what e
+
+let write_all_bare_ok what db bares =
+  List.iter (fun b -> ignore (write_bare_ok what db b : int)) bares
+
 (* Every outbox row as sqlite3 -json prints it, in seq order. *)
 let outbox db = rows db "select * from outbox order by seq;\n"
 let outbox_count db = count db "select count(*) as n from outbox;\n"
@@ -285,7 +296,7 @@ let edit db edits =
   let rec go appended = function
     | [] -> Ok appended
     | e :: rest -> (
-        match write db (Outbox.without_entry e) with
+        match write_bare db (Outbox.without_entry e) with
         | Error err -> Error err
         | Ok 0 -> go appended rest
         | Ok _ -> (

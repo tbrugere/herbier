@@ -8,7 +8,7 @@
 ; skipping the SQL checks when this sqlite3 has no FTS5.
 
 (copy_files#
- ../../app/store/{codec,schema,stmt,outbox,plants,observations,tags,photos,cascade,settings,search,dev_seed,references,ref_images,commune_packs}.{ml,mli})
+ ../../app/store/{codec,schema,stmt,outbox,plants,observations,tags,photos,cascade,settings,search,dev_seed,references,ref_images,commune_packs,sync_state}.{ml,mli})
 
 (copy_files# ../../app/store/tables.ml)
 
@@ -19,7 +19,8 @@
   test_outbox
   test_references
   test_ref_images
-  test_commune_packs)
+  test_commune_packs
+  test_sync_state)
  (libraries herbier_domain herbier_refs postgrest yojson ptime alcotest)
  (preprocess
   (pps ppx_deriving.eq))

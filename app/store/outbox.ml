@@ -65,30 +65,38 @@ let last_error_column : (outbox, string option, [`Optional]) Col.t =
 let edit ~table ~reread ~row_id ~input stmt =
   Edit {table; stmt; reread; row_id; input}
 
+type bare = Stmt.t
+
 let without_entry (Edit {stmt; table = _; reread = _; row_id = _; input = _}) =
   stmt
+
+let bare stmt = stmt
+let bare_stmt bare = bare
 
 let reread (Edit {reread; table = _; stmt = _; row_id = _; input = _}) =
   Stmt.stmt reread
 
 (* created_at comes from SQLite's clock so that Db.edit needs no clock; '%f'
    gives milliseconds, padded to Codec.timestamp's microseconds. *)
+let entry_stmt ~table_name ~row_id payload =
+  {
+    Stmt.sql =
+      "insert into outbox (table_name, row_id, op, payload_json, created_at) \
+       values (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%f', 'now') || '000Z')";
+    params =
+      [
+        Codec.param table_name_column table_name;
+        Codec.param row_id_column row_id;
+        Codec.param op_column Upsert;
+        Codec.param payload_column payload;
+      ];
+  }
+
 let append (Edit {table; reread; row_id; input; stmt = _}) text =
   Result.map
     (fun v ->
-      {
-        Stmt.sql =
-          "insert into outbox (table_name, row_id, op, payload_json, \
-           created_at) values (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%f', \
-           'now') || '000Z')";
-        params =
-          [
-            Codec.param table_name_column (Col.name_of_table table);
-            Codec.param row_id_column (row_id v);
-            Codec.param op_column Upsert;
-            Codec.param payload_column (Postgrest.Input.to_json (input v));
-          ];
-      })
+      entry_stmt ~table_name:(Col.name_of_table table) ~row_id:(row_id v)
+        (Postgrest.Input.to_json (input v)))
     (Stmt.decode reread text)
 
 let entry_row =
@@ -109,6 +117,18 @@ let next ~limit =
     entry_row
     "select * from outbox where last_error is null order by seq limit ?"
     [Codec.Int (max 0 limit)]
+
+let parked =
+  Stmt.query
+    ~json:[Codec.json payload_column]
+    entry_row "select * from outbox where last_error is not null order by seq"
+    []
+
+let pending_ids ~table_name =
+  Stmt.query ~json:[] (Row.col row_id_column)
+    "select distinct row_id from outbox where table_name = ? and last_error is \
+     null order by row_id"
+    [Codec.param table_name_column table_name]
 
 type outbox_count
 

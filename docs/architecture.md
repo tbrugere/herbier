@@ -195,11 +195,16 @@ the mean of the positions. Details in `app/domain/places.mli`.
   could move a child's new foreign key ahead of its parent). Any error rolls
   back rows and entries together. `created_at` is SQLite's clock
   (`Codec.timestamp` format, milliseconds), for display only; order is `seq`.
-  Settings, pull and the dev seed write without entries (pull and the seed
-  through `Outbox.without_entry`). That the bare statement is used only there
-  is a convention, not a type: `Db.write` accepts it. `seq` has no `autoincrement`, so a number may
-  be reused once the newest entry is deleted: the sync engine must not hold a
-  `seq` across a `delete`.
+  Settings, pull and the dev seed write without entries. The pull's and the
+  seed's synced writes are `Outbox.bare` values (`Outbox.without_entry` of an
+  edit, `Tags.upsert_plant_tag`, `References.upsert_row` /
+  `upsert_plant_ref`), a type `Db.write` does not take (`Outbox.bare_stmt`
+  unwraps it for `Db` and the tests only, a convention: the pure store
+  modules cannot name `Db`): they run only inside
+  `Db.bare_transaction` (one explicit transaction, `pragma defer_foreign_keys
+  = on`, rolled back on any error), so the dev seed is atomic too. `seq` has
+  no `autoincrement`, so a number may be reused once the newest entry is
+  deleted: the sync engine must not hold a `seq` across a `delete`.
 - IndexedDB/localStorage are used for nothing durable (Android evicts them).
 - Full-text search over names is done locally (SQLite FTS5 with
   `unicode61 remove_diacritics 2`), so search works offline. The Postgres
@@ -279,8 +284,16 @@ but `Postgrest.Col` encodes a `TimestampTz` with whole seconds
 fractional digits and the next pull brings back the truncated value.
 `updated_at` is unaffected (the server sets it).
 
-Protocol, run on app start, on resume, and after each local write when
-online:
+Protocol, run by `sync/engine.ml` on app start, on resume, after each local
+write, on sign-in and when its retry timer fires. One cycle at a time
+(`sync/cycle/schedule.ml`): a trigger during a cycle runs exactly one more after
+it. A cycle pushes, then pulls only if the push completed (parked entries
+do not stop it). A stopped cycle backs off (10 s doubling to 300 s); any
+trigger but the timer runs at once, keeping the attempt count; going to the
+background cancels the timer, and a cycle that stops after the app went to
+the background arms none (the next resume runs at once). A 401 refreshes the
+session before backing off; signed out, the engine stays idle until the next
+sign-in. No online check: a failed fetch is a stop like any other.
 
 1. **Push**: for each outbox row in `seq` order, one request per row,
    `POST /rest/v1/<table>` with `Prefer:
@@ -322,13 +335,24 @@ online:
    would otherwise keep a stale row over another install's later edit, for good.
    This requires push and pull never to run at the same time, so that a pull
    never applies an answer older than a push already done. Update
-   `last_pulled_at`. Local foreign keys are enforced, and a parent created
-   elsewhere between the pull of its table and the pull of its child's table
-   reaches the device after the child. So the tables are applied parents first
-   (plants, tags, observations, photos, then the link and reference tables) in
-   one transaction with `pragma defer_foreign_keys = on`; if the commit fails on
-   a foreign key, the whole pull rolls back with its cursors and the next cycle,
-   which now sees the parent, retries.
+   `last_pulled_at` to the greatest `updated_at` the table returned. Every table
+   is fetched before anything is written, so the transaction never waits on the
+   network. Local foreign keys are enforced, and a parent created elsewhere
+   between the pull of its table and the pull of its child's table reaches the
+   device after the child. So the tables are applied parents first (plants,
+   tags, observations, photos, then the link and reference tables) in one
+   transaction with `pragma defer_foreign_keys = on`; if a foreign key fails
+   (`pragma foreign_key_check` just before the commit: on Android a failed
+   commit leaves the transaction open and cannot be rolled back), the whole pull
+   rolls back with its cursors and the next cycle, which now sees the parent,
+   retries. Statuses are classified as for the push, except that a 4xx other
+   than 401 on a select stops the cycle and is retried with backoff (there is
+   nothing to park), and so is a page that does not decode (one bad row fails
+   its table's select, and with it the pull). Such a stop recurs until the app
+   or the server changes, so Settings shows the last
+   cycle's as « Réception bloquée » (`Outcome.persistent`: another 4xx, an
+   undecodable answer, a failed local write); the pull stays atomic, one bad
+   table blocks every table.
 3. Previews are not synced (no Storage bucket; M6.49 dropped 2026-11-12):
    a new device rebuilds them from the originals (Drive).
 

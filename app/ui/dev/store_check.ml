@@ -63,6 +63,7 @@ let now () =
   |> Printf.sprintf "%.0f"
 
 type master
+type pragma_defer
 
 let name_row : (master, string) Row.t =
   Row.col {ty = Not_Null Str; name = "name"}
@@ -356,10 +357,10 @@ let count_row : (count, int) Row.t = Row.col {ty = Not_Null Integer; name = "n"}
 let print_ints rows = String.concat ", " (List.map string_of_int rows)
 
 (* 2 from round-trip, 2 from search, 3 from the outbox group, 1 from the
-   references group. *)
+   references group, 1 from the bare transaction group. *)
 let check_count log db =
-  step log "8 plants rows" ~detail:no_detail
-    (expect print_ints [8]
+  step log "9 plants rows" ~detail:no_detail
+    (expect print_ints [9]
        (Db.query db ~json:[] count_row "select count(*) as n from plants" []))
 
 let outbox_count db = Db.all db Outbox.count
@@ -403,18 +404,30 @@ let expect_appended (a : Herbier_domain.Plant.t) (b : Herbier_domain.Plant.t)
                    })))
     (store fut)
 
-let expect_plugin_error fut =
+(* [error] picks the expected error, as the text the step shows. *)
+let expect_error ~expected error fut =
   Fut.map
     (function
-      | Error (Db.Plugin e) -> Ok (Cap_error.to_string e)
-      | Error e ->
-          Error
-            (Mismatch {expected = "a plugin error"; got = Db.error_to_string e})
-      | Ok n ->
-          Error
-            (Mismatch
-               {expected = "a plugin error"; got = Printf.sprintf "Ok %d" n}))
+      | Ok n -> Error (Mismatch {expected; got = Printf.sprintf "Ok %d" n})
+      | Error e -> (
+          match error e with
+          | Some text -> Ok text
+          | None -> Error (Mismatch {expected; got = Db.error_to_string e})))
     fut
+
+let expect_plugin_error =
+  expect_error ~expected:"a plugin error" (function
+    | Db.Plugin e -> Some (Cap_error.to_string e)
+    | Decode _ | Schema _ | Migration _ | Not_migrated _ | Unexpected_rows _
+    | Foreign_key _ | Raised _ ->
+        None)
+
+let expect_foreign_key =
+  expect_error ~expected:"a foreign key error" (function
+    | Db.Foreign_key _ as e -> Some (Db.error_to_string e)
+    | Plugin _ | Decode _ | Schema _ | Migration _ | Not_migrated _
+    | Unexpected_rows _ | Raised _ ->
+        None)
 
 let orphan_observation () : Herbier_domain.Observation.t =
   {
@@ -600,6 +613,68 @@ let check_references log db =
                |> List.rev))
           (Db.all db (Outbox.next ~limit:100))))
 
+let defer_row : (pragma_defer, int) Row.t =
+  Row.col {ty = Not_Null Integer; name = "defer_foreign_keys"}
+
+let defer_query =
+  Herbier_store.Stmt.query ~json:[] defer_row "pragma defer_foreign_keys" []
+
+let observation_present db (o : Herbier_domain.Observation.t) expected =
+  expect
+    (function true -> "present" | false -> "absent")
+    expected
+    (Fut.map
+       (Result.map Option.is_some)
+       (Db.find db (Observation_queries.get o.id)))
+
+let bare_write tx edit = Db.Tx.write tx (Outbox.without_entry edit)
+
+(* Deferred foreign keys, the pragma and the rollback after a violation are
+   the plugin's: only the device runs them. *)
+let check_bare log db =
+  let open Fut.Result_syntax in
+  let* before = store (outbox_count db) in
+  let p = search_plant "Bare" None in
+  let o = {(orphan_observation ()) with plant_id = Some p.id} in
+  let* (_ : int list) =
+    step log "child before parent commits"
+      ~detail:(fun d -> Some ("defer_foreign_keys inside: " ^ print_ints d))
+      (expect print_ints [1]
+         (Db.bare_transaction db (fun tx ->
+              let* (_ : int) = bare_write tx (Observation_queries.upsert o) in
+              let* (_ : int) = bare_write tx (Plant_queries.upsert p) in
+              Db.Tx.all tx defer_query)))
+  in
+  let* (_ : bool) =
+    step log "plant present" ~detail:no_detail (plant_present db p true)
+  in
+  let* (_ : bool) =
+    step log "observation present" ~detail:no_detail
+      (observation_present db o true)
+  in
+  let* (_ : int list) =
+    step log "no entry appended" ~detail:no_detail
+      (expect print_ints before (outbox_count db))
+  in
+  let* (_ : int list) =
+    step log "defer_foreign_keys after commit" ~detail:no_detail
+      (expect print_ints [0] (Db.all db defer_query))
+  in
+  let orphan = orphan_observation () in
+  let* (_ : string) =
+    step log "orphan fails before commit"
+      ~detail:(fun e -> Some e)
+      (expect_foreign_key
+         (Db.bare_transaction db (fun tx ->
+              bare_write tx (Observation_queries.upsert orphan))))
+  in
+  let* (_ : bool) =
+    step log "orphan rolled back" ~detail:no_detail
+      (observation_present db orphan false)
+  in
+  step log "write after rollback" ~detail:no_detail
+    (expect_changed (Db.write db (Settings.set Wifi_only false)))
+
 (* Runs [f db], then closes [db] when [f] failed, keeping [f]'s error: the
    next group then starts with no connection left open. *)
 let closing_on_error db f =
@@ -775,6 +850,8 @@ let fresh_then_reuse log database =
   let* (_ : int list) = closing_on_error db (check_outbox log) in
   heading log "references";
   let* (_ : string list) = closing_on_error db (check_references log) in
+  heading log "transaction sans entrée";
+  let* (_ : int) = closing_on_error db (check_bare log) in
   heading log "reopen";
   reopen log db database
 

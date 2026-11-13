@@ -1,6 +1,7 @@
 (** The running app: the open database, the global {!State}, the account
-    ({!Herbier_sync.Auth}), and the one place screens save synced rows through
-    (local settings use {!Herbier_store.Db.write}). *)
+    ({!Herbier_sync.Auth}), the sync engine ({!Herbier_sync.Engine}), and the
+    one place screens save synced rows through (local settings use
+    {!Herbier_store.Db.write}). *)
 
 type t
 
@@ -11,7 +12,8 @@ val create :
   auth:Herbier_sync.Auth.t ->
   t
 (** [theme]: {!Theme.load}'s result, read once at startup. [auth] is not started
-    here (see {!start_auth}). *)
+    here (see {!start_auth}); the sync engine is built but not started (see
+    {!start_sync}). No IO. *)
 
 val db : t -> Herbier_store.Db.t
 val state : t -> State.t
@@ -19,9 +21,20 @@ val auth : t -> Herbier_sync.Auth.t
 
 val start_auth : t -> unit
 (** {!Herbier_sync.Auth.start} with an [on_change] that sets {!State.account}'s
-    [auth] (keeping [storage] and [wifi_only]), outside any update step. Called
+    [auth] (keeping [storage] and [wifi_only]), outside any update step, and on
+    a change to [Signed_in _] sends {!Herbier_sync.Engine.signed_in}. Called
     once by main; dev pages never call it, so that the apps they build register
     no app-state listener and no timer. *)
+
+val start_sync : t -> unit
+(** {!Herbier_sync.Engine.start}: called once by main, right after
+    {!start_auth}. Until then the engine ignores every trigger. *)
+
+val engine : t -> Herbier_sync.Engine.t
+(** For #dev/sync. *)
+
+val synced : t -> unit React.event
+(** Fires after every sync cycle, outside any update step. *)
 
 val theme : t -> (Theme.t, Theme.error) result
 (** The design tokens OCaml needs (the map's colours), or why they are missing.
@@ -33,11 +46,12 @@ val save :
   (int, Herbier_store.Db.error) result Fut.t
 (** {!Herbier_store.Db.edit}: the edits and their outbox entries in one
     transaction. After a commit that appended at least one entry, {!saved} fires
-    (outside any update step, once the future is determined) and
-    {!geocode_pending} runs. *)
+    and the sync engine gets a local write (outside any update step, once the
+    future is determined), and {!geocode_pending} runs. *)
 
 val saved : t -> unit React.event
-(** Something was saved: screens showing store data reload on it. *)
+(** The store changed (a local save, or a pull that wrote rows): screens showing
+    store data reload on it. *)
 
 val save_photos :
   t ->
@@ -48,9 +62,9 @@ val save_photos :
     ({!Herbier_photos.Preview.save}, with the preview made at capture and the
     storage setting of {!State.account}), one after the other, dated by its EXIF
     date or else now (a shutter shot is taken just before). Resolves to the
-    shots that were not saved, in order, each failure logged; fires {!saved}
-    once after the last when at least one was saved. The observation must
-    already be stored. *)
+    shots that were not saved, in order, each failure logged; fires {!saved} and
+    sends the engine a local write once after the last when at least one was
+    saved. The observation must already be stored. *)
 
 (** {1 References} *)
 

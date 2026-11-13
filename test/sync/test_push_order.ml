@@ -54,18 +54,22 @@ let string_field_opt name j =
       | _ -> None)
   | _ -> None
 
-(* Reads every entry Outbox.next gives, in seq order, and pushes each in
-   that order over Mock_http (every push answered 201). Returns the
-   entries and the requests sent, both in push order. *)
+(* Reads every entry Outbox.next gives, in seq order, and upserts each one's
+   row in that order over Mock_http (every upsert answered 201), as Push
+   does. Returns the entries and the requests sent, both in push order. *)
 let push_all db =
   Mock_http.reset ();
   Mock_http.respond ~status:201 "";
   let entries = Cli.all db (Outbox.next ~limit:100) in
   List.iter
     (fun (e : Outbox.entry) ->
-      match F.R.push F.conn ~table_name:e.table_name ~payload:e.payload with
-      | Ok () -> ()
-      | Error _ -> Alcotest.failf "push of %s/%s failed" e.table_name e.row_id)
+      match Synced.decode_entry ~table_name:e.table_name e.payload with
+      | Error _ -> Alcotest.failf "%s/%s does not decode" e.table_name e.row_id
+      | Ok (Entry (t, row)) -> (
+          match F.R.upsert F.conn t row with
+          | Ok () -> ()
+          | Error _ ->
+              Alcotest.failf "push of %s/%s failed" e.table_name e.row_id))
     entries;
   (entries, List.rev !Mock_http.requests)
 

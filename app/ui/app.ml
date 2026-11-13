@@ -32,8 +32,10 @@ type t = {
   state : State.t;
   theme : (Theme.t, Theme.error) result;
   auth : Herbier_sync.Auth.t;
+  engine : Herbier_sync.Engine.t;
   saved : unit React.event;
   send_saved : unit -> unit;
+  synced : unit React.event;
   generations : (Plant_id.t * int) list ref;
       (* style: mutable because a fetch's saves are checked against the
          plant's current generation when each branch ends, outside any
@@ -101,8 +103,23 @@ let load_packs db ~communes ~set_packs =
                l.rows))
     (Commune_packs.load db)
 
+(* The engine calls [on_cycle] from a future's callback, never inside an
+   update step. A pull that wrote rows fires [saved] so screens reload, but
+   is no local write: it must not trigger another cycle. *)
+let on_cycle ~send_saved ~send_synced (report : Herbier_sync.Cycle.Report.t) =
+  (match Herbier_sync.Cycle.Report.pulled_writes report with
+  | true -> send_saved ()
+  | false -> ());
+  send_synced ()
+
 let create ~db ~state ~theme ~auth =
   let saved, send = React.E.create () in
+  let synced, send_synced = React.E.create () in
+  let send_saved () = send () in
+  let engine =
+    Herbier_sync.Engine.create ~db ~auth
+      ~on_cycle:(on_cycle ~send_saved ~send_synced:(fun () -> send_synced ()))
+  in
   let packs, set_packs = React.S.create ~eq:(List.equal equal_pack) [] in
   let set_packs ?step p = set_packs ?step p in
   let downloading, set_downloading =
@@ -121,8 +138,10 @@ let create ~db ~state ~theme ~auth =
     state;
     theme;
     auth;
+    engine;
     saved;
-    send_saved = (fun () -> send ());
+    send_saved;
+    synced;
     generations = ref [];
     running = ref [];
     fetching;
@@ -149,13 +168,24 @@ let state t = t.state
 let theme t = t.theme
 let saved t = t.saved
 let auth t = t.auth
+let engine t = t.engine
+let synced t = t.synced
+
+let changed t =
+  t.send_saved ();
+  Herbier_sync.Engine.local_write t.engine
 
 (* Auth calls [on_change] from future and listener callbacks, never inside an
    update step, so the setter may run here. *)
 let start_auth t =
   Herbier_sync.Auth.start t.auth ~on_change:(fun status ->
       let account = React.S.value (State.account t.state) in
-      State.set_account t.state {account with auth = status})
+      State.set_account t.state {account with auth = status};
+      match status with
+      | Signed_in _ -> Herbier_sync.Engine.signed_in t.engine
+      | Unconfigured | Restoring | Signed_out -> ())
+
+let start_sync t = Herbier_sync.Engine.start t.engine
 
 (* [saved] fires from its own reaction on the result, so a subscriber that
    raises cannot keep the caller's future from being determined. [commit]
@@ -163,7 +193,7 @@ let start_auth t =
    (no observation in them) use it. *)
 let commit t edits =
   let r = Db.edit t.db edits in
-  Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> t.send_saved ());
+  Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> changed t);
   r
 
 let log parts = Brr.Console.(log [str (String.concat " " parts)])
@@ -375,7 +405,7 @@ let save_photos t ~(observation : Herbier_domain.Observation.t) shots =
   in
   Fut.map
     (fun (saved, failed) ->
-      (match saved with 0 -> () | _ -> t.send_saved ());
+      (match saved with 0 -> () | _ -> changed t);
       List.rev failed)
     (List.fold_left
        (fun acc s -> Fut.bind acc (fun r -> step r s))

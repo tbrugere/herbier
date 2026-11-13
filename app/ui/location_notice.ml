@@ -61,5 +61,5 @@ let show_once app =
       | Ok (None | Some false) | Error (Db.Decode _) -> show app
       | Error
           (( Db.Plugin _ | Db.Schema _ | Db.Migration _ | Db.Not_migrated _
-           | Db.Unexpected_rows _ | Db.Raised _ ) as e) ->
+           | Db.Unexpected_rows _ | Db.Raised _ | Db.Foreign_key _ ) as e) ->
           log_error "read" e)

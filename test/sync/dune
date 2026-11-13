@@ -1,7 +1,13 @@
-; The pure modules of app/sync/ and the store modules they use, copied in
-; (herbier_sync and herbier_store link Brr and cannot be linked natively):
-; they must not reference Brr, Fut, Jv or Herbier_bindings. herbier_store.ml
-; gives the copied store modules their `Herbier_store.` path.
+; Native checks of the pure modules of app/sync/, copied in flat: they must
+; not reference Brr, Fut, Jv or Herbier_bindings. test_sync runs the
+; session/nonce/gotrue suites; test_rest those of synced.ml and net/rest.ml,
+; with test_synced's and test_push_order's; test_cycle those of cycle/ (and
+; 4m's parked_entry.ml), over cli_local.ml's Local.S (the sqlite3 CLI,
+; Mock_http's identity IO). The store modules they use are copied from
+; app/store/ (herbier_store links Brr and cannot be linked natively). The
+; shims give the copies the paths they use: herbier_store.ml
+; `Herbier_store.`, net.ml `Net.Rest`, herbier_sync.ml parked_entry.ml's
+; `Herbier_sync.`.
 (copy_files# ../../app/sync/auth/{session,nonce,gotrue}.{ml,mli})
 
 (copy_files# ../../app/sync/synced.{ml,mli})
@@ -9,7 +15,12 @@
 (copy_files# ../../app/sync/net/rest.{ml,mli})
 
 (copy_files#
- ../../app/store/{codec,schema,stmt,outbox,plants,observations,photos,tags,references,cascade}.{ml,mli})
+ ../../app/sync/cycle/{outcome,last_error,local,io,schedule,push,pull,report}.{ml,mli})
+
+(copy_files# ../../app/ui/screens/settings/parked_entry.{ml,mli})
+
+(copy_files#
+ ../../app/store/{codec,schema,stmt,outbox,plants,observations,photos,tags,references,cascade,sync_state}.{ml,mli})
 
 (copy_files# ../../app/store/tables.ml)
 
@@ -18,7 +29,7 @@
 (copy_files# ../store/sqlite_cli.ml)
 
 (tests
- (names test_sync test_rest)
+ (names test_sync test_rest test_cycle)
  (libraries
   herbier_domain
   postgrest

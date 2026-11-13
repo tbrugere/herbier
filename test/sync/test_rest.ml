@@ -432,9 +432,6 @@ let error_to_string_per_constructor () =
       (R.Bad_response (Client.JsonError "eof"), "bad response: not JSON: eof");
       ( R.Bad_response (Client.RowError (2, `Missing)),
         "bad response: row 2: missing column" );
-      (R.Unknown_table "outbox", "bad entry: unknown table outbox");
-      ( R.Bad_payload ("plants", `WrongType),
-        "bad entry: plants payload: wrong type" );
     ]
 
 (* The recorded bodies are what PostgREST answered; the library keeps only
@@ -746,15 +743,30 @@ let payload_round_trip () =
     observation_full;
   round_trip "reference, a nested payload" Synced.reference reference_full
 
-(* ---------- Push ---------- *)
+(* ---------- An outbox entry: decode_entry, then upsert ---------- *)
+
+let entry_error =
+  Alcotest.testable
+    (fun f e -> Format.pp_print_string f (Synced.entry_error_to_string e))
+    (fun (a : Synced.entry_error) b -> a = b)
+
+let decode_entry_error ~table_name payload =
+  match Synced.decode_entry ~table_name payload with
+  | Ok (_ : Synced.entry) -> None
+  | Error e -> Some e
 
 let push_sends_a_structurally_equal_body () =
   Mock_http.reset ();
   Mock_http.respond ~status:201 "";
   let payload = Input.to_json (Synced.input Synced.plants plant_min) in
-  (match R.push F.conn ~table_name:"plants" ~payload with
-  | Ok () -> ()
-  | Error e -> Alcotest.failf "expected Ok, got %s" (R.error_to_string e));
+  (match Synced.decode_entry ~table_name:"plants" payload with
+  | Error e ->
+      Alcotest.failf "expected a plants entry, got %s"
+        (Synced.entry_error_to_string e)
+  | Ok (Entry (t, row)) -> (
+      match R.upsert F.conn t row with
+      | Ok () -> ()
+      | Error e -> Alcotest.failf "expected Ok, got %s" (R.error_to_string e)));
   let body =
     match (Mock_http.last ()).body with
     | Some b -> Yojson.Safe.from_string b
@@ -763,34 +775,30 @@ let push_sends_a_structurally_equal_body () =
   Alcotest.check json "the sent body is structurally equal to the payload"
     payload body
 
-let push_unknown_table_is_unknown_table_with_no_request () =
-  Mock_http.reset ();
-  Alcotest.(check (result unit rest_error))
-    "Unknown_table" (Error (R.Unknown_table "outbox"))
-    (R.push F.conn ~table_name:"outbox" ~payload:(`Assoc []));
-  Alcotest.(check int) "no request was sent" 0 (List.length !Mock_http.requests)
+let decode_entry_unknown_table () =
+  Alcotest.(check (option entry_error))
+    "Unknown_table" (Some (Unknown_table "outbox"))
+    (decode_entry_error ~table_name:"outbox" (`Assoc []))
 
 let plant_min_payload_with f =
   match Input.to_json (Synced.input Synced.plants plant_min) with
   | `Assoc kvs -> `Assoc (f kvs)
   | _ -> Alcotest.fail "a plant payload is an object"
 
-let expect_bad_payload_and_no_request row_error payload =
-  Mock_http.reset ();
-  Alcotest.(check (result unit rest_error))
+let expect_bad_payload row_error payload =
+  Alcotest.(check (option entry_error))
     "Bad_payload"
-    (Error (R.Bad_payload ("plants", row_error)))
-    (R.push F.conn ~table_name:"plants" ~payload);
-  Alcotest.(check int) "no request was sent" 0 (List.length !Mock_http.requests)
+    (Some (Bad_payload ("plants", row_error)))
+    (decode_entry_error ~table_name:"plants" payload)
 
 (* Only display_name is missing, so the decode can fail on nothing else. *)
-let push_payload_missing_display_name_is_bad_payload () =
-  expect_bad_payload_and_no_request `Missing
+let decode_entry_missing_display_name_is_bad_payload () =
+  expect_bad_payload `Missing
     (plant_min_payload_with (List.remove_assoc "display_name"))
 
 (* An integer literal beyond a native int: the decoder raises Failure, and
-   push must turn it into Bad_payload rather than let it escape. *)
-let push_payload_with_an_oversized_integer_is_bad_payload () =
+   decode_entry must turn it into Bad_payload rather than let it escape. *)
+let decode_entry_oversized_integer_is_bad_payload () =
   let payload =
     plant_min_payload_with (fun kvs ->
         ("gbif_key", `Intlit "99999999999999999999999")
@@ -802,7 +810,7 @@ let push_payload_with_an_oversized_integer_is_bad_payload () =
       Alcotest.failf "expected WrongType, got %s"
         (Herbier_store.Codec.row_error_to_string e)
   | Ok _ -> Alcotest.fail "expected Error");
-  expect_bad_payload_and_no_request `WrongType payload
+  expect_bad_payload `WrongType payload
 
 (* ---------- Synced.decide ---------- *)
 
@@ -913,19 +921,19 @@ let tests =
        re-encodes the same",
       `Quick,
       payload_round_trip );
-    ( "push: the body sent is structurally equal to the outbox payload",
+    ( "push: an outbox payload, decoded and upserted, sends a structurally \
+       equal body",
       `Quick,
       push_sends_a_structurally_equal_body );
-    ( "push: an unknown table is Unknown_table, no request sent",
+    ( "decode_entry: an unknown table is Unknown_table",
       `Quick,
-      push_unknown_table_is_unknown_table_with_no_request );
-    ( "push: a plants payload missing display_name is Bad_payload, no request \
-       sent",
+      decode_entry_unknown_table );
+    ( "decode_entry: a plants payload missing display_name is Bad_payload",
       `Quick,
-      push_payload_missing_display_name_is_bad_payload );
-    ( "push: an integer literal beyond int is Bad_payload, no request sent",
+      decode_entry_missing_display_name_is_bad_payload );
+    ( "decode_entry: an integer literal beyond int is Bad_payload",
       `Quick,
-      push_payload_with_an_oversized_integer_is_bad_payload );
+      decode_entry_oversized_integer_is_bad_payload );
   ]
 
 let () =

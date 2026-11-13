@@ -2,7 +2,8 @@
     synced row, appended by {!Db.edit} in the same transaction as the change,
     pushed by the sync engine in [seq] order (architecture §4). Pure: statements
     as values, run by {!Db} on the device and by the sqlite3 CLI in test/store.
-    {!Dev_seed} writes rows without entries ({!without_entry}). *)
+    The pull and {!Dev_seed} write synced rows without entries ({!bare}), only
+    inside {!Db.bare_transaction}. *)
 
 type op =
   | Upsert
@@ -49,14 +50,30 @@ val edit :
     row once [stmt] has changed a row, whatever its [deleted_at]. Used by the
     per-table modules only. *)
 
-val without_entry : edit -> Stmt.t
-(** The write alone, with no entry. Run with {!Db.write}, it changes a synced
-    row that is never pushed. Nothing in the types prevents that: by convention
-    only {!Dev_seed} (and the pull, architecture §4) take this path, and
-    {!Db.edit} runs it followed by the entry. *)
+type bare
+(** A write to a synced row that appends no outbox entry: a pulled row, a dev
+    seed row. Distinct from [Stmt.t], so {!Db.write} does not take it; it runs
+    only inside {!Db.bare_transaction} ([Db.Tx.write]). *)
+
+val without_entry : edit -> bare
+(** The edit's statement alone, with no entry. *)
+
+val bare : Stmt.t -> bare
+(** For the per-table modules only: a synced write that is not an [edit]
+    ({!Tags.upsert_plant_tag}, {!References.upsert_row},
+    {!References.upsert_plant_ref}). *)
+
+val bare_stmt : bare -> Stmt.t
+(** For {!Db} ({!Db.edit} and the bare transaction) and test/store, test/sync
+    only. Passing the result to [Db.write] defeats the point of {!bare}; nothing
+    else calls it. *)
 
 val reread : edit -> Stmt.t
 (** The SQL and parameters of the read-back query. *)
+
+val entry_stmt : table_name:string -> row_id:string -> Yojson.Safe.t -> Stmt.t
+(** The insert {!append} gives, for any table name, row id and payload: how
+    #dev/sync and the tests add an entry with no row behind it. *)
 
 val append : edit -> string -> (Stmt.t, Codec.error) result
 (** [append e row] decodes [row] (one row of [reread e], as the plugin returns
@@ -73,6 +90,15 @@ val next : limit:int -> entry Stmt.query
 (** Entries not parked ([last_error] null), [seq] ascending, at most [limit]
     ([limit <= 0] → no row). [payload_json] is parsed as JSON; an entry whose
     [op] is not ["upsert"] or whose payload is not JSON is a decode error. *)
+
+val parked : entry Stmt.query
+(** Entries with [last_error] not null, [seq] ascending (4m, #dev/sync).
+    Decoding as {!next}. *)
+
+val pending_ids : table_name:string -> string Stmt.query
+(** Distinct [row_id] of the entries of [table_name] that are not parked, in
+    [row_id] order: the merge's [pending] (architecture §4). A row with one
+    parked and one unparked entry is listed once. *)
 
 val count : int Stmt.query
 (** Number of entries, parked ones included: one row. *)

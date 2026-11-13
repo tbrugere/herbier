@@ -92,28 +92,15 @@ let upsert (t : Tag.t) = edit t.id (Stmt.upsert ~table:T.table (input t))
 let soft_delete id ~at =
   edit id (Stmt.soft_delete ~table:T.table ~id:(Codec.param T.id id) ~at)
 
-(* Conflict on the natural key, not on id: a row pulled from another install
-   may carry a different id for the same pair (architecture §4). *)
-let upsert_plant_tag (pt : Tag.Plant_tag.t) =
-  {
-    Stmt.sql =
-      "insert into plant_tags (id, plant_id, tag_id, created_at, updated_at, \
-       deleted_at) values (?, ?, ?, ?, ?, ?) on conflict (plant_id, tag_id) do \
-       update set updated_at = excluded.updated_at, deleted_at = \
-       excluded.deleted_at";
-    params =
-      [
-        Codec.param Pt.id pt.id;
-        Codec.param Pt.plant_id pt.plant_id;
-        Codec.param Pt.tag_id pt.tag_id;
-        Codec.param Pt.created_at pt.created_at;
-        Codec.param Pt.updated_at pt.updated_at;
-        Codec.param Pt.deleted_at pt.deleted_at;
-      ];
-  }
+let upsert_plant_tag pt =
+  Outbox.bare
+    (Stmt.upsert
+       ~conflict:[Pt.plant_id.name; Pt.tag_id.name]
+       ~keep:[Pt.id.name; Pt.created_at.name]
+       ~table:Pt.table (plant_tag_input pt))
 
-(* By the natural key, not the derived id: a revived or pulled link keeps
-   the id it was stored with, and the payload must carry that one. *)
+(* By the natural key, the unique constraint the write conflicts on; the id
+   is derived from it (architecture §4), so both name one row. *)
 let plant_tag_edit ~plant ~tag stmt =
   Outbox.edit ~table:Pt.table
     ~reread:

@@ -103,9 +103,8 @@ let any_by_key = "select * from reference where plant_id = ? and source = ?"
 let get plant source =
   query live_by_key [Codec.param R.plant_id plant; Codec.param R.source source]
 
-(* Read back by the natural key, not the derived id: a row pulled from
-   another install keeps the id it was stored with, and the outbox entry must
-   carry that one. *)
+(* Read back by the natural key, the unique constraint the write conflicts
+   on; the id is derived from it (architecture §4), so both name one row. *)
 let reference_edit ~plant ~source stmt =
   Outbox.edit ~table:R.table
     ~reread:
@@ -150,6 +149,20 @@ let remove ~plant ~source ~at =
           Codec.param R.source source;
         ];
     }
+
+let upsert_row r =
+  Outbox.bare
+    (Stmt.upsert
+       ~conflict:[R.plant_id.name; R.source.name]
+       ~keep:[R.id.name; R.created_at.name]
+       ~table:R.table (input r))
+
+let upsert_plant_ref p =
+  Outbox.bare
+    (Stmt.upsert
+       ~conflict:[Pr.plant_id.name; Pr.source.name]
+       ~keep:[Pr.id.name; Pr.created_at.name]
+       ~table:Pr.table (plant_ref_input p))
 
 let plant_refs plant =
   Stmt.query ~json:[] plant_ref_row

@@ -465,6 +465,7 @@ let ign_offline_block app =
 
 let v app =
   let db = App.db app and state = App.state app in
+  let parked, parked_b = Pending.v app in
   let storage =
     React.S.map ~eq:( = )
       (fun (a : State.account) -> a.storage)
@@ -576,20 +577,8 @@ let v app =
               [
                 compressed.el;
                 wifi_switch.el;
-                row
-                  [
-                    El.span
-                      ~at:[cls "settings__text"]
-                      [
-                        El.span
-                          ~at:[cls "settings__title"]
-                          [El.txt' "Données hors-ligne"];
-                        El.span
-                          ~at:[cls "t-meta"]
-                          [El.txt' "Aperçus photos · Fiches de référence"];
-                      ];
-                    free.el;
-                  ];
+                Row.v ~trailing:free.el ~title:"Données hors-ligne"
+                  ~detail:"Aperçus photos · Fiches de référence" ();
               ];
           ];
         section "Noms de lieux"
@@ -630,6 +619,7 @@ let v app =
                     send.el;
                   ];
               ];
+            parked;
           ];
       ]
   in
@@ -639,6 +629,7 @@ let v app =
       List.concat
         [
           account_b;
+          parked_b;
           drive_b;
           local_b;
           [

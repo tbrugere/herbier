@@ -8,6 +8,10 @@
     logging [ok] or {!Herbier_sync.Auth.error_to_string}. Never prints a token.
 *)
 
+val status_to_string : Herbier_sync.Auth.status -> string
+(** ["Unconfigured"], ["Restoring"], ["Signed_out"], ["Signed_in <email>"]
+    (["(no address)"] without one); #dev/sync shows it too. *)
+
 val el : (App.t, string) result -> Brr.El.t
 (** A fresh element on the app's {!App.auth} (the one main started), or the
     app's error string when it did not start. The poll runs until the page is

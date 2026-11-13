@@ -111,6 +111,26 @@ only `updated_at` is the server's. Then:
 - `sync_upsert_observations_check_400.json`: `lat` set without `lon`
   (`23514`, `observations_position_both_or_neither`).
 
+Then the pull cases, read by `test/sync/test_cycle.ml`, recorded after the
+files above (which they leave as they are). They share one run's rows and
+server timestamps (pages 1 and 1_moved continue page 0's rows and ids, and
+`Tag 001 bis` in page 1_moved is later than all of them), so the script
+records all five again when one is missing:
+
+- `sync_select_plants_empty_200.json`: the plants select filtered on
+  `updated_at=gt.2100-01-01T00:00:00Z`: the real `[]` answer.
+- `sync_select_tags_deleted_200.json`: the fixture tag soft-deleted by an
+  upsert carrying `deleted_at`, then the tags select (one row, `deleted_at`
+  set; its `updated_at` is the server's, later than the upsert's).
+- `sync_select_tags_page0_200.json`, `sync_select_tags_page1_200.json`:
+  500 more tags in one POST (`Tag 001` … `Tag 500`, ids
+  `01965d4e-0000-7000-8000-000000001001` … `…1500`), then the tags select
+  with `Range: 0-499` (500 rows: the deleted fixture tag and `Tag 001` …
+  `Tag 499`) and `Range: 500-999` (`Tag 500`).
+- `sync_select_tags_page1_moved_200.json`: `Tag 001` upserted again as
+  `Tag 001 bis` (its `updated_at` moves last), then `Range: 500-999`: that
+  tag a second time, the offset race of architecture §4.
+
 The reference row's `payload` is sent with `vernacular` before `species` and
 `rank` before `key` inside it; `sync_select_reference_200.json` shows
 `jsonb`'s reorder (`species` first, `key` first inside it), which the

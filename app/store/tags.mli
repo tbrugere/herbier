@@ -40,12 +40,12 @@ val soft_delete : Tag_id.t -> at:Ptime.t -> Outbox.edit
     entry when the tag was live, nothing otherwise. Links to the tag are left as
     they are; queries ignore links to a deleted tag. *)
 
-val upsert_plant_tag : Tag.Plant_tag.t -> Stmt.t
+val upsert_plant_tag : Tag.Plant_tag.t -> Outbox.bare
 (** Writes a whole [plant_tags] row with conflict target [(plant_id, tag_id)],
     the natural key. On conflict it sets [updated_at] and [deleted_at] from the
-    record and keeps the existing row's [id] and [created_at]. The dev seed's
-    write, and the pull's (architecture §4): a bare statement, no outbox entry.
-*)
+    record and keeps the existing row's [id] and [created_at]. The pull's and
+    the dev seed's write (architecture §4), inside [Db.bare_transaction]: no
+    outbox entry. *)
 
 val tag : plant:Plant_id.t -> tag:Tag_id.t -> at:Ptime.t -> Outbox.edit
 (** Puts the tag on the plant (architecture §2 revive rule):

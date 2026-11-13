@@ -2,8 +2,8 @@
 ; decoded with Postgrest.Row.
 ; The pure modules (codec, schema, tables, stmt, outbox, plants, observations,
 ; tags, photos, cascade, settings, search, references, ref_images,
-; commune_packs, dev_seed) must not reference Db, Herbier_bindings, Brr or Fut:
-; test/store compiles them natively through copy_files.
+; commune_packs, dev_seed, sync_state) must not reference Db, Herbier_bindings,
+; Brr or Fut: test/store compiles them natively through copy_files.
 (library
  (name herbier_store)
  (public_name herbier.store)

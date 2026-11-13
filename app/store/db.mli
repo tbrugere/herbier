@@ -1,14 +1,15 @@
 (** The local SQLite database: open and migrate, statements with bound
     parameters, rows decoded with {!Postgrest.Row}. SQL is hand-written by the
-    callers; no query DSL. {!run}, {!write} and {!write_all} run each statement
-    in the plugin's own transaction; {!exec} runs its statements in one plugin
-    transaction; {!edit} runs its statements in one explicit transaction.
+    callers; no query DSL. {!run} and {!write} run each statement in the
+    plugin's own transaction; {!exec} runs its statements in one plugin
+    transaction; {!edit} and {!bare_transaction} run their statements in one
+    explicit transaction.
 
     Every operation on a [t] ({!exec}, {!run}, {!query}, {!all}, {!find},
-    {!write}, {!write_all}, {!edit}, {!user_version}, {!close}) starts only once
-    the previous one on the same [t] has settled, success or error, so callers
-    may start operations without awaiting each other: a statement arriving in
-    the middle of an {!edit} would otherwise end its transaction. *)
+    {!write}, {!edit}, {!bare_transaction}, {!user_version}, {!close}) starts
+    only once the previous one on the same [t] has settled, success or error, so
+    callers may start operations without awaiting each other: a statement
+    arriving in the middle of an {!edit} would otherwise end its transaction. *)
 
 type t
 
@@ -25,6 +26,9 @@ type error =
   | Unexpected_rows of {sql : string; count : int}
       (** [sql] returned [count] rows where one row (or at most one, for
           {!find}) was expected. *)
+  | Foreign_key of {table : string; parent : string; count : int}
+      (** {!bare_transaction}: [count] rows break a deferred foreign key; the
+          first one is in [table] and points at [parent]. *)
   | Raised of string
       (** An OCaml exception escaped while starting the operation (a bug);
           [Printexc.to_string] of it. Later operations still run. *)
@@ -86,11 +90,6 @@ val write : t -> Stmt.t -> (int, error) result Fut.t
     constraint violation (foreign key, unique, check) is a [Plugin] error like
     any other; only its message tells them apart. *)
 
-val write_all : t -> Stmt.t list -> (unit, error) result Fut.t
-(** {!write} each statement in order, stopping at the first error, which is
-    returned. Not atomic: statements before the failing one stay applied. For
-    the dev seed ({!Dev_seed.statements}), which appends no outbox entry. *)
-
 val edit : t -> Outbox.edit list -> (int, error) result Fut.t
 (** [edit db edits] runs every edit and its entry in one transaction, in order:
     for each edit, its statement; when it changed at least one row, its
@@ -104,5 +103,38 @@ val edit : t -> Outbox.edit list -> (int, error) result Fut.t
 
     [edits = []] is [Ok 0] and touches nothing. A rollback failure is logged to
     the console; the first error is the one returned. This is the only way the
-    app writes a synced row; settings go through {!write}, the dev seed through
-    {!write_all}. *)
+    app's screens write a synced row; settings go through {!write}, the pull and
+    the dev seed through {!bare_transaction}. *)
+
+type tx
+(** An open bare transaction; valid only inside the callback of
+    {!bare_transaction}. *)
+
+val bare_transaction :
+  t -> (tx -> ('a, error) result Fut.t) -> ('a, error) result Fut.t
+(** Queued like every operation. [beginTransaction];
+    [pragma defer_foreign_keys = on] (foreign keys checked at the end, so rows
+    can be written children before parents; SQLite resets the pragma at commit
+    or rollback); [f tx]; [pragma foreign_key_check]; commit. [f]'s [Error], an
+    OCaml exception raised starting [f] ([Raised]), a foreign-key violation
+    ([Foreign_key], found before the commit: on Android a failed commit cannot
+    be rolled back and leaves the connection unusable) or a failed commit
+    ([Plugin _]) → rollback, the first error returned; a failed rollback is
+    logged as in {!edit}. Appends no outbox entry. [f] must use only {!Tx} on
+    [tx]: any other operation on [t] queues behind this one and never starts
+    (deadlock). For the pull and the dev seed. An exception raised later, inside
+    a continuation of [f]'s future, is not caught: the future never settles, so
+    the transaction stays open and every later operation on [t] waits forever
+    ([edit]'s chain has the same limit). [f] must therefore be total. *)
+
+module Tx : sig
+  val all : tx -> 'a Stmt.query -> ('a list, error) result Fut.t
+  (** As {!all}, inside the transaction (sees its writes). *)
+
+  val write : tx -> Outbox.bare -> (int, error) result Fut.t
+  (** Rows changed. A constraint error other than a deferred foreign key fails
+      here ([Plugin _]). *)
+
+  val write_local : tx -> Stmt.t -> (int, error) result Fut.t
+  (** A local-only table ([Sync_state.set]). *)
+end

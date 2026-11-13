@@ -1,9 +1,9 @@
 (** Queries and edits on [reference] (one row per source of a plant) and
     [plant_refs] (the plant's id at each source), architecture §2, §4. New rows
     get the id derived from [(plant_id, source)]; writes conflict on that
-    natural key and keep the stored [id] and [created_at], so a row pulled from
-    another install keeps its id. Lists are ordered by [source] label ascending.
-*)
+    natural key and keep the stored [id] and [created_at]; every install derives
+    the same id from the key (architecture §4). Lists are ordered by [source]
+    label ascending. *)
 
 module Reference = Herbier_domain.Reference
 module Plant_id = Herbier_domain.Ids.Plant_id
@@ -61,6 +61,18 @@ val remove :
     [(plant_id, source)]. A later {!put} revives it. Used when a plant is linked
     to another taxon: the old taxon's rows must not survive as kept rows of the
     new one. *)
+
+val upsert_row : Reference.t -> Outbox.bare
+(** The whole row, conflict target [(plant_id, source)]: no row → inserted with
+    the record's [id] and [created_at]; a row (live or deleted) → every other
+    column set from the record ([fetched_at], [payload] as JSON text, [status],
+    [updated_at], [deleted_at]), its [id] and [created_at] kept. Never deletes
+    (no replace). The pull's write of [reference], inside [Db.bare_transaction]:
+    no outbox entry. *)
+
+val upsert_plant_ref : Reference.Plant_ref.t -> Outbox.bare
+(** Same rule for [plant_refs] ([external_id], [url], [updated_at], [deleted_at]
+    set; [id], [created_at] kept). *)
 
 val plant_refs : Plant_id.t -> Reference.Plant_ref.t Stmt.query
 (** Live plant refs of the plant. *)

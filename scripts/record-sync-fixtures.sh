@@ -100,14 +100,13 @@ upsert_headers=(-H "Authorization: Bearer $token"
 upsert() { # <name> <table> <json row> [expected status]
   call "$1" "${4:-201}" POST "$rest/$2" "$anon" "$3" "${upsert_headers[@]}"
 }
-# Rest.select_since's headers.
-select_headers=(-H "Authorization: Bearer $token" -H 'Range-Unit: items'
-  -H 'Range: 0-499' -H 'Accept: application/json'
-  -H 'Prefer: missing=default')
-pull() { # <name> <table> <filter or ""> <columns>
+# Rest.select_since's request (page 0 unless a range is given).
+pull() { # <name> <table> <filter or ""> <columns> [range]
   local filter="${3:+$3&}"
   call "$1" 200 GET "$rest/$2?${filter}select=$4&order=updated_at,id" \
-    "$anon" "" "${select_headers[@]}"
+    "$anon" "" -H "Authorization: Bearer $token" -H 'Range-Unit: items' \
+    -H "Range: ${5:-0-499}" -H 'Accept: application/json' \
+    -H 'Prefer: missing=default'
 }
 
 plant=01965d4e-0000-7000-8000-000000000001
@@ -175,3 +174,44 @@ keep fk sync_upsert_observations_fk_409.json
 # lat without lon (23514).
 upsert check observations '{"id":"01965d4e-0000-7000-8000-000000000023","plant_id":null,"at":"2026-11-12T08:45:00Z","lat":45.5,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null}' 400
 keep check sync_upsert_observations_check_400.json
+
+# 5. Pull cases, after every recording above, which they leave as they
+#    are. The five files share this run's server timestamps (the tests
+#    compare page 0's and page 1's), so they are recorded together: one
+#    missing, all five are recorded again.
+for file in sync_select_plants_empty_200.json \
+  sync_select_tags_deleted_200.json sync_select_tags_page0_200.json \
+  sync_select_tags_page1_200.json \
+  sync_select_tags_page1_moved_200.json; do
+  [ -e "$out/$file" ] || force=1
+done
+# An empty answer: nothing after a far-future bound.
+pull s_plants_empty plants updated_at=gt.2100-01-01T00:00:00Z id,display_name,aliases,scientific_name,authorship,gbif_key,notes,notes_updated_at,cover_photo_id,created_at,updated_at,deleted_at
+keep s_plants_empty sync_select_plants_empty_200.json
+
+# The fixture tag soft-deleted by an upsert carrying deleted_at.
+upsert tag_deleted tags '{"id":"'$tag'","name":"Lisière","created_at":"2026-11-12T09:01:00Z","updated_at":"2026-11-12T09:08:00Z","deleted_at":"2026-11-12T09:08:00Z"}' 200
+pull s_tags_deleted tags "" id,name,created_at,updated_at,deleted_at
+keep s_tags_deleted sync_select_tags_deleted_200.json
+
+# Paging: 500 more tags in one POST (ids 01965d4e-…-000000001001 to
+# …1500, one transaction, so one updated_at), 501 tags in all: page 0 holds
+# 500, page 1 the last one.
+tag_id() { printf '01965d4e-0000-7000-8000-%012d' "$((1000 + $1))"; }
+bulk="$(for n in $(seq 1 500); do
+  printf '{"id":"%s","name":"Tag %03d","created_at":"2026-11-12T09:10:00Z","updated_at":"2026-11-12T09:10:00Z","deleted_at":null}\n' \
+    "$(tag_id "$n")" "$n"
+done | jq -cs .)"
+upsert bulk_tags tags "$bulk"
+pull s_tags_page0 tags "" id,name,created_at,updated_at,deleted_at 0-499
+keep s_tags_page0 sync_select_tags_page0_200.json
+pull s_tags_page1 tags "" id,name,created_at,updated_at,deleted_at 500-999
+keep s_tags_page1 sync_select_tags_page1_200.json
+
+# The offset race (architecture §4): a tag of page 0 is written again
+# between the two page requests; its updated_at moves last, so page 1 now
+# holds it a second time.
+upsert tag_moved tags '{"id":"'"$(tag_id 1)"'","name":"Tag 001 bis","created_at":"2026-11-12T09:10:00Z","updated_at":"2026-11-12T09:11:00Z","deleted_at":null}' 200
+pull s_tags_page1_moved tags "" id,name,created_at,updated_at,deleted_at \
+  500-999
+keep s_tags_page1_moved sync_select_tags_page1_moved_200.json

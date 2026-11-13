@@ -28,17 +28,41 @@ val decode : 'a query -> string -> ('a, Codec.error) result
 (** [decode q text] is [Codec.decode ~json row text] for the [json] and [row] of
     [q]: one row as the plugin returns it (a JSON object text). Never raises. *)
 
+val by_ids :
+  json:'table Codec.json_column list ->
+  table:'table Postgrest.Col.table ->
+  ('table, 'a) Postgrest.Row.t ->
+  string list ->
+  'a query
+(** [by_ids ~json ~table row ids] is [select * from table where id in (?, …)],
+    one text parameter per id (the canonical lowercase id), any [deleted_at],
+    rows in no particular order. The caller keeps [ids] at most {!max_ids} long.
+    [[]] → [where id in ()], no row. *)
+
+val max_ids : int
+(** 500: the most ids one {!by_ids} takes, below SQLite's 999-parameter floor.
+*)
+
 val upsert :
-  table:'table Postgrest.Col.table -> ('table, [`Full]) Postgrest.Input.t -> t
-(** [upsert ~table input] is
-    [insert into table (c1, …) values (?, …) on conflict (id) do update set c =
-     excluded.c] over the fields of [input] in order, each bound with
+  ?conflict:string list ->
+  ?keep:string list ->
+  table:'table Postgrest.Col.table ->
+  ('table, [`Full]) Postgrest.Input.t ->
+  t
+(** [upsert ~conflict ~keep ~table input] is
+    [insert into table (c1, …) values (?, …) on conflict (<conflict>) do update
+     set c = excluded.c] over the fields of [input] in order, each bound with
     [Codec.param] of its column (an [Optional] field holding [Unspecified],
-    which the type admits, is left out, as {!Postgrest.Input.to_json} does),
-    every column but ["id"] in the update ([do nothing] when ["id"] is the only
-    one). [input] must include ["id"]. It never deletes the old row, so
-    foreign-key cascades never fire (see {!Schema}). [upsert] and {!soft_delete}
-    are shared so that every synced table follows the one write convention. *)
+    which the type admits, is left out, as {!Postgrest.Input.to_json} does).
+    Every column but the [conflict] and [keep] ones is in the update
+    ([do nothing] when none is left). [input] must include the [conflict]
+    columns. It never deletes the old row, so foreign-key cascades never fire
+    (see {!Schema}). [upsert] and {!soft_delete} are shared so that every synced
+    table follows the one write convention.
+
+    [~conflict] (default [["id"]]) is the conflict target, a unique key of the
+    table, given as the columns' [name]s from {!Tables}; [~keep] (default [[]])
+    names more columns the update leaves as stored. *)
 
 val soft_delete :
   table:'table Postgrest.Col.table -> id:Codec.param -> at:Ptime.t -> t

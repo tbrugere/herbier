@@ -158,6 +158,7 @@ let () =
       | Ok app -> (
           watch_network app;
           Herbier_ui.App.start_auth app;
+          Herbier_ui.App.start_sync app;
           Herbier_ui.App.geocode_pending app;
           (* A veil over a dev page would cover the emulator's checks; the
              notice shows at the next start on an app route. *)

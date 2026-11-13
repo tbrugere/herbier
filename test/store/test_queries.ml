@@ -15,39 +15,52 @@ module P = Tables.Plants
 module Cli = Sqlite_cli
 
 (* These checks are about the bare statements and their changes() counts, so
-   each write goes through [Outbox.without_entry] (no entry); test_outbox
-   checks the entries. *)
+   each write goes through [Outbox.without_entry] (no entry), unwrapped with
+   [Outbox.bare_stmt]; test_outbox checks the entries. *)
 module Plants = struct
   include Plants
 
-  let upsert p = Outbox.without_entry (upsert p)
-  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+  let upsert p = Outbox.bare_stmt (Outbox.without_entry (upsert p))
+
+  let soft_delete id ~at =
+    Outbox.bare_stmt (Outbox.without_entry (soft_delete id ~at))
 end
 
 module Observations = struct
   include Observations
 
-  let upsert o = Outbox.without_entry (upsert o)
-  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+  let upsert o = Outbox.bare_stmt (Outbox.without_entry (upsert o))
+
+  let soft_delete id ~at =
+    Outbox.bare_stmt (Outbox.without_entry (soft_delete id ~at))
 
   let set_place_derived id ~lat ~lon name ~at =
-    Outbox.without_entry (set_place_derived id ~lat ~lon name ~at)
+    Outbox.bare_stmt
+      (Outbox.without_entry (set_place_derived id ~lat ~lon name ~at))
 end
 
 module Photos = struct
   include Photos
 
-  let upsert p = Outbox.without_entry (upsert p)
-  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
+  let upsert p = Outbox.bare_stmt (Outbox.without_entry (upsert p))
+
+  let soft_delete id ~at =
+    Outbox.bare_stmt (Outbox.without_entry (soft_delete id ~at))
 end
 
 module Tags = struct
   include Tags
 
-  let upsert t = Outbox.without_entry (upsert t)
-  let soft_delete id ~at = Outbox.without_entry (soft_delete id ~at)
-  let tag ~plant ~tag:t ~at = Outbox.without_entry (tag ~plant ~tag:t ~at)
-  let untag ~plant ~tag ~at = Outbox.without_entry (untag ~plant ~tag ~at)
+  let upsert t = Outbox.bare_stmt (Outbox.without_entry (upsert t))
+
+  let soft_delete id ~at =
+    Outbox.bare_stmt (Outbox.without_entry (soft_delete id ~at))
+
+  let tag ~plant ~tag:t ~at =
+    Outbox.bare_stmt (Outbox.without_entry (tag ~plant ~tag:t ~at))
+
+  let untag ~plant ~tag ~at =
+    Outbox.bare_stmt (Outbox.without_entry (untag ~plant ~tag ~at))
 end
 
 (* ---------- fixtures ---------- *)
@@ -1114,20 +1127,21 @@ let tags_upsert_plant_tag () =
   let db = with_plant_and_tag () in
   let fresh = link_of (plant_tag_id 0xd1) ~created_at:t1 ~updated_at:t1 in
   check_changes "upsert_plant_tag of a new pair changes 1 row" 1 db
-    (Tags.upsert_plant_tag fresh);
+    (Outbox.bare_stmt (Tags.upsert_plant_tag fresh));
   Alcotest.(check (option plant_tag_t))
     "the new row is the record as given" (Some fresh) (link_row db);
   let other =
     link_of (plant_tag_id 0xd2) ~created_at:t2 ~updated_at:t3 ~deleted_at:t3
   in
   check_changes "upsert_plant_tag on an existing pair changes 1 row" 1 db
-    (Tags.upsert_plant_tag other);
+    (Outbox.bare_stmt (Tags.upsert_plant_tag other));
   Alcotest.(check (option plant_tag_t))
     "id and created_at kept, updated_at and deleted_at from the record"
     (Some
        (link_of (plant_tag_id 0xd1) ~created_at:t1 ~updated_at:t3 ~deleted_at:t3))
     (link_row db);
-  check_not_replace "Tags.upsert_plant_tag" (Tags.upsert_plant_tag other)
+  check_not_replace "Tags.upsert_plant_tag"
+    (Outbox.bare_stmt (Tags.upsert_plant_tag other))
 
 let tags_of_plant () =
   let db = Cli.migrated_db () in
@@ -2021,7 +2035,7 @@ let live_counts db =
 
 let seed_applies () =
   let db = Cli.migrated_db () in
-  writes "seed" db Dev_seed.statements;
+  Cli.write_all_bare_ok "seed" db Dev_seed.statements;
   let expected =
     [
       ("plants", 12);
@@ -2033,7 +2047,7 @@ let seed_applies () =
   in
   Alcotest.(check (list (pair string int)))
     "the seed gives its live counts and no photo" expected (live_counts db);
-  writes "seed again" db Dev_seed.statements;
+  Cli.write_all_bare_ok "seed again" db Dev_seed.statements;
   Alcotest.(check (list (pair string int)))
     "applying the seed twice gives the same counts" expected (live_counts db);
   Alcotest.(check int)
@@ -2069,7 +2083,7 @@ let seed_applies () =
 
 let seed_search () =
   let db = Cli.migrated_db () in
-  writes "seed" db Dev_seed.statements;
+  Cli.write_all_bare_ok "seed" db Dev_seed.statements;
   let found = search db "digitale" in
   List.iter
     (fun name ->

@@ -30,6 +30,9 @@ val classify_status : int -> status_class
 val equal_status_class : status_class -> status_class -> bool
 val pp_status_class : Format.formatter -> status_class -> unit
 
+val bad_response_to_string : Postgrest.Client.bad_response -> string
+(** One line: ["row <i>: <why>"], ["expected an array"], ["not JSON: …"]. *)
+
 module type HTTP = sig
   include Postgrest.Client.HTTP
 
@@ -46,11 +49,6 @@ module Make (H : HTTP) : sig
     | Bad_response of Postgrest.Client.bad_response
         (** a 2xx whose body did not decode: not JSON, not an array, or row [i]
             did not decode (the whole select fails) *)
-    | Unknown_table of string
-        (** push only: no synced table has this name; nothing was sent *)
-    | Bad_payload of string * Postgrest.Row.error
-        (** push only: the payload does not decode as the named table's row;
-            nothing was sent *)
 
   val error_to_string : error -> string
   (** One line; never a token. *)
@@ -66,16 +64,6 @@ module Make (H : HTTP) : sig
       [Content-Type: application/json]; body = [Input.to_json_string]. Any
       status below 400 → [Ok ()] (body ignored). Status ≥ 400 → its
       {!classify_status} constructor. *)
-
-  val push :
-    Postgrest.Client.conn ->
-    table_name:string ->
-    payload:Yojson.Safe.t ->
-    (unit, error) result H.IO.t
-  (** One outbox entry: {!Synced.of_name}, {!Synced.decode_payload}, then
-      {!upsert}; the body sent is structurally equal to [payload] (both are
-      [Input.to_json] of the same row). Unknown table → [Unknown_table],
-      undecodable payload → [Bad_payload]; no request. *)
 
   val select_since :
     Postgrest.Client.conn ->

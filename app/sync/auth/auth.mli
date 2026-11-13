@@ -99,12 +99,13 @@ val access_token : t -> (string, error) result Fut.t
     else that refresh's error ([Network _] / [Server _]; a revoked session →
     [Error No_session] after the status went to [Signed_out]). *)
 
-(** {1 Dev page only} *)
-
 val refresh_now : t -> (unit, error) result Fut.t
 (** The refresh, now, whatever {!Session.due} says. Same rules as the timer's:
     success stored and rescheduled, a revoked session dropped, a transient
-    failure retried later. *)
+    failure retried later. {!Engine} calls it after a 401; #dev/auth's button
+    too. *)
+
+(** {1 Dev page only} *)
 
 val session_expires_at : t -> Ptime.t option
 
@@ -112,3 +113,12 @@ val debug_expire : t -> unit
 (** « Expirer »: sets the in-memory session's [expires_at] so that it becomes
     {!Session.due} in 30 s (Preferences untouched) and reschedules, so that the
     next resume or timer refreshes it. Signed out: nothing. *)
+
+val debug_import : t -> string -> (unit, error) result Fut.t
+(** #dev/sync: a GoTrue session JSON (scripts/local-session.sh's output) adopted
+    as if {!sign_in} had made it: {!Gotrue.decode_session} [~now] [~status:200],
+    then written to Preferences, kept, [Signed_in], refresh rescheduled, the
+    previous session logged out (the path {!sign_in} takes after the grant; a
+    {!sign_in} running meanwhile ends with [Replaced]). Not JSON / not a session
+    → [Error (Server (Malformed _))]; [Unconfigured] → [Error Not_configured] (a
+    dev build needs a Google client id, any value, to be configured). *)

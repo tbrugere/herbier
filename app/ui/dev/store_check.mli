@@ -8,7 +8,12 @@
     rows and entries of a failing edit (no transaction left open afterwards),
     stays atomic when a plain write is started before it settles, and
     {!Herbier_store.Outbox.park} / {!Herbier_store.Outbox.delete} take an entry
-    out of {!Herbier_store.Outbox.next}. *)
+    out of {!Herbier_store.Outbox.next}; and the group « transaction sans entrée
+    »: {!Herbier_store.Db.bare_transaction} commits an observation written
+    before its plant (foreign keys deferred, [defer_foreign_keys] 1 inside and 0
+    after the commit) and appends no entry, while an observation whose plant is
+    never written fails with [Foreign_key] before the commit, rolled back, and a
+    later write still works. *)
 
 val el : unit -> Brr.El.t
 (** A fresh element that starts the checks when created. Uses three new

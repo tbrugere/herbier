@@ -144,3 +144,8 @@
   background: var(--paper)
   &[hidden]
     display: none
+
+// Loaded's host of the « Non synchronisé » card: no box of its own, so the
+// hidden card of an empty outbox leaves no gap in the section.
+.settings__parked
+  display: contents

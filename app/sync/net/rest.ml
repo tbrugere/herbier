@@ -49,8 +49,6 @@ module Make (H : HTTP) = struct
     | Transient of int
     | Rejected of int
     | Bad_response of Client.bad_response
-    | Unknown_table of string
-    | Bad_payload of string * Postgrest.Row.error
 
   let error_to_string = function
     | Offline e -> "offline: " ^ H.error_to_string e
@@ -59,10 +57,6 @@ module Make (H : HTTP) = struct
     | Transient s -> Printf.sprintf "transient (%d)" s
     | Rejected s -> Printf.sprintf "rejected (%d)" s
     | Bad_response b -> "bad response: " ^ bad_response_to_string b
-    | Unknown_table name -> "bad entry: unknown table " ^ name
-    | Bad_payload (name, e) ->
-        Printf.sprintf "bad entry: %s payload: %s" name
-          (Herbier_store.Codec.row_error_to_string e)
 
   let of_client : C.error -> error = function
     | IOError e -> Offline e
@@ -81,14 +75,6 @@ module Make (H : HTTP) = struct
     map_error
       (C.insert conn ~on_conflict:`Upsert ~returning:Zero (Synced.input t row)
          (Synced.table t))
-
-  let push conn ~table_name ~payload =
-    match Synced.of_name table_name with
-    | None -> H.IO.return (Error (Unknown_table table_name))
-    | Some (Any t) -> (
-        match Synced.decode_payload t payload with
-        | Ok row -> upsert conn t row
-        | Error e -> H.IO.return (Error (Bad_payload (table_name, e))))
 
   let range_headers page =
     let first = page * page_size in

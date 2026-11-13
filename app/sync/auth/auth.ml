@@ -452,3 +452,14 @@ let sign_out t =
                   replace t None;
                   log "signed out")
                 (Result.map_error (fun e -> Storage e) removed))
+
+let debug_import t text =
+  match t.phase with
+  | Off -> Fut.return (Error Not_configured)
+  | Reading | Ready _ -> (
+      match Gotrue.decode_session ~now:(now ()) ~status:200 text with
+      | Error e -> Fut.return (Error (Server e))
+      | Ok s ->
+          t.sign_in_attempt <- t.sign_in_attempt + 1;
+          let attempt = t.sign_in_attempt in
+          serially t (fun () -> keep t ~attempt s))
