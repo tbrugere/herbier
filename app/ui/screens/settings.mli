@@ -1,9 +1,14 @@
-(** 4m Réglages (tab). « Où vont mes photos » (Google Drive or Herbier only; no
-    Google Photos row, architecture §5) and « Envoyer seulement en Wi-Fi » are
-    written to the local [settings] table and kept in {!State.account}. The «
-    File d'envoi » count follows {!State.network}. The other rows are static:
-    the account card, « Données hors-ligne », and the inert « Libérer » and «
-    Envoyer maintenant »; « Copie compressée hors-ligne » is always on, the
+(** 4m Réglages (tab). The account card follows {!State.account}'s [auth]: « Se
+    connecter » when signed out, the address and « Changer » when signed in
+    (both {!Herbier_sync.Auth.sign_in}, the current session kept until a new one
+    is made), no button while the session is read or when the build has no
+    sign-in; a failed attempt leaves one line under the card until the next tap
+    (none for a dismissed chooser). « Où vont mes photos » (Google Drive or
+    Herbier only; no Google Photos row, architecture §5) and « Envoyer seulement
+    en Wi-Fi » are written to the local [settings] table and kept in
+    {!State.account}. The « File d'envoi » count follows {!State.network}. The
+    other rows are static: « Données hors-ligne », and the inert « Libérer » and
+    « Envoyer maintenant »; « Copie compressée hors-ligne » is always on, the
     preview being the only local copy. « Noms de lieux »: an intro line (own
     places first, then the sources below, then « Lieu inconnu »), then one
     switch per [Place_name.order] source (« IGN hors-ligne », « IGN en ligne »,

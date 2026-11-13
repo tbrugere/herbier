@@ -9,6 +9,7 @@ import { Preferences } from '@capacitor/preferences';
 import { App } from '@capacitor/app';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import { CapacitorShareTarget } from '@capgo/capacitor-share-target';
 import exifr from 'exifr';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -23,6 +24,7 @@ globalThis.herbier = {
   geolocation: Geolocation,
   shareTarget: CapacitorShareTarget,
   http: CapacitorHttp,
+  socialLogin: SocialLogin,
   exifr,
   map,
 };

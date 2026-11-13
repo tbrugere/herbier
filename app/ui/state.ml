@@ -20,13 +20,13 @@ let equal_network a b =
   Bool.equal a.online b.online && Int.equal a.pending_uploads b.pending_uploads
 
 type account = {
-  google_signed_in : bool;
+  auth : Herbier_sync.Auth.status;
   storage : Original_target.t;
   wifi_only : bool;
 }
 
 let equal_account a b =
-  Bool.equal a.google_signed_in b.google_signed_in
+  Herbier_sync.Auth.equal_status a.auth b.auth
   && Original_target.equal a.storage b.storage
   && Bool.equal a.wifi_only b.wifi_only
 

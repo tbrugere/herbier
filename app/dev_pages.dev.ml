@@ -18,6 +18,7 @@ let find db app =
   | "seed" -> Some (page (fun () -> D.Seed_check.el db))
   | "refs-http" -> Some (page D.Refs_http_check.el)
   | "link" -> Some (page (fun () -> D.Link_check.el app))
+  | "auth" -> Some (page (fun () -> D.Auth_check.el app))
   | "photos" -> Some (page D.Photo_check.el)
   | "rb" -> Some (page D.Rb_check.el)
   | "theme" -> Some (page D.Theme_check.el)

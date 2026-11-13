@@ -12,7 +12,8 @@
 #   scripts/emulator.sh unlock <label>   release the lock, only if that label holds it
 #   scripts/emulator.sh unlock --force   release the lock whoever holds it (humans only)
 #   scripts/emulator.sh lock-status      print the holder, its age and idle time, or "free"
-#   scripts/emulator.sh start            create the AVD if missing, boot it headless, wait for boot
+#   scripts/emulator.sh start            create the AVD if missing, boot it headless, wait for boot,
+#                                        reverse tcp:54321 (the local Supabase stack, app/sync/dune)
 #   scripts/emulator.sh stop             remove the devtools forward, kill the emulator
 #   scripts/emulator.sh install          dune build @web, cap sync, assembleDebug, adb install
 #   scripts/emulator.sh install-web      dune build @web, push the web bundle into the installed
@@ -106,6 +107,12 @@ booted() {
 
 need() { command -v "$1" >/dev/null || die "$1 not found (is $2 installed under $ANDROID_HOME?)"; }
 
+# The app's dev builds sign in against the local stack at 127.0.0.1:54321.
+# A reverse mapping does not survive an emulator restart: set on every start.
+reverse_supabase() {
+  adb -s "$1" reverse tcp:54321 tcp:54321 >/dev/null 2>&1 || true
+}
+
 cmd_start() {
   need emulator emulator
   need adb platform-tools
@@ -116,6 +123,7 @@ cmd_start() {
     echo no | avdmanager create avd -n "$avd" -k "$image" -d "$device" >/dev/null
   fi
   if booted; then
+    reverse_supabase "$(serial)"
     echo "already running: $(serial)"
     return
   fi
@@ -139,6 +147,7 @@ emulator-$console_port; stop the other, or set HERBIER_ALLOW_SECOND_EMULATOR=1"
   s="$(serial)"
   adb -s "$s" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
   adb -s "$s" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+  reverse_supabase "$s"
   echo "booted: $s"
 }
 
@@ -313,7 +322,7 @@ cmd_forward() {
 webview() { node "$here/webview.mjs" --port "$port" "$@"; }
 
 # Dev pages that show a screen rather than a check log, so print no "done".
-INTERACTIVE_DEV_PAGES="dev/gallery dev/collection dev/sheet dev/photos dev/capture dev/link"
+INTERACTIVE_DEV_PAGES="dev/gallery dev/collection dev/sheet dev/photos dev/capture dev/link dev/auth"
 
 cmd_open() {
   local fragment="${1:-}"

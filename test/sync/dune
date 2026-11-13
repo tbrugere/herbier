@@ -1,0 +1,9 @@
+; Native checks of the pure modules of app/sync/, copied in: they must not
+; reference Brr, Fut, Jv or Herbier_bindings.
+(copy_files# ../../app/sync/{session,nonce,gotrue}.{ml,mli})
+
+(test
+ (name test_sync)
+ (libraries yojson ptime alcotest)
+ (deps
+  (glob_files %{project_root}/test/fixtures/gotrue_*.json)))

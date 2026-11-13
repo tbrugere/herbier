@@ -44,6 +44,159 @@ let radio ~title ~detail selected =
         (React.S.map (fun v -> Some (string_of_bool v)) selected);
     ] )
 
+module Auth = Herbier_sync.Auth
+
+(* The line under the account card after a failed sign-in; a dismissed
+   chooser is not a failure, nor a tap replaced by a later one. *)
+let sign_in_error : Auth.error -> string option = function
+  | Cancelled | Replaced -> None
+  | Not_allowed -> Some "Ce compte Google n'a pas accès à Herbier."
+  | Network _ -> Some "Pas de connexion au serveur."
+  | Google _ -> Some "La connexion Google a échoué."
+  | Server _ -> Some "Le serveur a refusé la connexion."
+  | Storage _ -> Some "Connexion non enregistrée sur le téléphone."
+  | Not_configured | Crypto _ | No_session -> Some "La connexion a échoué."
+
+(* The address's first character, whole even when it is not ASCII;
+   upper-cased only when it is. *)
+let initial = function
+  | "" -> None
+  | e ->
+      let d = String.get_utf_8_uchar e 0 in
+      let b = Buffer.create 4 in
+      Buffer.add_utf_8_uchar b (Uchar.utf_decode_uchar d);
+      Some (String.uppercase_ascii (Buffer.contents b))
+
+type card = {
+  avatar : string;
+  title : string;
+  meta : string;
+  action : string option;
+}
+
+(* « Changer » signs in again (the account chooser); the current session
+   stays until the new one is made. *)
+let card ~running : Auth.status -> card = function
+  | Unconfigured ->
+      {
+        avatar = "G";
+        title = "Compte Google non connecté";
+        meta = "Connexion indisponible dans cette version.";
+        action = None;
+      }
+  | Restoring ->
+      {avatar = "G"; title = "Compte Google"; meta = "…"; action = None}
+  | Signed_out ->
+      {
+        avatar = "G";
+        title = "Compte Google non connecté";
+        meta = "Connectez-vous pour sauvegarder la collection.";
+        action =
+          Some
+            (match running with
+            | true -> "Connexion…"
+            | false -> "Se connecter");
+      }
+  | Signed_in {email} ->
+      {
+        avatar = Option.value (Option.bind email initial) ~default:"G";
+        title = "Compte Google connecté";
+        meta = Option.value email ~default:"Adresse inconnue";
+        action =
+          Some (match running with true -> "Connexion…" | false -> "Changer");
+      }
+
+let equal_card a b =
+  String.equal a.avatar b.avatar
+  && String.equal a.title b.title
+  && String.equal a.meta b.meta
+  && Option.equal String.equal a.action b.action
+
+let account_card app =
+  let auth = App.auth app and state = App.state app in
+  let running, set_running = React.S.create ~eq:Bool.equal false in
+  let error, set_error = React.S.create ~eq:(Option.equal String.equal) None in
+  let card =
+    React.S.l2 ~eq:equal_card
+      (fun (a : State.account) running -> card ~running a.auth)
+      (State.account state) running
+  in
+  let avatar = El.span ~at:[cls "settings__avatar"] [] in
+  let title = El.span ~at:[cls "settings__title"] [] in
+  let meta = El.span ~at:[cls "t-meta"; cls "settings__email"] [] in
+  let button = W.Button.text "" in
+  (* role=alert: read out when it appears, since nothing else changes where
+     the user is looking when a sign-in fails. *)
+  let error_el =
+    El.p
+      ~at:
+        [
+          cls "t-meta";
+          cls "settings__error";
+          At.v (Jstr.v "role") (Jstr.v "alert");
+        ]
+      []
+  in
+  let sign_in () =
+    match React.S.value running with
+    | true -> ()
+    | false ->
+        let step = React.Step.create () in
+        set_running ~step true;
+        set_error ~step None;
+        React.Step.execute step;
+        Fut.await (Auth.sign_in auth) (fun result ->
+            let message =
+              match result with
+              | Ok () -> None
+              | Error e ->
+                  let message = sign_in_error e in
+                  Option.iter
+                    (fun (_ : string) ->
+                      Console.(
+                        error
+                          [
+                            str "réglages: sign-in"; str (Auth.error_to_string e);
+                          ]))
+                    message;
+                  message
+            in
+            let step = React.Step.create () in
+            set_running ~step false;
+            set_error ~step message;
+            React.Step.execute step)
+  in
+  let el =
+    El.div
+      [
+        W.Card.panel
+          [
+            El.div
+              ~at:[cls "settings__account"]
+              [
+                avatar;
+                El.span ~at:[cls "settings__text"] [title; meta];
+                button.el;
+              ];
+          ];
+        error_el;
+      ]
+  in
+  ( el,
+    Rb.text avatar (React.S.map (fun c -> c.avatar) card)
+    :: Rb.text title (React.S.map (fun c -> c.title) card)
+    :: Rb.text meta (React.S.map (fun c -> c.meta) card)
+    :: Rb.text button.el
+         (React.S.map (fun c -> Option.value c.action ~default:"") card)
+    :: Rb.class_ button.el "is-hidden"
+         (React.S.map (fun c -> Option.is_none c.action) card)
+    :: Rb.attr button.el "aria-disabled"
+         (React.S.map (function true -> Some "true" | false -> None) running)
+    :: Rb.text error_el (React.S.map (Option.value ~default:"") error)
+    :: Rb.class_ error_el "is-hidden" (React.S.map Option.is_none error)
+    :: Rb.act button.click sign_in
+    :: button.bindings )
+
 (* « IGN hors-ligne »: the downloaded packs and the département picker. *)
 
 type picker =
@@ -344,30 +497,7 @@ let v app =
             log_error "wifi" e;
             set_account (fun a -> {a with wifi_only = not next}))
   in
-  let account =
-    W.Card.panel
-      [
-        El.div
-          ~at:[cls "settings__account"]
-          [
-            El.span ~at:[cls "settings__avatar"] [El.txt' "G"];
-            El.span
-              ~at:[cls "settings__text"]
-              [
-                El.span
-                  ~at:[cls "settings__title"]
-                  [El.txt' "Compte Google non connecté"];
-                El.span
-                  ~at:[cls "t-meta"]
-                  [
-                    El.txt'
-                      "La connexion se fait à la première photo envoyée vers \
-                       Drive.";
-                  ];
-              ];
-          ];
-      ]
-  in
+  let account, account_b = account_card app in
   let drive_el, drive_click, drive_b =
     radio ~title:"Google Drive · dossier “Herbier”"
       ~detail:"Un sous-dossier par espèce. Aperçus gardés sur le téléphone."
@@ -508,6 +638,7 @@ let v app =
     bindings =
       List.concat
         [
+          account_b;
           drive_b;
           local_b;
           [

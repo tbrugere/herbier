@@ -81,13 +81,14 @@ let modal app = function
 (* The theme is read once, here: app.css is loaded by now. [online] starts
    from the navigator and {!watch_network} keeps it current. *)
 let create_app db {storage; wifi_only; place_sources} =
+  let auth = Herbier_sync.Auth.create () in
   let state =
     Herbier_ui.State.create
       ~network:{online = Navigator.online G.navigator; pending_uploads = 0}
-      ~account:{google_signed_in = false; storage; wifi_only}
+      ~account:{auth = Herbier_sync.Auth.status auth; storage; wifi_only}
       ~place_sources
   in
-  Herbier_ui.App.create ~db ~state ~theme:(Herbier_ui.Theme.load ())
+  Herbier_ui.App.create ~db ~state ~theme:(Herbier_ui.Theme.load ()) ~auth
 
 (* The window's online and offline events update [State.network]; coming
    back online asks the enabled place-name sources for what was saved
@@ -156,6 +157,7 @@ let () =
       (match app with
       | Ok app -> (
           watch_network app;
+          Herbier_ui.App.start_auth app;
           Herbier_ui.App.geocode_pending app;
           (* A veil over a dev page would cover the emulator's checks; the
              notice shows at the next start on an app route. *)

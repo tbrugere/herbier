@@ -2,7 +2,7 @@
 (executable
  (name main)
  (modes js)
- (libraries brr herbier_domain herbier_store herbier_ui)
+ (libraries brr herbier_domain herbier_store herbier_sync herbier_ui)
  (js_of_ocaml
   (flags (:standard))))
 

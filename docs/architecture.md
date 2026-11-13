@@ -300,9 +300,68 @@ Pausing: if PostgREST answers with the paused-project error, the outbox just
 waits; the user sees "serveur en pause" in Settings with a link to the
 dashboard. Recording is unaffected.
 
-Auth on device: Google sign-in via Credential Manager → `signInWithIdToken`
-on Supabase → session in Capacitor Preferences; `startAutoRefresh` on
-resume, `stopAutoRefresh` on background.
+Auth on device: Google sign-in via Credential Manager → Supabase's id-token
+grant (supabase-js's `signInWithIdToken`) → session in Capacitor
+Preferences, refreshed as below. No supabase-js: `sync/auth.ml`
+makes GoTrue's three calls over fetch (`POST /auth/v1/token?grant_type=id_token`,
+`grant_type=refresh_token`, `/logout?scope=local`), described and decoded
+sans IO in `sync/gotrue.ml`.
+
+- Nonce: 32 random bytes as hex are the raw nonce, sent to GoTrue; their
+  SHA-256 hex goes to the plugin, which puts it verbatim in the id token's
+  `nonce` claim; GoTrue compares the claim with the hash of the raw nonce
+  (`skip_nonce_check = false`). The plugin's `standard` style always shows
+  the account chooser.
+- Session: one Preferences key, `auth.session`, a versioned JSON object
+  (`sync/session.ml`), written before the in-memory session is replaced.
+  Every write of the key (sign-in, refresh, sign-out, a revoked session)
+  runs after the previous one has resolved, so a refresh that lands during
+  a sign-in or a sign-out cannot write over it. A refresh rotates the
+  refresh token: if the app dies between the server's rotation and that
+  write, the next launch is signed out (one tap to sign in again; nothing
+  is lost, the outbox is local). The key is left out of Android's backups
+  (`android/app/src/main/res/xml/backup_rules.xml`,
+  `data_extraction_rules.xml`): a refresh token does not go to Google
+  Drive, and a reinstall starts signed out.
+- Expiry: the session's `expires_at` is the device's clock when the request
+  was sent plus GoTrue's `expires_in`, not GoTrue's `expires_at`, so that a
+  device clock set wrong does not make every session due (a refresh loop)
+  or late.
+- Refresh: 90 s before the access token expires, by one timer while the app
+  is in the foreground; on resume a due session is refreshed at once; the
+  timer is cleared on background. A refresh that GoTrue itself answers 4xx
+  (its JSON error, with a code; except 408, 429) drops the session (signed
+  out); a network failure, 408, 429, 5xx or a 4xx that is not GoTrue's (a
+  proxy's page, a gateway's 401 for a wrong key) keeps it and retries after
+  10 s, doubling up to 300 s. A build with a wrong key or URL therefore
+  retries forever (logged) rather than signing out. The PostgREST transport
+  awaits `Auth.access_token` per request, which refreshes a due session
+  first, and hands the token to a per-request `Client.supabase_conn`.
+- The account is created by hand, before its first sign-in, with the same
+  Gmail address and a confirmed email: sign-ups are off, and GoTrue links
+  the Google identity to the existing user with that verified email. Locally:
+  `curl -X POST "$API_URL/auth/v1/admin/users" -H "apikey: $SERVICE_ROLE_KEY"
+  -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H 'Content-Type: application/json'
+  -d '{"email":"<gmail>","email_confirm":true}'` (values from `npx supabase
+  status -o env`); in production, the dashboard's Authentication → Add user,
+  "Auto confirm", with Providers → Google enabled (client id = the Web client
+  id, nonce check on) and "Allow new users to sign up" off.
+- Where a build signs in is fixed at build time from `HERBIER_SUPABASE_URL`,
+  `HERBIER_SUPABASE_PUBLISHABLE_KEY` and `HERBIER_GOOGLE_WEB_CLIENT_ID` (the
+  Web OAuth client id, also `config.toml`'s Google `client_id`: export
+  it before `npx supabase start`, and restart the stack after exporting it
+  later; unset, the stack starts and refuses every Google id token).
+  Outside the release profile the first two default to the local stack
+  (`http://127.0.0.1:54321`, reached from the emulator through `adb reverse
+  tcp:54321 tcp:54321`, which `scripts/emulator.sh start` sets up); a build
+  without all three shows « Connexion indisponible dans cette version. » in
+  4m. Dev builds (`dune build`, `scripts/dev.sh`, `scripts/emulator.sh`)
+  read no file and so get the local stack, unless the shell exports the
+  variables (keep production values out of `.envrc`). Production builds go
+  through `scripts/release.sh` (`--debug` for a debug APK of the same
+  bundle), which loads the git-ignored `.env.prod` (from the committed
+  `.env.prod.example`) for its own process only and refuses to build
+  without it or without all three values.
 
 ## 5. Photo pipeline
 

@@ -20,7 +20,7 @@ val equal_filters : filters -> filters -> bool
 type network = {online : bool; pending_uploads : int}
 
 type account = {
-  google_signed_in : bool;
+  auth : Herbier_sync.Auth.status;  (** the Google account 4m shows *)
   storage : Herbier_domain.Photo.Original_target.t;
       (** the Settings choice, kept while signed out: Drive asks for the sign-in
           at the first photo to upload *)

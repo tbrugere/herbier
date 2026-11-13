@@ -335,6 +335,18 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+# Google id tokens from Credential Manager (see docs/architecture.md §4).
+# client_id is the Web client id the Android app passes as serverClientId,
+# the id token's aud; the same HERBIER_GOOGLE_WEB_CLIENT_ID the app is built
+# with (app/sync/dune). No secret: the id-token flow does not use one. With
+# the variable unset the CLI passes the literal "env(…)" on, so the stack
+# starts and a Google sign-in is refused ("Bad ID token").
+[auth.external.google]
+enabled = true
+client_id = "env(HERBIER_GOOGLE_WEB_CLIENT_ID)"
+secret = ""
+skip_nonce_check = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]

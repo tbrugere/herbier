@@ -60,6 +60,31 @@ returns for one photo, never edited:
 No real phone photo is recorded yet: a camera photo picked on the phone through
 `#dev/photos` belongs next to these as `exifr_phone_<model>.json`, with a test.
 
+`gotrue_<endpoint>_<case>_<status>.json`: GoTrue (Supabase Auth) answers,
+recorded against the local stack by `scripts/record-gotrue-fixtures.sh`
+(`[--force]` to re-record), read by `test/sync/test_sync.ml`:
+
+- `gotrue_token_refresh_200.json`: a successful `/token?grant_type=refresh_token`
+  answer for a throwaway user.
+- `gotrue_token_refresh_not_found_400.json`: refreshing with an
+  already-rotated refresh token (`refresh_token_not_found`).
+- `gotrue_token_refresh_invalid_400.json`: refreshing with a bogus token
+  (`validation_failed`).
+- `gotrue_signup_disabled_422.json`: `/signup` with sign-ups off
+  (`signup_disabled`). The id-token grant answers a Google account with no
+  Herbier user with the same code and envelope (GoTrue v2.197.0 source:
+  `internal/api/external.go`, `NewUnprocessableEntityError(ErrorCodeSignupDisabled, …)`,
+  returned unwrapped by `token_oidc.go`'s `case *HTTPError: return err`);
+  not recorded, since it needs a real Google id token.
+- `gotrue_token_id_token_invalid_request_400.json`: the id-token grant with
+  a token that is not a Google one, the local Google provider on: GoTrue's
+  OAuth-style `{"error":…,"error_description":…}` envelope.
+
+No real access or refresh token outlives the script: the throwaway user and
+its sessions are deleted at the end (also on error). The JWT in the 200 file
+is a local-stack token (issuer `http://127.0.0.1:54321/auth/v1`), not a
+secret.
+
 `web/map/positron.json` (not in this directory: it is also the style the app
 ships) is a recorded payload, read by `test/geo` as the fixture of its
 `Style.with_overlays` tests; never hand-edited. It is re-recorded on demand

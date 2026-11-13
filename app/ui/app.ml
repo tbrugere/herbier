@@ -31,6 +31,7 @@ type t = {
   db : Db.t;
   state : State.t;
   theme : (Theme.t, Theme.error) result;
+  auth : Herbier_sync.Auth.t;
   saved : unit React.event;
   send_saved : unit -> unit;
   generations : (Plant_id.t * int) list ref;
@@ -100,7 +101,7 @@ let load_packs db ~communes ~set_packs =
                l.rows))
     (Commune_packs.load db)
 
-let create ~db ~state ~theme =
+let create ~db ~state ~theme ~auth =
   let saved, send = React.E.create () in
   let packs, set_packs = React.S.create ~eq:(List.equal equal_pack) [] in
   let set_packs ?step p = set_packs ?step p in
@@ -119,6 +120,7 @@ let create ~db ~state ~theme =
     db;
     state;
     theme;
+    auth;
     saved;
     send_saved = (fun () -> send ());
     generations = ref [];
@@ -146,6 +148,14 @@ let db t = t.db
 let state t = t.state
 let theme t = t.theme
 let saved t = t.saved
+let auth t = t.auth
+
+(* Auth calls [on_change] from future and listener callbacks, never inside an
+   update step, so the setter may run here. *)
+let start_auth t =
+  Herbier_sync.Auth.start t.auth ~on_change:(fun status ->
+      let account = React.S.value (State.account t.state) in
+      State.set_account t.state {account with auth = status})
 
 (* [saved] fires from its own reaction on the result, so a subscriber that
    raises cannot keep the caller's future from being determined. [commit]

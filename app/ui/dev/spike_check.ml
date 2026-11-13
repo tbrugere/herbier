@@ -68,7 +68,8 @@ let run ~db ~stage ~result ~current =
   in
   let enter_and_leave i =
     let screen =
-      Screens.Collection.v (App.create ~db ~state ~theme:(Theme.load ()))
+      Screens.Collection.v
+        (App.create ~db ~state ~theme:(Theme.load ()) ~auth:(Fixture.auth ()))
     in
     mount screen;
     let* filled =
@@ -114,7 +115,8 @@ let run ~db ~stage ~result ~current =
     | Error e -> fail "tags: %s" (Db.error_to_string e)
   in
   let control =
-    Screens.Collection.v (App.create ~db ~state ~theme:(Theme.load ()))
+    Screens.Collection.v
+      (App.create ~db ~state ~theme:(Theme.load ()) ~auth:(Fixture.auth ()))
   in
   mount control;
   let* filled =

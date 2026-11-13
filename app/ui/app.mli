@@ -1,6 +1,6 @@
-(** The running app: the open database, the global {!State}, and the one place
-    screens save synced rows through (local settings use
-    {!Herbier_store.Db.write}). *)
+(** The running app: the open database, the global {!State}, the account
+    ({!Herbier_sync.Auth}), and the one place screens save synced rows through
+    (local settings use {!Herbier_store.Db.write}). *)
 
 type t
 
@@ -8,11 +8,20 @@ val create :
   db:Herbier_store.Db.t ->
   state:State.t ->
   theme:(Theme.t, Theme.error) result ->
+  auth:Herbier_sync.Auth.t ->
   t
-(** [theme]: {!Theme.load}'s result, read once at startup. *)
+(** [theme]: {!Theme.load}'s result, read once at startup. [auth] is not started
+    here (see {!start_auth}). *)
 
 val db : t -> Herbier_store.Db.t
 val state : t -> State.t
+val auth : t -> Herbier_sync.Auth.t
+
+val start_auth : t -> unit
+(** {!Herbier_sync.Auth.start} with an [on_change] that sets {!State.account}'s
+    [auth] (keeping [storage] and [wifi_only]), outside any update step. Called
+    once by main; dev pages never call it, so that the apps they build register
+    no app-state listener and no timer. *)
 
 val theme : t -> (Theme.t, Theme.error) result
 (** The design tokens OCaml needs (the map's colours), or why they are missing.
