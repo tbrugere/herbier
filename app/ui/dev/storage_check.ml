@@ -3,6 +3,7 @@ module Cap_preferences = Herbier_bindings.Cap_preferences
 module Cap_filesystem = Herbier_bindings.Cap_filesystem
 module Cap_sqlite = Herbier_bindings.Cap_sqlite
 module Cap_app = Herbier_bindings.Cap_app
+module Fut_result = Herbier_bindings.Fut_result
 
 type failure =
   | Plugin of Cap_error.t
@@ -13,24 +14,13 @@ let failure_to_string = function
   | Mismatch {expected; got} ->
       Printf.sprintf "expected %S, got %S" expected got
 
-let append log text = Brr.El.append_children log [Brr.El.div [Brr.El.txt' text]]
-let heading log text = Brr.El.append_children log [Brr.El.h2 [Brr.El.txt' text]]
-let plugin fut = Fut.map (Result.map_error (fun e -> Plugin e)) fut
+let plugin fut = Fut_result.map_error (fun e -> Plugin e) fut
 let no_detail _ = ""
 
-(* Reports the step as soon as it settles and passes its result on, so a
-   group's chain stops at its first failure while every outcome is shown. *)
-let step log label ~detail fut =
-  Fut.map
-    (fun r ->
-      (match r with
-      | Ok v -> (
-          match detail v with
-          | "" -> append log (label ^ ": ok")
-          | d -> append log (label ^ ": ok · " ^ d))
-      | Error e -> append log (label ^ ": " ^ failure_to_string e));
-      r)
-    fut
+(* [detail] gives "" for no detail. *)
+let step log label ~detail =
+  Kit.step log label ~error:failure_to_string ~detail:(fun v ->
+      match detail v with "" -> None | d -> Some d)
 
 let expect print expected fut =
   Fut.map
@@ -202,25 +192,25 @@ let app log =
     step log "on_state_change" ~detail:no_detail
       (plugin
          (Cap_app.on_state_change (fun s ->
-              append log ("state: " ^ state_label s))))
+              Kit.append log ("state: " ^ state_label s))))
   in
   let* url =
     step log "on_url_open" ~detail:no_detail
-      (plugin (Cap_app.on_url_open (fun u -> append log ("url: " ^ u))))
+      (plugin (Cap_app.on_url_open (fun u -> Kit.append log ("url: " ^ u))))
   in
   step log "remove url listener" ~detail:no_detail (plugin (Cap_app.remove url))
 
 let run log =
   let open Fut.Syntax in
-  heading log "preferences";
+  Kit.heading log "preferences";
   let* (_ : (string option, failure) result) = preferences log in
-  heading log "filesystem";
+  Kit.heading log "filesystem";
   let* (_ : (string, failure) result) = filesystem log in
-  heading log "sqlite";
+  Kit.heading log "sqlite";
   let* (_ : (unit, failure) result) = sqlite log in
-  heading log "app";
+  Kit.heading log "app";
   let+ (_ : (unit, failure) result) = app log in
-  append log "done"
+  Kit.append log "done"
 
 let el () =
   let log =

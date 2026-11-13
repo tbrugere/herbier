@@ -1,6 +1,6 @@
 open Brr
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let v ?trailing ~title ~detail () =
   El.div

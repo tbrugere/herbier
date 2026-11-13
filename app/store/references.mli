@@ -47,11 +47,11 @@ val put :
     - a row (live or soft-deleted): sets [fetched_at], [payload], [status],
       [updated_at = at], [deleted_at = null]; keeps [id] and [created_at].
 
-    Always changes the row, so {!Db.edit} appends one entry carrying the stored
-    id. Read back by [(plant_id, source)]. [payload] must be a JSON object
-    ([Herbier_refs.Payload]'s builders always give one): a [`Null] would be
-    stored as the text ["null"], which {!row} cannot read back. An unknown plant
-    makes {!Db.edit} fail (foreign key). *)
+    Always changes the row, so {!Herbier_store_io.Db.edit} appends one entry
+    carrying the stored id. Read back by [(plant_id, source)]. [payload] must be
+    a JSON object ([Herbier_refs.Payload]'s builders always give one): a [`Null]
+    would be stored as the text ["null"], which {!row} cannot read back. An
+    unknown plant makes {!Herbier_store_io.Db.edit} fail (foreign key). *)
 
 val remove :
   plant:Plant_id.t -> source:Reference.Source.t -> at:Ptime.t -> Outbox.edit
@@ -95,8 +95,8 @@ val link :
     - a live row with the same [external_id] and [url]: nothing changes → no
       entry.
 
-    Read back by [(plant_id, source)]. An unknown plant makes {!Db.edit} fail.
-*)
+    Read back by [(plant_id, source)]. An unknown plant makes
+    {!Herbier_store_io.Db.edit} fail. *)
 
 val unlink :
   plant:Plant_id.t -> source:Reference.Source.t -> at:Ptime.t -> Outbox.edit

@@ -14,7 +14,7 @@ body or `docs/`.
   allowance below.
 - `docs/**` edits are in scope for §5 only.
 - Never flag generated or recorded files (`*.opam`, `dune.lock/**`, `supabase/schema/**`,
-  `test/postgrest/fixtures/scenarios.json`, `app/domain/version.ml`).
+  `test/postgrest/fixtures/scenarios.json`, `app/version/herbier_version.ml`).
 
 ## What to flag
 

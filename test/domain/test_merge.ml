@@ -2,6 +2,7 @@
    (sent) and test/fixtures/sync_select_reference_200.json (jsonb's
    reorder). *)
 
+module Value = Herbier_test_support.Value
 module Merge = Herbier_domain.Merge
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
@@ -14,10 +15,7 @@ module Status = Reference.Status
 
 (* ---------- time and id helpers (as test/store's fixtures) ---------- *)
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
+let time = Value.time
 
 let shift secs t =
   match Ptime.add_span t (Ptime.Span.of_int_s secs) with
@@ -26,13 +24,8 @@ let shift secs t =
 
 let t1 = time "2026-11-01T10:00:00Z"
 let t2 = time "2026-11-02T11:00:00Z"
-let uuid n = Printf.sprintf "01965d4e-0000-7000-8000-%012x" n
-
-let id_of what of_string n =
-  match of_string (uuid n) with
-  | Some x -> x
-  | None -> invalid_arg ("fixture " ^ what)
-
+let uuid = Value.uuid7
+let id_of what of_string n = Value.id what of_string (uuid n)
 let plant_id = id_of "plant id" Ids.Plant_id.of_string
 let observation_id = id_of "observation id" Ids.Observation_id.of_string
 let photo_id = id_of "photo id" Ids.Photo_id.of_string

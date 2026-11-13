@@ -1,14 +1,8 @@
 open Brr
-module Capture = Herbier_photos.Capture
-module Files = Herbier_store.Files
+module Capture = Herbier_photos_io.Capture
+module Files = Herbier_store_io.Files
 module Cap_error = Herbier_bindings.Cap_error
-
-let append log text = El.append_children log [El.div [El.txt' text]]
-
-let button label f =
-  let b = El.button [El.txt' label] in
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target b));
-  b
+module Fut_result = Herbier_bindings.Fut_result
 
 type camera = Off | Opening | On of Capture.viewfinder
 
@@ -18,20 +12,16 @@ let show log count (s : Capture.shot) =
   let open Fut.Result_syntax in
   let fut =
     let* () = Files.write_blob ~path s.preview.jpeg in
-    let* back = Files.read_blob ~path ~type':Herbier_photos.Preview.mime in
+    let* back = Files.read_blob ~path ~type':Herbier_photos_io.Preview.mime in
     let+ uri =
-      Fut.map
-        (Result.map_error (fun e ->
-             Cap_error.Rejected
-               {code = None; message = Jstr.to_string (Jv.Error.message e)}))
-        (Blob.data_uri back)
+      Fut_result.map_error Cap_error.of_jv_error (Blob.data_uri back)
     in
     (back, uri)
   in
   Fut.await fut (function
-    | Error e -> append log (path ^ ": " ^ Cap_error.to_string e)
+    | Error e -> Kit.append log (path ^ ": " ^ Cap_error.to_string e)
     | Ok (back, uri) ->
-        append log
+        Kit.append log
           (Printf.sprintf
              "%s %s: original %d bytes, preview %dx%d %d bytes, read back %d"
              (match s.source with Shutter -> "shutter" | Gallery -> "gallery")
@@ -55,30 +45,30 @@ let el () =
   let video = El.video ~at:[At.width 320] [] in
   let start () =
     match !camera with
-    | Opening | On _ -> append log "viewfinder already on"
+    | Opening | On _ -> Kit.append log "viewfinder already on"
     | Off ->
         camera := Opening;
         Fut.await (Capture.open_viewfinder ~video ()) (fun r ->
             match (r, !camera) with
             | Error e, _ ->
                 camera := Off;
-                append log (Capture.error_to_string e)
+                Kit.append log (Capture.error_to_string e)
             | Ok v, Opening ->
                 camera := On v;
-                append log "viewfinder on"
+                Kit.append log "viewfinder on"
             | Ok v, (Off | On _) -> Capture.close_viewfinder v)
   in
   let shoot () =
     match !camera with
-    | Off | Opening -> append log "no viewfinder"
+    | Off | Opening -> Kit.append log "no viewfinder"
     | On v ->
         Fut.await (Capture.shutter v) (function
-          | Error e -> append log (Capture.error_to_string e)
+          | Error e -> Kit.append log (Capture.error_to_string e)
           | Ok s -> show log count s)
   in
   let pick () =
     Fut.await (Capture.pick ~limit:5) (function
-      | Error e -> append log (Capture.error_to_string e)
+      | Error e -> Kit.append log (Capture.error_to_string e)
       | Ok shots -> List.iter (show log count) shots)
   in
   let close () =
@@ -86,7 +76,7 @@ let el () =
     | On v -> Capture.close_viewfinder v
     | Off | Opening -> ());
     camera := Off;
-    append log "viewfinder off"
+    Kit.append log "viewfinder off"
   in
   El.div
     ~at:[At.class' (Jstr.v "dev-page")]
@@ -95,10 +85,10 @@ let el () =
       video;
       El.div
         [
-          button "Viseur" start;
-          button "Déclencher" shoot;
-          button "Galerie" pick;
-          button "Fermer" close;
+          Kit.action "Viseur" start;
+          Kit.action "Déclencher" shoot;
+          Kit.action "Galerie" pick;
+          Kit.action "Fermer" close;
         ];
       log;
     ]

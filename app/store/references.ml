@@ -137,18 +137,9 @@ let put ~plant ~source ~fetched_at ~payload ~status ~at =
 
 let remove ~plant ~source ~at =
   reference_edit ~plant ~source
-    {
-      Stmt.sql =
-        "update reference set deleted_at = ?, updated_at = ? where plant_id = \
-         ? and source = ? and deleted_at is null";
-      params =
-        [
-          Codec.param R.deleted_at (Some at);
-          Codec.param R.updated_at at;
-          Codec.param R.plant_id plant;
-          Codec.param R.source source;
-        ];
-    }
+    (Stmt.soft_delete_by ~table:R.table
+       ~key:(Is (R.plant_id, plant), [Is (R.source, source)])
+       ~at)
 
 let upsert_row r =
   Outbox.bare
@@ -206,15 +197,6 @@ let link ~plant ~source ~external_id ~url ~at =
 
 let unlink ~plant ~source ~at =
   plant_ref_edit ~plant ~source
-    {
-      Stmt.sql =
-        "update plant_refs set deleted_at = ?, updated_at = ? where plant_id = \
-         ? and source = ? and deleted_at is null";
-      params =
-        [
-          Codec.param Pr.deleted_at (Some at);
-          Codec.param Pr.updated_at at;
-          Codec.param Pr.plant_id plant;
-          Codec.param Pr.source source;
-        ];
-    }
+    (Stmt.soft_delete_by ~table:Pr.table
+       ~key:(Is (Pr.plant_id, plant), [Is (Pr.source, source)])
+       ~at)

@@ -1,3 +1,5 @@
+module Url = Herbier_net.Url
+
 let taxref cd = "https://inpn.mnhn.fr/espece/cd_nom/" ^ string_of_int cd
 let tela nn = "https://www.tela-botanica.org/bdtfx-nn-" ^ string_of_int nn
 let inat id = "https://www.inaturalist.org/taxa/" ^ string_of_int id
@@ -13,17 +15,17 @@ let is_ipni_lsid id =
 
 let powo id =
   "https://powo.science.kew.org/taxon/"
-  ^ match is_ipni_lsid id with true -> id | false -> Request.encode id
+  ^ match is_ipni_lsid id with true -> id | false -> Url.encode id
 
 let plantnet name =
   "https://identify.plantnet.org/k-world-flora/species/"
-  ^ Request.encode name
+  ^ Url.encode name
   ^ "/data"
 
 let wikipedia ~lang title =
   "https://"
   ^ lang
   ^ ".wikipedia.org/wiki/"
-  ^ Request.encode (String.map (function ' ' -> '_' | c -> c) title)
+  ^ Url.encode (String.map (function ' ' -> '_' | c -> c) title)
 
 let eppo code = "https://gd.eppo.int/taxon/" ^ code

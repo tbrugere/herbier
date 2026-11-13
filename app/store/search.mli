@@ -6,38 +6,16 @@
     live observations. *)
 
 val match_expression : string -> string option
-(** The FTS5 [MATCH] text for what the user typed:
-    + the UTF-8 separators U+0080–U+00BF (but ª µ º: NBSP, « », ·, ¿) and
-      U+2000–U+207F (’ “ ” … – —, the narrow NBSP, superscripts) count as
-      spaces;
-    + terms are the maximal runs of bytes that are ASCII letters, ASCII digits
-      or ≥ 0x80 (UTF-8 sequences kept whole); every other byte separates terms
-      (spaces, punctuation, ['-'], ['\''], ['"'], ['*'], [':'], parentheses); a
-      term with no ASCII letter or digit and no lead byte of U+00C0–U+07FF,
-      U+0800–U+1FFF or U+3000–U+FFFF (only emoji or symbols) is dropped, since
-      it would match nothing;
-    + each term is folded: ASCII is lowercased, and the Latin-1 letters with a
-      diacritic (à á â ã ä å ç è é ê ë ì í î ï ñ ò ó ô õ ö ù ú û ü ý ÿ, their
-      capitals, and Ÿ) become their base ASCII letter; other bytes are kept (œ,
-      æ, ø and ß stay);
-    + at most one ending is stripped from the folded term, and only if at least
-      4 bytes remain: the first of ["es"; "is"; "us"; "um"; "ae"] that ends it
-      with 4 bytes left, otherwise the first of ["e"; "s"; "a"; "i"] that does
-      ("digitale" → "digital", "digitalis" → "digital", "pourpre" → "pourpr",
-      "roses" → "rose"; "rosa" and "lis" stay as they are);
-    + each term is written ["\"" ^ term ^ "\"*"], a quoted prefix query, so FTS5
-      keywords such as AND, OR, NOT and NEAR are plain text. Terms are joined by
-      one space: every term must match, in any column.
+(** The FTS5 [MATCH] text for what the user typed: each term of
+    {!Herbier_domain.Fold.terms}, folded ({!Herbier_domain.Fold.fold}) and with
+    one ending stripped ({!Herbier_domain.Fold.strip_ending}), is written
+    ["\"" ^ term ^ "\"*"], a quoted prefix query, so FTS5 keywords such as AND,
+    OR, NOT and NEAR are plain text. Terms are joined by one space: every term
+    must match, in any column. {!Herbier_domain.Fold.matches} runs the same
+    comparison in memory.
 
     [None] when there is no term (empty, blank, punctuation or symbols only).
     Never raises. *)
-
-val matches : query:string -> string -> bool
-(** [matches ~query text] runs, in memory, what {!match_expression} asks of
-    FTS5: [true] when every term of [query] (split, folded and with one ending
-    stripped exactly as {!match_expression} does) is a prefix of some term of
-    [text] (split and folded the same way, no ending stripped). [false] when
-    [query] has no term. Never raises. *)
 
 val plants : string -> Herbier_domain.Plant.t Stmt.query option
 (** [None] when [match_expression text] is [None]; the caller then shows the
@@ -48,8 +26,9 @@ val plants : string -> Herbier_domain.Plant.t Stmt.query option
 val plants_by_name : string -> Herbier_domain.Plant.t Stmt.query option
 (** {!plants} on the names and tags only: a plant is not found through the
     places it was seen at. The map (4b) matches a place on its own name with
-    {!matches}; through the places column, « lisi » would also admit the
-    observations made elsewhere of every plant ever seen at « Lisière ». *)
+    {!Herbier_domain.Fold.matches}; through the places column, « lisi » would
+    also admit the observations made elsewhere of every plant ever seen at «
+    Lisière ». *)
 
 val plants_or_all : string -> Herbier_domain.Plant.t Stmt.query
 (** {!plants}, or {!Plants.list} when the text has no term. *)

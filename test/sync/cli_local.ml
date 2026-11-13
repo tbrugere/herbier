@@ -1,5 +1,5 @@
 (* A [Local.S] over the sqlite3 CLI (test/store/sqlite_cli.ml, copied in),
-   standing in for the device's [Herbier_store.Db] (local.mli): [t] is a
+   standing in for the device's [Herbier_store_io.Db] (local.mli): [t] is a
    migrated db file's path.
 
    [bare_transaction] mirrors [Db.bare_transaction]'s contract (local.mli):
@@ -20,6 +20,8 @@
    Buffered writes are invisible to [Tx.all] until the script runs;
    pull.mli's "never reads back its own writes" keeps this faithful. *)
 
+module Stmt = Herbier_store.Stmt
+module Outbox = Herbier_store.Outbox
 module IO = Mock_http.IO
 module Cli = Sqlite_cli
 

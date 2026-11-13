@@ -1,3 +1,4 @@
+module Snap = Herbier_ui_model.Snap
 open Brr
 
 type t = {
@@ -9,7 +10,7 @@ type t = {
   bindings : Rb.binding list;
 }
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 (* A press becomes a drag once the finger has moved this far, in px. Below it
    the gesture is a tap, left to whatever the header holds. *)

@@ -1,0 +1,6 @@
+; Pure JSON and URL helpers the decoders and request builders share (refs,
+; geo, photos, sync). yojson only: no domain, no Brr.
+(library
+ (name herbier_net)
+ (public_name herbier.net)
+ (libraries yojson))

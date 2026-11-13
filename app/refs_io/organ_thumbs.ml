@@ -1,8 +1,8 @@
 module Reference = Herbier_domain.Reference
 module Organ = Reference.Organ
 module Image = Reference.Image
-module Db = Herbier_store.Db
-module Files = Herbier_store.Files
+module Db = Herbier_store_io.Db
+module Files = Herbier_store_io.Files
 module Ref_images = Herbier_store.Ref_images
 module References = Herbier_store.References
 module Organ_photos = Herbier_refs.Organ_photos
@@ -10,7 +10,8 @@ module Projection = Herbier_refs.Projection
 module Cap_error = Herbier_bindings.Cap_error
 module Cap_http = Herbier_bindings.Cap_http
 module Image_bitmap = Herbier_bindings.Image_bitmap
-module C2d = Brr_canvas.C2d
+module Canvas_jpeg = Herbier_bindings.Canvas_jpeg
+module Fut_result = Herbier_bindings.Fut_result
 
 type failure =
   | Host
@@ -66,46 +67,24 @@ let fetch ~timeout_ms url =
           | _ -> Ok base64))
     (Cap_http.get_bytes ~url ~timeout_ms)
 
-(* White under the image: JPEG has no alpha. See photos/preview.ml. *)
 let draw bitmap =
   let width, height =
     Organ_photos.fit
       ~width:(Image_bitmap.width bitmap)
       ~height:(Image_bitmap.height bitmap)
   in
-  let w = float width and h = float height in
-  match
-    Fun.protect
-      ~finally:(fun () -> Image_bitmap.close bitmap)
-      (fun () ->
-        let canvas = Brr_canvas.Canvas.create ~w:width ~h:height [] in
-        let ctx = C2d.get_context canvas in
-        C2d.set_fill_style ctx (C2d.color (Jstr.v "#fff"));
-        C2d.fill_rect ctx ~x:0. ~y:0. ~w ~h;
-        C2d.set_image_smoothing_quality ctx C2d.Image_smoothing_quality.high;
-        C2d.draw_image_in_rect ctx
-          (Image_bitmap.image_src bitmap)
-          ~x:0. ~y:0. ~w ~h;
-        canvas)
-  with
-  | canvas -> Ok canvas
-  | exception Jv.Error e -> Error (Draw (Cap_error.of_jv_error e))
+  match Canvas_jpeg.draw ~width ~height bitmap with
+  | Ok canvas -> Ok canvas
+  | Error e -> Error (Draw e)
   (* jsoo raises a thrown value that is not an Error as [Failure]. *)
   | exception Failure message ->
       Error (Draw (Cap_error.Rejected {code = None; message}))
 
 let encode canvas =
-  Fut.map
+  Fut_result.map_error
     (function
-      | Error e -> Error (Encode e)
-      | Ok blob -> (
-          match Jstr.to_string (Brr.Blob.type' blob) with
-          | t when String.equal t mime -> Ok blob
-          | t -> Error (Not_jpeg t)))
-    (Herbier_bindings.Canvas_blob.to_blob canvas ~type':mime
-       ~quality:Organ_photos.quality)
-
-let tag f fut = Fut.map (Result.map_error f) fut
+      | Canvas_jpeg.Encode e -> Encode e | Canvas_jpeg.Not_jpeg t -> Not_jpeg t)
+    (Canvas_jpeg.encode ~quality:Organ_photos.quality canvas)
 
 (* The thumbnail's file, written; [Error] for any failure before the
    database is touched. *)
@@ -118,10 +97,12 @@ let thumbnail ~timeout_ms (row : Image.t) path =
          (fun e -> Base64 e)
          (Files.blob_of_base64 ~type':mime base64))
   in
-  let* bitmap = tag (fun e -> Decode e) (Image_bitmap.of_blob blob) in
+  let* bitmap =
+    Fut_result.map_error (fun e -> Decode e) (Image_bitmap.of_blob blob)
+  in
   let* canvas = Fut.return (draw bitmap) in
   let* jpeg = encode canvas in
-  tag (fun e -> Write e) (Files.write_blob ~path jpeg)
+  Fut_result.map_error (fun e -> Write e) (Files.write_blob ~path jpeg)
 
 let download db ~timeout_ms (row : Image.t) =
   let open Fut.Syntax in
@@ -146,15 +127,10 @@ let download db ~timeout_ms (row : Image.t) =
 
 (* {1 The plant} *)
 
-(* [f] on each item in turn, stopping at the first [Error]. *)
 let each items f =
-  List.fold_left
-    (fun acc x ->
-      Fut.bind acc (function
-        | Error e -> Fut.return (Error e)
-        | Ok done_ -> Fut.map (Result.map (fun r -> (x, r) :: done_)) (f x)))
-    (Fut.ok []) items
-  |> Fut.map (Result.map List.rev)
+  Fut_result.traverse
+    (fun x -> Fut.map (Result.map (fun r -> (x, r))) (f x))
+    items
 
 (* Best effort: a missing or undeletable file is an orphan no row points
    to. *)

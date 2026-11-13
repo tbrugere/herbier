@@ -1,10 +1,13 @@
-; MapLibre map over the facade binding, map style, GeoJSON and geocoding
-; (style, features, geocode, place_name and communes are pure, copied into
-; test/geo; geocoder runs geocode over Brr fetch; commune_packs downloads and
-; stores packs through store).
+; Pure geo: GeoJSON features, the map style, the geocoding requests and
+; decoders (geocode), the place-name rules and the commune packs (communes).
+; No Brr, no store: the libraries below enforce it, and test/geo links this
+; library natively. The Brr side is app/geo_io/. Subdirectories are
+; qualified modules (communes/: Communes and its parts).
+(include_subdirs qualified)
+
 (library
  (name herbier_geo)
  (public_name herbier.geo)
- (libraries herbier_domain herbier_store herbier_bindings brr yojson)
+ (libraries herbier_domain herbier_net yojson)
  (preprocess
   (pps ppx_deriving.eq)))

@@ -1,16 +1,15 @@
+module Communes = Herbier_geo.Communes
+module Geocode = Herbier_geo.Geocode
+module Place_name = Herbier_geo.Place_name
 module Places = Herbier_domain.Places
 module Observation = Herbier_domain.Observation
 module Ids = Herbier_domain.Ids
+module Fixture = Herbier_test_support.Fixture
 
 (* ---------- fixture plumbing ---------- *)
 
-let read_fixture name =
-  In_channel.with_open_bin
-    (Filename.concat "../fixtures" name)
-    In_channel.input_all
-
 let json_fixture name =
-  match Geocode.json_of_string (read_fixture name) with
+  match Geocode.json_of_string (Fixture.read name) with
   | Ok j -> j
   | Error e -> failwith (name ^ ": " ^ Geocode.error_to_string e)
 

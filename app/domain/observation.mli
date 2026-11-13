@@ -32,5 +32,9 @@ val equal_position : position -> position -> bool
 (** [Float.equal] on each coordinate: exact, except that [nan] equals [nan] and
     [0.] equals [-0.]. *)
 
+val pp_position : Format.formatter -> position -> unit
+
 val equal : t -> t -> bool
 (** Field by field: [Ptime.equal] on instants (no truncation). *)
+
+val pp : Format.formatter -> t -> unit

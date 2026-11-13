@@ -36,9 +36,11 @@ let compare_obs (a : Observation.t) (b : Observation.t) =
   | 0 -> Ids.Observation_id.compare a.id b.id
   | c -> c
 
+let finite {lat; lon} = Float.is_finite lat && Float.is_finite lon
+
 let position_point : Observation.t -> point option = function
   | {deleted_at = None; position = Some {lat; lon; accuracy_m = _}; _}
-    when Float.is_finite lat && Float.is_finite lon ->
+    when finite {lat; lon} ->
       Some {lat; lon}
   | {deleted_at = Some _ | None; position = Some _ | None; _} -> None
 
@@ -97,12 +99,10 @@ let cluster observations =
   |> List.rev_map (fun g ->
       {centroid = centroid g; members = List.rev g.rev_members})
 
-let present s = match String.trim s with "" -> None | t -> Some t
-
 let place_name (o : Observation.t) =
-  match Option.bind o.place_label present with
+  match Option.bind o.place_label Text.non_blank with
   | Some l -> Some l
-  | None -> Option.bind o.place_derived present
+  | None -> Option.bind o.place_derived Text.non_blank
 
 let unknown_name = "Lieu inconnu"
 
@@ -155,7 +155,7 @@ let label observations =
   in
   let most_frequent field =
     live
-    |> List.filter_map (fun o -> Option.bind (field o) present)
+    |> List.filter_map (fun o -> Option.bind (field o) Text.non_blank)
     |> plurality
   in
   match most_frequent (fun (o : Observation.t) -> o.place_label) with
@@ -170,7 +170,7 @@ let label observations =
           |> Option.map (fun c -> Coordinates c))
 
 let rename name ~at {centroid = _; members} =
-  let label = present name in
+  let label = Text.non_blank name in
   List.filter_map
     (fun (o : Observation.t) ->
       match Option.equal String.equal o.place_label label with

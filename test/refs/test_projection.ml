@@ -1,3 +1,4 @@
+module Value = Herbier_test_support.Value
 module Ids = Herbier_domain.Ids
 module Reference = Herbier_domain.Reference
 module Source = Herbier_domain.Reference.Source
@@ -8,6 +9,7 @@ module Payload = Herbier_refs.Payload
 module Projection = Herbier_refs.Projection
 module Source_url = Herbier_refs.Source_url
 module Gbif = Herbier_refs.Sources.Gbif
+module Testable = Herbier_test_support.Testable
 
 (* ---------- fixtures, ids and times ---------- *)
 
@@ -16,11 +18,7 @@ let plant =
   | Some x -> x
   | None -> invalid_arg "plant id"
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
-
+let time = Value.time
 let t_gbif = time "2026-11-01T10:00:00Z"
 let t_other = time "2026-11-01T11:00:00Z"
 
@@ -193,7 +191,7 @@ let digitalis_tests =
               "scientific_name" "Digitalis purpurea L." value.scientific_name;
             Alcotest.(check (option string))
               "family" (Some "Plantaginaceae") value.family;
-            Alcotest.(check Check.yojson)
+            Alcotest.(check Testable.yojson)
               "sources"
               (sources_json [Source.Gbif])
               (sources_json sources)
@@ -221,7 +219,7 @@ let digitalis_tests =
               "de" (Some ["Roter Fingerhut"]) (names_of De value);
             Alcotest.(check (option (list string)))
               "it" (Some ["Digitale rossa"]) (names_of It value);
-            Alcotest.(check Check.yojson)
+            Alcotest.(check Testable.yojson)
               "sources"
               (sources_json [Source.Gbif; Source.Wikidata])
               (sources_json sources)
@@ -256,7 +254,7 @@ let digitalis_tests =
         | Some {value; sources} ->
             Alcotest.(check string)
               "value" "La plante est extrêmement toxique." value;
-            Alcotest.(check Check.yojson)
+            Alcotest.(check Testable.yojson)
               "sources"
               (sources_json [Source.Wikipedia])
               (sources_json sources)
@@ -277,7 +275,7 @@ let digitalis_tests =
               (fun (i : Gbif.Image.t) ->
                 Alcotest.(check string) "licence" "cc-by-sa" i.licence)
               value;
-            Alcotest.(check Check.yojson)
+            Alcotest.(check Testable.yojson)
               "sources"
               (sources_json [Source.Plantnet])
               (sources_json sources)
@@ -285,7 +283,7 @@ let digitalis_tests =
     ( "links, in order",
       `Quick,
       fun () ->
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "links"
           (links_json
              [
@@ -311,7 +309,7 @@ let digitalis_tests =
     ( "empty_fields: the regional six plus red_list",
       `Quick,
       fun () ->
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "empty_fields"
           (fields_json
              Projection.Field.
@@ -386,7 +384,7 @@ let arnica_tests =
         match proj.red_list with
         | Some {value; sources} ->
             Alcotest.(check string) "value" "LEAST_CONCERN" value;
-            Alcotest.(check Check.yojson)
+            Alcotest.(check Testable.yojson)
               "sources"
               (sources_json [Source.Gbif])
               (sources_json sources)
@@ -410,7 +408,7 @@ let arnica_tests =
     ( "links, in order",
       `Quick,
       fun () ->
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "links"
           (links_json
              [
@@ -436,7 +434,7 @@ let arnica_tests =
     ( "empty_fields: the regional six plus toxicity",
       `Quick,
       fun () ->
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "empty_fields"
           (fields_json
              Projection.Field.
@@ -464,7 +462,9 @@ let arnica_tests =
 
 let no_rows_is_empty () =
   let proj = project [] in
-  Alcotest.(check Check.yojson) "taxon" `Null (cited_json taxon_json proj.taxon);
+  Alcotest.(check Testable.yojson)
+    "taxon" `Null
+    (cited_json taxon_json proj.taxon);
   Alcotest.(check bool) "vernacular" true (Option.is_none proj.vernacular);
   Alcotest.(check bool) "origin" true (Option.is_none proj.origin);
   Alcotest.(check bool) "red_list" true (Option.is_none proj.red_list);
@@ -474,7 +474,7 @@ let no_rows_is_empty () =
     "links" []
     (List.map (fun (l : Projection.link) -> l.url) proj.links);
   Alcotest.(check (option ptime)) "fetched_at" None proj.fetched_at;
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "empty_fields"
     (fields_json Projection.Field.all)
     (fields_json (Projection.empty_fields proj))
@@ -490,14 +490,14 @@ let only_gbif_row () =
   (match proj.taxon with
   | Some {value; sources} ->
       Alcotest.(check int) "taxon key" 5414995 value.key;
-      Alcotest.(check Check.yojson)
+      Alcotest.(check Testable.yojson)
         "taxon sources"
         (sources_json [Source.Gbif])
         (sources_json sources)
   | None -> Alcotest.fail "taxon is None");
   (match proj.vernacular with
   | Some {sources; _} ->
-      Alcotest.(check Check.yojson)
+      Alcotest.(check Testable.yojson)
         "vernacular sources"
         (sources_json [Source.Gbif])
         (sources_json sources)
@@ -507,7 +507,7 @@ let only_gbif_row () =
   Alcotest.(check bool)
     "organ_photos is None" true
     (Option.is_none proj.organ_photos);
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "links = [Gbif] only"
     (links_json [link Source.Gbif "https://www.gbif.org/species/5414995"])
     (links_json proj.links)
@@ -580,9 +580,9 @@ let powo_row_ignored () =
   let proj = project [powo_row] in
   Alcotest.(check (option ptime)) "fetched_at stays None" None proj.fetched_at;
   Alcotest.(check bool) "taxon stays None" true (Option.is_none proj.taxon);
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "links stays []" (links_json []) (links_json proj.links);
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "empty_fields is Field.all"
     (fields_json Projection.Field.all)
     (fields_json (Projection.empty_fields proj))
@@ -908,7 +908,7 @@ let origin_and_red_list_rules () =
       ]
   in
   let proj = project [gbif_row ~distributions:page ()] in
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "origin: present WCVP rows, deduplicated, UNCERTAIN in neither list"
     (cited_json origin_json
        (Some
@@ -931,14 +931,14 @@ let filled_family_and_ranges () =
         List.mem f Projection.Field.[Family; Native_range; Introduced_range])
       (Projection.empty_fields proj)
   in
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "no family, introduced rows only"
     (fields_json Projection.Field.[Family; Native_range])
     (fields_json
        (empty
           (vernacular_page
              [distribution ~locality:"Chile" ~means:"INTRODUCED" wcvp])));
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "no family, native rows only"
     (fields_json Projection.Field.[Family; Introduced_range])
     (fields_json
@@ -1115,12 +1115,12 @@ let malformed_ids_give_no_link () =
   let only_gbif =
     links_json [link Source.Gbif "https://www.gbif.org/species/1"]
   in
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "another urn, a lowercase EPPO code, zero ids, an http page" only_gbif
     (links_json
        (links ~powo:"urn:lsid:other.org:names:1" ~eppo:"dikpu"
           ~page:"http://fr.wikipedia.org/wiki/X_y"));
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "a POWO suffix with a letter, an EPPO code with a dash, a page off \
      Wikipedia"
     only_gbif
@@ -1147,7 +1147,7 @@ let stored_urls_are_checked () =
         ~url:"https://example.org/ipni/1" t_other;
     ]
   in
-  Alcotest.(check Check.yojson)
+  Alcotest.(check Testable.yojson)
     "a stored url off its source, not https or with a space gives way to the \
      derived link; EPPO and Wikidata ones on their host are kept"
     (links_json

@@ -1,0 +1,6 @@
+; Helpers shared by the native test suites: the recorded-fixture reader, a
+; substring check, a Yojson testable and the literal values rows are built
+; from. Native only, no app library.
+(library
+ (name herbier_test_support)
+ (libraries yojson ptime alcotest))

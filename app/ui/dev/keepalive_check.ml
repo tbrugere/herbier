@@ -1,11 +1,8 @@
 open Brr
 module K = Herbier_sync.Keepalive
-
-let append log text = El.append_children log [El.div [El.txt' text]]
-let button label = El.button ~at:[At.type' (Jstr.v "button")] [El.txt' label]
-
-let on_click el f =
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target el) : Ev.listener)
+module Report = Herbier_sync_core.Keepalive.Report
+module Wire = Herbier_sync_core.Keepalive.Wire
+module Gotrue = Herbier_sync_core.Auth.Gotrue
 
 let lines_of el lines =
   El.set_children el (List.map (fun l -> El.div [El.txt' l]) lines)
@@ -17,7 +14,7 @@ let error_line label = function
 
 let iso t = Ptime.to_rfc3339 ~tz_offset_s:0 t
 
-let report_lines (r : K.Report.t) =
+let report_lines (r : Report.t) =
   List.concat
     [
       [
@@ -27,7 +24,7 @@ let report_lines (r : K.Report.t) =
         Printf.sprintf "queued: %d" r.queued;
         Printf.sprintf "runs: %d" (List.length r.runs);
       ];
-      List.map K.Report.run_to_string r.runs;
+      List.map Report.run_to_string r.runs;
     ]
 
 let page app =
@@ -36,8 +33,8 @@ let page app =
     El.div
       [
         El.txt'
-          (Printf.sprintf "label %s, every %d min" K.Wire.label
-             K.Wire.interval_minutes);
+          (Printf.sprintf "label %s, every %d min" Wire.label
+             Wire.interval_minutes);
       ]
   in
   let report = El.div [] in
@@ -58,43 +55,41 @@ let page app =
         ]
       ()
   in
-  let set = button "Session du job"
-  and drop = button "Oublier la session"
-  and hand_off = button "Confier la file"
-  and reclaim = button "Reprendre la file"
-  and run = button "Lancer maintenant"
-  and update = button "Actualiser" in
+  let set = Kit.button "Session du job"
+  and drop = Kit.button "Oublier la session"
+  and hand_off = Kit.button "Confier la file"
+  and reclaim = Kit.button "Reprendre la file"
+  and run = Kit.button "Lancer maintenant"
+  and update = Kit.button "Actualiser" in
   let done_ label fut =
     Fut.await fut (function
       | Ok () ->
-          append log (label ^ ": ok");
+          Kit.append log (label ^ ": ok");
           refresh ()
-      | Error e -> append log (error_line label e))
+      | Error e -> Kit.append log (error_line label e))
   in
-  on_click set (fun () ->
+  Kit.on_click set (fun () ->
       let text = Jstr.to_string (El.prop El.Prop.value session) in
       El.set_prop El.Prop.value Jstr.empty session;
       match
-        Herbier_sync.Auth.Gotrue.decode_session ~now:(Ptime_clock.now ())
-          ~status:200 text
+        Gotrue.decode_session ~now:(Ptime_clock.now ()) ~status:200 text
       with
-      | Error e ->
-          append log ("session: " ^ Herbier_sync.Auth.Gotrue.error_to_string e)
+      | Error e -> Kit.append log ("session: " ^ Gotrue.error_to_string e)
       | Ok s -> done_ "session" (K.set_session keepalive s));
-  on_click drop (fun () -> done_ "forget" (K.drop_session keepalive));
-  on_click hand_off (fun () ->
+  Kit.on_click drop (fun () -> done_ "forget" (K.drop_session keepalive));
+  Kit.on_click hand_off (fun () ->
       Fut.await (K.hand_off keepalive) (fun () ->
-          append log "hand off: done";
+          Kit.append log "hand off: done";
           refresh ()));
-  on_click reclaim (fun () -> done_ "reclaim" (K.reclaim keepalive));
-  on_click run (fun () ->
-      append log "run: started";
+  Kit.on_click reclaim (fun () -> done_ "reclaim" (K.reclaim keepalive));
+  Kit.on_click run (fun () ->
+      Kit.append log "run: started";
       Fut.await (K.run_now keepalive) (fun r ->
           (match r with
-          | Ok _ -> append log "run: ok"
-          | Error e -> append log (error_line "run" e));
+          | Ok _ -> Kit.append log "run: ok"
+          | Error e -> Kit.append log (error_line "run" e));
           show r));
-  on_click update refresh;
+  Kit.on_click update refresh;
   let el =
     El.div
       [
@@ -106,7 +101,7 @@ let page app =
         log;
       ]
   in
-  Fut.await (render ()) (fun () -> append log "done");
+  Fut.await (render ()) (fun () -> Kit.append log "done");
   el
 
 let el = function

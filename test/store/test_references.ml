@@ -5,6 +5,14 @@
    transaction. The JSON column through the Capacitor plugin is a device
    check (#dev/store, "references" group). *)
 
+module Value = Herbier_test_support.Value
+module Codec = Herbier_store.Codec
+module Stmt = Herbier_store.Stmt
+module Outbox = Herbier_store.Outbox
+module Plants = Herbier_store.Plants
+module Tags = Herbier_store.Tags
+module References = Herbier_store.References
+module Tables = Herbier_store.Tables
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
 module Reference = Herbier_domain.Reference
@@ -13,21 +21,13 @@ module Status = Herbier_domain.Reference.Status
 module Col = Postgrest.Col
 module Input = Postgrest.Input
 module Cli = Sqlite_cli
+module Text = Herbier_test_support.Text
 
 (* ---------- fixtures ---------- *)
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
-
-let uuid n = Printf.sprintf "00000000-0000-4000-8000-%012x" n
-
-let id_of what of_string n =
-  match of_string (uuid n) with
-  | Some x -> x
-  | None -> invalid_arg ("fixture " ^ what)
-
+let time = Value.time
+let uuid = Value.uuid4
+let id_of what of_string n = Value.id what of_string (uuid n)
 let plant_id = id_of "plant id" Ids.Plant_id.of_string
 let reference_id = id_of "reference id" Ids.Reference_id.of_string
 let plant_ref_id = id_of "plant ref id" Ids.Plant_ref_id.of_string
@@ -385,7 +385,7 @@ let put_for_unknown_plant_fails () =
   | Error stderr ->
       Alcotest.(check bool)
         "it fails on the foreign key" true
-        (Cli.contains ~sub:"FOREIGN KEY constraint failed" stderr)
+        (Text.contains ~sub:"FOREIGN KEY constraint failed" stderr)
 
 (* ---------- remove ---------- *)
 
@@ -591,15 +591,15 @@ let check_not_replace what (s : Stmt.t) =
   Alcotest.(check bool)
     (what ^ " is not insert or replace")
     false
-    (Cli.contains ~sub:"insert or replace" sql);
+    (Text.contains ~sub:"insert or replace" sql);
   Alcotest.(check bool)
     (what ^ " is not replace into")
     false
-    (Cli.contains ~sub:"replace into" sql);
+    (Text.contains ~sub:"replace into" sql);
   Alcotest.(check bool)
     (what ^ " has an on conflict clause")
     true
-    (Cli.contains ~sub:"on conflict" sql)
+    (Text.contains ~sub:"on conflict" sql)
 
 let seed_plant db n display_name =
   let p = plant n display_name in

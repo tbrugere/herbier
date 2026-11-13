@@ -3,6 +3,10 @@
    ids, one row builder per synced table (optional fields unset, every
    instant [at]) and a row's outbox entry. *)
 
+module Value = Herbier_test_support.Value
+module Synced = Herbier_sync_core.Synced
+module Rest = Herbier_sync_core.Net.Rest
+module Outbox = Herbier_store.Outbox
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
 module Observation = Herbier_domain.Observation
@@ -21,19 +25,11 @@ module R = Rest.Make (H)
 let conn =
   Rest.conn ~supabase_url:"http://127.0.0.1:54321" ~apikey:"K" ~token:"T"
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
+let time = Value.time
 
 (* The ids scripts/record-sync-fixtures.sh writes (UUID v7 shape). *)
-let uuid n = Printf.sprintf "01965d4e-0000-7000-8000-%012x" n
-
-let id_of what of_string n =
-  match of_string (uuid n) with
-  | Some x -> x
-  | None -> invalid_arg ("fixture " ^ what)
-
+let uuid = Value.uuid7
+let id_of what of_string n = Value.id what of_string (uuid n)
 let plant_id = id_of "plant id" Ids.Plant_id.of_string
 let observation_id = id_of "observation id" Ids.Observation_id.of_string
 let photo_id = id_of "photo id" Ids.Photo_id.of_string

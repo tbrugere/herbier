@@ -1,9 +1,10 @@
 (** The local [outbox] table (architecture §3, §4): one entry per change of a
-    synced row, appended by {!Db.edit} in the same transaction as the change,
-    pushed by the sync engine in [seq] order (architecture §4). Pure: statements
-    as values, run by {!Db} on the device and by the sqlite3 CLI in test/store.
-    The pull and {!Dev_seed} write synced rows without entries ({!bare}), only
-    inside {!Db.bare_transaction}. *)
+    synced row, appended by {!Herbier_store_io.Db.edit} in the same transaction
+    as the change, pushed by the sync engine in [seq] order (architecture §4).
+    Pure: statements as values, run by {!Herbier_store_io.Db} on the device and
+    by the sqlite3 CLI in test/store. The pull and {!Dev_seed} write synced rows
+    without entries ({!bare}), only inside
+    {!Herbier_store_io.Db.bare_transaction}. *)
 
 type op =
   | Upsert
@@ -52,8 +53,9 @@ val edit :
 
 type bare
 (** A write to a synced row that appends no outbox entry: a pulled row, a dev
-    seed row. Distinct from [Stmt.t], so {!Db.write} does not take it; it runs
-    only inside {!Db.bare_transaction} ([Db.Tx.write]). *)
+    seed row. Distinct from [Stmt.t], so {!Herbier_store_io.Db.write} does not
+    take it; it runs only inside {!Herbier_store_io.Db.bare_transaction}
+    ([Db.Tx.write]). *)
 
 val without_entry : edit -> bare
 (** The edit's statement alone, with no entry. *)
@@ -64,9 +66,9 @@ val bare : Stmt.t -> bare
     {!References.upsert_plant_ref}). *)
 
 val bare_stmt : bare -> Stmt.t
-(** For {!Db} ({!Db.edit} and the bare transaction) and test/store, test/sync
-    only. Passing the result to [Db.write] defeats the point of {!bare}; nothing
-    else calls it. *)
+(** For {!Herbier_store_io.Db} ({!Herbier_store_io.Db.edit} and the bare
+    transaction) and test/store, test/sync only. Passing the result to
+    [Db.write] defeats the point of {!bare}; nothing else calls it. *)
 
 val reread : edit -> Stmt.t
 (** The SQL and parameters of the read-back query. *)

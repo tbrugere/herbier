@@ -1,6 +1,6 @@
 open Brr
 
-type tab = Collection | Map | Journal | Settings
+type tab = Collection | Map | Journal | Settings [@@deriving eq]
 
 type t = {
   el : El.t;
@@ -9,12 +9,8 @@ type t = {
   bindings : Rb.binding list;
 }
 
-let cls c = At.class' (Jstr.v c)
-
-let button ?(at = []) classes children =
-  El.button
-    ~at:((At.type' (Jstr.v "button") :: List.map cls classes) @ at)
-    children
+let cls = Html.cls
+let button = Html.button
 
 let label = function
   | Collection -> "Collection"
@@ -28,11 +24,7 @@ let icon = function
   | Journal -> Icon.List
   | Settings -> Icon.Settings
 
-let equal a b =
-  match (a, b) with
-  | Collection, Collection | Map, Map | Journal, Journal | Settings, Settings ->
-      true
-  | (Collection | Map | Journal | Settings), _ -> false
+let equal = equal_tab
 
 type tab_button = {
   button_el : El.t;

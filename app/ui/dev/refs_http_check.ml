@@ -9,8 +9,6 @@ module Payload = Herbier_refs.Payload
 module Projection = Herbier_refs.Projection
 module Reference = Herbier_domain.Reference
 
-let append log text = Brr.El.append_children log [Brr.El.div [Brr.El.txt' text]]
-
 let in_flight () =
   String.concat "," (List.map Source.to_string (Http.in_flight ()))
 
@@ -200,13 +198,13 @@ let fetch log name request =
   Fut.map
     (function
       | Error e ->
-          append log (Printf.sprintf "%s: %s" name (Http.error_to_string e));
+          Kit.append log (Printf.sprintf "%s: %s" name (Http.error_to_string e));
           None
       | Ok body -> (
           match Decode.json_of_string body with
           | Ok json -> Some json
           | Error e ->
-              append log
+              Kit.append log
                 (Printf.sprintf "%s: %s" name (Decode.error_to_string e));
               None))
     (Http.get request)
@@ -264,7 +262,7 @@ let project_one log key =
   let now = Ptime_clock.now () in
   let plant_id = Herbier_domain.Ids.Plant_id.fresh () in
   let row source payload =
-    append log
+    Kit.append log
       (Printf.sprintf "%s payload %s: %d bytes" label (Source.to_string source)
          (String.length (Yojson.Safe.to_string payload)));
     {
@@ -293,7 +291,7 @@ let project_one log key =
   in
   List.iter
     (fun field ->
-      append log
+      Kit.append log
         (Printf.sprintf "%s %s: %s" label
            (Projection.Field.to_string field)
            (match Projection.filled t field with
@@ -302,11 +300,11 @@ let project_one log key =
     Projection.Field.all;
   List.iter
     (fun (p : Projection.problem) ->
-      append log
+      Kit.append log
         (Printf.sprintf "%s problem %s: %s" label (Payload.name p.part)
            (Decode.error_to_string p.error)))
     t.problems;
-  append log
+  Kit.append log
     (Printf.sprintf "%s empty fields: %d of %d" label
        (List.length (Projection.empty_fields t))
        (List.length Projection.Field.all))
@@ -315,7 +313,7 @@ let project_all log =
   let open Fut.Syntax in
   let* () = project_one log digitalis in
   let+ () = project_one log arnica in
-  append log "projection done"
+  Kit.append log "projection done"
 
 let decode_all log =
   let results =
@@ -323,7 +321,7 @@ let decode_all log =
       (fun {name; request; summary} ->
         Fut.map
           (fun r ->
-            append log
+            Kit.append log
               (match r with
               | Error e -> Printf.sprintf "%s: %s" name (Http.error_to_string e)
               | Ok body -> (
@@ -335,22 +333,22 @@ let decode_all log =
       (described ())
   in
   Fut.await (Fut.of_list results) (fun _ ->
-      append log "decode done";
+      Kit.append log "decode done";
       Fut.await (project_all log) Fun.id)
 
 let run log =
-  append log ("user agent: " ^ Http.user_agent);
+  Kit.append log ("user agent: " ^ Http.user_agent);
   let results =
     List.mapi
       (fun i ((request : Request.t), timeout_ms) ->
         let source = request.source in
         let fut = Http.get ?timeout_ms request in
-        append log
+        Kit.append log
           (Printf.sprintf "#%d %s queued · in flight: %s" i
              (Source.to_string source) (in_flight ()));
         Fut.map
           (fun r ->
-            append log
+            Kit.append log
               (Printf.sprintf "#%d %s %s · in flight: %s" i
                  (Source.to_string source)
                  (match r with
@@ -363,7 +361,7 @@ let run log =
   in
   Fut.await (Fut.of_list results) (fun results ->
       let ok = List.length (List.filter Result.is_ok results) in
-      append log
+      Kit.append log
         (Printf.sprintf "done: %d ok, %d errors" ok (List.length results - ok));
       decode_all log)
 

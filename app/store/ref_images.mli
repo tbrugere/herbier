@@ -1,7 +1,7 @@
 (** The device-only [ref_images] table (architecture §2 [RefImage], §3): one
     organ image per [(plant_id, source, organ)] with its downloaded thumbnail.
-    Not synced: written with {!Db.write}, never through {!Db.edit}, no outbox
-    entry. *)
+    Not synced: written with {!Herbier_store_io.Db.write}, never through
+    {!Herbier_store_io.Db.edit}, no outbox entry. *)
 
 module Image = Herbier_domain.Reference.Image
 module Plant_id = Herbier_domain.Ids.Plant_id

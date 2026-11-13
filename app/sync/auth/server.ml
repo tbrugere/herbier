@@ -1,11 +1,11 @@
+module Gotrue = Herbier_sync_core.Auth.Gotrue
+module Session = Herbier_sync_core.Auth.Session
+module Grant = Herbier_sync_core.Auth.Grant
 module Timed_fetch = Herbier_bindings.Timed_fetch
 
-type error = Network of string | Rejected of Gotrue.error
+type error = Grant.error = Network of string | Rejected of Gotrue.error
 
-let error_to_string = function
-  | Network m -> "network: " ^ m
-  | Rejected e -> Gotrue.error_to_string e
-
+let error_to_string = Grant.error_to_string
 let base_url = Backend.supabase_url
 let apikey = Backend.publishable_key
 
@@ -27,8 +27,15 @@ let grant request =
 let id_token_grant ~raw_nonce ~id_token =
   grant (Gotrue.id_token_grant ~base_url ~apikey ~id_token ~nonce:raw_nonce)
 
+type refreshed = Grant.refreshed =
+  | Fresh of Session.t
+  | Revoked of Gotrue.error
+  | Failed of error
+
 let refresh (s : Session.t) =
-  grant (Gotrue.refresh_grant ~base_url ~apikey ~refresh_token:s.refresh_token)
+  Fut.map Grant.refreshed
+    (grant
+       (Gotrue.refresh_grant ~base_url ~apikey ~refresh_token:s.refresh_token))
 
 let logout (s : Session.t) =
   Fut.map

@@ -4,7 +4,6 @@
  (name test_refs)
  (modules
   test_refs
-  fixture
   check
   fake_net
   test_request
@@ -17,7 +16,14 @@
   test_step
   test_fanout
   test_resolve)
- (libraries herbier_refs herbier_domain yojson ptime alcotest)
+ (libraries
+  herbier_refs
+  herbier_net
+  herbier_domain
+  herbier_test_support
+  yojson
+  ptime
+  alcotest)
  (deps
   (glob_files %{project_root}/test/fixtures/*.json)
   %{project_root}/scripts/record-refs-fixtures.sh))

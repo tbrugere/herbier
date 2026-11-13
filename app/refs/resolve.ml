@@ -1,3 +1,4 @@
+module Text = Herbier_domain.Text
 module Link = Herbier_domain.Link
 module Gbif = Sources.Gbif
 module Wikidata = Sources.Wikidata
@@ -5,13 +6,13 @@ module Wikipedia = Sources.Wikipedia
 module Taxon = Gbif.Taxon
 
 type unresolved = No_species | Observation_link | Unavailable of string
+[@@deriving eq]
 
 type outcome =
   | Taxon of Taxon.t
   | Candidates of Taxon.t list
   | Unresolved of {query : string; why : unresolved}
-
-let equal_outcome (a : outcome) (b : outcome) = a = b
+[@@deriving eq]
 
 let species_ranks =
   [
@@ -102,9 +103,7 @@ let taxa request decode =
   | Step.Failed msg -> Error (Unavailable msg)
 
 module Candidate = struct
-  type t = {taxon : Taxon.t; french : string list}
-
-  let equal (a : t) b = a = b
+  type t = {taxon : Taxon.t; french : string list} [@@deriving eq]
 end
 
 (* The pieces of the French rows, first spelling of each kept: TAXREF joins
@@ -116,7 +115,7 @@ let french (names : Gbif.Vernacular.t list) =
         match v.language with
         | Some "fra" ->
             List.filter_map
-              (fun piece -> Decode.non_blank (String.trim piece))
+              (fun piece -> Text.non_blank piece)
               (String.split_on_char ',' v.name)
         | Some _ | None -> [])
       names

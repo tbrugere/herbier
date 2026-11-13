@@ -1,5 +1,8 @@
+module Fr_date = Herbier_ui_model.Fr_date
+module Fr_text = Herbier_ui_model.Fr_text
+module Local_time = Herbier_ui_model.Local_time
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
@@ -8,10 +11,8 @@ module Plant = Herbier_domain.Plant
 module Features = Herbier_geo.Features
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
-
-let log_error what e =
-  Console.(error [str ("observation: " ^ what); str (Db.error_to_string e)])
+let cls = Html.cls
+let log_error = Log.db ~scope:"observation"
 
 type data = {
   observation : Observation.t;
@@ -58,14 +59,12 @@ let title (d : data) =
 
 let action ?(tone = `Plain) label =
   let el =
-    El.button
-      ~at:
-        (At.type' (Jstr.v "button")
-        :: cls "observation__action"
-        ::
-        (match tone with
-        | `Danger -> [cls "observation__action--danger"]
-        | `Plain -> []))
+    Html.button
+      ("observation__action"
+      ::
+      (match tone with
+      | `Danger -> ["observation__action--danger"]
+      | `Plain -> []))
       []
   in
   let click, b = Rb.click el in
@@ -127,21 +126,10 @@ let render app (data : data React.signal) =
             true)
       (App.save app [Observations.upsert next])
   in
-  let back =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "icon-button";
-          At.v (Jstr.v "aria-label") (Jstr.v "Retour");
-        ]
-      [W.Icon.el W.Icon.Arrow_back]
-  in
+  let back = W.Icon_button.el ~label:"Retour" W.Icon.Arrow_back in
   let back_click, b_back = Rb.click back in
   let done_ = W.Button.text "Terminé" in
-  let title_el =
-    El.button ~at:[At.type' (Jstr.v "button"); cls "observation__plant"] []
-  in
+  let title_el = Html.button ["observation__plant"] [] in
   let title_click, b_title = Rb.click title_el in
   let header =
     El.div
@@ -164,14 +152,14 @@ let render app (data : data React.signal) =
     | true -> ()
     | false ->
         set_adding true;
-        Fut.await (Herbier_photos.Capture.pick ~limit:10) (function
+        Fut.await (Herbier_photos_io.Capture.pick ~limit:10) (function
           | Error e ->
               set_adding false;
               Console.(
                 error
                   [
                     str "observation: gallery";
-                    str (Herbier_photos.Capture.error_to_string e);
+                    str (Herbier_photos_io.Capture.error_to_string e);
                   ]);
               problem "Les photos n'ont pas pu être lues."
           | Ok shots ->
@@ -187,13 +175,7 @@ let render app (data : data React.signal) =
   in
   let mosaic (photos : Herbier_domain.Photo.t list) =
     let add =
-      El.button
-        ~at:
-          [
-            At.type' (Jstr.v "button");
-            cls "observation__add";
-            At.v (Jstr.v "aria-label") (Jstr.v "Ajouter des photos");
-          ]
+      Html.button ~label:"Ajouter des photos" ["observation__add"]
         [W.Icon.el W.Icon.Add]
     in
     let add_click, b_add = Rb.click add in
@@ -292,15 +274,7 @@ let render app (data : data React.signal) =
              (React.S.map ~eq:( == ) (fun d -> d.observation.position) data))
   in
   let move_el =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "text-button";
-          cls "text-button--moss";
-          cls "observation__move";
-        ]
-      []
+    Html.button ["text-button"; "text-button--moss"; "observation__move"] []
   in
   let move_click, b_move = Rb.click move_el in
   let open_map () =

@@ -1,10 +1,18 @@
-(* Native checks of app/sync/auth/session.ml, nonce.ml and gotrue.ml (copied
-   into this directory by test/sync/dune, hence the unqualified [Session],
-   [Nonce] and [Gotrue] module names, Auth.Session etc. in the app). Fixture
+(* Native checks of app/sync_core/auth/session.ml, nonce.ml, gotrue.ml and
+   grant.ml (Auth.Session, Auth.Nonce, Auth.Gotrue and Auth.Grant of
+   herbier_sync_core). Fixture
    bodies are read from test/fixtures/; the status that goes with each is
    given by the test, matching the fixture's name. No test sends a request or
    touches Preferences: auth.ml, the binding and the screen are
    device-checked. *)
+
+module Backoff = Herbier_sync_core.Backoff
+module Session = Herbier_sync_core.Auth.Session
+module Nonce = Herbier_sync_core.Auth.Nonce
+module Gotrue = Herbier_sync_core.Auth.Gotrue
+module Grant = Herbier_sync_core.Auth.Grant
+module Fixture = Herbier_test_support.Fixture
+module Text = Herbier_test_support.Text
 
 (* ---------- Session ---------- *)
 
@@ -156,10 +164,10 @@ let of_string_error_never_contains_the_tokens () =
   | Error msg ->
       Alcotest.(check bool)
         "no access token in the error" false
-        (Support.contains ~needle:"AT_SECRET_TOKEN_VALUE" msg);
+        (Text.contains ~sub:"AT_SECRET_TOKEN_VALUE" msg);
       Alcotest.(check bool)
         "no refresh token in the error" false
-        (Support.contains ~needle:"RT_SECRET_TOKEN_VALUE" msg)
+        (Text.contains ~sub:"RT_SECRET_TOKEN_VALUE" msg)
 
 let due_near_the_90s_margin () =
   let s = session ~expires_at:t0 () in
@@ -194,7 +202,7 @@ let expired_at_the_5s_cutoff () =
     (Session.expired ~now:(shift (-5) t0) s)
 
 let retry_delay_backs_off_and_caps_at_300s () =
-  let secs attempt = Ptime.Span.to_int_s (Session.retry_delay ~attempt) in
+  let secs attempt = Ptime.Span.to_int_s (Backoff.delay ~attempt) in
   Alcotest.(check (option int)) "attempt -5" (Some 10) (secs (-5));
   Alcotest.(check (option int)) "attempt 0" (Some 10) (secs 0);
   Alcotest.(check (option int)) "attempt 1" (Some 10) (secs 1);
@@ -204,7 +212,42 @@ let retry_delay_backs_off_and_caps_at_300s () =
   Alcotest.(check (option int)) "attempt 5" (Some 160) (secs 5);
   Alcotest.(check (option int)) "attempt 6" (Some 300) (secs 6);
   Alcotest.(check (option int)) "attempt 1000" (Some 300) (secs 1000);
-  Alcotest.(check (option int)) "attempt max_int" (Some 300) (secs max_int)
+  Alcotest.(check (option int)) "attempt max_int" (Some 300) (secs max_int);
+  Alcotest.(check (option int)) "attempt min_int" (Some 10) (secs min_int)
+
+(* The two copies Backoff.delay replaced, verbatim: Session.retry_delay
+   (refreshes) and Schedule.retry_delay (cycles). They agree on every attempt
+   but min_int, where Schedule's [attempt - 1] wrapped round to 300 s against
+   its own contract ([attempt <= 1] → 10 s); both count attempts up from 0. *)
+let session_retry_delay ~attempt =
+  let retry_cap_s = 300 in
+  match attempt with
+  | n when n <= 1 -> Ptime.Span.of_int_s 10
+  | n when n >= 6 -> Ptime.Span.of_int_s retry_cap_s
+  | n -> Ptime.Span.of_int_s (min retry_cap_s (10 lsl (n - 1)))
+
+let schedule_retry_delay ~attempt =
+  let exponent = min 5 (max 0 (attempt - 1)) in
+  Ptime.Span.of_int_s (min 300 (10 * (1 lsl exponent)))
+
+let backoff_is_both_former_copies () =
+  let attempts =
+    List.init 80 (fun i -> i - 10)
+    @ [max_int; max_int - 1; min_int + 1; 1 lsl 40]
+  in
+  List.iter
+    (fun attempt ->
+      let got = Backoff.delay ~attempt in
+      let name = string_of_int attempt in
+      Alcotest.(check bool)
+        ("session's, attempt " ^ name)
+        true
+        (Ptime.Span.equal got (session_retry_delay ~attempt));
+      Alcotest.(check bool)
+        ("schedule's, attempt " ^ name)
+        true
+        (Ptime.Span.equal got (schedule_retry_delay ~attempt)))
+    attempts
 
 let with_expiry_changes_only_expires_at () =
   let s = session ~expires_at:t0 () in
@@ -255,6 +298,9 @@ let session_tests =
     ( "retry_delay doubles from 10s and caps at 300s",
       `Quick,
       retry_delay_backs_off_and_caps_at_300s );
+    ( "Backoff.delay is both copies it replaced",
+      `Quick,
+      backoff_is_both_former_copies );
     ( "with_expiry changes only expires_at",
       `Quick,
       with_expiry_changes_only_expires_at );
@@ -530,20 +576,19 @@ let expected_session_of_fixture_json ?(now = sent) (json : Yojson.Safe.t) :
       | _ -> Alcotest.fail "fixture is missing a field decode_session needs")
   | _ -> Alcotest.fail "fixture is not a JSON object"
 
-let fixture_200_text = Support.fixture "gotrue_token_refresh_200.json"
+let fixture_200_text = Fixture.read "gotrue_token_refresh_200.json"
 let fixture_200_json = Yojson.Safe.from_string fixture_200_text
 
 let fixture_not_found_text =
-  Support.fixture "gotrue_token_refresh_not_found_400.json"
+  Fixture.read "gotrue_token_refresh_not_found_400.json"
 
-let fixture_invalid_text =
-  Support.fixture "gotrue_token_refresh_invalid_400.json"
+let fixture_invalid_text = Fixture.read "gotrue_token_refresh_invalid_400.json"
 
 let fixture_signup_disabled_text =
-  Support.fixture "gotrue_signup_disabled_422.json"
+  Fixture.read "gotrue_signup_disabled_422.json"
 
 let fixture_id_token_invalid_text =
-  Support.fixture "gotrue_token_id_token_invalid_request_400.json"
+  Fixture.read "gotrue_token_id_token_invalid_request_400.json"
 
 (* Derives a variant of the 200 fixture's top-level JSON, never a file. *)
 let remove_top_field key json =
@@ -679,7 +724,7 @@ let decode_session_malformed_never_quotes_the_body () =
   | Error e ->
       Alcotest.(check bool)
         "no body text in error_to_string" false
-        (Support.contains ~needle:"SECRET" (Gotrue.error_to_string e))
+        (Text.contains ~sub:"SECRET" (Gotrue.error_to_string e))
   | Ok _ -> Alcotest.fail "expected Error, got Ok"
 
 let decode_session_200_with_a_null_user_is_malformed () =
@@ -896,12 +941,10 @@ let revokes_session_cases () =
 
 let error_to_string_names_the_status_and_code () =
   let s = Gotrue.error_to_string error_not_found in
-  Alcotest.(check bool)
-    "mentions the status" true
-    (Support.contains ~needle:"400" s);
+  Alcotest.(check bool) "mentions the status" true (Text.contains ~sub:"400" s);
   Alcotest.(check bool)
     "mentions the error code" true
-    (Support.contains ~needle:"refresh_token_not_found" s)
+    (Text.contains ~sub:"refresh_token_not_found" s)
 
 let error_to_string_cases () =
   let rejected message = Gotrue.Rejected {status = 400; code = None; message} in
@@ -1017,6 +1060,55 @@ let gotrue_response_tests =
       error_to_string_cases );
   ]
 
+(* ---------- Grant ---------- *)
+
+let refreshed_to_string : Grant.refreshed -> string = function
+  | Fresh s -> "Fresh " ^ s.access_token
+  | Revoked e -> "Revoked " ^ Gotrue.error_to_string e
+  | Failed e -> "Failed " ^ Grant.error_to_string e
+
+let refreshed_t =
+  Alcotest.testable
+    (fun ppf r -> Format.pp_print_string ppf (refreshed_to_string r))
+    (fun a b -> String.equal (refreshed_to_string a) (refreshed_to_string b))
+
+let grant_refreshed_cases () =
+  let check name expected answer =
+    Alcotest.check refreshed_t name expected (Grant.refreshed answer)
+  in
+  let s = session ~expires_at:t0 () in
+  check "a session is Fresh" (Fresh s) (Ok s);
+  check "a revoking answer is Revoked" (Revoked error_not_found)
+    (Error (Rejected error_not_found));
+  check "signup_disabled is Revoked" (Revoked error_signup_disabled)
+    (Error (Rejected error_signup_disabled));
+  let busy = Gotrue.Rejected {status = 429; code = Some "c"; message = "x"} in
+  check "a 429 is Failed, kept for a retry" (Failed (Rejected busy))
+    (Error (Rejected busy));
+  check "Malformed is Failed" (Failed (Rejected (Gotrue.Malformed "x")))
+    (Error (Rejected (Gotrue.Malformed "x")));
+  check "a network failure is Failed" (Failed (Network "down"))
+    (Error (Network "down"))
+
+let grant_error_to_string_cases () =
+  Alcotest.(check string)
+    "network" "network: down"
+    (Grant.error_to_string (Network "down"));
+  Alcotest.(check string)
+    "rejected"
+    (Gotrue.error_to_string error_not_found)
+    (Grant.error_to_string (Rejected error_not_found))
+
+let grant_tests =
+  [
+    ( "refreshed: a session, revoked by revokes_session, else Failed",
+      `Quick,
+      grant_refreshed_cases );
+    ( "error_to_string: network prefixed, GoTrue's own",
+      `Quick,
+      grant_error_to_string_cases );
+  ]
+
 let () =
   Alcotest.run "sync"
     [
@@ -1025,4 +1117,5 @@ let () =
       ("Nonce", nonce_tests);
       ("Gotrue requests", gotrue_request_tests);
       ("Gotrue responses", gotrue_response_tests);
+      ("Grant", grant_tests);
     ]

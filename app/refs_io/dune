@@ -6,8 +6,10 @@
  (libraries
   herbier_domain
   herbier_store
+  herbier_store_io
   herbier_bindings
   herbier_refs
+  herbier_version
   brr
   yojson
   ptime

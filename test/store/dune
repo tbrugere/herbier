@@ -1,16 +1,10 @@
-; Native checks of the local schema SQL, the store's value codec and the pure
-; per-table query modules, run through the sqlite3 command-line tool. They
-; check the SQL and the codec, not the Capacitor plugin: the device checks are
-; the #dev/store and #dev/seed pages. The modules below are copied from
-; app/store/, so they must not reference Db, Herbier_bindings, Brr or Fut.
+; Native checks of herbier_store (app/store/: the local schema SQL, the
+; store's value codec and the per-table query modules), run through the
+; sqlite3 command-line tool. They check the SQL and the codec, not the
+; Capacitor plugin: the device checks are the #dev/store and #dev/seed pages.
 ; sqlite_cli.ml holds the helpers the tests share. sqlite3 is a test
 ; dependency: the build fails without it, and the suite fails rather than
 ; skipping the SQL checks when this sqlite3 has no FTS5.
-
-(copy_files#
- ../../app/store/{codec,schema,stmt,outbox,plants,observations,tags,photos,cascade,settings,search,dev_seed,references,ref_images,commune_packs,sync_state}.{ml,mli})
-
-(copy_files# ../../app/store/tables.ml)
 
 (tests
  (names
@@ -21,7 +15,15 @@
   test_ref_images
   test_commune_packs
   test_sync_state)
- (libraries herbier_domain herbier_refs postgrest yojson ptime alcotest)
+ (libraries
+  herbier_store
+  herbier_domain
+  herbier_refs
+  herbier_test_support
+  postgrest
+  yojson
+  ptime
+  alcotest)
  (preprocess
   (pps ppx_deriving.eq))
  (deps %{bin:sqlite3})

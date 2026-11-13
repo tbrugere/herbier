@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Record the PostgREST answers of test/fixtures/sync_*.json from the local
 # stack (`npx supabase start`). The curl requests are written by hand to
-# match app/sync/net/rest.ml's; test_rest checks only the answers' keys,
+# match app/sync_core/net/rest.ml's; test_rest checks only the answers' keys,
 # against the catalog. A file name ends with the status the request must
 # answer (the anon upsert's with the status answered); another status fails
 # the script. A throwaway user, sync-fixtures@herbier.local, owns the rows

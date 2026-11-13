@@ -1,3 +1,4 @@
+module Plant_form = Herbier_ui_model.Plant_form
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Tag = Herbier_domain.Tag

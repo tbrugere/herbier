@@ -1,5 +1,5 @@
 (** 5b Déplacer le point (modal, no tab bar). A full-screen interactive MapLibre
-    map ({!Herbier_geo.Map}, [interactive:true]) above a drawer; the point is
+    map ({!Herbier_geo_io.Map}, [interactive:true]) above a drawer; the point is
     the map's centre, shown by a fixed pin (DOM, not a map layer, whose foot is
     exactly the centre of the map element) while the map slides under it.
 
@@ -9,19 +9,19 @@
     of {!Map_sheet.position_failure} in the pill, until the next fix; a fix that
     arrives before the map exists is flown to once it does). The pill and the
     drawer's line are [role="status"] live regions. The origin ghost: the stored
-    position ({!Herbier_geo.Map.set_origin}); none when the observation had no
-    position.
+    position ({!Herbier_geo_io.Map.set_origin}); none when the observation had
+    no position.
 
     Drawer: {!Move_plan.title} (20/800) and {!Move_plan.meta}, both following
     the camera after each [moveend]; the « Chercher un lieu » field, whose
-    submit (Enter or its « OK ») runs {!Herbier_geo.Geocoder.search}
+    submit (Enter or its « OK ») runs {!Herbier_geo_io.Geocoder.search}
     [~near:centre] — only the latest query's reply is shown; when « Photon en
     ligne » is off ([Place_name.can_search] of {!State.place_sources}) it shows
     « Activez « Photon en ligne » dans Réglages pour chercher un lieu. » without
     a request (checked before the network, and again as [~allow] when the
     request leaves the geocoder's queue: a refused one shows the same line);
     offline ({!State.network}) « Hors ligne : la recherche attend le réseau. »
-    without a request; a {!Herbier_geo.Geocoder.transient} error « Réseau
+    without a request; a {!Herbier_geo_io.Geocoder.transient} error « Réseau
     indisponible, réessayez. », any other « Recherche impossible » (both
     logged); no result « Aucun lieu trouvé »; each result is a row (name, then
     [context] in [t-meta]) whose tap flies to its point at

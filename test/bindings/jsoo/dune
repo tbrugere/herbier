@@ -1,0 +1,18 @@
+; js_of_ocaml build of the pure-JS helpers of herbier_bindings, run under
+; node: Fut_result.traverse against the sequential folds it replaced
+; (photos_io/capture.ml's pick, refs_io/organ_thumbs.ml's each), copied in
+; verbatim. NODE_OPTIONS is cleared so a preload in the developer's shell
+; cannot alter the run.
+
+(executable
+ (name smoke)
+ (modes js)
+ (libraries herbier_bindings brr))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run node %{dep:smoke.bc.js}))))

@@ -1,4 +1,5 @@
-module Db = Herbier_store.Db
+module Cycle = Herbier_sync_core.Cycle
+module Db = Herbier_store_io.Db
 module Cap_app = Herbier_bindings.Cap_app
 module Cap_error = Herbier_bindings.Cap_error
 module Outcome = Cycle.Outcome
@@ -41,8 +42,8 @@ let create ~db ~auth ~keepalive ~on_cycle =
 
 let state t = t.state
 let last t = t.last
-let log m = Brr.Console.(log [str ("sync: " ^ m)])
-let warn m = Brr.Console.(warn [str ("sync: " ^ m)])
+let log = Console_line.log Sync
+let warn = Console_line.warn Sync
 
 let clear_timer t =
   Option.iter Brr.G.stop_timer t.timer;

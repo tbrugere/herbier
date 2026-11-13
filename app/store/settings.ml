@@ -21,6 +21,8 @@ let name : type a. a key -> string = function
    in Tables. *)
 type settings
 
+let table : settings Col.table = Col.table "settings"
+
 let key_column : (settings, string, [`Mandatory]) Col.t =
   {ty = Not_Null Str; name = "key"}
 
@@ -48,10 +50,12 @@ let get key =
     [Codec.param key_column (name key)]
 
 let set key v =
-  {
-    Stmt.sql =
-      "insert into settings (key, value) values (?, ?) on conflict (key) do \
-       update set value = excluded.value";
-    params =
-      [Codec.param key_column (name key); Codec.param (value_column key) v];
-  }
+  Stmt.upsert ~conflict:[key_column.name] ~table
+    Postgrest.Input.
+      {
+        fields =
+          [
+            Mandatory (key_column, Value (name key));
+            Mandatory (value_column key, Value v);
+          ];
+      }

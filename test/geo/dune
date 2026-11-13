@@ -1,13 +1,16 @@
-; Native checks of the pure modules of app/geo/, copied in: they must not
-; reference Brr, Fut or Herbier_bindings.
-(copy_files#
- ../../app/geo/{features,style,geocode,place_name,communes}.{ml,mli})
+; Native checks of herbier_geo (app/geo/: no Brr, no store; its libraries
+; enforce it).
 
 (tests
  (names test_geo test_geocode test_place_name test_communes)
- (libraries herbier_domain yojson alcotest ptime)
- (preprocess
-  (pps ppx_deriving.eq))
+ (libraries
+  herbier_geo
+  herbier_net
+  herbier_domain
+  herbier_test_support
+  yojson
+  alcotest
+  ptime)
  (deps
   %{project_root}/web/map/positron.json
   (glob_files %{project_root}/test/fixtures/*.json)

@@ -7,6 +7,11 @@
 
 (* ---------- small string helpers ---------- *)
 
+module Codec = Herbier_store.Codec
+module Schema = Herbier_store.Schema
+module Stmt = Herbier_store.Stmt
+module Outbox = Herbier_store.Outbox
+
 let rec find_from ~sub s i =
   let n = String.length sub in
   match i + n > String.length s with
@@ -15,8 +20,6 @@ let rec find_from ~sub s i =
       match String.sub s i n = sub with
       | true -> Some i
       | false -> find_from ~sub s (i + 1))
-
-let contains ~sub s = Option.is_some (find_from ~sub s 0)
 
 let split_on ~sep s =
   let rec go i acc =
@@ -441,9 +444,3 @@ let ptime =
     (fun f t ->
       Format.pp_print_string f (Ptime.to_rfc3339 ~frac_s:12 ~tz_offset_s:0 t))
     Ptime.equal
-
-(* A testable through a JSON rendering, so diffs are readable. *)
-let testable_of_json to_json =
-  Alcotest.testable
-    (fun f x -> Format.pp_print_string f (Yojson.Safe.to_string (to_json x)))
-    (fun a b -> Yojson.Safe.equal (to_json a) (to_json b))

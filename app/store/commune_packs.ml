@@ -15,6 +15,8 @@ type t = {
    in Tables. *)
 type commune_packs
 
+let table : commune_packs Col.table = Col.table "commune_packs"
+
 let departement : (commune_packs, string, [`Mandatory]) Col.t =
   {ty = Not_Null Str; name = "departement"}
 
@@ -55,23 +57,19 @@ let find code =
     [Codec.param departement code]
 
 let put (p : t) =
-  {
-    Stmt.sql =
-      "insert into commune_packs (departement, name, path, size_bytes, \
-       communes, downloaded_at) values (?, ?, ?, ?, ?, ?) on conflict \
-       (departement) do update set name = excluded.name, path = excluded.path, \
-       size_bytes = excluded.size_bytes, communes = excluded.communes, \
-       downloaded_at = excluded.downloaded_at";
-    params =
-      [
-        Codec.param departement p.departement;
-        Codec.param name p.name;
-        Codec.param path p.path;
-        Codec.param size_bytes p.size_bytes;
-        Codec.param communes p.communes;
-        Codec.param downloaded_at p.downloaded_at;
-      ];
-  }
+  Stmt.upsert ~conflict:[departement.name] ~table
+    Postgrest.Input.
+      {
+        fields =
+          [
+            Mandatory (departement, Value p.departement);
+            Mandatory (name, Value p.name);
+            Mandatory (path, Value p.path);
+            Mandatory (size_bytes, Value p.size_bytes);
+            Mandatory (communes, Value p.communes);
+            Mandatory (downloaded_at, Value p.downloaded_at);
+          ];
+      }
 
 let remove ~departement:code =
   {

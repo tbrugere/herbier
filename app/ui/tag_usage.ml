@@ -1,4 +1,5 @@
-module Db = Herbier_store.Db
+module Collection_filter = Herbier_ui_model.Collection_filter
+module Db = Herbier_store_io.Db
 module Tags = Herbier_store.Tags
 module Tag = Herbier_domain.Tag
 

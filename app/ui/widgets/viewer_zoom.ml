@@ -1,3 +1,4 @@
+module Zoom = Herbier_ui_model.Zoom
 open Brr
 
 type t = {el : El.t; reset : unit -> unit; bindings : Rb.binding list}

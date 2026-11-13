@@ -2,7 +2,9 @@
 module Http_uri = Uri
 open Brr
 module Sync = Herbier_sync
+module Sync_core = Herbier_sync_core
 module Tag = Herbier_domain.Tag
+module Fut_result = Herbier_bindings.Fut_result
 
 (* The transport, logging what it sends: the request line is what the page
    checks, and only Client.Make knows it. *)
@@ -27,26 +29,14 @@ module Logged = struct
     send ~meth ~url ~headers ?body ()
 end
 
-module Remote = Sync.Net.Rest.Make (Logged)
-
-let append log text = El.append_children log [El.div [El.txt' text]]
-let button label = El.button ~at:[At.type' (Jstr.v "button")] [El.txt' label]
-
-let on_click el f =
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target el) : Ev.listener)
-
-let set_disabled el disabled =
-  El.set_at At.Name.disabled
-    (match disabled with true -> Some Jstr.empty | false -> None)
-    el
+module Remote = Sync_core.Net.Rest.Make (Logged)
 
 let iso t = Ptime.to_rfc3339 ~frac_s:3 ~tz_offset_s:0 t
 
 let conn_of app field =
   match String.trim (Jstr.to_string (El.prop El.Prop.value field)) with
   | "" ->
-      Fut.map
-        (Result.map_error Sync.Auth.error_to_string)
+      Fut_result.map_error Sync.Auth.error_to_string
         (Sync.Net.Transport.conn (App.auth app))
   | token -> Fut.return (Ok (Sync.Net.Transport.conn_of_token token))
 
@@ -61,15 +51,15 @@ let throwaway_tag () =
   }
 
 let report log label = function
-  | Ok detail -> append log (label ^ ": ok" ^ detail)
-  | Error e -> append log (label ^ ": " ^ Remote.error_to_string e)
+  | Ok detail -> Kit.append log (label ^ ": ok" ^ detail)
+  | Error e -> Kit.append log (label ^ ": " ^ Remote.error_to_string e)
 
 let upsert log conn =
-  Logged.sink := append log;
+  Logged.sink := Kit.append log;
   let tag = throwaway_tag () in
   Fut.map
     (fun r -> report log "upsert" (Result.map (fun () -> " · " ^ tag.name) r))
-    (Remote.upsert conn Sync.Synced.tags tag)
+    (Remote.upsert conn Sync_core.Synced.tags tag)
 
 let summary (tags : Tag.t list) =
   let last =
@@ -84,23 +74,26 @@ let summary (tags : Tag.t list) =
     (Option.fold ~none:"-" ~some:iso last)
 
 let pull log conn =
-  Logged.sink := append log;
+  Logged.sink := Kit.append log;
   let open Fut.Syntax in
-  let* all = Remote.select_since conn Sync.Synced.tags ~since:None ~page:0 in
+  let* all =
+    Remote.select_since conn Sync_core.Synced.tags ~since:None ~page:0
+  in
   report log "select (since none)" (Result.map summary all);
   let since = Ptime.sub_span (Ptime_clock.now ()) (Ptime.Span.of_int_s 60) in
-  let+ recent = Remote.select_since conn Sync.Synced.tags ~since ~page:0 in
+  let+ recent = Remote.select_since conn Sync_core.Synced.tags ~since ~page:0 in
   report log "select (since 1 min)" (Result.map summary recent)
 
 (* The button stays disabled until its run ends, so a double tap does not
    start a second one. *)
 let with_conn button log fut run =
-  set_disabled button true;
+  Kit.set_disabled button true;
   Fut.await fut (function
     | Error e ->
-        append log ("conn: " ^ e);
-        set_disabled button false
-    | Ok conn -> Fut.await (run log conn) (fun () -> set_disabled button false))
+        Kit.append log ("conn: " ^ e);
+        Kit.set_disabled button false
+    | Ok conn ->
+        Fut.await (run log conn) (fun () -> Kit.set_disabled button false))
 
 let page app =
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
@@ -117,13 +110,13 @@ let page app =
         ]
       ()
   in
-  let send = button "Envoyer une étiquette"
-  and pull_button = button "Tirer les étiquettes"
-  and invalid = button "Jeton invalide" in
-  on_click send (fun () -> with_conn send log (conn_of app field) upsert);
-  on_click pull_button (fun () ->
+  let send = Kit.button "Envoyer une étiquette"
+  and pull_button = Kit.button "Tirer les étiquettes"
+  and invalid = Kit.button "Jeton invalide" in
+  Kit.on_click send (fun () -> with_conn send log (conn_of app field) upsert);
+  Kit.on_click pull_button (fun () ->
       with_conn pull_button log (conn_of app field) pull);
-  on_click invalid (fun () ->
+  Kit.on_click invalid (fun () ->
       with_conn invalid log
         (Fut.return (Ok (Sync.Net.Transport.conn_of_token "invalid")))
         upsert);

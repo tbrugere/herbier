@@ -1,3 +1,5 @@
+module Collection_filter = Herbier_ui_model.Collection_filter
+module Journal_filter = Herbier_ui_model.Journal_filter
 module Tag = Herbier_domain.Tag
 module Tag_id = Herbier_domain.Ids.Tag_id
 module W = Widgets

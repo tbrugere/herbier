@@ -1,6 +1,7 @@
 module Observation = Herbier_domain.Observation
 module Places = Herbier_domain.Places
 module Observation_id = Herbier_domain.Ids.Observation_id
+module Bbox = Herbier_domain.Bbox
 
 let collection features =
   `Assoc [("type", `String "FeatureCollection"); ("features", `List features)]
@@ -47,24 +48,14 @@ let observations list =
         ])
   |> collection
 
-type bounds = {south : float; west : float; north : float; east : float}
+type bounds = Bbox.t = {
+  south : float;
+  west : float;
+  north : float;
+  east : float;
+}
 
-let box_of_points = function
-  | [] -> None
-  | ({lat; lon} : Places.point) :: rest ->
-      Some
-        (List.fold_left
-           (fun {south; west; north; east} ({lat; lon} : Places.point) ->
-             {
-               south = Float.min south lat;
-               west = Float.min west lon;
-               north = Float.max north lat;
-               east = Float.max east lon;
-             })
-           {south = lat; west = lon; north = lat; east = lon}
-           rest)
-
-let bounds list = box_of_points (List.map snd (placed list))
+let bounds list = Bbox.of_points (List.map snd (placed list))
 let radians d = d *. Float.pi /. 180.
 let degrees r = r *. 180. /. Float.pi
 
@@ -95,8 +86,7 @@ let ring ~(center : Places.point) ~radius_m ~steps =
     Float.is_finite radius_m
     && radius_m > 0.
     && steps >= 3
-    && Float.is_finite center.lat
-    && Float.is_finite center.lon
+    && Places.finite center
   with
   | false -> None
   | true ->
@@ -130,11 +120,11 @@ let circle ~center ~radius_m ~steps =
 let circle_steps = 64
 
 let circle_bounds ~center ~radius_m =
-  Option.bind (ring ~center ~radius_m ~steps:circle_steps) box_of_points
+  Option.bind (ring ~center ~radius_m ~steps:circle_steps) Bbox.of_points
 
 let accuracy_bounds ({lat; lon; accuracy_m} : Observation.position) =
   let center : Places.point = {lat; lon} in
-  match Float.is_finite lat && Float.is_finite lon with
+  match Places.finite center with
   | false -> None
   | true -> (
       (* Which radius is drawable is [ring]'s rule alone, so that the box and
@@ -143,7 +133,7 @@ let accuracy_bounds ({lat; lon; accuracy_m} : Observation.position) =
         Option.bind accuracy_m (fun r -> circle_bounds ~center ~radius_m:r)
       with
       | Some _ as box -> box
-      | None -> box_of_points [center])
+      | None -> Bbox.of_points [center])
 
 type place = {
   key : Observation_id.t;
@@ -175,15 +165,12 @@ let south_key = "south"
 let east_key = "east"
 let north_key = "north"
 
-let finite_point ({lat; lon} : Places.point) =
-  Float.is_finite lat && Float.is_finite lon
-
 let focus = function
-  | Some p when finite_point p -> collection [feature (point_geometry p) []]
+  | Some p when Places.finite p -> collection [feature (point_geometry p) []]
   | Some _ | None -> empty
 
 let place_point {key; cluster; shown} =
-  match (bounds shown, finite_point cluster.centroid) with
+  match (bounds shown, Places.finite cluster.centroid) with
   | None, _ | Some _, false -> None
   | Some {south; west; north; east}, true ->
       let identified =
@@ -224,15 +211,10 @@ let selection = function
 
 type hit = Group of bounds | Member of Observation_id.t
 
-let number = function
-  | `Int i -> Some (Float.of_int i)
-  | `Float f when Float.is_finite f -> Some f
-  | _ -> None
-
 let hit = function
   | `Assoc fields -> (
       let field k = List.assoc_opt k fields in
-      let bound k = Option.bind (field k) number in
+      let bound k = Option.bind (field k) Herbier_net.Json.number in
       match field "cluster" with
       | Some (`Bool true) -> (
           match

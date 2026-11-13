@@ -33,7 +33,7 @@ val plant_tag_input :
 
 val upsert : Tag.t -> Outbox.edit
 (** Writes the whole record ({!Stmt.upsert} of {!input}); always changes the
-    row, so {!Db.edit} appends one entry. Read back by [id]. *)
+    row, so {!Herbier_store_io.Db.edit} appends one entry. Read back by [id]. *)
 
 val soft_delete : Tag_id.t -> at:Ptime.t -> Outbox.edit
 (** {!Stmt.soft_delete}; read back by [id] whatever [deleted_at]. Appends an
@@ -57,7 +57,8 @@ val tag : plant:Plant_id.t -> tag:Tag_id.t -> at:Ptime.t -> Outbox.edit
     - a live row: nothing changes ([updated_at] not bumped) → appends nothing.
 
     The conflict target is [(plant_id, tag_id)]; the row is read back by that
-    pair. Foreign keys apply: an unknown plant or tag makes {!Db.edit} fail. *)
+    pair. Foreign keys apply: an unknown plant or tag makes
+    {!Herbier_store_io.Db.edit} fail. *)
 
 val untag : plant:Plant_id.t -> tag:Tag_id.t -> at:Ptime.t -> Outbox.edit
 (** Soft-deletes the live link ([deleted_at = updated_at = at]) → appends an

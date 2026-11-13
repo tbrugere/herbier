@@ -5,6 +5,21 @@
    rollback, the serialisation of Db and the plugin's transaction flag are
    device checks (#dev/store, outbox group). *)
 
+module Value = Herbier_test_support.Value
+module Codec = Herbier_store.Codec
+module Stmt = Herbier_store.Stmt
+module Outbox = Herbier_store.Outbox
+module Plants = Herbier_store.Plants
+module Observations = Herbier_store.Observations
+module Tags = Herbier_store.Tags
+module Photos = Herbier_store.Photos
+module Cascade = Herbier_store.Cascade
+module Dev_seed = Herbier_store.Dev_seed
+module References = Herbier_store.References
+module Commune_packs = Herbier_store.Commune_packs
+module Ref_images = Herbier_store.Ref_images
+module Settings = Herbier_store.Settings
+module Tables = Herbier_store.Tables
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
 module Observation = Herbier_domain.Observation
@@ -13,21 +28,13 @@ module Tag = Herbier_domain.Tag
 module Col = Postgrest.Col
 module Input = Postgrest.Input
 module Cli = Sqlite_cli
+module Text = Herbier_test_support.Text
 
 (* ---------- fixtures ---------- *)
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
-
-let uuid n = Printf.sprintf "00000000-0000-4000-8000-%012x" n
-
-let id_of what of_string n =
-  match of_string (uuid n) with
-  | Some x -> x
-  | None -> invalid_arg ("fixture " ^ what)
-
+let time = Value.time
+let uuid = Value.uuid4
+let id_of what of_string n = Value.id what of_string (uuid n)
 let plant_id = id_of "plant id" Ids.Plant_id.of_string
 let observation_id = id_of "observation id" Ids.Observation_id.of_string
 let photo_id = id_of "photo id" Ids.Photo_id.of_string
@@ -498,7 +505,7 @@ let observations_set_place_derived () =
 
 (* 5b's save of a Move_plan.apply result: the row Observations.upsert stores
    and its single outbox entry. Built by hand: test/store does not link
-   app/ui/move_plan.ml. *)
+   app/ui_model/move_plan.ml. *)
 let observations_move_clears_accuracy_and_derived () =
   let db = Cli.migrated_db () in
   check_edit "plant" 1 db [Plants.upsert (plant 0x1 "Pissenlit")];
@@ -652,7 +659,7 @@ let failing_edit_appends_nothing () =
   | Error stderr ->
       Alcotest.(check bool)
         "it fails on the foreign key" true
-        (Cli.contains ~sub:"FOREIGN KEY constraint failed" stderr));
+        (Text.contains ~sub:"FOREIGN KEY constraint failed" stderr));
   check_count "the outbox is unchanged" 1 db;
   Alcotest.(check int)
     "the observation is absent" 0
@@ -1060,18 +1067,18 @@ let stmt_upsert () =
     (column_list sql);
   Alcotest.(check bool)
     "it inserts into tags" true
-    (Cli.contains ~sub:"insert into tags" sql);
+    (Text.contains ~sub:"insert into tags" sql);
   let update = after ~sub:"do update set" sql in
   List.iter
     (fun c ->
       Alcotest.(check bool)
         (c ^ " is in the update clause")
         true
-        (Cli.contains ~sub:("excluded." ^ c) update))
+        (Text.contains ~sub:("excluded." ^ c) update))
     ["name"; "created_at"; "updated_at"; "deleted_at"];
   Alcotest.(check bool)
     "id is not in the update clause" false
-    (Cli.contains ~sub:"excluded.id" update);
+    (Text.contains ~sub:"excluded.id" update);
   Alcotest.(check (list Cli.param))
     "one parameter per column, in order"
     [
@@ -1093,7 +1100,7 @@ let stmt_upsert_only_id () =
   let s = Stmt.upsert ~table:Tables.Tags.table only_id in
   Alcotest.(check bool)
     "an input with only id gives do nothing" true
-    (Cli.contains ~sub:"do nothing" (String.lowercase_ascii s.sql));
+    (Text.contains ~sub:"do nothing" (String.lowercase_ascii s.sql));
   Alcotest.(check (list Cli.param))
     "its one parameter is the id"
     [Text (uuid 0xc1)]
@@ -1219,6 +1226,253 @@ let cascades () =
 
 (* ---------- run ---------- *)
 
+(* ---------- the edits' statements, pinned ---------- *)
+
+(* Each by-id edit (statement and read-back), each natural-key soft delete
+   and each local-table upsert, as SQL text and parameters. *)
+let check_stmt what (stmt : Stmt.t) ~sql ~params =
+  Alcotest.(check string) (what ^ ": sql") sql stmt.sql;
+  Alcotest.(check (list Cli.param)) (what ^ ": params") params stmt.params
+
+let check_edit what edit ~sql ~params ~reread ~reread_params =
+  check_stmt what (Outbox.bare_stmt (Outbox.without_entry edit)) ~sql ~params;
+  check_stmt (what ^ " read-back") (Outbox.reread edit) ~sql:reread
+    ~params:reread_params
+
+let at = Codec.Text (Codec.timestamp t3)
+
+let soft_delete_sql table =
+  Printf.sprintf
+    "update %s set deleted_at = ?, updated_at = ? where id = ? and deleted_at \
+     is null"
+    table
+
+(* Written out here, not by Stmt: the by-id upserts' text is checked
+   independently of the helper that renders it. Their parameters are
+   Stmt.upsert's, checked by the "Stmt.upsert" cases. *)
+let upsert_sql table columns =
+  let updated =
+    List.filter_map
+      (fun c ->
+        match String.equal c "id" with
+        | true -> None
+        | false -> Some (c ^ " = excluded." ^ c))
+      columns
+  in
+  Printf.sprintf
+    "insert into %s (%s) values (%s) on conflict (id) do update set %s" table
+    (String.concat ", " columns)
+    (String.concat ", " (List.map (fun _ -> "?") columns))
+    (String.concat ", " updated)
+
+let by_id_edits_are_pinned () =
+  let p = full_plant in
+  let o = observation ~plant:0x2 0x3 t1 in
+  let ph = photo ~observation:0x3 0x4 t1 in
+  let t = tag 0x5 "Forêt" in
+  let module P = Tables.Plants in
+  let module O = Tables.Observations in
+  let module Ph = Tables.Photos in
+  let module T = Tables.Tags in
+  let pid = Codec.param P.id p.id in
+  let upsert = Stmt.upsert ~table:P.table (Plants.input p) in
+  check_edit "plants upsert" (Plants.upsert p)
+    ~sql:
+      (upsert_sql "plants"
+         [
+           "id";
+           "display_name";
+           "aliases";
+           "scientific_name";
+           "authorship";
+           "gbif_key";
+           "notes";
+           "notes_updated_at";
+           "cover_photo_id";
+           "created_at";
+           "updated_at";
+           "deleted_at";
+         ])
+    ~params:upsert.params ~reread:"select * from plants where id = ?"
+    ~reread_params:[pid];
+  check_edit "plants soft_delete"
+    (Plants.soft_delete p.id ~at:t3)
+    ~sql:(soft_delete_sql "plants") ~params:[at; at; pid]
+    ~reread:"select * from plants where id = ?" ~reread_params:[pid];
+  let oid = Codec.param O.id o.id in
+  let upsert = Stmt.upsert ~table:O.table (Observations.input o) in
+  check_edit "observations upsert" (Observations.upsert o)
+    ~sql:
+      (upsert_sql "observations"
+         [
+           "id";
+           "plant_id";
+           "at";
+           "lat";
+           "lon";
+           "accuracy_m";
+           "place_label";
+           "place_derived";
+           "note";
+           "created_at";
+           "updated_at";
+           "deleted_at";
+         ])
+    ~params:upsert.params ~reread:"select * from observations where id = ?"
+    ~reread_params:[oid];
+  check_edit "observations soft_delete"
+    (Observations.soft_delete o.id ~at:t3)
+    ~sql:(soft_delete_sql "observations")
+    ~params:[at; at; oid] ~reread:"select * from observations where id = ?"
+    ~reread_params:[oid];
+  check_edit "observations set_place_derived"
+    (Observations.set_place_derived o.id ~lat:45.5 ~lon:6.25 "Annecy" ~at:t3)
+    ~sql:
+      "update observations set place_derived = ?, updated_at = ? where id = ? \
+       and deleted_at is null and lat = ? and lon = ? and (place_derived is \
+       null or trim(place_derived) = '')"
+    ~params:
+      [
+        Codec.Text "Annecy";
+        at;
+        oid;
+        Codec.param O.lat (Some 45.5);
+        Codec.param O.lon (Some 6.25);
+      ]
+    ~reread:"select * from observations where id = ?" ~reread_params:[oid];
+  let phid = Codec.param Ph.id ph.id in
+  let upsert = Stmt.upsert ~table:Ph.table (Photos.input ph) in
+  check_edit "photos upsert" (Photos.upsert ph)
+    ~sql:
+      (upsert_sql "photos"
+         [
+           "id";
+           "observation_id";
+           "taken_at";
+           "width";
+           "height";
+           "sha256";
+           "preview_path";
+           "preview_bucket_key";
+           "original_target";
+           "drive_file_id";
+           "upload_state";
+           "created_at";
+           "updated_at";
+           "deleted_at";
+         ])
+    ~params:upsert.params ~reread:"select * from photos where id = ?"
+    ~reread_params:[phid];
+  check_edit "photos soft_delete"
+    (Photos.soft_delete ph.id ~at:t3)
+    ~sql:(soft_delete_sql "photos") ~params:[at; at; phid]
+    ~reread:"select * from photos where id = ?" ~reread_params:[phid];
+  let tid = Codec.param T.id t.id in
+  let upsert = Stmt.upsert ~table:T.table (Tags.input t) in
+  check_edit "tags upsert" (Tags.upsert t)
+    ~sql:
+      (upsert_sql "tags"
+         ["id"; "name"; "created_at"; "updated_at"; "deleted_at"])
+    ~params:upsert.params ~reread:"select * from tags where id = ?"
+    ~reread_params:[tid];
+  check_edit "tags soft_delete"
+    (Tags.soft_delete t.id ~at:t3)
+    ~sql:(soft_delete_sql "tags") ~params:[at; at; tid]
+    ~reread:"select * from tags where id = ?" ~reread_params:[tid]
+
+let natural_key_soft_deletes_are_pinned () =
+  let plant = plant_id 0x2 and tag = tag_id 0x5 in
+  let source = Herbier_domain.Reference.Source.Gbif in
+  let pl = Codec.param Tables.Plants.id plant in
+  let src = Codec.param Tables.Reference.source source in
+  let tg = Codec.param Tables.Tags.id tag in
+  check_edit "untag"
+    (Tags.untag ~plant ~tag ~at:t3)
+    ~sql:
+      "update plant_tags set deleted_at = ?, updated_at = ? where plant_id = ? \
+       and tag_id = ? and deleted_at is null"
+    ~params:[at; at; pl; tg]
+    ~reread:"select * from plant_tags where plant_id = ? and tag_id = ?"
+    ~reread_params:[pl; tg];
+  check_edit "References.remove"
+    (References.remove ~plant ~source ~at:t3)
+    ~sql:
+      "update reference set deleted_at = ?, updated_at = ? where plant_id = ? \
+       and source = ? and deleted_at is null"
+    ~params:[at; at; pl; src]
+    ~reread:"select * from reference where plant_id = ? and source = ?"
+    ~reread_params:[pl; src];
+  check_edit "References.unlink"
+    (References.unlink ~plant ~source ~at:t3)
+    ~sql:
+      "update plant_refs set deleted_at = ?, updated_at = ? where plant_id = ? \
+       and source = ? and deleted_at is null"
+    ~params:[at; at; pl; src]
+    ~reread:"select * from plant_refs where plant_id = ? and source = ?"
+    ~reread_params:[pl; src]
+
+let local_upserts_are_pinned () =
+  let pack : Commune_packs.t =
+    {
+      departement = "90";
+      name = "Territoire de Belfort";
+      path = "communes/90-1.json";
+      size_bytes = 109832;
+      communes = 101;
+      downloaded_at = t1;
+    }
+  in
+  check_stmt "commune_packs" (Commune_packs.put pack)
+    ~sql:
+      "insert into commune_packs (departement, name, path, size_bytes, \
+       communes, downloaded_at) values (?, ?, ?, ?, ?, ?) on conflict \
+       (departement) do update set name = excluded.name, path = excluded.path, \
+       size_bytes = excluded.size_bytes, communes = excluded.communes, \
+       downloaded_at = excluded.downloaded_at"
+    ~params:
+      [
+        Codec.Text "90";
+        Codec.Text "Territoire de Belfort";
+        Codec.Text "communes/90-1.json";
+        Codec.Int 109832;
+        Codec.Int 101;
+        Codec.Text (Codec.timestamp t1);
+      ];
+  let image : Herbier_domain.Reference.Image.t =
+    {
+      plant_id = plant_id 0x2;
+      source = Herbier_domain.Reference.Source.Gbif;
+      organ = Herbier_domain.Reference.Organ.Leaf;
+      remote_url = "https://example.org/a.jpg";
+      licence = "CC-BY";
+      attribution = "A. B.";
+      thumb_path = None;
+    }
+  in
+  check_stmt "ref_images" (Ref_images.put image)
+    ~sql:
+      "insert into ref_images (plant_id, source, organ, remote_url, licence, \
+       attribution, thumb_path) values (?, ?, ?, ?, ?, ?, ?) on conflict \
+       (plant_id, source, organ) do update set remote_url = \
+       excluded.remote_url, licence = excluded.licence, attribution = \
+       excluded.attribution, thumb_path = excluded.thumb_path"
+    ~params:
+      [
+        Codec.Text (uuid 0x2);
+        Codec.Text "gbif";
+        Codec.Text "leaf";
+        Codec.Text "https://example.org/a.jpg";
+        Codec.Text "CC-BY";
+        Codec.Text "A. B.";
+        Codec.Null;
+      ];
+  check_stmt "settings"
+    (Settings.set Settings.Wifi_only true)
+    ~sql:
+      "insert into settings (key, value) values (?, ?) on conflict (key) do \
+       update set value = excluded.value"
+    ~params:[Codec.Text "wifi_only"; Codec.Text "true"]
+
 let () =
   let case name f = Alcotest.test_case name `Quick f in
   Alcotest.run "store outbox"
@@ -1302,5 +1556,14 @@ let () =
         [
           case "columns follow the input, id stays out of the update" stmt_upsert;
           case "an input with only id is do nothing" stmt_upsert_only_id;
+        ] );
+      ( "the edits' statements, pinned",
+        [
+          case "by id: upsert, soft_delete, set_place_derived and read-back"
+            by_id_edits_are_pinned;
+          case "by natural key: untag, remove, unlink and read-back"
+            natural_key_soft_deletes_are_pinned;
+          case "local tables: commune_packs, ref_images, settings"
+            local_upserts_are_pinned;
         ] );
     ]

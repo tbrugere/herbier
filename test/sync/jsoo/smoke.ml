@@ -3,6 +3,9 @@
    token answer decoded. Silent on success; the first mismatch goes to stderr
    and exits 1. *)
 
+module Session = Herbier_sync_core.Auth.Session
+module Gotrue = Herbier_sync_core.Auth.Gotrue
+
 let fail fmt =
   Printf.ksprintf
     (fun m ->

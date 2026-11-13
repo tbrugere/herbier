@@ -5,20 +5,31 @@
    Stmt.decode as Db.all does on the device. The Capacitor plugin itself is
    checked on the device (#dev/store, #dev/seed). *)
 
+module Value = Herbier_test_support.Value
+module Codec = Herbier_store.Codec
+module Schema = Herbier_store.Schema
+module Stmt = Herbier_store.Stmt
+module Outbox = Herbier_store.Outbox
+module Settings = Herbier_store.Settings
+module Search = Herbier_store.Search
+module Dev_seed = Herbier_store.Dev_seed
+module Tables = Herbier_store.Tables
 module Row = Postgrest.Row
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
 module Observation = Herbier_domain.Observation
 module Photo = Herbier_domain.Photo
 module Tag = Herbier_domain.Tag
+module Fold = Herbier_domain.Fold
 module P = Tables.Plants
 module Cli = Sqlite_cli
+module Text = Herbier_test_support.Text
 
 (* These checks are about the bare statements and their changes() counts, so
    each write goes through [Outbox.without_entry] (no entry), unwrapped with
    [Outbox.bare_stmt]; test_outbox checks the entries. *)
 module Plants = struct
-  include Plants
+  include Herbier_store.Plants
 
   let upsert p = Outbox.bare_stmt (Outbox.without_entry (upsert p))
 
@@ -27,7 +38,7 @@ module Plants = struct
 end
 
 module Observations = struct
-  include Observations
+  include Herbier_store.Observations
 
   let upsert o = Outbox.bare_stmt (Outbox.without_entry (upsert o))
 
@@ -40,7 +51,7 @@ module Observations = struct
 end
 
 module Photos = struct
-  include Photos
+  include Herbier_store.Photos
 
   let upsert p = Outbox.bare_stmt (Outbox.without_entry (upsert p))
 
@@ -49,7 +60,7 @@ module Photos = struct
 end
 
 module Tags = struct
-  include Tags
+  include Herbier_store.Tags
 
   let upsert t = Outbox.bare_stmt (Outbox.without_entry (upsert t))
 
@@ -65,18 +76,9 @@ end
 
 (* ---------- fixtures ---------- *)
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
-
-let uuid n = Printf.sprintf "00000000-0000-4000-8000-%012x" n
-
-let id_of what of_string n =
-  match of_string (uuid n) with
-  | Some x -> x
-  | None -> invalid_arg ("fixture " ^ what)
-
+let time = Value.time
+let uuid = Value.uuid4
+let id_of what of_string n = Value.id what of_string (uuid n)
 let plant_id = id_of "plant id" Ids.Plant_id.of_string
 let observation_id = id_of "observation id" Ids.Observation_id.of_string
 let photo_id = id_of "photo id" Ids.Photo_id.of_string
@@ -150,24 +152,6 @@ let ts t = `String (Ptime.to_rfc3339 ~frac_s:12 ~tz_offset_s:0 t)
 let opt f = function None -> `Null | Some v -> f v
 let str s = `String s
 
-let plant_json (p : Plant.t) =
-  `Assoc
-    [
-      ("id", str (Ids.Plant_id.to_string p.id));
-      ("display_name", str p.display_name);
-      ("aliases", `List (List.map str p.aliases));
-      ("scientific_name", opt str p.scientific_name);
-      ("authorship", opt str p.authorship);
-      ("gbif_key", opt (fun n -> `Int n) p.gbif_key);
-      ("notes", str p.notes);
-      ("notes_updated_at", opt ts p.notes_updated_at);
-      ( "cover_photo_id",
-        opt (fun x -> str (Ids.Photo_id.to_string x)) p.cover_photo_id );
-      ("created_at", ts p.created_at);
-      ("updated_at", ts p.updated_at);
-      ("deleted_at", opt ts p.deleted_at);
-    ]
-
 let observation_json (o : Observation.t) =
   `Assoc
     [
@@ -192,52 +176,11 @@ let observation_json (o : Observation.t) =
       ("deleted_at", opt ts o.deleted_at);
     ]
 
-let photo_json (p : Photo.t) =
-  `Assoc
-    [
-      ("id", str (Ids.Photo_id.to_string p.id));
-      ("observation_id", str (Ids.Observation_id.to_string p.observation_id));
-      ("taken_at", ts p.taken_at);
-      ("width", `Int p.width);
-      ("height", `Int p.height);
-      ("sha256", str p.sha256);
-      ("preview_path", str p.preview_path);
-      ("preview_bucket_key", opt str p.preview_bucket_key);
-      ( "original_target",
-        str (Photo.Original_target.to_string p.original_target) );
-      ("drive_file_id", opt str p.drive_file_id);
-      ("upload_state", str (Photo.Upload_state.to_string p.upload_state));
-      ("created_at", ts p.created_at);
-      ("updated_at", ts p.updated_at);
-      ("deleted_at", opt ts p.deleted_at);
-    ]
-
-let tag_json (t : Tag.t) =
-  `Assoc
-    [
-      ("id", str (Ids.Tag_id.to_string t.id));
-      ("name", str t.name);
-      ("created_at", ts t.created_at);
-      ("updated_at", ts t.updated_at);
-      ("deleted_at", opt ts t.deleted_at);
-    ]
-
-let plant_tag_json (t : Tag.Plant_tag.t) =
-  `Assoc
-    [
-      ("id", str (Ids.Plant_tag_id.to_string t.id));
-      ("plant_id", str (Ids.Plant_id.to_string t.plant_id));
-      ("tag_id", str (Ids.Tag_id.to_string t.tag_id));
-      ("created_at", ts t.created_at);
-      ("updated_at", ts t.updated_at);
-      ("deleted_at", opt ts t.deleted_at);
-    ]
-
-let plant_t = Cli.testable_of_json plant_json
-let observation_t = Cli.testable_of_json observation_json
-let photo_t = Cli.testable_of_json photo_json
-let tag_t = Cli.testable_of_json tag_json
-let plant_tag_t = Cli.testable_of_json plant_tag_json
+let plant_t = Alcotest.testable Plant.pp Plant.equal
+let observation_t = Alcotest.testable Observation.pp Observation.equal
+let photo_t = Alcotest.testable Photo.pp Photo.equal
+let tag_t = Alcotest.testable Tag.pp Tag.equal
+let plant_tag_t = Alcotest.testable Tag.Plant_tag.pp Tag.Plant_tag.equal
 
 (* ---------- running statements ---------- *)
 
@@ -285,15 +228,15 @@ let check_not_replace what (s : Stmt.t) =
   Alcotest.(check bool)
     (what ^ " is not insert or replace")
     false
-    (Cli.contains ~sub:"insert or replace" sql);
+    (Text.contains ~sub:"insert or replace" sql);
   Alcotest.(check bool)
     (what ^ " is not replace into")
     false
-    (Cli.contains ~sub:"replace into" sql);
+    (Text.contains ~sub:"replace into" sql);
   Alcotest.(check bool)
     (what ^ " has an on conflict clause")
     true
-    (Cli.contains ~sub:"on conflict" sql)
+    (Text.contains ~sub:"on conflict" sql)
 
 (* [upsert b] over [a], both under one id, changes 1 row and leaves exactly
    [b]; then the same with [a] over [b]. With [a] bare and [b] full, every
@@ -1530,33 +1473,7 @@ let match_expression () =
       (["ý"; "ÿ"; "Ý"; "Ÿ"], 'y');
     ]
 
-(* ---------- Search.matches ---------- *)
-
-(* Each case as (query, text, expected). *)
-let matches_cases =
-  [
-    ("schlu", "Col de la Schlucht", true);
-    ("col schlucht", "Col de la Schlucht", true);
-    ("ecrin", "Les Écrins", true);
-    ("ÉCRINS", "les ecrins", true);
-    ("digitale", "Digitalis purpurea", true);
-    ("bois", "Lisière du bois", true);
-    ("oi", "Lisière du bois", false);
-    ("jardin potager", "Jardin", false);
-    ("", "Jardin", false);
-    ("  , ", "Jardin", false);
-    ("\xf0\x9f\x8c\xbf" (* 🌿 *), "Jardin", false);
-    ("jardin", "", false);
-  ]
-
-let matches_runs_what_match_expression_asks () =
-  List.iter
-    (fun (query, text, expected) ->
-      Alcotest.(check bool)
-        (Printf.sprintf "matches ~query:%S %S" query text)
-        expected
-        (Search.matches ~query text))
-    matches_cases
+(* ---------- Fold.matches and Search.match_expression ---------- *)
 
 (* A query with no term ([match_expression] is [None]) matches no text. *)
 let matches_false_when_no_term () =
@@ -1581,8 +1498,7 @@ let matches_false_when_no_term () =
         (fun text ->
           Alcotest.(check bool)
             (Printf.sprintf "matches ~query:%S %S" query text)
-            false
-            (Search.matches ~query text))
+            false (Fold.matches ~query text))
         texts)
     no_term
 
@@ -1842,7 +1758,7 @@ let seed_ids_prefix () =
        Dev_seed.observations)
 
 let distinct_count xs = List.length (List.sort_uniq String.compare xs)
-let has_any_of chars s = List.exists (fun c -> Cli.contains ~sub:c s) chars
+let has_any_of chars s = List.exists (fun c -> Text.contains ~sub:c s) chars
 let diacritics = ["é"; "è"; "ê"; "â"; "ï"]
 
 let seed_plants () =
@@ -2217,10 +2133,8 @@ let () =
           case "folds, strips one ending, quotes and prefixes each term"
             match_expression;
         ] );
-      ( "Search.matches",
+      ( "Fold.matches",
         [
-          case "runs in memory what match_expression asks of FTS5 MATCH"
-            matches_runs_what_match_expression_asks;
           case "is false whenever match_expression has no term"
             matches_false_when_no_term;
         ] );

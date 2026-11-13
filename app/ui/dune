@@ -9,16 +9,23 @@
   herbier_domain
   herbier_bindings
   herbier_store
+  herbier_store_io
   herbier_sync
+  herbier_sync_core
   herbier_photos
+  herbier_photos_io
   herbier_refs
+  herbier_ui_model
   yojson
   herbier_refs_io
   herbier_geo
+  herbier_geo_io
   postgrest
   uri
   brr
   react
   reactiveData
   ptime
-  ptime.clock.os))
+  ptime.clock.os)
+ (preprocess
+  (pps ppx_deriving.eq)))

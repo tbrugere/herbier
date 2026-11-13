@@ -3,7 +3,7 @@
    (Unix ms, past 2^31) must read back as 2026-11-12T09:50:00Z. Silent on
    success; prints the failure to stderr and exits 1. *)
 
-module Report = Herbier_sync.Keepalive.Report
+module Report = Herbier_sync_core.Keepalive.Report
 
 let fail m =
   prerr_endline ("keepalive jsoo smoke: " ^ m);

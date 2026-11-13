@@ -3,7 +3,7 @@
     tags and observations, and the display names {!Herbier_store.Search.plants}
     returns for ["digitale"]. Each step prints one line, "ok" or the error. *)
 
-val el : (Herbier_store.Db.t, string) result -> Brr.El.t
+val el : (Herbier_store_io.Db.t, string) result -> Brr.El.t
 (** A fresh element that starts the steps when created, or says why there is no
     database. Writes the seed's rows into [herbier] and nothing else; they stay.
 *)

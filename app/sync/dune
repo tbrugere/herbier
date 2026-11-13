@@ -1,21 +1,20 @@
-; Supabase auth and the outbox push/pull over PostgREST; engine.ml runs the
-; cycles on the device. Sub-directories are qualified: auth/auth.ml is the
-; group's main module (Auth, with Auth.Session, Auth.Nonce, Auth.Gotrue,
-; Auth.Server), keepalive/keepalive.ml too (Keepalive, with Keepalive.Wire,
-; Keepalive.Report); net/ and cycle/ have none (Net.Rest, Net.Transport;
-; Cycle.Push, Cycle.Pull, Cycle.Schedule, …). The pure modules
-; (auth/session, auth/nonce, auth/gotrue, synced, json_read, net/rest,
-; keepalive/wire, keepalive/report and all of cycle/) must not reference
-; Brr, Fut, Jv or Herbier_bindings: test/sync compiles them natively through
-; copy_files.
+; Sync on the device: the account (auth/: Auth, with Auth.Server, the GoTrue
+; calls), the PostgREST transport over fetch (net/), the engine that runs the
+; cycles and the keep-alive job's side (keepalive/). The pure halves are
+; herbier_sync_core (app/sync_core/); Auth re-exports its Session, Gotrue and
+; Nonce, Keepalive its Wire and Report. Sub-directories are qualified:
+; auth/auth.ml and keepalive/keepalive.ml are their groups' main modules.
 (include_subdirs qualified)
 
 (library
  (name herbier_sync)
  (public_name herbier.sync)
  (libraries
+  herbier_sync_core
   herbier_domain
+  herbier_net
   herbier_store
+  herbier_store_io
   herbier_bindings
   postgrest
   uri

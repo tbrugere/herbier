@@ -5,23 +5,18 @@
     is in the foreground (from {!start} on; cleared on background, the refresh
     done at once on resume when due). *)
 
-module Session = Session
-(** The stored session and its refresh timing. *)
-
-module Gotrue = Gotrue
-(** GoTrue's requests and answers, sans IO. *)
-
-module Nonce = Nonce
-(** Hex encoding of the sign-in nonce. *)
+module Session := Herbier_sync_core.Auth.Session
+module Gotrue := Herbier_sync_core.Auth.Gotrue
 
 module Server = Server
 (** The GoTrue calls, shared with the keep-alive job's session. *)
 
-type status =
-  | Unconfigured  (** this build has no Supabase URL/key or Google client id *)
-  | Restoring  (** before {!start} has read Preferences *)
+type status = Herbier_sync_core.Auth.Lifecycle.status =
+  | Unconfigured
+  | Restoring
   | Signed_out
   | Signed_in of {email : string option}
+      (** {!Herbier_sync_core.Auth.Lifecycle.status}. *)
 
 val equal_status : status -> status -> bool
 

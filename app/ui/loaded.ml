@@ -1,7 +1,6 @@
 open Brr
 
-let log what e =
-  Console.(error [str what; str (Herbier_store.Db.error_to_string e)])
+let log = Log.db
 
 let v ?reload ?failed ~what el load render =
   (* One item, replaced on each load: [Rb.rlist] owns its bindings. *)
@@ -59,8 +58,8 @@ let live ~reload ~what ~gone ~failed el load render =
   in
   [Rb.rlist el item content; Rb.act reload run]
 
-let notice text =
-  let back = Widgets.Button.text ~tone:`Ink "Retour" in
+let notice ?(back = "Retour") text =
+  let back = Widgets.Button.text ~tone:`Ink back in
   ( El.div
       [
         El.div ~at:[At.class' (Jstr.v "modal-header")] [back.el];

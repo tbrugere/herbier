@@ -86,7 +86,7 @@ is a local-stack token (issuer `http://127.0.0.1:54321/auth/v1`), not a
 secret.
 
 `sync_<verb>_<table>[_<case>]_<status>.json`: PostgREST (Supabase, local
-stack) answers for the sync requests of `app/sync/net/rest.ml`, read by
+stack) answers for the sync requests of `app/sync_core/net/rest.ml`, read by
 `test/sync/test_rest.ml`, recorded by `scripts/record-sync-fixtures.sh
 [--force]` against the local stack (`npx supabase start`) with a throwaway
 user `sync-fixtures@herbier.local`, deleted at the end with its rows (also on

@@ -1,20 +1,20 @@
 module Original_target = struct
-  type t = App_only | Drive [@@deriving eq]
+  type t = App_only | Drive [@@deriving eq, show]
 
   let all = [App_only; Drive]
   let to_string = function App_only -> "app_only" | Drive -> "drive"
 
-  let of_string = function
-    | "app_only" -> Some App_only
-    | "drive" -> Some Drive
-    | _ -> None
+  include Lookup.Make (struct
+    type nonrec t = t
 
-  let to_json t = `String (to_string t)
-  let of_json = function `String s -> of_string s | _ -> None
+    let all = all
+    let to_string = to_string
+  end)
 end
 
 module Upload_state = struct
-  type t = Pending | Uploaded | Failed | Original_missing [@@deriving eq]
+  type t = Pending | Uploaded | Failed | Original_missing
+  [@@deriving eq, show]
 
   let all = [Pending; Uploaded; Failed; Original_missing]
 
@@ -24,22 +24,19 @@ module Upload_state = struct
     | Failed -> "failed"
     | Original_missing -> "original_missing"
 
-  let of_string = function
-    | "pending" -> Some Pending
-    | "uploaded" -> Some Uploaded
-    | "failed" -> Some Failed
-    | "original_missing" -> Some Original_missing
-    | _ -> None
+  include Lookup.Make (struct
+    type nonrec t = t
 
-  let to_json t = `String (to_string t)
-  let of_json = function `String s -> of_string s | _ -> None
+    let all = all
+    let to_string = to_string
+  end)
 end
 
 (* style: [original_target], [drive_file_id] and [upload_state] are three
    fields, not one [App_only | Drive of ...] variant, because the record
    mirrors the [photos] row column for column and the store reads it through
    flat [Postgrest] columns, whose row specs cannot fail. *)
-type id = Ids.Photo_id.t [@@deriving eq]
+type id = Ids.Photo_id.t [@@deriving eq, show]
 
 type t = {
   id : id;
@@ -57,7 +54,7 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
-[@@deriving eq]
+[@@deriving eq, show]
 
 let awaiting_drive p =
   match (p.original_target, p.upload_state) with

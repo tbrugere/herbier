@@ -2,7 +2,7 @@ open Brr
 module Observation = Herbier_domain.Observation
 module Places = Herbier_domain.Places
 module Features = Herbier_geo.Features
-module Geo_map = Herbier_geo.Map
+module Geo_map = Herbier_geo_io.Map
 
 type t = {el : El.t; tap : unit React.event; bindings : Rb.binding list}
 
@@ -37,16 +37,7 @@ let v ~colours position =
   (* The tap target is a button laid over the canvas, not [el]: MapLibre fills
      [el] with its attribution (a toggle and links), which must stay outside
      any button and above it. *)
-  let button =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          At.class' (Jstr.v "mini-map__tap");
-          At.v (Jstr.v "aria-label") (Jstr.v "Voir sur la carte");
-        ]
-      []
-  in
+  let button = Html.button ~label:"Voir sur la carte" ["mini-map__tap"] [] in
   let el = El.div ~at:[At.class' (Jstr.v "mini-map")] [button] in
   let tap, click = Rb.click button in
   let set_hidden hidden = El.set_class (Jstr.v "is-hidden") hidden el in
@@ -65,7 +56,7 @@ let v ~colours position =
         | Released, Error _ -> ()
         | (Idle | Creating | Ready _ | Failed), Error e ->
             map := Failed;
-            Console.(error [str "mini-carte"; str (Geo_map.error_to_string e)]);
+            Log.error "mini-carte" (Geo_map.error_to_string e);
             set_hidden true
         | (Idle | Creating | Ready _ | Failed), Ok m -> (
             map := Ready m;

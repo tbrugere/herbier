@@ -11,4 +11,4 @@
     [herbierDev.mapRendered()] is the number of observation points rendered (0
     before the map exists). *)
 
-val el : (Herbier_store.Db.t, string) result -> Brr.El.t
+val el : (Herbier_store_io.Db.t, string) result -> Brr.El.t

@@ -18,6 +18,9 @@ val equal_point : point -> point -> bool
 val of_position : Observation.position -> point
 (** Drops [accuracy_m]. *)
 
+val finite : point -> bool
+(** Both coordinates finite (not [nan], not infinite). *)
+
 val position_point : Observation.t -> point option
 (** The placeable rule of {!cluster}: [Some {lat; lon}] for a live observation
     ([deleted_at = None]) with [position = Some p] and finite [p.lat] and

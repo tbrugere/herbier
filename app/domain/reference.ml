@@ -10,7 +10,7 @@ module Source = struct
     | Eppo
     | Inat
     | Plantnet
-  [@@deriving eq]
+  [@@deriving eq, show]
 
   let all =
     [Gbif; Wikidata; Wikipedia; Powo; Ipni; Taxref; Tela; Eppo; Inat; Plantnet]
@@ -27,25 +27,16 @@ module Source = struct
     | Inat -> "inat"
     | Plantnet -> "plantnet"
 
-  let of_string = function
-    | "gbif" -> Some Gbif
-    | "wikidata" -> Some Wikidata
-    | "wikipedia" -> Some Wikipedia
-    | "powo" -> Some Powo
-    | "ipni" -> Some Ipni
-    | "taxref" -> Some Taxref
-    | "tela" -> Some Tela
-    | "eppo" -> Some Eppo
-    | "inat" -> Some Inat
-    | "plantnet" -> Some Plantnet
-    | _ -> None
+  include Lookup.Make (struct
+    type nonrec t = t
 
-  let to_json t = `String (to_string t)
-  let of_json = function `String s -> of_string s | _ -> None
+    let all = all
+    let to_string = to_string
+  end)
 end
 
 module Status = struct
-  type t = Complete | Partial | Missing | Failed [@@deriving eq]
+  type t = Complete | Partial | Missing | Failed [@@deriving eq, show]
 
   let all = [Complete; Partial; Missing; Failed]
 
@@ -55,19 +46,16 @@ module Status = struct
     | Missing -> "missing"
     | Failed -> "failed"
 
-  let of_string = function
-    | "complete" -> Some Complete
-    | "partial" -> Some Partial
-    | "missing" -> Some Missing
-    | "failed" -> Some Failed
-    | _ -> None
+  include Lookup.Make (struct
+    type nonrec t = t
 
-  let to_json t = `String (to_string t)
-  let of_json = function `String s -> of_string s | _ -> None
+    let all = all
+    let to_string = to_string
+  end)
 end
 
 module Organ = struct
-  type t = Flower | Leaf | Fruit | Habit
+  type t = Flower | Leaf | Fruit | Habit [@@deriving eq, show]
 
   let all = [Flower; Leaf; Fruit; Habit]
 
@@ -77,15 +65,15 @@ module Organ = struct
     | Fruit -> "fruit"
     | Habit -> "habit"
 
-  let of_string = function
-    | "flower" -> Some Flower
-    | "leaf" -> Some Leaf
-    | "fruit" -> Some Fruit
-    | "habit" -> Some Habit
-    | _ -> None
+  include Lookup.Make (struct
+    type nonrec t = t
+
+    let all = all
+    let to_string = to_string
+  end)
 end
 
-type id = Ids.Reference_id.t [@@deriving eq]
+type id = Ids.Reference_id.t [@@deriving eq, show]
 
 let id_of_key ~plant ~source =
   Ids.Reference_id.of_key ~plant ~source:(Source.to_string source)
@@ -101,10 +89,10 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
-[@@deriving eq]
+[@@deriving eq, show]
 
 module Plant_ref = struct
-  type id = Ids.Plant_ref_id.t [@@deriving eq]
+  type id = Ids.Plant_ref_id.t [@@deriving eq, show]
 
   let id_of_key ~plant ~source =
     Ids.Plant_ref_id.of_key ~plant ~source:(Source.to_string source)
@@ -119,7 +107,7 @@ module Plant_ref = struct
     updated_at : Ptime.t;
     deleted_at : Ptime.t option;
   }
-  [@@deriving eq]
+  [@@deriving eq, show]
 end
 
 module Image = struct

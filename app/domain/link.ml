@@ -247,13 +247,10 @@ let gbif = function
   | _ -> None
 
 (* A decoded "%20" or "_" leaves nothing to search for. *)
-let non_blank s =
-  match String.trim s with "" -> None | trimmed -> Some trimmed
-
 let plantnet path =
   match
-    ( Option.bind (after_segment "species" path) non_blank,
-      Option.bind (after_segment "observations" path) non_blank )
+    ( Option.bind (after_segment "species" path) Text.non_blank,
+      Option.bind (after_segment "observations" path) Text.non_blank )
   with
   | Some name, _ -> Some (Plantnet name)
   | None, Some id -> Some (Plantnet_observation id)
@@ -265,7 +262,7 @@ let plantuse = function
   | [lang; page] when lang <> "w" && not (String.contains page ':') ->
       Option.map
         (fun name -> Plantuse name)
-        (non_blank (underscores_to_spaces page))
+        (Text.non_blank (underscores_to_spaces page))
   | _ -> None
 
 (* A title may hold a literal "/" ("AC/DC"), so it is every segment after
@@ -274,7 +271,7 @@ let wikipedia lang = function
   | "wiki" :: (_ :: _ as title) ->
       Option.map
         (fun title -> Wikipedia {lang; title})
-        (non_blank (underscores_to_spaces (String.concat "/" title)))
+        (Text.non_blank (underscores_to_spaces (String.concat "/" title)))
   | _ -> None
 
 let inpn = function
@@ -289,7 +286,7 @@ let tela = function
   | [] -> None
 
 let powo = function
-  | "taxon" :: id :: _ -> Option.map (fun id -> Powo id) (non_blank id)
+  | "taxon" :: id :: _ -> Option.map (fun id -> Powo id) (Text.non_blank id)
   | _ -> None
 
 let inat = function

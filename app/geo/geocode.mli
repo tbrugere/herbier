@@ -24,12 +24,6 @@ val request_endpoint : request -> string
     ["photon https://photon.komoot.io/reverse"]: no coordinates and no query,
     for the console. *)
 
-val encode : string -> string
-(** Percent-encoding of a query key or value: every byte except the RFC 3986
-    unreserved set [A-Z a-z 0-9 - . _ ~], upper-case hex. [" "] → ["%20"], [","]
-    → ["%2C"], ["\""] → ["%22"], ["é"] → ["%C3%A9"]. A copy of
-    [Herbier_refs.Request.encode] (layout.md, known copies). *)
-
 val coordinate : float -> string
 (** [Printf.sprintf "%.5f"]: ["48.06330"], ["-0.85000"], [48.0633512] →
     ["48.06335"]. About 1 m: no coarser than a phone's fix, so the providers get
@@ -71,22 +65,6 @@ val in_france : Places.point -> bool
     answers and fall back to Photon. [false] for a [nan] coordinate. Overseas
     France is outside the box (Photon). *)
 
-val near : string -> string option
-(** The stored [place_derived] phrase for a place name (handoff 4c « Près de
-    Colmar »), French contraction applied to the trimmed name:
-    - ["Le X"] → ["Près du X"], ["Les X"] → ["Près des X"], ["La X"] →
-      ["Près de la X"], ["L'X"] or ["L’X"] → ["Près de l’X"]: the article
-      matched case-insensitively (ASCII) and followed by a space (the apostrophe
-      forms by nothing), replaced by the contracted form;
-    - else a name starting with a vowel (ASCII [AEIOUY], either case, or one of
-      [À Â Ä É È Ê Ë Î Ï Ô Ö Ù Û Ü Œ Æ] and their lower case) →
-      ["Près d’" ^ name] (no elision before h);
-    - else ["Près de " ^ name], also for a name made only of an article (["L'"]
-      → ["Près de L'"]).
-
-    [None] for a blank name. The apostrophe written is always [’] (U+2019).
-    Never raises. *)
-
 type error =
   | Not_json of string  (** the body is not JSON; the parser's message *)
   | Unexpected of {path : string; expected : string}
@@ -102,9 +80,6 @@ val json_of_string : string -> (Yojson.Safe.t, error) result
 (** {1 Payload helpers}
 
     Shared by the decoders here and by [Communes]'s WFS decoders. *)
-
-val member : string -> Yojson.Safe.t -> Yojson.Safe.t option
-(** The field of an object; a missing field, [null] or a non-object → [None]. *)
 
 val max_value_bytes : int
 (** [200]: a longer provider string is not a place name (it would be synced as
@@ -123,9 +98,6 @@ val properties : Yojson.Safe.t -> Yojson.Safe.t
 val features : Yojson.Safe.t -> (Yojson.Safe.t list, error) result
 (** A FeatureCollection's [features];
     [Unexpected {path = "/features"; expected = "array"}] when not an array. *)
-
-val number : Yojson.Safe.t -> float option
-(** An [`Int] or a finite [`Float]; anything else → [None]. *)
 
 val photon_name : Yojson.Safe.t -> (string option, error) result
 (** A Photon reverse payload. [features] must be an array
@@ -184,13 +156,13 @@ val or_else :
 
 val reverse_ign : Places.point -> (string option, error) result program
 (** « IGN en ligne »: when {!in_france}: [geoplateforme_lieu_dit] → a name →
-    [Done (Ok (near name))]; none → [geoplateforme_commune] → a name →
-    [Done (Ok (near name))]; none → [Done (Ok None)]. Outside the box:
+    [Done (Ok (Near.phrase name))]; none → [geoplateforme_commune] → a name →
+    [Done (Ok (Near.phrase name))]; none → [Done (Ok None)]. Outside the box:
     [Done (Ok None)] with no request. A payload that does not decode →
     [Done (Error e)] at once (no commune request after a bad lieu-dit payload).
-    A name that [near] rejects counts as none. *)
+    A name that [Near.phrase] rejects counts as none. *)
 
 val reverse_photon : Places.point -> (string option, error) result program
 (** « Photon en ligne »: [photon_reverse] → {!photon_name} → a name →
-    [Done (Ok (near name))]; none → [Done (Ok None)]; bad payload →
+    [Done (Ok (Near.phrase name))]; none → [Done (Ok None)]; bad payload →
     [Done (Error e)]. One request, anywhere in the world. *)

@@ -99,7 +99,7 @@ Launch a lens only if a changed path matches. Print the launch/skip decision for
 
 Never flag the contents of generated or recorded files: `herbier.opam`, `postgrest.opam`,
 `dune.lock/**`, `supabase/schema/**`, `test/postgrest/fixtures/scenarios.json`,
-`test/postgrest/fixtures/README.md`, `app/domain/version.ml`, `www`. Flag them only when they are
+`test/postgrest/fixtures/README.md`, `app/version/herbier_version.ml`, `www`. Flag them only when they are
 stale against their source (ci-infra, supabase-db).
 
 ## 5. Dispatch in parallel

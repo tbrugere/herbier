@@ -58,13 +58,26 @@ let upsert ?(conflict = ["id"]) ?(keep = []) ~table
     params = List.map snd columns;
   }
 
-let soft_delete ~table ~id ~at =
+let soft_delete_where ~table ~key ~at =
   let at = Codec.Text (Codec.timestamp at) in
   {
     sql =
       Printf.sprintf
-        "update %s set deleted_at = ?, updated_at = ? where id = ? and \
-         deleted_at is null"
-        (Postgrest.Col.name_of_table table);
-    params = [at; at; id];
+        "update %s set deleted_at = ?, updated_at = ? where %s and deleted_at \
+         is null"
+        (Postgrest.Col.name_of_table table)
+        (String.concat " and " (List.map (fun (name, _) -> name ^ " = ?") key));
+    params = at :: at :: List.map snd key;
   }
+
+type 'table key_column =
+  | Is : ('table, 'a, 'optional) Postgrest.Col.t * 'a -> 'table key_column
+
+let soft_delete_by ~table ~key:(first, rest) ~at =
+  soft_delete_where ~table ~at
+    ~key:
+      (List.map
+         (fun (Is (col, v)) -> (col.Postgrest.Col.name, Codec.param col v))
+         (first :: rest))
+
+let soft_delete ~table ~id ~at = soft_delete_where ~table ~key:[("id", id)] ~at

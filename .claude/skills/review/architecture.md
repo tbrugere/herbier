@@ -9,31 +9,27 @@ Any changed `*.ml`, `*.mli`, `dune`, `dune-project`.
 
 ## The rules to check against
 
-From `layout.md` §2, enforced by each `dune` file's `libraries`:
-
-```
-domain    <- ptime, uuidm                 (no JSON library, no Brr)
-postgrest <- yojson, ptime, uri           (lib/; no domain, no Brr, no HTTP)
-refs      <- domain, yojson               (no Brr)
-bindings  <- brr                          (no domain, no logic)
-store     <- domain, bindings, postgrest
-sync      <- domain, store, bindings, postgrest
-photos | refs_io | geo <- domain, store, bindings  (refs_io also refs; siblings never import each other)
-ui        <- everything above + react, reactiveData
-main      <- ui
-```
+`layout.md` §2's "Dependency direction" block, enforced by each `dune` file's `libraries`
+(read it there, not from a copy). In short: the pure libraries (`domain`, `net`, `refs`,
+`photos`, `geo`, `store`, `sync_core`, `ui_model`, and `lib/postgrest/`) have no Brr; each
+`*_io` library and `sync` is the Brr half of its pure one; `photos_io`, `refs_io` and `geo_io`
+never import each other; `ui` sits above everything, `main` above `ui`.
 
 ## Checklist
 
 - **Dependency direction.** A `libraries` field or an `open`/qualified reference that goes
-  against the table: `Yojson` or `Jv` in `domain/`, `Brr` in `refs/` or `lib/postgrest/`,
-  `herbier_photos` used from `herbier_geo`, store code reaching into `ui`.
+  against the block: `Jv` in `domain/`, `Brr` in a pure library (`refs/`, `store/`,
+  `sync_core/`, `ui_model/`, `lib/postgrest/`), `herbier_photos_io` used from `herbier_geo_io`,
+  store code reaching into `ui`.
 - **Logic in the wrong layer.** Domain rules (merge, place clustering, link classification)
   written in a screen or in `store/`; SQL in `ui/`; HTTP or Brr fetch inside `lib/postgrest/`
-  (it is sans-IO: requests are values, the transport lives in `sync/transport.ml`); a binding
+  (it is sans-IO: requests are values, the transport lives in `sync/net/transport.ml`); IO
+  (Brr, Fut, bindings) in a pure library instead of its `*_io` half; a binding
   module that validates or transforms beyond the JS shape.
 - **Orchestration.** Cross-service sequences (save, then outbox push, then reference fetch,
-  then geocode) belong in `ui/app.ml`; a sibling service calling another is the smell.
+  then geocode) belong in `ui/app/` (App: Core, Geocoding, Reference_fetch, Packs, in that
+  order; a module calls only those before it); one IO library (`photos_io`, `refs_io`,
+  `geo_io`) calling another is the smell.
 - **Duplication and drift.** Two definitions of the same record or variant, in two libraries
   (the domain type and a store copy) or side by side in one module (a private "wire" record
   mirroring a public one, a field added only to keep a caller unchanged); near-identical

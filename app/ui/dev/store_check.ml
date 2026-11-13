@@ -1,6 +1,7 @@
 module Cap_error = Herbier_bindings.Cap_error
 module Cap_sqlite = Herbier_bindings.Cap_sqlite
-module Db = Herbier_store.Db
+module Fut_result = Herbier_bindings.Fut_result
+module Db = Herbier_store_io.Db
 module Codec = Herbier_store.Codec
 module Schema = Herbier_store.Schema
 module Plants = Herbier_store.Tables.Plants
@@ -28,24 +29,10 @@ let failure_to_string = function
   | Mismatch {expected; got} ->
       Printf.sprintf "expected %S, got %S" expected got
 
-(* Duplicated from storage_check: the dev pages share no module. *)
-let append log text = Brr.El.append_children log [Brr.El.div [Brr.El.txt' text]]
-let heading log text = Brr.El.append_children log [Brr.El.h2 [Brr.El.txt' text]]
-let store fut = Fut.map (Result.map_error (fun e -> Store e)) fut
-let plugin fut = Fut.map (Result.map_error (fun e -> Plugin e)) fut
+let store fut = Fut_result.map_error (fun e -> Store e) fut
+let plugin fut = Fut_result.map_error (fun e -> Plugin e) fut
 let no_detail _ = None
-
-let step log label ~detail fut =
-  Fut.map
-    (fun r ->
-      (match r with
-      | Ok v -> (
-          match detail v with
-          | None -> append log (label ^ ": ok")
-          | Some d -> append log (label ^ ": ok · " ^ d))
-      | Error e -> append log (label ^ ": " ^ failure_to_string e));
-      r)
-    fut
+let step log label ~detail = Kit.step log label ~detail ~error:failure_to_string
 
 let expect print expected fut =
   Fut.map
@@ -838,21 +825,21 @@ let newer log database =
 
 let fresh_then_reuse log database =
   let open Fut.Result_syntax in
-  heading log "fresh";
+  Kit.heading log "fresh";
   let* db = fresh log database in
-  heading log "round-trip";
+  Kit.heading log "round-trip";
   let* () = closing_on_error db (round_trip log) in
-  heading log "search";
+  Kit.heading log "search";
   let* (_ : string list) = closing_on_error db (check_search log) in
-  heading log "settings";
+  Kit.heading log "settings";
   let* (_ : bool option) = closing_on_error db (check_settings log) in
-  heading log "outbox";
+  Kit.heading log "outbox";
   let* (_ : int list) = closing_on_error db (check_outbox log) in
-  heading log "references";
+  Kit.heading log "references";
   let* (_ : string list) = closing_on_error db (check_references log) in
-  heading log "transaction sans entrée";
+  Kit.heading log "transaction sans entrée";
   let* (_ : int) = closing_on_error db (check_bare log) in
-  heading log "reopen";
+  Kit.heading log "reopen";
   reopen log db database
 
 let run log =
@@ -861,11 +848,11 @@ let run log =
   let* (_ : (unit, failure) result) =
     fresh_then_reuse log (prefix ^ "_fresh")
   in
-  heading log "upgrade from empty";
+  Kit.heading log "upgrade from empty";
   let* (_ : (unit, failure) result) = upgrade log (prefix ^ "_empty") in
-  heading log "newer version";
+  Kit.heading log "newer version";
   let+ (_ : (unit, failure) result) = newer log (prefix ^ "_newer") in
-  append log "done"
+  Kit.append log "done"
 
 let el () =
   let log =

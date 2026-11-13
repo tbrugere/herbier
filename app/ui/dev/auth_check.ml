@@ -2,12 +2,6 @@ open Brr
 module Auth = Herbier_sync.Auth
 module Backend = Herbier_sync.Backend
 
-let append log text = El.append_children log [El.div [El.txt' text]]
-let button label = El.button ~at:[At.type' (Jstr.v "button")] [El.txt' label]
-
-let on_click el f =
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target el) : Ev.listener)
-
 let prefix n s =
   match String.length s > n with true -> String.sub s 0 n ^ "…" | false -> s
 
@@ -42,8 +36,8 @@ let expiry = function
 
 let report log label fut =
   Fut.await fut (function
-    | Ok () -> append log (label ^ ": ok")
-    | Error e -> append log (label ^ ": " ^ Auth.error_to_string e))
+    | Ok () -> Kit.append log (label ^ ": ok")
+    | Error e -> Kit.append log (label ^ ": " ^ Auth.error_to_string e))
 
 let page app =
   let auth = App.auth app in
@@ -72,19 +66,19 @@ let page app =
   render ();
   let (_ : G.timer_id) = G.set_interval ~ms:1000 poll in
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
-  let sign_in = button "Se connecter"
-  and refresh = button "Rafraîchir maintenant"
-  and expire = button "Expirer"
-  and sign_out = button "Se déconnecter"
-  and update = button "Actualiser" in
-  on_click update render;
-  on_click sign_in (fun () -> report log "sign_in" (Auth.sign_in auth));
-  on_click refresh (fun () -> report log "refresh" (Auth.refresh_now auth));
-  on_click expire (fun () ->
+  let sign_in = Kit.button "Se connecter"
+  and refresh = Kit.button "Rafraîchir maintenant"
+  and expire = Kit.button "Expirer"
+  and sign_out = Kit.button "Se déconnecter"
+  and update = Kit.button "Actualiser" in
+  Kit.on_click update render;
+  Kit.on_click sign_in (fun () -> report log "sign_in" (Auth.sign_in auth));
+  Kit.on_click refresh (fun () -> report log "refresh" (Auth.refresh_now auth));
+  Kit.on_click expire (fun () ->
       Auth.debug_expire auth;
       render ();
-      append log "expire: ok");
-  on_click sign_out (fun () -> report log "sign_out" (Auth.sign_out auth));
+      Kit.append log "expire: ok");
+  Kit.on_click sign_out (fun () -> report log "sign_out" (Auth.sign_out auth));
   El.div
     (El.h1 [El.txt' "Auth check"]
      :: List.map (fun l -> El.p [El.txt' l]) backend_lines

@@ -1,4 +1,4 @@
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Dev_seed = Herbier_store.Dev_seed
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
@@ -6,20 +6,10 @@ module Observations = Herbier_store.Observations
 module Search = Herbier_store.Search
 module Plant = Herbier_domain.Plant
 
-(* Duplicated from storage_check: the dev pages share no module. *)
-let append log text = Brr.El.append_children log [Brr.El.div [Brr.El.txt' text]]
-
-let step log label ~detail fut =
-  Fut.map
-    (fun r ->
-      (match r with
-      | Ok v -> (
-          match detail v with
-          | "" -> append log (label ^ ": ok")
-          | d -> append log (label ^ ": ok · " ^ d))
-      | Error e -> append log (label ^ ": " ^ Db.error_to_string e));
-      r)
-    fut
+(* [detail] gives "" for no detail. *)
+let step log label ~detail =
+  Kit.step log label ~error:Db.error_to_string ~detail:(fun v ->
+      match detail v with "" -> None | d -> Some d)
 
 let count v = string_of_int (List.length v)
 
@@ -72,8 +62,8 @@ let el db =
       [Brr.El.h1 [Brr.El.txt' "Seed check"]]
   in
   (match db with
-  | Error e -> append log ("no herbier database: " ^ e)
+  | Error e -> Kit.append log ("no herbier database: " ^ e)
   | Ok db ->
       Fut.await (steps log db) (fun (_ : (unit, Db.error) result) ->
-          append log "done"));
+          Kit.append log "done"));
   log

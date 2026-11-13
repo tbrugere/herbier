@@ -5,7 +5,10 @@
    [commune_packs] is not synced). The Capacitor plugin itself and the file it
    points at are a device check (#dev/geocode, "IGN hors-ligne" line). *)
 
+module Schema = Herbier_store.Schema
+module Commune_packs = Herbier_store.Commune_packs
 module Cli = Sqlite_cli
+module Text = Herbier_test_support.Text
 
 (* ---------- fixtures ---------- *)
 
@@ -146,7 +149,7 @@ let rejected what ~because db sql =
   match Cli.sqlite db sql with
   | Ok out -> Alcotest.failf "%s should be rejected, got %s" what out
   | Error e -> (
-      match Cli.contains ~sub:because e with
+      match Text.contains ~sub:because e with
       | true -> ()
       | false ->
           Alcotest.failf "%s should be rejected for %S, got %s" what because e)

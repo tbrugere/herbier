@@ -1,5 +1,5 @@
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Settings = Herbier_store.Settings
 module Original_target = Herbier_domain.Photo.Original_target
 

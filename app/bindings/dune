@@ -1,5 +1,6 @@
-; Jv/Brr bindings to Capacitor plugins, JS libraries and web APIs, and thin
-; wrappers that turn one JS API into a result. No domain.
+; Jv/Brr bindings to Capacitor plugins, JS libraries and web APIs, thin
+; wrappers that turn one JS API into a result, and the two helpers every
+; service repeats over them (Js_error, Fut_result). No domain.
 (library
  (name herbier_bindings)
  (public_name herbier.bindings)

@@ -1,6 +1,6 @@
 ; js_of_ocaml builds run under node: under jsoo's 32-bit int, Yojson.Safe
 ; reads an integer past 2^31 as `Intlit, which the native suites never see.
-; smoke: app/sync/auth/session.ml and gotrue.ml (with json_read.ml); the
+; smoke: herbier_sync_core's Auth.Session and Auth.Gotrue; the
 ; stored form must be the same bytes as natively, and a token answer carrying
 ; an integer past 2038 must still decode. keepalive_smoke:
 ; Keepalive.Report.decode on test/runner's report.json, whose millisecond
@@ -8,25 +8,19 @@
 ; NODE_OPTIONS is cleared so a preload in the developer's shell cannot alter
 ; the run.
 
-(copy_files# ../../../app/sync/auth/{session,gotrue}.{ml,mli})
-
-(copy_files# ../../../app/sync/json_read.{ml,mli})
-
 (copy_files# ../stored_v1.ml)
 
 (executable
  (name smoke)
  (modes js)
- (modules smoke session gotrue json_read stored_v1)
- (libraries yojson ptime)
- (preprocess
-  (pps ppx_deriving.eq ppx_deriving_yojson)))
+ (modules smoke stored_v1)
+ (libraries herbier_sync_core yojson ptime))
 
 (executable
  (name keepalive_smoke)
  (modes js)
  (modules keepalive_smoke)
- (libraries herbier.sync ptime))
+ (libraries herbier_sync_core ptime))
 
 (rule
  (alias runtest)

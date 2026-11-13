@@ -1,8 +1,9 @@
+module Parked_entry = Herbier_ui_model.Parked_entry
 open Brr
 module Outbox = Herbier_store.Outbox
-module Outcome = Herbier_sync.Cycle.Outcome
+module Outcome = Herbier_sync_core.Cycle.Outcome
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let parked_rows = function
   | [] -> []
@@ -39,7 +40,7 @@ let card (blocked, entries) =
 
 let pull_blocked engine =
   Option.bind (Herbier_sync.Engine.last engine) (fun report ->
-      Option.bind (Herbier_sync.Cycle.Report.pull_stop report) (fun stop ->
+      Option.bind (Herbier_sync_core.Cycle.Report.pull_stop report) (fun stop ->
           match Outcome.persistent stop with true -> Some stop | false -> None))
 
 let unreadable () =
@@ -59,7 +60,7 @@ let v app =
       (fun () ->
         Fut.map
           (Result.map (fun entries -> (pull_blocked (App.engine app), entries)))
-          (Herbier_store.Db.all (App.db app) Outbox.parked))
+          (Herbier_store_io.Db.all (App.db app) Outbox.parked))
       card
   in
   (el, bindings)

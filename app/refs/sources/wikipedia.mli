@@ -5,11 +5,11 @@
 
 val summary : lang:string -> title:string -> Request.t option
 (** ["https://<lang>.wikipedia.org/api/rest_v1/page/summary/<t>"] where [<t>] is
-    the trimmed [title] with spaces turned into ['_'], then {!Request.encode}d
-    as one segment (["AC/DC"] gives ["AC%2FDC"]). [None] when [lang] fails
-    {!Herbier_domain.Link.valid_wikipedia_lang} (the rule [Link.Wikipedia] is
-    classified with: not ["FR"], ["fr.m"], [""], ["www"]), or when the trimmed
-    title is blank, ["."] or [".."]. *)
+    the trimmed [title] with spaces turned into ['_'], then
+    {!Herbier_net.Url.encode}d as one segment (["AC/DC"] gives ["AC%2FDC"]).
+    [None] when [lang] fails {!Herbier_domain.Link.valid_wikipedia_lang} (the
+    rule [Link.Wikipedia] is classified with: not ["FR"], ["fr.m"], [""],
+    ["www"]), or when the trimmed title is blank, ["."] or [".."]. *)
 
 type kind =
   | Standard
@@ -34,6 +34,9 @@ type t = {
           checks it before using it as [href]. *)
   thumbnail : thumbnail option;  (** All three fields, or [None]. *)
 }
+
+val equal : t -> t -> bool
+val pp : Format.formatter -> t -> unit
 
 val summary_of_json : Yojson.Safe.t -> (t, Decode.error) result
 (** Required [type] and [title]. A 404 never reaches here: [http.ml] returns

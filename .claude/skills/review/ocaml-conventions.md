@@ -6,7 +6,7 @@ reference, this file lists what to look for in a diff.
 ## Scope
 
 Any changed `*.ml`, `*.mli`, `dune`, `dune-project`. Never flag generated files
-(`app/domain/version.ml`, `*.opam`). `lib/postgrest/` sources are human-written: review them
+(`app/version/herbier_version.ml`, `*.opam`). `lib/postgrest/` sources are human-written: review them
 the same way, the author decides.
 
 ## Checklist

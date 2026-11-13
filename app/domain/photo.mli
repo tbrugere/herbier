@@ -5,6 +5,7 @@ module Original_target : sig
   type t = App_only | Drive
 
   val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 
   val all : t list
   (** Every constructor, in declaration order. *)
@@ -27,6 +28,7 @@ module Upload_state : sig
   type t = Pending | Uploaded | Failed | Original_missing
 
   val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 
   val all : t list
   (** Every constructor, in declaration order. *)
@@ -72,6 +74,8 @@ type t = {
 
 val equal : t -> t -> bool
 (** Field by field: [Ptime.equal] on instants (no truncation). *)
+
+val pp : Format.formatter -> t -> unit
 
 val awaiting_drive : t -> bool
 (** Whether the original is bound for Drive and not there yet: [Pending], or

@@ -7,6 +7,11 @@
    triggers) is checked here for its objects and its upgrade paths; what the
    triggers keep in the index is in test_queries. *)
 
+module Testable = Herbier_test_support.Testable
+module Value = Herbier_test_support.Value
+module Codec = Herbier_store.Codec
+module Schema = Herbier_store.Schema
+module Tables = Herbier_store.Tables
 module Col = Postgrest.Col
 module Row = Postgrest.Row
 module Ids = Herbier_domain.Ids
@@ -16,8 +21,8 @@ module Status = Herbier_domain.Reference.Status
 module Organ = Herbier_domain.Reference.Organ
 module P = Tables.Plants
 module Cli = Sqlite_cli
+module Text = Herbier_test_support.Text
 
-let contains = Cli.contains
 let replace_all = Cli.replace_all
 let sqlite = Cli.sqlite
 let exec_ok = Cli.exec_ok
@@ -311,7 +316,7 @@ let one_statement_per_string () =
               Alcotest.(check bool)
                 (what ^ " is one statement")
                 true
-                (contains ~sub:(statement ^ "\n; -- ") out))
+                (Text.contains ~sub:(statement ^ "\n; -- ") out))
         (Schema.batch m))
     Schema.migrations
 
@@ -560,7 +565,7 @@ let rejected what ~because db sql =
   match sqlite db (fk_on ^ sql) with
   | Ok _ -> Alcotest.failf "%s should be rejected" what
   | Error e -> (
-      match contains ~sub:because e with
+      match Text.contains ~sub:because e with
       | true -> ()
       | false ->
           Alcotest.failf "%s should be rejected for %S, got %s" what because e)
@@ -785,10 +790,7 @@ let outbox_defaults () =
 
 (* ---------- fixtures ---------- *)
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
+let time = Value.time
 
 let some_or_fail what = function
   | Some v -> v
@@ -858,7 +860,7 @@ let text_codec () =
       | "true" -> Some true
       | _ -> None)
   in
-  let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal in
+  let json = Testable.yojson in
   Alcotest.(check json)
     "to_json is a JSON string" (`String "false") (c.to_json false);
   Alcotest.(check (option bool))
@@ -1082,7 +1084,7 @@ let error_strings () =
     ];
   Alcotest.(check bool)
     "error_to_string of Invalid_json_column names the column" true
-    (contains ~sub:"aliases"
+    (Text.contains ~sub:"aliases"
        (Codec.error_to_string (Invalid_json_column "aliases")))
 
 (* ---------- plants round-trip ---------- *)

@@ -1,13 +1,11 @@
-; Local SQLite over @capacitor-community/sqlite: hand-written SQL, rows
-; decoded with Postgrest.Row.
-; The pure modules (codec, schema, tables, stmt, outbox, plants, observations,
-; tags, photos, cascade, settings, search, references, ref_images,
-; commune_packs, dev_seed, sync_state) must not reference Db, Herbier_bindings,
-; Brr or Fut: test/store compiles them natively through copy_files.
+; Local SQLite, sans IO: hand-written SQL as statements and queries, rows
+; decoded with Postgrest.Row, the schema and its migrations, the outbox. No
+; Brr, no bindings: the libraries below enforce it, and test/store links this
+; library natively. app/store_io/ runs the statements on the device.
 (library
  (name herbier_store)
  (public_name herbier.store)
- (libraries herbier_domain herbier_bindings postgrest yojson ptime brr)
+ (libraries herbier_domain postgrest yojson ptime)
  (preprocess
   (pps ppx_deriving.eq)))
 

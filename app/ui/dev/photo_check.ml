@@ -3,18 +3,10 @@ module Cap_error = Herbier_bindings.Cap_error
 module Cap_geolocation = Herbier_bindings.Cap_geolocation
 module Exifr = Herbier_bindings.Exifr
 module Exif = Herbier_photos.Exif
-module Preview = Herbier_photos.Preview
-module Files = Herbier_store.Files
-
-let append log text = Brr.El.append_children log [Brr.El.div [Brr.El.txt' text]]
-
-let button label on_click =
-  let b = Brr.El.button [Brr.El.txt' label] in
-  (* The listener lives as long as the page; nothing unlistens it. *)
-  let _ : Brr.Ev.listener =
-    Brr.Ev.listen Brr.Ev.click (fun _ -> on_click ()) (Brr.El.as_target b)
-  in
-  b
+module Preview = Herbier_photos_io.Preview
+module Files = Herbier_store_io.Files
+module Js_error = Herbier_bindings.Js_error
+module Fut_result = Herbier_bindings.Fut_result
 
 let describe (e : Exif.t) =
   let time =
@@ -46,8 +38,8 @@ let read_exif blob =
 
 (* Dev scratch file, outside previews/: no row points to it. *)
 let preview_path = "dev/preview.jpg"
-let preview fut = Fut.map (Result.map_error Preview.error_to_string) fut
-let file fut = Fut.map (Result.map_error Cap_error.to_string) fut
+let preview fut = Fut_result.map_error Preview.error_to_string fut
+let file fut = Fut_result.map_error Cap_error.to_string fut
 
 let bytes blob =
   Fut.map
@@ -80,14 +72,10 @@ let check_preview log original =
   let* p = preview (Preview.make original) in
   let* () = file (Files.write_blob ~path:preview_path p.jpeg) in
   let* back = file (Files.read_blob ~path:preview_path ~type':Preview.mime) in
-  let+ back_bytes =
-    Fut.map
-      (Result.map_error (fun e -> Jstr.to_string (Jv.Error.message e)))
-      (bytes back)
-  in
+  let+ back_bytes = Fut_result.map_error Js_error.message (bytes back) in
   let written = Brr.Blob.byte_length p.jpeg in
   let read = Brr.Blob.byte_length back in
-  append log
+  Kit.append log
     (Printf.sprintf
        "preview %dx%d, %d bytes written, %d read back (%s), EXIF segment: %s, \
         original sha256 %s"
@@ -108,17 +96,17 @@ let check log (m : Cap_camera.media) =
   let* blob = Herbier_bindings.Web_path.blob m.web_path in
   match blob with
   | Error e ->
-      append log (m.web_path ^ ": fetch: " ^ e);
+      Kit.append log (m.web_path ^ ": fetch: " ^ e);
       Fut.return ()
   | Ok blob ->
       let* line = read_exif blob in
-      append log (m.web_path ^ ": " ^ line);
+      Kit.append log (m.web_path ^ ": " ^ line);
       let+ r = check_preview log blob in
-      Result.iter_error (fun e -> append log ("preview: " ^ e)) r
+      Result.iter_error (fun e -> Kit.append log ("preview: " ^ e)) r
 
 let pick log () =
   Fut.await (Cap_camera.choose_photos ~limit:5) (function
-    | Error e -> append log ("pick: " ^ Cap_error.to_string e)
+    | Error e -> Kit.append log ("pick: " ^ Cap_error.to_string e)
     | Ok media ->
         Fut.await
           (List.fold_left
@@ -131,17 +119,17 @@ let locate log () =
     (Cap_geolocation.current_position ~high_accuracy:true ~timeout_ms:20_000
        ~maximum_age_ms:0) (function
     | Ok p ->
-        append log
+        Kit.append log
           (Printf.sprintf "gps: %.6f,%.6f ±%.0f m" p.latitude p.longitude
              p.accuracy_m)
-    | Error e -> append log ("gps: " ^ Cap_error.to_string e))
+    | Error e -> Kit.append log ("gps: " ^ Cap_error.to_string e))
 
 let el () =
   let log = Brr.El.div ~at:[Brr.At.v (Jstr.v "role") (Jstr.v "log")] [] in
   Brr.El.div
     [
       Brr.El.h1 [Brr.El.txt' "Photo check"];
-      button "Pick photos" (pick log);
-      button "GPS position" (locate log);
+      Kit.action "Pick photos" (pick log);
+      Kit.action "GPS position" (locate log);
       log;
     ]

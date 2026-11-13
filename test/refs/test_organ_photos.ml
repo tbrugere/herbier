@@ -6,6 +6,8 @@ module Payload = Herbier_refs.Payload
 module Projection = Herbier_refs.Projection
 module Gbif = Herbier_refs.Sources.Gbif
 module Organ_photos = Herbier_refs.Organ_photos
+module Fixture = Herbier_test_support.Fixture
+module Testable = Herbier_test_support.Testable
 
 (* ---------- fixtures ---------- *)
 
@@ -91,7 +93,8 @@ let image_json (i : Reference.Image.t) =
 let images_json l = `List (List.map image_json l)
 
 let check_images what expected actual =
-  Alcotest.(check Check.yojson) what (images_json expected) (images_json actual)
+  Alcotest.(check Testable.yojson)
+    what (images_json expected) (images_json actual)
 
 (* ---------- downloadable ---------- *)
 

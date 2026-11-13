@@ -10,8 +10,8 @@ let sources = [Source.Gbif; Source.Plantnet; Source.Wikidata; Source.Wikipedia]
 type row = {source : Source.t; status : Status.t; payload : Yojson.Safe.t}
 
 let equal_row a b =
-  a.source = b.source
-  && a.status = b.status
+  Source.equal a.source b.source
+  && Status.equal a.status b.status
   && Yojson.Safe.equal a.payload b.payload
 
 let empty = `Assoc []
@@ -147,7 +147,8 @@ let branches ~gbif_key:key = [gbif ~key; plantnet ~key; wiki ~key]
 
 let live_row previous source =
   List.find_opt
-    (fun (r : Reference.t) -> r.source = source && Option.is_none r.deleted_at)
+    (fun (r : Reference.t) ->
+      Source.equal r.source source && Option.is_none r.deleted_at)
     previous
 
 let merge ~previous row =

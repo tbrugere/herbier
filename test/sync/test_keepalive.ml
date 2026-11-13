@@ -1,10 +1,18 @@
-(* Native alcotest of app/sync/keepalive/wire.ml and report.ml, the
+(* Native alcotest of app/sync_core/keepalive/wire.ml and report.ml, the
    contract between the app and web/runner/keepalive.js; it also decodes
    what the job's node test (test/runner/test_keepalive.mjs) writes. *)
 
+module Testable = Herbier_test_support.Testable
+module Session = Herbier_sync_core.Auth.Session
+module Gotrue = Herbier_sync_core.Auth.Gotrue
+module Synced = Herbier_sync_core.Synced
+module Rest = Herbier_sync_core.Net.Rest
+module Keepalive = Herbier_sync_core.Keepalive
+module Outbox = Herbier_store.Outbox
 module F = Sync_fixtures
 module Wire = Keepalive.Wire
 module Report = Keepalive.Report
+module Text = Herbier_test_support.Text
 
 (* supabase_url matches test/sync/handoff_sample.ml's; apikey is "K", the key
    of Sync_fixtures.conn, for the cross-check against Mock_http. *)
@@ -13,7 +21,7 @@ let apikey = "K"
 
 (* ---------- small helpers ---------- *)
 
-let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal
+let json = Testable.yojson
 
 let check_request name a b =
   Alcotest.check json name (Wire.request_to_yojson a) (Wire.request_to_yojson b)
@@ -244,14 +252,14 @@ let session_doc_hides_tokens_outside_the_session_field () =
       in
       Alcotest.(check bool)
         "no access token outside session" false
-        (Support.contains ~needle:session_sample.access_token rest_text);
+        (Text.contains ~sub:session_sample.access_token rest_text);
       Alcotest.(check bool)
         "no refresh token outside session" false
-        (Support.contains ~needle:session_sample.refresh_token rest_text);
+        (Text.contains ~sub:session_sample.refresh_token rest_text);
       let session_text = Yojson.Safe.to_string session_field in
       Alcotest.(check bool)
         "sanity: the session field does carry the access token" true
-        (Support.contains ~needle:session_sample.access_token session_text)
+        (Text.contains ~sub:session_sample.access_token session_text)
   | _ -> Alcotest.fail "session_doc is not a JSON object"
 
 let three_entries () =
@@ -385,10 +393,10 @@ let queue_doc_contains_no_token () =
   let {Wire.doc; _} = Wire.queue_doc ~supabase_url ~apikey entries in
   Alcotest.(check bool)
     "no access token" false
-    (Support.contains ~needle:session_sample.access_token doc);
+    (Text.contains ~sub:session_sample.access_token doc);
   Alcotest.(check bool)
     "no refresh token" false
-    (Support.contains ~needle:session_sample.refresh_token doc)
+    (Text.contains ~sub:session_sample.refresh_token doc)
 
 (* ---------- decode_reclaim ---------- *)
 
@@ -655,7 +663,7 @@ let run_to_string_contains_no_token () =
         (fun token ->
           Alcotest.(check bool)
             ("no token in: " ^ line) false
-            (Support.contains ~needle:token line))
+            (Text.contains ~sub:token line))
         tokens)
     runs
 
@@ -798,7 +806,7 @@ let config_matches_the_constants () =
     Alcotest.(check bool)
       ("capacitor.config.ts has " ^ needle)
       true
-      (Support.contains ~needle config)
+      (Text.contains ~sub:needle config)
   in
   has (Printf.sprintf "label: '%s'" Wire.label);
   has (Printf.sprintf "event: '%s'" (Wire.event_to_string Wire.Run));
@@ -812,7 +820,7 @@ let job_listens_to_every_event () =
       Alcotest.(check bool)
         ("keepalive.js: " ^ needle)
         true
-        (Support.contains ~needle job))
+        (Text.contains ~sub:needle job))
     [
       (Wire.event_to_string Wire.Run, "addEventListener");
       (Wire.event_to_string Wire.Run_now, "addEventListener");

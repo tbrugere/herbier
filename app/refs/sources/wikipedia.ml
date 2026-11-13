@@ -1,3 +1,5 @@
+module Json = Herbier_net.Json
+
 (* [lang] becomes part of a host name: only a plain language code passes.
    A title "." or ".." would be a dot segment, which URL resolution removes,
    reaching another endpoint; MediaWiki forbids both titles. *)
@@ -11,8 +13,10 @@ let summary ~lang ~title =
            ~path:[String.map (function ' ' -> '_' | c -> c) title]
            ~query:[])
 
-type kind = Standard | Disambiguation | Other of string
+type kind = Standard | Disambiguation | Other of string [@@deriving eq, show]
+
 type thumbnail = {source : string; width : int; height : int}
+[@@deriving eq, show]
 
 type t = {
   kind : kind;
@@ -24,6 +28,7 @@ type t = {
   page_url : string option;
   thumbnail : thumbnail option;
 }
+[@@deriving eq, show]
 
 let kind_of_string = function
   | "standard" -> Standard
@@ -31,7 +36,7 @@ let kind_of_string = function
   | s -> Other s
 
 let thumbnail json =
-  Option.bind (Decode.member "thumbnail" json) (fun thumb ->
+  Option.bind (Json.member "thumbnail" json) (fun thumb ->
       match
         ( Decode.string "source" thumb,
           Decode.int "width" thumb,
@@ -54,9 +59,7 @@ let summary_of_json json =
       Option.bind (Decode.string "wikibase_item" json) Qid.of_string;
     page_url =
       Option.bind
-        (Option.bind
-           (Decode.member "content_urls" json)
-           (Decode.member "desktop"))
+        (Option.bind (Json.member "content_urls" json) (Json.member "desktop"))
         (Decode.string "page");
     thumbnail = thumbnail json;
   }

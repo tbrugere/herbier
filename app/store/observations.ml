@@ -92,26 +92,26 @@ let input (o : Observation.t) : (O.t, [`Full]) Postgrest.Input.t =
         ];
     }
 
-(* No deleted_at filter: a soft delete must read back the row it deleted. *)
-let reread id =
-  Stmt.query ~json:[] row "select * from observations where id = ?"
-    [Codec.param O.id id]
+module Writes = By_id.Make (struct
+  type table = O.t
+  type id = Observation_id.t
+  type row = Observation.t
 
-let edit id stmt =
-  Outbox.edit ~table:O.table ~reread:(reread id)
-    ~row_id:(fun (o : Observation.t) -> Observation_id.to_string o.id)
-    ~input stmt
+  let table = O.table
+  let id = O.id
+  let row = row
+  let id_of (o : Observation.t) = o.id
+  let id_to_string = Observation_id.to_string
+  let input = input
+end)
 
-let upsert (o : Observation.t) =
-  edit o.id (Stmt.upsert ~table:O.table (input o))
-
-let soft_delete id ~at =
-  edit id (Stmt.soft_delete ~table:O.table ~id:(Codec.param O.id id) ~at)
+let upsert = Writes.upsert
+let soft_delete = Writes.soft_delete
 
 (* The position and "still unnamed" conditions make a name computed before a
    move or a concurrent edit a no-op instead of overwriting newer data. *)
 let set_place_derived id ~lat ~lon name ~at =
-  edit id
+  Writes.edit id
     {
       Stmt.sql =
         "update observations set place_derived = ?, updated_at = ? where id = \

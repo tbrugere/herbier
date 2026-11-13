@@ -1,7 +1,8 @@
+module Fr_text = Herbier_ui_model.Fr_text
 open Brr
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 let top = 4
 
 let by_use (a : Tag_usage.t) (b : Tag_usage.t) =
@@ -10,16 +11,7 @@ let by_use (a : Tag_usage.t) (b : Tag_usage.t) =
 let v app =
   let state = App.state app in
   let subtitle = El.p ~at:[cls "t-meta"] [] in
-  let back =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "icon-button";
-          At.v (Jstr.v "aria-label") (Jstr.v "Retour");
-        ]
-      [W.Icon.el W.Icon.Arrow_back]
-  in
+  let back = W.Icon_button.el ~label:"Retour" W.Icon.Arrow_back in
   let back_click, b_back = Rb.click back in
   let manage = W.Button.text "Gérer" in
   let pick (u : Tag_usage.t) () =
@@ -35,8 +27,7 @@ let v app =
   let chips, chips_handle = ReactiveData.RList.create [] in
   let card (u : Tag_usage.t) =
     let el =
-      El.button
-        ~at:[At.type' (Jstr.v "button"); cls "tag-card"]
+      Html.button ["tag-card"]
         [
           El.div
             ~at:[cls "tag-card__names"]
@@ -56,8 +47,7 @@ let v app =
   in
   let chip (u : Tag_usage.t) =
     let el =
-      El.button
-        ~at:[At.type' (Jstr.v "button"); cls "tag-chip"]
+      Html.button ["tag-chip"]
         [
           El.txt' (u.tag.name ^ " ");
           El.span
@@ -72,7 +62,8 @@ let v app =
     (Tag_usage.load (App.db app))
     (function
       | Error e ->
-          Console.(error [str "tags"; str (Herbier_store.Db.error_to_string e)]);
+          Console.(
+            error [str "tags"; str (Herbier_store_io.Db.error_to_string e)]);
           El.set_children subtitle [El.txt' "Lecture impossible"]
       | Ok [] -> El.set_children subtitle [El.txt' "Aucun tag pour l’instant."]
       | Ok usage ->

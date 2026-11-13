@@ -1,0 +1,15 @@
+; Sync sans IO: the session and GoTrue's requests and answers (auth/), the
+; synced tables (synced), the PostgREST requests (net/rest), the push and pull
+; cycle over any HTTP and store (cycle/), and the keep-alive job's documents
+; (keepalive/). No Brr, no bindings: the libraries below enforce it, and
+; test/sync links this library natively. app/sync/ runs it on the device.
+; Sub-directories are qualified and have no main module: Auth.Session,
+; Net.Rest, Cycle.Push, Keepalive.Wire, ….
+(include_subdirs qualified)
+
+(library
+ (name herbier_sync_core)
+ (public_name herbier.sync_core)
+ (libraries herbier_domain herbier_net herbier_store postgrest uri yojson ptime)
+ (preprocess
+  (pps ppx_deriving.eq ppx_deriving.show ppx_deriving_yojson)))

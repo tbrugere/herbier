@@ -1,8 +1,8 @@
-(** 4h's mini-map: a non-interactive MapLibre map ({!Herbier_geo.Map},
+(** 4h's mini-map: a non-interactive MapLibre map ({!Herbier_geo_io.Map},
     [interactive:false]) 130 px high showing a position as a moss point
-    ({!Herbier_geo.Map.set_focus}) and, when its accuracy is known, the metric
-    accuracy circle ({!Herbier_geo.Map.set_accuracy}); the only place the
-    accuracy shows (handoff 4h). Taps are reported, not acted on.
+    ({!Herbier_geo_io.Map.set_focus}) and, when its accuracy is known, the
+    metric accuracy circle ({!Herbier_geo_io.Map.set_accuracy}); the only place
+    the accuracy shows (handoff 4h). Taps are reported, not acted on.
 
     The map is created once, at the first position with finite coordinates (an
     observation without position gets no WebGL context), and kept while the

@@ -1,5 +1,8 @@
+module Fr_text = Herbier_ui_model.Fr_text
+module Gps = Herbier_ui_model.Gps
+module Record_plan = Herbier_ui_model.Record_plan
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Observations = Herbier_store.Observations
 module Search = Herbier_store.Search
@@ -7,27 +10,18 @@ module Plant = Herbier_domain.Plant
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Observation = Herbier_domain.Observation
 module Observation_id = Herbier_domain.Ids.Observation_id
-module Capture = Herbier_photos.Capture
+module Capture = Herbier_photos_io.Capture
 module Object_url = Herbier_bindings.Object_url
 module Camera_stream = Herbier_bindings.Camera_stream
 module RList = ReactiveData.RList
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
-let log what detail = Console.(error [str ("noter: " ^ what); str detail])
+let cls = Html.cls
+let log = Log.error ~scope:"noter"
 
 type suggestion = {plant : Plant.t; seen_here : bool}
 
-let button ?label classes children =
-  El.button
-    ~at:
-      (At.type' (Jstr.v "button")
-       ::
-       (match label with
-       | Some l -> [At.v (Jstr.v "aria-label") (Jstr.v l)]
-       | None -> [])
-      @ List.map cls classes)
-    children
+let button = Html.button
 
 type discard = Discard | Continue
 

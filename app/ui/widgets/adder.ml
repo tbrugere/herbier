@@ -3,11 +3,7 @@ open Brr
 type t = {el : El.t; added : string React.event; bindings : Rb.binding list}
 
 let v ~label ~placeholder () =
-  let pill =
-    El.button
-      ~at:[At.type' (Jstr.v "button"); At.class' (Jstr.v "adder__pill")]
-      [El.txt' ("+ " ^ label)]
-  in
+  let pill = Html.button ["adder__pill"] [El.txt' ("+ " ^ label)] in
   let input =
     El.input
       ~at:

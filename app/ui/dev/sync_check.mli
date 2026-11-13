@@ -1,7 +1,7 @@
 (** Dev-only page [#dev/sync]: the sync engine on the device. Shows the account
     status, the outbox (count and parked entries), the pull cursors
     ({!Herbier_store.Sync_state.all}), the engine's
-    {!Herbier_sync.Cycle.Schedule} state and its last cycle (push counts,
+    {!Herbier_sync_core.Cycle.Schedule} state and its last cycle (push counts,
     per-table pull report, stop), redrawn after every cycle ({!App.synced}) and
     on « Actualiser ». Buttons: « Importer la session »
     ({!Herbier_sync.Auth.debug_import} of the pasted output of

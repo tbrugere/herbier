@@ -32,14 +32,18 @@ let wanted images =
 type plan = {put : Image.t list; remove : Image.t list}
 
 let ours ~plant (s : Image.t) =
-  Plant_id.equal s.plant_id plant && s.source = Reference.Source.Plantnet
+  Plant_id.equal s.plant_id plant
+  && Reference.Source.equal s.source Reference.Source.Plantnet
 
 let stored_of ~plant ~stored organ =
-  List.find_opt (fun (s : Image.t) -> ours ~plant s && s.organ = organ) stored
+  List.find_opt
+    (fun (s : Image.t) -> ours ~plant s && Organ.equal s.organ organ)
+    stored
 
 let in_organ_order rows =
   List.concat_map
-    (fun organ -> List.filter (fun (r : Image.t) -> r.organ = organ) rows)
+    (fun organ ->
+      List.filter (fun (r : Image.t) -> Organ.equal r.organ organ) rows)
     Organ.all
 
 let plan ~plant ~wanted ~stored =
@@ -89,8 +93,8 @@ let shown ~wanted ~stored =
       List.find_map
         (fun (s : Image.t) ->
           match
-            ( s.source = Reference.Source.Plantnet
-              && s.organ = organ
+            ( Reference.Source.equal s.source Reference.Source.Plantnet
+              && Organ.equal s.organ organ
               && String.equal s.remote_url i.url,
               s.thumb_path )
           with
@@ -115,7 +119,7 @@ let changed report =
 
 let report ~wanted ~plan downloads =
   let has organ rows =
-    List.exists (fun (r : Image.t) -> r.organ = organ) rows
+    List.exists (fun (r : Image.t) -> Organ.equal r.organ organ) rows
   in
   List.filter_map
     (fun organ ->
@@ -123,7 +127,9 @@ let report ~wanted ~plan downloads =
         ( has organ plan.remove,
           List.find_map
             (fun ((r : Image.t), o) ->
-              match r.organ = organ with true -> Some o | false -> None)
+              match Organ.equal r.organ organ with
+              | true -> Some o
+              | false -> None)
             downloads,
           has organ plan.put,
           List.mem_assoc organ wanted )

@@ -1,6 +1,8 @@
 module Decode = Herbier_refs.Decode
 module Gbif = Herbier_refs.Sources.Gbif
 module Organ = Herbier_domain.Reference.Organ
+module Testable = Herbier_test_support.Testable
+module Text = Herbier_test_support.Text
 
 let check_unexpected_path name expected_path = function
   | Error (Decode.Unexpected {path; _}) ->
@@ -18,88 +20,18 @@ let str s = `String s
 let int n = `Int n
 let bool b = `Bool b
 
-(* ---------- JSON renderings, for readable diffs ---------- *)
+(* ---------- testables ---------- *)
 
-let status_json : Gbif.Status.t -> Yojson.Safe.t = function
-  | Accepted -> `String "Accepted"
-  | Doubtful -> `String "Doubtful"
-  | Synonym -> `String "Synonym"
-  | Other s -> `Assoc [("Other", `String s)]
+let status_t = Alcotest.testable Gbif.Status.pp Gbif.Status.equal
+let taxon_t = Alcotest.testable Gbif.Taxon.pp Gbif.Taxon.equal
+let match_t = Alcotest.testable Gbif.pp_match_ Gbif.equal_match_
+let vernacular_t = Alcotest.testable Gbif.Vernacular.pp Gbif.Vernacular.equal
+let organ_t = Alcotest.testable Organ.pp Organ.equal
 
-let taxon_json (t : Gbif.Taxon.t) =
-  `Assoc
-    [
-      ("key", int t.key);
-      ("scientific_name", str t.scientific_name);
-      ("canonical_name", Check.opt str t.canonical_name);
-      ("authorship", Check.opt str t.authorship);
-      ("rank", Check.opt str t.rank);
-      ("status", Check.opt status_json t.status);
-      ("accepted_key", Check.opt int t.accepted_key);
-      ("family", Check.opt str t.family);
-      ("vernacular_name", Check.opt str t.vernacular_name);
-    ]
-
-let match_json : Gbif.match_ -> Yojson.Safe.t = function
-  | No_match -> `String "No_match"
-  | Higher_rank t -> `Assoc [("Higher_rank", taxon_json t)]
-  | Matched {taxon; fuzzy; confidence} ->
-      `Assoc
-        [
-          ( "Matched",
-            `Assoc
-              [
-                ("taxon", taxon_json taxon);
-                ("fuzzy", bool fuzzy);
-                ("confidence", Check.opt int confidence);
-              ] );
-        ]
-
-let vernacular_json (v : Gbif.Vernacular.t) =
-  `Assoc
-    [
-      ("name", str v.name);
-      ("language", Check.opt str v.language);
-      ("source", Check.opt str v.source);
-      ("country", Check.opt str v.country);
-    ]
-
-let page_json to_json (p : _ Gbif.page) =
-  `Assoc
-    [
-      ("results", `List (List.map to_json p.results));
-      ( "dropped",
-        `List (List.map (fun e -> `String (Decode.error_to_string e)) p.dropped)
-      );
-      ("end_of_records", bool p.end_of_records);
-      ("count", Check.opt int p.count);
-    ]
-
-let distribution_json (d : Gbif.Distribution.t) =
-  `Assoc
-    [
-      ("location_id", Check.opt str d.location_id);
-      ("locality", Check.opt str d.locality);
-      ("country", Check.opt str d.country);
-      ("status", Check.opt str d.status);
-      ("establishment_means", Check.opt str d.establishment_means);
-      ("threat_status", Check.opt str d.threat_status);
-      ("source", Check.opt str d.source);
-    ]
-
-let organ_json o = `String (Organ.to_string o)
-
-let image_json (i : Gbif.Image.t) =
-  `Assoc
-    [
-      ("occurrence_key", str i.occurrence_key);
-      ("url", str i.url);
-      ("organ", Check.opt organ_json i.organ);
-      ("organ_label", Check.opt str i.organ_label);
-      ("licence", str i.licence);
-      ("attribution", str i.attribution);
-      ("observation_url", Check.opt str i.observation_url);
-    ]
+let page_t t =
+  Alcotest.testable
+    (Gbif.pp_page (Alcotest.pp t))
+    (Gbif.equal_page (Alcotest.equal t))
 
 (* ---------- fixtures ---------- *)
 
@@ -130,7 +62,7 @@ let gbif_page results =
 
 let status_of j =
   match Gbif.species_of_json j with
-  | Ok t -> Option.map status_json t.status
+  | Ok (t : Gbif.Taxon.t) -> t.status
   | Error e -> Alcotest.failf "decode failed: %s" (Decode.error_to_string e)
 
 let species_with_status s =
@@ -148,7 +80,7 @@ let species_tests =
     ( "Digitalis purpurea: every field",
       `Quick,
       fun () ->
-        Check.check_result "species" ~to_json:taxon_json
+        Check.check_result "species" taxon_t
           (Ok
              {
                Gbif.Taxon.key = 5414995;
@@ -171,10 +103,8 @@ let species_tests =
               "scientific_name" "Arnica montana L." t.scientific_name;
             Alcotest.(check (option string))
               "family" (Some "Asteraceae") t.family;
-            Alcotest.(check (option Check.yojson))
-              "status"
-              (Some (status_json Accepted))
-              (Option.map status_json t.status)
+            Alcotest.(check (option status_t))
+              "status" (Some Gbif.Status.Accepted) t.status
         | Error e ->
             Alcotest.failf "decode failed: %s" (Decode.error_to_string e) );
     ( "Fallopia japonica: synonym with an accepted key",
@@ -182,10 +112,8 @@ let species_tests =
       fun () ->
         match Gbif.species_of_json fallopia_species with
         | Ok t ->
-            Alcotest.(check (option Check.yojson))
-              "status"
-              (Some (status_json Synonym))
-              (Option.map status_json t.status);
+            Alcotest.(check (option status_t))
+              "status" (Some Gbif.Status.Synonym) t.status;
             Alcotest.(check (option int))
               "accepted_key" (Some 2889173) t.accepted_key
         | Error e ->
@@ -222,9 +150,8 @@ let status_tests =
     ( name,
       `Quick,
       fun () ->
-        Alcotest.(check (option Check.yojson))
-          "status"
-          (Some (status_json expected))
+        Alcotest.(check (option status_t))
+          "status" (Some expected)
           (status_of (species_with_status raw)) )
   in
   [
@@ -236,7 +163,7 @@ let status_tests =
     ( "a missing taxonomicStatus is None",
       `Quick,
       fun () ->
-        Alcotest.(check (option Check.yojson))
+        Alcotest.(check (option status_t))
           "status" None
           (status_of
              (`Assoc [("key", `Int 1); ("scientificName", `String "Foo bar")]))
@@ -274,10 +201,8 @@ let match_tests =
         match Gbif.match_of_json match_fallopia with
         | Ok (Matched {taxon; _}) ->
             Alcotest.(check int) "key" 5334357 taxon.key;
-            Alcotest.(check (option Check.yojson))
-              "status"
-              (Some (status_json Synonym))
-              (Option.map status_json taxon.status);
+            Alcotest.(check (option status_t))
+              "status" (Some Gbif.Status.Synonym) taxon.status;
             Alcotest.(check (option int))
               "accepted_key" (Some 2889173) taxon.accepted_key
         | Ok _ -> Alcotest.fail "expected Matched"
@@ -296,7 +221,7 @@ let match_tests =
     ( "no kingdom filter and no hit at all is No_match",
       `Quick,
       fun () ->
-        Check.check_result "match" ~to_json:match_json (Ok No_match)
+        Check.check_result "match" match_t (Ok No_match)
           (Gbif.match_of_json match_none) );
     ( "an EXACT match without usageKey is Unexpected at /usageKey",
       `Quick,
@@ -431,7 +356,7 @@ let vernacular_search_tests =
                     (fun (v : Gbif.Vernacular.t) ->
                       match v.language with
                       | Some "fra" ->
-                          Check.contains ~needle:"Digitale pourpre" v.name
+                          Text.contains ~sub:"Digitale pourpre" v.name
                       | _ -> false)
                     vernaculars
                 in
@@ -482,10 +407,10 @@ let vernacular_names_tests =
             let has_comma_joined =
               List.exists
                 (fun (v : Gbif.Vernacular.t) ->
-                  Check.contains ~needle:", " v.name
+                  Text.contains ~sub:", " v.name
                   &&
                   match v.source with
-                  | Some s -> Check.contains ~needle:"TAXREF" s
+                  | Some s -> Text.contains ~sub:"TAXREF" s
                   | None -> false)
                 page.results
             in
@@ -510,8 +435,7 @@ let vernacular_names_inline_tests =
        kept",
       `Quick,
       fun () ->
-        Check.check_result "page"
-          ~to_json:(page_json vernacular_json)
+        Check.check_result "page" (page_t vernacular_t)
           (Ok
              {
                Gbif.results =
@@ -586,7 +510,7 @@ let distributions_tests =
                 (fun (d : Gbif.Distribution.t) ->
                   Option.is_none d.establishment_means
                   && (match d.source with
-                    | Some s -> Check.contains ~needle:"World Checklist" s
+                    | Some s -> Text.contains ~sub:"World Checklist" s
                     | None -> false)
                   &&
                   match d.locality with
@@ -609,7 +533,7 @@ let distributions_tests =
               List.filter
                 (fun (d : Gbif.Distribution.t) ->
                   match d.source with
-                  | Some s -> Check.contains ~needle:"World Checklist" s
+                  | Some s -> Text.contains ~sub:"World Checklist" s
                   | None -> false)
                 page.results
             in
@@ -655,12 +579,12 @@ let occurrence_count_tests =
     ( "Digitalis purpurea: the recorded count",
       `Quick,
       fun () ->
-        Check.check_result "count" ~to_json:int (Ok 569133)
+        Check.check_result "count" Alcotest.int (Ok 569133)
           (Gbif.occurrence_count_of_json occurrence_count_digitalis) );
     ( "Arnica montana: the recorded count",
       `Quick,
       fun () ->
-        Check.check_result "count" ~to_json:int (Ok 232506)
+        Check.check_result "count" Alcotest.int (Ok 232506)
           (Gbif.occurrence_count_of_json occurrence_count_arnica) );
     ( "a negative integer body is an Error",
       `Quick,
@@ -673,7 +597,7 @@ let occurrence_count_tests =
     ( "zero is a count",
       `Quick,
       fun () ->
-        Check.check_result "count" ~to_json:int (Ok 0)
+        Check.check_result "count" Alcotest.int (Ok 0)
           (Gbif.occurrence_count_of_json (`Int 0)) );
     ( "a float or an Intlit body is an Error",
       `Quick,
@@ -722,7 +646,7 @@ let plantnet_media_tests =
                   (String.length (String.trim i.attribution) > 0);
                 Alcotest.(check bool)
                   "url host" true
-                  (Check.starts_with ~prefix:"https://bs.plantnet.org/" i.url))
+                  (String.starts_with ~prefix:"https://bs.plantnet.org/" i.url))
               page.results;
             let tbl = organ_tally page.results in
             Alcotest.(check int) "leaf" 49 (count_by tbl "leaf");
@@ -855,9 +779,7 @@ let plantnet_media_inline_tests =
         | [i] ->
             Alcotest.(check (option string))
               "organ_label" (Some "bark") i.organ_label;
-            Alcotest.(check (option Check.yojson))
-              "organ" None
-              (Option.map organ_json i.organ);
+            Alcotest.(check (option organ_t)) "organ" None i.organ;
             Alcotest.(check string) "licence" "cc-by-sa" i.licence;
             Alcotest.(check string)
               "attribution from the license holder" "Iris Selcho" i.attribution
@@ -867,12 +789,12 @@ let plantnet_media_inline_tests =
       fun () ->
         match Gbif.plantnet_media_of_json plantnet_media_digitalis with
         | Ok page ->
-            Alcotest.(check (list (option Check.yojson)))
+            Alcotest.(check (list (option organ_t)))
               "organs of bark images" [None]
               (List.filter_map
                  (fun (i : Gbif.Image.t) ->
                    match i.organ_label with
-                   | Some "bark" -> Some (Option.map organ_json i.organ)
+                   | Some "bark" -> Some i.organ
                    | Some _ | None -> None)
                  page.results)
         | Error e ->
@@ -1095,7 +1017,7 @@ let decode_tests =
     ( "a bare integer is valid JSON",
       `Quick,
       fun () ->
-        Check.check_result "parsed" ~to_json:Fun.id
+        Check.check_result "parsed" Testable.yojson
           (Ok (`Int 569133))
           (Decode.json_of_string "569133") );
   ]

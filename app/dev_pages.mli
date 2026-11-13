@@ -4,7 +4,7 @@
     links none of [Herbier_ui.Dev]. *)
 
 val find :
-  (Herbier_store.Db.t, string) result ->
+  (Herbier_store_io.Db.t, string) result ->
   (Herbier_ui.App.t, string) result ->
   string ->
   (unit -> Herbier_ui.Screen.t) option

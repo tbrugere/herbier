@@ -132,7 +132,7 @@ the mean of the positions. Details in `app/domain/places.mli`.
   `plants.cover_photo_id` (it would close a cycle with `photos` and break a
   first pull). A cover that points at a deleted or not yet pulled photo is
   read as no cover: the plant's newest live photo stands in
-  (`app/ui/cover.ml`). The four lookup tables (§2) exist locally too, with the same
+  (`app/ui_model/cover.ml`). The four lookup tables (§2) exist locally too, with the same
   values (no `description`) and the same foreign keys, so an unknown label
   is rejected on the device; a value added later is a new local migration
   inserting its row, and `test/store` checks each table holds the
@@ -173,7 +173,7 @@ the mean of the positions. Details in `app/domain/places.mli`.
     deletes the row, then the file.
   - `tiles/<region>.pmtiles`, downloaded once from Settings.
 - The binding (`Cap_sqlite.query`) returns each row as the JSON text of the
-  plugin's row object; `store/db.ml` parses it and decodes it with
+  plugin's row object; `store_io/db.ml` parses it and decodes it with
   `Postgrest.Row`, so yojson stays out of `bindings/`. Single statements run
   in the plugin's per-call transaction; `Cap_sqlite` also binds
   `beginTransaction` / `commitTransaction` / `rollbackTransaction`, and a
@@ -286,7 +286,7 @@ fractional digits and the next pull brings back the truncated value.
 
 Protocol, run by `sync/engine.ml` on app start, on resume, after each local
 write, on sign-in and when its retry timer fires. One cycle at a time
-(`sync/cycle/schedule.ml`): a trigger during a cycle runs exactly one more after
+(`sync_core/cycle/schedule.ml`): a trigger during a cycle runs exactly one more after
 it. A cycle pushes, then pulls only if the push completed (parked entries
 do not stop it). A stopped cycle backs off (10 s doubling to 300 s); any
 trigger but the timer runs at once, keeping the attempt count; going to the
@@ -300,7 +300,7 @@ sign-in. No online check: a failed fetch is a stop like any other.
    resolution=merge-duplicates,missing=default` (upsert on `id`; one row per
    request so that a 4xx names exactly one entry and each row gets its own
    `now()`). On 2xx delete the outbox row. Statuses are classified by
-   `sync/net/rest.ml`: 540 paused project (below); 401 unauthorized (refresh the
+   `sync_core/net/rest.ml`: 540 paused project (below); 401 unauthorized (refresh the
    session, never park); 408, 429 and 5xx transient (stop, retry later with
    exponential backoff); any other 4xx rejected (park it with `last_error`,
    the status, shown in Settings: the library's error carries no body). A
@@ -435,7 +435,7 @@ grant (supabase-js's `signInWithIdToken`) → session in Capacitor
 Preferences, refreshed as below. No supabase-js: `sync/auth/server.ml`
 makes GoTrue's three calls over fetch (`POST /auth/v1/token?grant_type=id_token`,
 `grant_type=refresh_token`, `/logout?scope=local`) for `sync/auth/auth.ml` and
-the keep-alive, described and decoded sans IO in `sync/auth/gotrue.ml`.
+the keep-alive, described and decoded sans IO in `sync_core/auth/gotrue.ml`.
 
 - Nonce: 32 random bytes as hex are the raw nonce, sent to GoTrue; their
   SHA-256 hex goes to the plugin, which puts it verbatim in the id token's
@@ -443,7 +443,7 @@ the keep-alive, described and decoded sans IO in `sync/auth/gotrue.ml`.
   (`skip_nonce_check = false`). The plugin's `standard` style always shows
   the account chooser.
 - Session: one Preferences key, `auth.session`, a versioned JSON object
-  (`sync/auth/session.ml`), written before the in-memory session is replaced.
+  (`sync_core/auth/session.ml`), written before the in-memory session is replaced.
   Every write of the key (sign-in, refresh, sign-out, a revoked session)
   runs after the previous one has resolved, so a refresh that lands during
   a sign-in or a sign-out cannot write over it. A refresh rotates the
@@ -597,7 +597,7 @@ gbif_key
   form, native/introduced range, FR status, protection, red list, flowering
   months, habitat/ecology chips, toxicity, organ photos, links). Altitude is
   dropped; height is parsed from Coste text when present. The projection
-  (`refs/projection.ml`) reads whatever parts a row holds, whatever its
+  (`refs/projection/`) reads whatever parts a row holds, whatever its
   status, and a part that fails to decode degrades its fields only. Rules:
   vernacular names from GBIF rows and Wikidata P1843 in fr, en, de, it, top
   three by votes (case-insensitive); native/introduced ranges from the WCVP

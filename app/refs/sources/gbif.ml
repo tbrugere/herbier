@@ -1,3 +1,5 @@
+module Text = Herbier_domain.Text
+module Json = Herbier_net.Json
 module Organ = Herbier_domain.Reference.Organ
 
 let backbone_dataset = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c"
@@ -62,6 +64,7 @@ let plantnet_media ~key =
 
 module Status = struct
   type t = Accepted | Doubtful | Synonym | Other of string
+  [@@deriving eq, show]
 
   let of_string = function
     | "ACCEPTED" -> Accepted
@@ -83,6 +86,7 @@ module Taxon = struct
     family : string option;
     vernacular_name : string option;
   }
+  [@@deriving eq, show]
 
   let latin t = Option.value t.canonical_name ~default:t.scientific_name
 
@@ -149,6 +153,7 @@ type 'a page = {
   end_of_records : bool;
   count : int option;
 }
+[@@deriving eq, show]
 
 (* Elements are decoded with their index in the pointer; one that fails is
    dropped (style §8.4) and its error kept. *)
@@ -179,6 +184,7 @@ type match_ =
   | No_match
   | Higher_rank of Taxon.t
   | Matched of {taxon : Taxon.t; fuzzy : bool; confidence : int option}
+[@@deriving eq, show]
 
 let match_of_json json =
   let open Decode.Syntax in
@@ -218,6 +224,7 @@ module Vernacular = struct
     source : string option;
     country : string option;
   }
+  [@@deriving eq, show]
 
   let of_json ~at json =
     let open Decode.Syntax in
@@ -251,6 +258,7 @@ module Distribution = struct
     threat_status : string option;
     source : string option;
   }
+  [@@deriving eq, show]
 
   let of_json ~at json =
     let location_id = Decode.string "locationId" json in
@@ -288,13 +296,14 @@ module Image = struct
     attribution : string;
     observation_url : string option;
   }
+  [@@deriving eq, show]
 end
 
 (* Under js_of_ocaml Yojson gives [`Intlit] for keys above 2^31. *)
 let occurrence_key json =
-  match Decode.member "key" json with
+  match Json.member "key" json with
   | Some (`Int k) when k >= 0 -> Some (string_of_int k)
-  | Some (`Intlit s) when Decode.is_digits s -> Some s
+  | Some (`Intlit s) when Json.is_digits s -> Some s
   | _ -> None
 
 let last_index ~sep s =
@@ -327,7 +336,7 @@ let split_license license =
         | true -> Some code
         | false -> None
       in
-      (code, Decode.non_blank (String.trim (String.sub s 0 i)))
+      (code, Text.non_blank (String.sub s 0 i))
   | _ -> (None, None)
 
 let image ~key ~references json =
@@ -353,7 +362,7 @@ let image ~key ~references json =
       let organ_label =
         Option.bind (Decode.string "title" json) (fun title ->
             Option.bind (after_last ~sep:": " title) (fun w ->
-                Decode.non_blank (String.lowercase_ascii (String.trim w))))
+                Text.non_blank (String.lowercase_ascii w)))
       in
       Some
         {

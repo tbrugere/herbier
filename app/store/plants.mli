@@ -39,7 +39,7 @@ val upsert : Plant.t -> Outbox.edit
 (** Writes the whole record ({!Stmt.upsert} of {!input}): [deleted_at] included,
     so upserting a record with [deleted_at = None] revives the row. [aliases] is
     stored as a JSON array of strings (["[]"] when empty). Always changes the
-    row, so {!Db.edit} appends one entry. Read back by [id]. *)
+    row, so {!Herbier_store_io.Db.edit} appends one entry. Read back by [id]. *)
 
 val soft_delete : Plant_id.t -> at:Ptime.t -> Outbox.edit
 (** Marks the plant deleted ({!Stmt.soft_delete}); read back by [id] whatever

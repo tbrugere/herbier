@@ -5,6 +5,7 @@
    compares the rows the migrations insert with the to_string of [all]
    pinned here. *)
 
+module Testable = Herbier_test_support.Testable
 module Photo = Herbier_domain.Photo
 module Reference = Herbier_domain.Reference
 
@@ -79,7 +80,7 @@ let json_cases (type a) name ~(all : a list) ~(to_string : a -> string)
   let value =
     Alcotest.testable (fun f x -> Format.pp_print_string f (to_string x)) ( = )
   in
-  let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal in
+  let json = Testable.yojson in
   let wire () =
     List.iter
       (fun x ->

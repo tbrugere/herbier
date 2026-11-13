@@ -42,7 +42,7 @@ let fixture_tests =
         Alcotest.(check bool)
           "extract starts with the title" true
           (match t.extract with
-          | Some e -> Check.starts_with ~prefix:"Digitalis purpurea" e
+          | Some e -> String.starts_with ~prefix:"Digitalis purpurea" e
           | None -> false);
         Alcotest.(check (option string))
           "description"

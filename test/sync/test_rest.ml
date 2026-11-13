@@ -3,6 +3,10 @@
    backend here, as in test/postgrest's own suite. This file is the entry
    point: it also runs Test_synced's and Test_push_order's suites. *)
 
+module Testable = Herbier_test_support.Testable
+module Synced = Herbier_sync_core.Synced
+module Rest = Herbier_sync_core.Net.Rest
+module Outbox = Herbier_store.Outbox
 module F = Sync_fixtures
 module R = Sync_fixtures.R
 module Ids = Herbier_domain.Ids
@@ -16,6 +20,8 @@ module Status = Reference.Status
 module Client = Postgrest.Client
 module Col = Postgrest.Col
 module Input = Postgrest.Input
+module Fixture = Herbier_test_support.Fixture
+module Text = Herbier_test_support.Text
 
 let t1 = F.time "2026-11-01T10:00:00Z"
 
@@ -100,7 +106,7 @@ let classify_status_classes () =
 
 (* ---------- Upsert ---------- *)
 
-let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal
+let json = Testable.yojson
 
 (* Bodies written out by hand: timestamps in whole seconds UTC (the
    library's encoding), ids as lowercase strings. *)
@@ -450,16 +456,16 @@ let upsert_errors () =
     (R.Offline "boom");
   case "540: Paused" ~status:(Some 540) ~body:"" R.Paused;
   case "401 bad jwt: Unauthorized" ~status:(Some 401)
-    ~body:(Support.fixture "sync_upsert_plants_bad_jwt_401.json")
+    ~body:(Fixture.read "sync_upsert_plants_bad_jwt_401.json")
     R.Unauthorized;
   case "409 fk violation: Rejected 409" ~status:(Some 409)
-    ~body:(Support.fixture "sync_upsert_observations_fk_409.json")
+    ~body:(Fixture.read "sync_upsert_observations_fk_409.json")
     (R.Rejected 409);
   case "400 check violation: Rejected 400" ~status:(Some 400)
-    ~body:(Support.fixture "sync_upsert_observations_check_400.json")
+    ~body:(Fixture.read "sync_upsert_observations_check_400.json")
     (R.Rejected 400);
   case "anon (401 as recorded): its class" ~status:(Some 401)
-    ~body:(Support.fixture "sync_upsert_plants_anon_401.json")
+    ~body:(Fixture.read "sync_upsert_plants_anon_401.json")
     R.Unauthorized;
   case "503: Transient 503" ~status:(Some 503) ~body:"" (R.Transient 503)
 
@@ -504,9 +510,9 @@ let error_to_string_never_contains_the_token () =
   let errors =
     [
       error_of ~status:401
-        ~body:(Support.fixture "sync_upsert_plants_bad_jwt_401.json");
+        ~body:(Fixture.read "sync_upsert_plants_bad_jwt_401.json");
       error_of ~status:409
-        ~body:(Support.fixture "sync_upsert_observations_fk_409.json");
+        ~body:(Fixture.read "sync_upsert_observations_fk_409.json");
       error_of ~status:503 ~body:"";
       error_of ~status:540 ~body:"";
     ]
@@ -516,7 +522,7 @@ let error_to_string_never_contains_the_token () =
       Alcotest.(check bool)
         (Printf.sprintf "%s does not contain the token" (R.error_to_string e))
         false
-        (Support.contains ~needle:marker (R.error_to_string e)))
+        (Text.contains ~sub:marker (R.error_to_string e)))
     errors
 
 (* ---------- Decoding recorded answers ---------- *)
@@ -529,7 +535,7 @@ let error_to_string_never_contains_the_token () =
 let decode_one (type table row) name (t : (table, row) Synced.t)
     ~(equal : row -> row -> bool) ~(updated_at : row -> Ptime.t)
     ~expected_updated_at ~micro ~(with_updated_at : Ptime.t -> row) =
-  let text = Support.fixture (Printf.sprintf "sync_select_%s_200.json" name) in
+  let text = Fixture.read (Printf.sprintf "sync_select_%s_200.json" name) in
   (match Yojson.Safe.from_string text with
   | `List [`Assoc kvs] ->
       Alcotest.(check (list string))
@@ -686,8 +692,7 @@ let decoding_recorded_answers () =
 
 let reference_payload_is_structural_not_textual () =
   Mock_http.reset ();
-  Mock_http.respond ~status:200
-    (Support.fixture "sync_select_reference_200.json");
+  Mock_http.respond ~status:200 (Fixture.read "sync_select_reference_200.json");
   match R.select_since F.conn Synced.reference ~since:None ~page:0 with
   | Ok [(r : Reference.t)] ->
       Alcotest.check json "Yojson.Safe.equal to the sent object"

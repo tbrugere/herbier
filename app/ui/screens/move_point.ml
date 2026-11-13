@@ -1,15 +1,17 @@
+module Map_sheet = Herbier_ui_model.Map_sheet
+module Move_plan = Herbier_ui_model.Move_plan
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Observations = Herbier_store.Observations
 module Observation = Herbier_domain.Observation
 module Places = Herbier_domain.Places
 module Geocode = Herbier_geo.Geocode
-module Geocoder = Herbier_geo.Geocoder
-module Geo_map = Herbier_geo.Map
+module Geocoder = Herbier_geo_io.Geocoder
+module Geo_map = Herbier_geo_io.Map
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
-let log_error what e = Console.(error [str ("déplacer: " ^ what); str e])
+let cls = Html.cls
+let log_error = Log.error ~scope:"déplacer"
 let hint = "Glissez la carte sous le point"
 let gone_text = "Cette observation n'est plus dans l'herbier."
 let save_failed = "La position n'a pas pu être enregistrée."
@@ -17,8 +19,6 @@ let zoom_in = "Zoomez pour placer le point précisément."
 
 (* style: the MapLibre handle (style guide 2.2): created asynchronously, and
    the screen may be left before it exists. *)
-type map_state = Creating | Ready of Geo_map.t | Failed | Released
-
 (* What « Chercher un lieu » shows under its field. *)
 type search =
   | Idle
@@ -30,23 +30,10 @@ type search =
   | Nothing_found
   | Found of Geocode.place list
 
-let equal_camera (a : State.camera) (b : State.camera) =
-  Places.equal_point a.center b.center && Float.equal a.zoom b.zoom
-
-let enter ev = Jstr.equal (Ev.Keyboard.key (Ev.as_type ev)) (Jstr.v "Enter")
+let enter = Html.enter
 
 let round_button ~label icon =
-  let el =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "icon-button";
-          cls "move-point__round";
-          At.v (Jstr.v "aria-label") (Jstr.v label);
-        ]
-      [W.Icon.el icon]
-  in
+  let el = W.Icon_button.el ~classes:["move-point__round"] ~label icon in
   let click, b = Rb.click el in
   (el, click, b)
 
@@ -54,8 +41,7 @@ let search_line text = (El.p ~at:[cls "t-meta"] [El.txt' text], [])
 
 let result_row pick (p : Geocode.place) =
   let el =
-    El.button
-      ~at:[At.type' (Jstr.v "button"); cls "move-point__result"]
+    Html.button ["move-point__result"]
       (El.span ~at:[cls "move-point__result-name"] [El.txt' p.name]
       :: Option.to_list
            (Option.map
@@ -101,7 +87,7 @@ let render app (o : Observation.t) =
         Option.value (React.S.value (State.map_view state)).camera
           ~default:Locate.world
   in
-  let camera, set_camera = React.S.create ~eq:equal_camera entry in
+  let camera, set_camera = React.S.create ~eq:State.equal_camera entry in
   let picked, set_picked =
     React.S.create
       ~eq:
@@ -129,17 +115,15 @@ let render app (o : Observation.t) =
      late entry fix no longer takes it over;
      [pending_fix]: a fix that arrived before the map existed; [search_seq]
      numbers the latest query, a reply to an older one is dropped. *)
-  let map = ref Creating
+  let map = ref Map_slot.Creating
   and moved = ref false
   and pending_fix = ref None
   and search_seq = ref 0 in
-  let alive () =
-    match !map with Released -> false | Creating | Ready _ | Failed -> true
-  in
+  let alive () = Map_slot.alive !map in
   let fly ?(zoom = Move_plan.initial_zoom) point =
     match !map with
-    | Ready m -> Geo_map.fly_to m ~center:point ~zoom
-    | Creating | Failed | Released -> ()
+    | Map_slot.Ready m -> Geo_map.fly_to m ~center:point ~zoom
+    | Map_slot.(Creating | Failed | Released) -> ()
   in
   let field =
     W.Text_field.v ~icon:W.Icon.Search ~action:"OK"
@@ -195,14 +179,14 @@ let render app (o : Observation.t) =
       | Ok fix -> (
           set_pill hint;
           match !map with
-          | Ready m ->
+          | Map_slot.Ready m ->
               fly
                 ~zoom:
                   (Float.max Move_plan.initial_zoom
                      (Option.value (Geo_map.zoom m) ~default:0.))
                 fix
-          | Creating -> pending_fix := Some fix
-          | Failed | Released -> ()))
+          | Map_slot.Creating -> pending_fix := Some fix
+          | Map_slot.(Failed | Released) -> ()))
   in
   (* Without origin, the device's fix is a better start than the last 4b
      camera, but only until the user moves the map. *)
@@ -212,9 +196,9 @@ let render app (o : Observation.t) =
       | Error (_ : Map_sheet.notice) -> ()
       | Ok fix -> (
           match (!map, !moved) with
-          | Ready _, false -> fly fix
-          | Creating, false -> pending_fix := Some fix
-          | (Ready _ | Creating | Failed | Released), _ -> ()))
+          | Map_slot.Ready _, false -> fly fix
+          | Map_slot.Creating, false -> pending_fix := Some fix
+          | Map_slot.(Ready _ | Creating | Failed | Released), _ -> ()))
   in
   let on_movestart ~user =
     (match user with true -> moved := true | false -> ());
@@ -227,7 +211,7 @@ let render app (o : Observation.t) =
   let container = El.div ~at:[cls "move-point__map"] [] in
   (match App.theme app with
   | Error (Theme.Missing_tokens missing) ->
-      map := Failed;
+      map := Map_slot.Failed;
       log_error "thème" (String.concat ", " missing)
   | Ok theme ->
       Fut.await
@@ -236,11 +220,11 @@ let render app (o : Observation.t) =
         | Ok m when not (alive ()) -> Geo_map.remove m
         | Error _ when not (alive ()) -> ()
         | Error e ->
-            map := Failed;
+            map := Map_slot.Failed;
             log_error "création" (Geo_map.error_to_string e);
             set_message (Some (Map_sheet.broken_text Map_sheet.Map_unavailable))
         | Ok m ->
-            map := Ready m;
+            map := Map_slot.Ready m;
             Geo_map.set_origin m origin;
             Geo_map.on_movestart m on_movestart;
             Geo_map.on_moveend m on_moveend;
@@ -258,7 +242,7 @@ let render app (o : Observation.t) =
         React.S.value moving,
         Move_plan.can_validate ~zoom:c.zoom )
     with
-    | Ready _, false, false, true ->
+    | Map_slot.Ready _, false, false, true ->
         let centre = c.center in
         set_saving true;
         set_message None;
@@ -291,7 +275,7 @@ let render app (o : Observation.t) =
                         | false, _ -> ()
                         | true, Error _ -> fail save_failed
                         | true, Ok _ -> Route.back ())))
-    | (Ready _ | Creating | Failed | Released), _, _, _ -> ()
+    | Map_slot.(Ready _ | Creating | Failed | Released), _, _, _ -> ()
   in
   let close, close_click, b_close = round_button ~label:"Fermer" W.Icon.Close in
   let locate_el, locate_click, b_locate =
@@ -367,14 +351,7 @@ let render app (o : Observation.t) =
         drawer;
       ]
   in
-  let release_map =
-    Rb.on_release (fun () ->
-        match !map with
-        | Ready m ->
-            map := Released;
-            Geo_map.remove m
-        | Creating | Failed | Released -> map := Released)
-  in
+  let release_map = Rb.on_release (fun () -> Map_slot.release map) in
   ( el,
     List.concat
       [

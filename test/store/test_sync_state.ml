@@ -2,12 +2,13 @@
    through the sqlite3 CLI, as test_outbox.ml checks Outbox. Device checks
    (#dev/sync) cover the Capacitor plugin itself. *)
 
+module Value = Herbier_test_support.Value
+module Codec = Herbier_store.Codec
+module Outbox = Herbier_store.Outbox
+module Sync_state = Herbier_store.Sync_state
 module Cli = Sqlite_cli
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
+let time = Value.time
 
 (* Keeps microseconds, as Codec.timestamp's format does. *)
 let t_plants = time "2026-11-01T09:00:00.123456Z"

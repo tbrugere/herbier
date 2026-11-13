@@ -8,7 +8,7 @@ type cover =
 
 type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 (* Spans, not divs: they sit inside a button, which allows phrasing content
    only. The Sass makes them blocks. *)
@@ -52,11 +52,7 @@ let plant ~name ~sci cover =
         ( "card-plant--bare",
           [names ~name ~sci [span "card-plant__mention" [El.txt' mention]]] )
   in
-  let el =
-    El.button
-      ~at:[At.type' (Jstr.v "button"); cls "card-plant"; cls modifier]
-      children
-  in
+  let el = Html.button ["card-plant"; modifier] children in
   let click, b = Rb.click el in
   {el; click; bindings = [b]}
 

@@ -1,3 +1,11 @@
+module Testable = Herbier_test_support.Testable
+module Synced = Herbier_sync_core.Synced
+module Outbox = Herbier_store.Outbox
+module Plants = Herbier_store.Plants
+module Observations = Herbier_store.Observations
+module Tags = Herbier_store.Tags
+module Photos = Herbier_store.Photos
+module Cascade = Herbier_store.Cascade
 module F = Sync_fixtures
 module Cli = Sqlite_cli
 
@@ -116,7 +124,7 @@ let push_order_matches_the_outbox_s_order () =
       Alcotest.failf "expected exactly 2 plants requests, got %d"
         (List.length rs)
 
-let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal
+let json = Testable.yojson
 
 let every_request_body_equals_its_entry_s_payload () =
   let db, _, _ = seed () in

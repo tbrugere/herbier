@@ -9,7 +9,7 @@ type t = {
   bindings : Rb.binding list;
 }
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let v ?icon ?action ?(value = "") ~placeholder () =
   let input =
@@ -40,11 +40,7 @@ let v ?icon ?action ?(value = "") ~placeholder () =
     match action with
     | None -> (React.E.never, [], [])
     | Some label ->
-        let b =
-          El.button
-            ~at:[At.type' (Jstr.v "button"); cls "text-field__action"]
-            [El.txt' label]
-        in
+        let b = Html.button ["text-field__action"] [El.txt' label] in
         let e, ba = Rb.click b in
         (e, [b], [ba])
   in

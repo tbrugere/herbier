@@ -27,7 +27,12 @@ val observations : Observation.t list -> Yojson.Safe.t
      "properties":{"id":<uuid>,"kind":k}}], [k] the observation's {!kind};
     exactly those two properties. Never raises; never emits NaN or infinity. *)
 
-type bounds = {south : float; west : float; north : float; east : float}
+type bounds = Herbier_domain.Bbox.t = {
+  south : float;
+  west : float;
+  north : float;
+  east : float;
+}
 
 val bounds : Observation.t list -> bounds option
 (** Min/max of the placeable positions; [None] when none is placeable. No

@@ -1,5 +1,10 @@
+module Communes = Herbier_geo.Communes
+module Geocode = Herbier_geo.Geocode
+module Near = Herbier_geo.Near
 module Places = Herbier_domain.Places
 module Code = Communes.Code
+module Fixture = Herbier_test_support.Fixture
+module Text = Herbier_test_support.Text
 
 let code s =
   match Code.of_string s with
@@ -10,13 +15,8 @@ let codes = List.map Code.to_string
 
 (* ---------- fixture plumbing (same as test_geocode.ml) ---------- *)
 
-let read_fixture name =
-  In_channel.with_open_bin
-    (Filename.concat "../fixtures" name)
-    In_channel.input_all
-
 let json_fixture name =
-  match Geocode.json_of_string (read_fixture name) with
+  match Geocode.json_of_string (Fixture.read name) with
   | Ok j -> j
   | Error e -> failwith (name ^ ": " ^ Geocode.error_to_string e)
 
@@ -172,21 +172,9 @@ let fixture_script_tests =
                 "fetch geoplateforme_wfs_communes_99.json geoplateforme \"%s\""
                 (communes_99_recorded_url ())
             in
-            let contains ~needle haystack =
-              let n = String.length needle and h = String.length haystack in
-              let rec at i =
-                match i > h - n with
-                | true -> false
-                | false -> (
-                    match String.equal (String.sub haystack i n) needle with
-                    | true -> true
-                    | false -> at (i + 1))
-              in
-              match n with 0 -> true | _ -> at 0
-            in
             Alcotest.(check bool)
               "fetch line present" true
-              (contains ~needle:line script) );
+              (Text.contains ~sub:line script) );
   ]
 
 (* The departements and 90 fetch lines are cross-checked in
@@ -1052,7 +1040,7 @@ let index_find_and_name () =
   | Some c -> Alcotest.(check string) "giromagny insee" "90052" c.insee
   | None -> Alcotest.fail "expected Giromagny to be found");
   Alcotest.(check (option string))
-    "eloie" (Geocode.near "Éloie") (Communes.name idx eloie);
+    "eloie" (Near.phrase "Éloie") (Communes.name idx eloie);
   Alcotest.(check (option string))
     "belfort name" (Some "Près de Belfort")
     (Communes.name idx belfort);

@@ -6,56 +6,34 @@ type filters = {
   year : int option;
   to_identify_only : bool;
 }
+[@@deriving eq]
 
 let no_filters = {tags = []; year = None; to_identify_only = false}
 
-let equal_filters a b =
-  List.equal Tag_id.equal a.tags b.tags
-  && Option.equal Int.equal a.year b.year
-  && Bool.equal a.to_identify_only b.to_identify_only
-
-type network = {online : bool; pending_uploads : int}
-
-let equal_network a b =
-  Bool.equal a.online b.online && Int.equal a.pending_uploads b.pending_uploads
+type network = {online : bool; pending_uploads : int} [@@deriving eq]
 
 type account = {
   auth : Herbier_sync.Auth.status;
   storage : Original_target.t;
   wifi_only : bool;
 }
+[@@deriving eq]
 
-let equal_account a b =
-  Herbier_sync.Auth.equal_status a.auth b.auth
-  && Original_target.equal a.storage b.storage
-  && Bool.equal a.wifi_only b.wifi_only
-
-type camera = {center : Herbier_domain.Places.point; zoom : float}
+type camera = {
+  center : Herbier_domain.Places.point;
+  zoom : float; [@equal Float.equal]
+}
+[@@deriving eq]
 
 type map_view = {
   camera : camera option;
   selected : Herbier_domain.Ids.Observation_id.t option;
   focus : Herbier_geo.Features.bounds option;
+      [@equal Option.equal Herbier_domain.Bbox.equal]
 }
+[@@deriving eq]
 
 let no_map_view = {camera = None; selected = None; focus = None}
-
-let equal_camera a b =
-  Float.equal a.center.lat b.center.lat
-  && Float.equal a.center.lon b.center.lon
-  && Float.equal a.zoom b.zoom
-
-let equal_bounds (a : Herbier_geo.Features.bounds)
-    (b : Herbier_geo.Features.bounds) =
-  Float.equal a.south b.south
-  && Float.equal a.west b.west
-  && Float.equal a.north b.north
-  && Float.equal a.east b.east
-
-let equal_map_view a b =
-  Option.equal equal_camera a.camera b.camera
-  && Option.equal Herbier_domain.Ids.Observation_id.equal a.selected b.selected
-  && Option.equal equal_bounds a.focus b.focus
 
 type 'a cell = {signal : 'a React.signal; set : ?step:React.step -> 'a -> unit}
 

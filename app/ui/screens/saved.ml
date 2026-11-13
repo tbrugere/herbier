@@ -1,5 +1,7 @@
+module Fr_date = Herbier_ui_model.Fr_date
+module Fr_text = Herbier_ui_model.Fr_text
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
@@ -8,7 +10,7 @@ module Photo = Herbier_domain.Photo
 module Plant = Herbier_domain.Plant
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 type data = {
   observation : Observation.t;
@@ -114,8 +116,7 @@ let render (d : data) =
       ]
   in
   let note_row =
-    El.button
-      ~at:[At.type' (Jstr.v "button"); cls "saved__action"]
+    Html.button ["saved__action"]
       [
         El.span [El.txt' "Ajouter une note à cette observation"];
         El.span ~at:[cls "saved__chevron"] [El.txt' "›"];
@@ -123,8 +124,7 @@ let render (d : data) =
   in
   let note_click, b_note = Rb.click note_row in
   let move_row =
-    El.button
-      ~at:[At.type' (Jstr.v "button"); cls "saved__action"]
+    Html.button ["saved__action"]
       [
         El.span [El.txt' "Corriger la position sur la carte"];
         El.span ~at:[cls "saved__chevron"] [El.txt' "›"];
@@ -141,16 +141,7 @@ let render (d : data) =
               ("Voir la fiche " ^ p.display_name) )
     | None -> None
   in
-  let close =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "icon-button";
-          At.v (Jstr.v "aria-label") (Jstr.v "Fermer");
-        ]
-      [W.Icon.el W.Icon.Close]
-  in
+  let close = W.Icon_button.el ~label:"Fermer" W.Icon.Close in
   let close_click, b_close = Rb.click close in
   let el =
     El.div

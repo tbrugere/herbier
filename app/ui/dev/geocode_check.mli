@@ -1,4 +1,4 @@
-(** Dev-only page for [Herbier_geo.Geocoder] and the place-name rule. Reached
+(** Dev-only page for [Herbier_geo_io.Geocoder] and the place-name rule. Reached
     with the URL fragment [#dev/geocode].
     - « Inverse » queues [Place_name.resolve] with both online sources on (not «
       IGN hors-ligne », no pack) and [online = true] (deliberate requests, dev

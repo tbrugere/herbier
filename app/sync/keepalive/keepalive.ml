@@ -1,9 +1,10 @@
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Outbox = Herbier_store.Outbox
 module Cap_error = Herbier_bindings.Cap_error
 module Runner = Herbier_bindings.Cap_background_runner
-module Wire = Wire
-module Report = Report
+module Wire = Herbier_sync_core.Keepalive.Wire
+module Report = Herbier_sync_core.Keepalive.Report
+module Session = Herbier_sync_core.Auth.Session
 
 (* style: mutable fields because dispatches resolve in future callbacks,
    outside any reaction; nothing outside this module sees them. *)
@@ -20,8 +21,8 @@ type t = {
 let create ~db =
   {db; chain = Serial.create (); handed = true; no_plugin = false}
 
-let log m = Brr.Console.(log [str ("keepalive: " ^ m)])
-let warn m = Brr.Console.(warn [str ("keepalive: " ^ m)])
+let log = Console_line.log Keepalive
+let warn = Console_line.warn Keepalive
 let serially t step = Serial.run t.chain step
 
 type error =
@@ -183,15 +184,14 @@ let logout what s =
 (* An expired access token cannot log out: the refresh gives a live one,
    and the logout then revokes the whole session. *)
 let live s =
-  match Auth.Session.expired ~now:(Ptime_clock.now ()) s with
+  match Session.expired ~now:(Ptime_clock.now ()) s with
   | false -> Fut.return (Some s)
   | true ->
       Fut.map
         (function
-          | Ok fresh -> Some fresh
-          | Error (Auth.Server.Rejected e) when Auth.Gotrue.revokes_session e ->
-              None
-          | Error e ->
+          | Auth.Server.Fresh fresh -> Some fresh
+          | Revoked _ -> None
+          | Failed e ->
               warn ("job session refresh: " ^ Auth.Server.error_to_string e);
               None)
         (Auth.Server.refresh s)

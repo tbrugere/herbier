@@ -1,3 +1,4 @@
+module Rest = Herbier_sync_core.Net.Rest
 module Timed_fetch = Herbier_bindings.Timed_fetch
 
 module IO = struct

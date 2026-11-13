@@ -1,3 +1,4 @@
+module Map_sheet = Herbier_ui_model.Map_sheet
 module Cap_geolocation = Herbier_bindings.Cap_geolocation
 module Cap_error = Herbier_bindings.Cap_error
 

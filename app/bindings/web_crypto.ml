@@ -1,5 +1,3 @@
-let message e = Jstr.to_string (Jv.Error.message e)
-
 let bytes_of a =
   let b = Brr.Tarray.to_bigarray1 a in
   String.init (Bigarray.Array1.dim b) (fun i ->
@@ -9,7 +7,7 @@ let random_bytes n =
   let a = Brr.Tarray.create Brr.Tarray.Uint8 n in
   match Brr_webcrypto.Crypto.(set_random_values crypto a) with
   | () -> Ok (bytes_of a)
-  | exception Jv.Error e -> Error (message e)
+  | exception Jv.Error e -> Error (Js_error.message e)
 
 let sha256 text =
   let subtle = Brr_webcrypto.Crypto.(subtle crypto) in
@@ -23,6 +21,6 @@ let sha256 text =
         (function
           | Ok digest ->
               Ok (bytes_of (Brr.Tarray.of_buffer Brr.Tarray.Uint8 digest))
-          | Error e -> Error (message e))
+          | Error e -> Error (Js_error.message e))
         fut
-  | exception Jv.Error e -> Fut.return (Error (message e))
+  | exception Jv.Error e -> Fut.return (Error (Js_error.message e))

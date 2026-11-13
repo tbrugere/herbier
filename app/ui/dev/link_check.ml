@@ -6,9 +6,7 @@ module Taxon = Herbier_refs.Sources.Gbif.Taxon
 module Plants = Herbier_store.Plants
 module Plant = Herbier_domain.Plant
 module Plant_id = Herbier_domain.Ids.Plant_id
-module Db = Herbier_store.Db
-
-let append log text = El.append_children log [El.div [El.txt' text]]
+module Db = Herbier_store_io.Db
 
 let examples =
   [
@@ -48,26 +46,16 @@ let outcome_to_string = function
 let line link outcome = Link.to_string link ^ " → " ^ outcome_to_string outcome
 
 let rec run_examples log = function
-  | [] -> append log "examples done"
+  | [] -> Kit.append log "examples done"
   | text :: rest ->
       Fut.await (Resolver.resolve_text text) (fun (link, outcome) ->
-          append log (line link outcome);
+          Kit.append log (line link outcome);
           run_examples log rest)
-
-let button label = El.button ~at:[At.type' (Jstr.v "button")] [El.txt' label]
-
-let on_click el f =
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target el) : Ev.listener)
-
-let set_disabled el disabled =
-  El.set_at At.Name.disabled
-    (match disabled with true -> Some Jstr.empty | false -> None)
-    el
 
 let page app =
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
-  let examples_button = button "Exemples" in
-  on_click examples_button (fun () -> run_examples log examples);
+  let examples_button = Kit.button "Exemples" in
+  Kit.on_click examples_button (fun () -> run_examples log examples);
   let input =
     El.input
       ~at:
@@ -78,16 +66,16 @@ let page app =
         ]
       ()
   in
-  let resolve_button = button "Résoudre" in
-  let search_button = button "Chercher" in
-  on_click search_button (fun () ->
+  let resolve_button = Kit.button "Résoudre" in
+  let search_button = Kit.button "Chercher" in
+  Kit.on_click search_button (fun () ->
       Route.go
         (Route.Modal
            (Route.Search (Jstr.to_string (El.prop El.Prop.value input)))));
-  let sheet_button = button "4j" in
-  on_click sheet_button (fun () ->
+  let sheet_button = Kit.button "4j" in
+  Kit.on_click sheet_button (fun () ->
       match String.trim (Jstr.to_string (El.prop El.Prop.value input)) with
-      | "" -> append log "4j: type a link or a text first"
+      | "" -> Kit.append log "4j: type a link or a text first"
       | text ->
           Route.go (Route.Modal (Route.Intercepted {text; outside = false})));
   (* Shown here because the console never gets user text. *)
@@ -103,26 +91,26 @@ let page app =
   let select =
     El.select ~at:[At.v (Jstr.v "aria-label") (Jstr.v "Plante")] []
   in
-  let link_button = button "Lier" in
-  set_disabled link_button true;
+  let link_button = Kit.button "Lier" in
+  Kit.set_disabled link_button true;
   (* style: the last resolved taxon, written by the click handlers only. *)
   let resolved = ref None in
-  on_click resolve_button (fun () ->
+  Kit.on_click resolve_button (fun () ->
       let text = Jstr.to_string (El.prop El.Prop.value input) in
       El.set_children result [El.txt' "…"];
       resolved := None;
-      set_disabled link_button true;
+      Kit.set_disabled link_button true;
       Fut.await (Resolver.resolve_text text) (fun (link, outcome) ->
           El.set_children result [El.txt' (line link outcome)];
           match outcome with
           | Resolve.Taxon t ->
               resolved := Some t;
-              set_disabled link_button false
+              Kit.set_disabled link_button false
           | Resolve.Candidates _ | Resolve.Unresolved _ -> ()));
   Fut.await
     (Db.all (App.db app) Plants.list)
     (function
-      | Error e -> append log ("plants: " ^ Db.error_to_string e)
+      | Error e -> Kit.append log ("plants: " ^ Db.error_to_string e)
       | Ok plants ->
           El.set_children select
             (List.map
@@ -131,16 +119,17 @@ let page app =
                    ~at:[At.value (Jstr.v (Plant_id.to_string p.id))]
                    [El.txt' p.display_name])
                plants));
-  on_click link_button (fun () ->
+  Kit.on_click link_button (fun () ->
       let chosen = Jstr.to_string (El.prop El.Prop.value select) in
       match (!resolved, Plant_id.of_string chosen) with
       | Some t, Some id ->
           Fut.await (App.link app id t) (function
             | Ok () -> Route.go (Route.Modal (Plant id))
-            | Error App.Plant_gone -> append log "link: plant gone"
-            | Error (App.Store e) -> append log ("link: " ^ Db.error_to_string e))
-      | None, _ -> append log "link: resolve a taxon first"
-      | _, None -> append log "link: choose a plant");
+            | Error App.Plant_gone -> Kit.append log "link: plant gone"
+            | Error (App.Store e) ->
+                Kit.append log ("link: " ^ Db.error_to_string e))
+      | None, _ -> Kit.append log "link: resolve a taxon first"
+      | _, None -> Kit.append log "link: choose a plant");
   [
     El.h1 [El.txt' "Link check"];
     El.p [examples_button];

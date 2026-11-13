@@ -2,6 +2,8 @@
    distinct and abstract (each [t] is abstract in ids.mli), so a
    Plant_id.t passed where an Observation_id.t is expected is a type error. *)
 
+module Testable = Herbier_test_support.Testable
+
 let v = "123e4567-e89b-42d3-a456-426614174000"
 let nil = "00000000-0000-0000-0000-000000000000"
 let version_1 = "123e4567-e89b-12d3-a456-426614174000"
@@ -162,7 +164,7 @@ module Cases (I : Herbier_domain.Ids.S) = struct
       "pp prints to_string" v
       (Format.asprintf "%a" I.pp x)
 
-  let json = Alcotest.testable Yojson.Safe.pp Yojson.Safe.equal
+  let json = Testable.yojson
 
   let json_round_trips () =
     let x = parse v in

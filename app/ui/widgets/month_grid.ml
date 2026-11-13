@@ -1,6 +1,7 @@
+module Ref_text = Herbier_ui_model.Ref_text
 open Brr
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let cell months m =
   El.span

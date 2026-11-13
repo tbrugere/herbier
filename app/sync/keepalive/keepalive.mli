@@ -20,16 +20,14 @@
     plugin (the browser) has no job: the first [Unavailable] dispatch turns
     every later one into a no-op. *)
 
-module Wire = Wire
-(** The job's contract: its events, the requests and documents it is handed, its
-    small answers. *)
-
-module Report = Report
-(** What the job reports. *)
+module Wire := Herbier_sync_core.Keepalive.Wire
+module Report := Herbier_sync_core.Keepalive.Report
+module Session := Herbier_sync_core.Auth.Session
+module Gotrue := Herbier_sync_core.Auth.Gotrue
 
 type t
 
-val create : db:Herbier_store.Db.t -> t
+val create : db:Herbier_store_io.Db.t -> t
 (** No IO, no listener. *)
 
 type error =
@@ -66,7 +64,7 @@ val reclaim : t -> (unit, error) result Fut.t
     again by the engine (idempotent upserts, in [seq] order). A missing plugin →
     [Ok ()]. *)
 
-val replace_session : t -> Auth.Session.t -> (unit, error) result Fut.t
+val replace_session : t -> Session.t -> (unit, error) result Fut.t
 (** For a new grant: [takeSession] then [setSession] with {!Wire.session_doc} on
     {!Backend}'s URL and key, both in one step of the dispatch chain; then the
     taken session is logged out (as {!drop_session} does). When the take or the
@@ -74,18 +72,18 @@ val replace_session : t -> Auth.Session.t -> (unit, error) result Fut.t
     being left live with nobody holding it ([Error]); a failed take leaves the
     job its old session. *)
 
-val set_session : t -> Auth.Session.t -> (unit, error) result Fut.t
+val set_session : t -> Session.t -> (unit, error) result Fut.t
 (** #dev/keepalive: [setSession] alone. Replaces whatever session the job had
     (and drops its queue), without logging either out. *)
 
 val drop_session : t -> (unit, error) result Fut.t
 (** [takeSession] (the job forgets its session and its queue), then, when one
     came back, best-effort server-side logout of it: refreshed first when its
-    access token is {!Auth.Session.expired} (a refresh answered with
-    {!Auth.Gotrue.revokes_session} means it is already dead: done), then
-    {!Auth.Gotrue.logout}; failures logged, [Ok ()]. [Error] when the dispatch
-    or its answer failed. A take that timed out is still followed: the session
-    it returns late is logged out then. A [Rejected] take leaves the job its
+    access token is {!Session.expired} (a refresh answered with
+    {!Gotrue.revokes_session} means it is already dead: done), then
+    {!Gotrue.logout}; failures logged, [Ok ()]. [Error] when the dispatch or its
+    answer failed. A take that timed out is still followed: the session it
+    returns late is logged out then. A [Rejected] take leaves the job its
     session, until the next sign-in replaces it. *)
 
 val report : t -> (Report.t, error) result Fut.t

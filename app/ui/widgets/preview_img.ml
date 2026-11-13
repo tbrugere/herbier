@@ -9,8 +9,8 @@ let v ?(cls = []) ?(alt = "") path =
   let box = El.div ~at [img] in
   let warn detail = Console.(warn [str ("preview " ^ path); str detail]) in
   Fut.await
-    (Herbier_store.Files.read_blob ~path ~type':Herbier_photos.Preview.mime)
-    (function
+    (Herbier_store_io.Files.read_blob ~path
+       ~type':Herbier_photos_io.Preview.mime) (function
     | Error e -> warn (Herbier_bindings.Cap_error.to_string e)
     | Ok blob ->
         let url = Herbier_bindings.Object_url.create blob in

@@ -1,5 +1,10 @@
+module Collection_filter = Herbier_ui_model.Collection_filter
+module Fr_date = Herbier_ui_model.Fr_date
+module Fr_text = Herbier_ui_model.Fr_text
+module Journal_day = Herbier_ui_model.Journal_day
+module Journal_filter = Herbier_ui_model.Journal_filter
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Observations = Herbier_store.Observations
@@ -11,7 +16,7 @@ module Tag_id = Herbier_domain.Ids.Tag_id
 module RList = ReactiveData.RList
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 let offset (o : Observation.t) = Zone.offset_s o.at
 let date (o : Observation.t) = Zone.date o.at
 let year (o : Observation.t) = Zone.year o.at
@@ -56,13 +61,9 @@ let day_place state (d : Observation.t Journal_day.t) =
   | Some p, None -> ([El.span ~at:[cls "journal__place"] [El.txt' p]], [])
   | Some p, Some b ->
       let button =
-        El.button
-          ~at:
-            [
-              At.type' (Jstr.v "button");
-              cls "journal__place";
-              At.v (Jstr.v "aria-label") (Jstr.v ("Voir sur la carte : " ^ p));
-            ]
+        Html.button
+          ~label:("Voir sur la carte : " ^ p)
+          ["journal__place"]
           [El.txt' (p ^ " "); W.Icon.el ~size:14 W.Icon.My_location]
       in
       let click, b_click = Rb.click button in
@@ -90,7 +91,7 @@ let day state ~this_year names (d : Observation.t Journal_day.t) =
   in
   (el, place_bindings @ List.concat_map snd rows)
 
-let log_error e = Console.(error [str "journal"; str (Db.error_to_string e)])
+let log_error e = Log.db "journal" e
 
 let v app =
   let db = App.db app and state = App.state app in

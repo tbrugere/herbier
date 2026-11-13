@@ -1,5 +1,15 @@
+module Fr_date = Herbier_ui_model.Fr_date
+module Gps = Herbier_ui_model.Gps
+module Intercept = Herbier_ui_model.Intercept
+module Journal_day = Herbier_ui_model.Journal_day
+module List_patch = Herbier_ui_model.List_patch
+module Plant_link = Herbier_ui_model.Plant_link
+module Plant_version = Herbier_ui_model.Plant_version
+module Ref_pick = Herbier_ui_model.Ref_pick
+module Ref_search = Herbier_ui_model.Ref_search
+module To_identify = Herbier_ui_model.To_identify
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Search = Herbier_store.Search
@@ -23,10 +33,8 @@ type mode =
 (* The two modes that move an observation. *)
 type move_mode = Identify_obs | Change_obs
 
-let cls c = At.class' (Jstr.v c)
-
-let log_error what e =
-  Console.(error [str ("identifier: " ^ what); str (Db.error_to_string e)])
+let cls = Html.cls
+let log_error = Log.db ~scope:"identifier"
 
 type data = {
   observation : Observation.t;
@@ -70,11 +78,6 @@ let observation_card (o : Observation.t) =
               o.note);
        ])
 
-let same (a : Plant.t) (b : Plant.t) = Plant_id.equal a.id b.id
-
-let equal (a : Plant.t) (b : Plant.t) =
-  same a b && Ptime.equal a.updated_at b.updated_at
-
 type orphan = Keep_plant | Delete_plant
 
 let orphan_dialog (p : Plant.t) =
@@ -86,16 +89,7 @@ let orphan_dialog (p : Plant.t) =
     ]
 
 let back_button () =
-  let back =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "icon-button";
-          At.v (Jstr.v "aria-label") (Jstr.v "Retour");
-        ]
-      [W.Icon.el W.Icon.Arrow_back]
-  in
+  let back = W.Icon_button.el ~label:"Retour" W.Icon.Arrow_back in
   let click, b = Rb.click back in
   (back, [b; Rb.act click Route.back])
 
@@ -140,7 +134,9 @@ let collection db ~problem ~(search : W.Text_field.t) row =
             log_error "search" e;
             problem "La recherche n'a pas pu se faire."
         | Ok next when mine = !seq ->
-            Rb.patch rows_handle (List_patch.diff ~same ~equal !shown next);
+            Rb.patch rows_handle
+              (List_patch.diff ~same:Plant_version.same
+                 ~equal:Plant_version.equal !shown next);
             shown := next;
             set_found (Some (List.length next))
         | Error _ | Ok _ -> ())
@@ -205,8 +201,7 @@ let choose ~while_here ~mode ~current ~plants ~problem ~release
     (c : Candidate.t) k =
   Fut.await (Herbier_refs_io.Resolver.chosen c.taxon) (fun result ->
       (match result with
-      | Error why ->
-          Console.(error [str "refs: chosen"; str (unresolved_text why)])
+      | Error why -> Log.error ~scope:"refs" "chosen" (unresolved_text why)
       | Ok _ -> ());
       while_here (fun () ->
           match result with
@@ -676,7 +671,7 @@ let load_intercepted db =
   let+ links = Db.all db Tags.links in
   {plants; tags; links}
 
-let log_refs what why = Console.(error [str ("refs: " ^ what); str why])
+let log_refs = Log.error ~scope:"refs"
 
 (* The app the link came from shows again; the route was popped already. *)
 let minimize () =
@@ -695,11 +690,7 @@ let close ~outside () =
   match outside with true -> minimize () | false -> ()
 
 let toggle_button label on =
-  let el =
-    El.button
-      ~at:[At.type' (Jstr.v "button"); cls "intercept__toggle"]
-      [El.txt' label]
-  in
+  let el = Html.button ["intercept__toggle"] [El.txt' label] in
   let click, b = Rb.click el in
   ( el,
     click,
@@ -926,10 +917,7 @@ let render_found app (d : intercepted) ~gps ~search ~problem ~while_here ~close
         [
           Rb.act add.click save;
           Rb.class_ add.el "is-inactive" nothing_to_add;
-          Rb.attr add.el "aria-disabled"
-            (React.S.map
-               (function true -> Some "true" | false -> None)
-               nothing_to_add);
+          Rb.disabled add.el nothing_to_add;
           Rb.act research.click search;
           Rb.act open_click (fun () ->
               set_open_after (not (React.S.value open_after)));
@@ -1035,16 +1023,7 @@ let render_intercept app ~outside text (d : intercepted) =
         render_found app d ~gps ~search ~problem ~while_here ~close candidate
           existing
   in
-  let close_button =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "icon-button";
-          At.v (Jstr.v "aria-label") (Jstr.v "Fermer");
-        ]
-      [W.Icon.el W.Icon.Close]
-  in
+  let close_button = W.Icon_button.el ~label:"Fermer" W.Icon.Close in
   let close_click, close_b = Rb.click close_button in
   let body_el = El.div ~at:[cls "intercept__body"] [] in
   let header = "Herbier · " ^ Intercept.header link in

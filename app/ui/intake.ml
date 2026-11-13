@@ -1,3 +1,4 @@
+module Intercept = Herbier_ui_model.Intercept
 module Cap_app = Herbier_bindings.Cap_app
 module Cap_share_target = Herbier_bindings.Cap_share_target
 
@@ -37,10 +38,7 @@ let open_sheet = function
       | true -> Route.replace route
       | false -> Route.go route)
 
-let log name e =
-  Brr.Console.(
-    error
-      [str ("intake: " ^ name); str (Herbier_bindings.Cap_error.to_string e)])
+let log = Log.cap ~scope:"intake"
 
 let start (_ : App.t) =
   Fut.await

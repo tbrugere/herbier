@@ -70,8 +70,11 @@ evidence. Open decisions are listed at the end.
   `@capacitor-community/camera-preview` as fallback.
 - **ppx_deriving in app libraries** (decided 2026-11-13): `ppx_deriving.eq`
   and `ppx_deriving_yojson` may be used (their runtime is plain OCaml,
-  checked under js_of_ocaml). Not `show` in app code: it links Format and the
-  printers into the bundle (tests only). Not `ppx_deriving_yojson` on closed
+  checked under js_of_ocaml). `show` may be derived for the tests' printers
+  and for logging, never for user-facing text, which stays hand-written
+  (decided 2026-11-13). Where nothing calls it, the release build's dead-code
+  elimination drops the printers and Format (measured on #68: the release
+  bundle +1 KB, the dev bundle +139 KB). Not `ppx_deriving_yojson` on closed
   sets sent to PostgREST: it encodes a constructor `Drive` as `["Drive"]`, so
   their `to_json`/`of_json` stay hand-written. Rules: style guide §5.5.
 - A **small Kotlin layer** is expected: the `intent-filter`s in the manifest

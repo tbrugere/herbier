@@ -1,11 +1,13 @@
 (** Runs sync cycles (push, then pull when the push completed) over
-    {!Net.Transport} and {!Herbier_store.Db}, as {!Cycle.Schedule} decides. Logs
-    each cycle to the console (["sync: …"], never a token). *)
+    {!Net.Transport} and {!Herbier_store_io.Db}, as {!Cycle.Schedule} decides.
+    Logs each cycle to the console (["sync: …"], never a token). *)
+
+module Cycle := Herbier_sync_core.Cycle
 
 type t
 
 val create :
-  db:Herbier_store.Db.t ->
+  db:Herbier_store_io.Db.t ->
   auth:Auth.t ->
   keepalive:Keepalive.t ->
   on_cycle:(Cycle.Report.t -> unit) ->

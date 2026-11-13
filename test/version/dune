@@ -1,0 +1,5 @@
+; The git describe stamp, apart from test/domain so that a new commit
+; relinks only this test.
+(test
+ (name test_version)
+ (libraries herbier_version alcotest))

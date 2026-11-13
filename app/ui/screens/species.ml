@@ -1,5 +1,12 @@
+module Cover = Herbier_ui_model.Cover
+module Fr_date = Herbier_ui_model.Fr_date
+module Fr_text = Herbier_ui_model.Fr_text
+module Journal_day = Herbier_ui_model.Journal_day
+module Plant_form = Herbier_ui_model.Plant_form
+module Ref_block = Herbier_ui_model.Ref_block
+module Ref_text = Herbier_ui_model.Ref_text
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Observations = Herbier_store.Observations
@@ -17,20 +24,9 @@ module Organ_photos = Herbier_refs.Organ_photos
 module Ref_images = Herbier_store.Ref_images
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
-
-let button ?label classes children =
-  let aria =
-    match label with
-    | Some l -> [At.v (Jstr.v "aria-label") (Jstr.v l)]
-    | None -> []
-  in
-  El.button
-    ~at:((At.type' (Jstr.v "button") :: aria) @ List.map cls classes)
-    children
-
-let log_error what e =
-  Console.(error [str ("fiche: " ^ what); str (Db.error_to_string e)])
+let cls = Html.cls
+let button = Html.button
+let log_error = Log.db ~scope:"fiche"
 
 (* What the fiche shows, loaded on entry and after each save. *)
 type data = {
@@ -110,8 +106,7 @@ let observation_row (d : data) (o : Observation.t) =
       ]
   in
   let el =
-    El.button
-      ~at:[At.type' (Jstr.v "button"); cls "species__obs"]
+    Html.button ["species__obs"]
       [
         El.div ~at:[cls "species__obs-date"] [El.txt' when_];
         El.div ~at:[cls "t-meta"] [El.txt' (String.concat " · " details)];
@@ -295,8 +290,7 @@ let unlinked state id () =
                " Hors-ligne : la recherche de noms reviendra avec le réseau.")
          online)
     :: Rb.class_ link.el "is-offline" (React.S.map not online)
-    :: Rb.attr link.el "aria-disabled"
-         (React.S.map (function true -> None | false -> Some "true") online)
+    :: Rb.disabled link.el (React.S.map not online)
     :: Rb.act link.click (fun () ->
         match (React.S.value (State.network state)).online with
         | true -> Route.go (Route.Modal (Route.Link_species id))
@@ -423,8 +417,7 @@ let linked app (data : data React.signal) () =
   let projection = React.S.map ~eq:( == ) project data in
   let meta = El.span ~at:[cls "t-meta"; cls "species__ref-meta"] [] in
   let refresh =
-    button ~label:"Mettre à jour la référence" ["icon-button"]
-      [W.Icon.el W.Icon.Refresh]
+    W.Icon_button.el ~label:"Mettre à jour la référence" W.Icon.Refresh
   in
   let click, b_click = Rb.click refresh in
   let rows = El.div ~at:[cls "species__ref-slot"] [] in
@@ -458,13 +451,9 @@ let linked app (data : data React.signal) () =
     [
       b_click;
       Rb.act click (fun () -> App.refresh app id);
-      Rb.attr refresh "aria-disabled"
-        (React.S.l2
-           ~eq:(Option.equal String.equal)
-           (fun fetching online ->
-             match (fetching, online) with
-             | false, true -> None
-             | true, _ | _, false -> Some "true")
+      Rb.disabled refresh
+        (React.S.l2 ~eq:Bool.equal
+           (fun fetching online -> fetching || not online)
            fetching online);
       Rb.class_ refresh "is-offline" (React.S.map not online);
       Rb.text meta
@@ -633,9 +622,7 @@ let render app (data : data React.signal) =
 (* A plant that is not (or no longer) live, or a fiche that could not be
    read: the reason under ←. *)
 let notice text =
-  let back =
-    button ~label:"Retour" ["icon-button"] [W.Icon.el W.Icon.Arrow_back]
-  in
+  let back = W.Icon_button.el ~label:"Retour" W.Icon.Arrow_back in
   let click, b = Rb.click back in
   ( El.div
       ~at:[cls "species__gone"]

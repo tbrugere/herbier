@@ -1,57 +1,26 @@
-; Native checks of the pure modules of app/sync/, copied in flat: they must
-; not reference Brr, Fut, Jv or Herbier_bindings. test_sync runs the
-; session/nonce/gotrue suites; test_rest those of synced.ml and net/rest.ml,
-; with test_synced's and test_push_order's; test_cycle those of cycle/ (and
-; 4m's parked_entry.ml), over cli_local.ml's Local.S (the sqlite3 CLI,
-; Mock_http's identity IO); test_keepalive those of keepalive/ (see its
-; stanza). The store modules they use are copied from app/store/
-; (herbier_store links Brr and cannot be linked natively). The shims give the
-; copies the paths they use: herbier_store.ml `Herbier_store.`, net.ml
-; `Net.Rest`, auth.ml `Auth.Session` and `Auth.Gotrue`, keepalive.ml
-; `Keepalive.Wire` and `Keepalive.Report`, herbier_sync.ml parked_entry.ml's
-; `Herbier_sync.`.
+; Native checks of herbier_sync_core (app/sync_core/), linked natively.
+; test_sync runs the session/nonce/gotrue suites; test_lifecycle those of
+; auth/lifecycle.ml; test_rest those of synced.ml and net/rest.ml, with
+; test_synced's and test_push_order's; test_cycle those of cycle/, over
+; cli_local.ml's Local.S (the sqlite3 CLI, Mock_http's identity IO);
+; test_keepalive those of keepalive/ (see its stanza).
 ;
-; The copies, the shims and the shared helpers form herbier_sync_copy,
-; unwrapped so that they keep their bare names: the tests and
-; handoff_sample.exe both link them, and a module belongs to one stanza.
-; handoff_sample prints the hand-off test/runner reads.
-(copy_files# ../../app/sync/auth/{session,nonce,gotrue}.{ml,mli})
-
-(copy_files# ../../app/sync/{synced,json_read}.{ml,mli})
-
-(copy_files# ../../app/sync/net/rest.{ml,mli})
-
-(copy_files#
- ../../app/sync/cycle/{outcome,last_error,local,io,schedule,push,pull,report}.{ml,mli})
-
-(copy_files# ../../app/sync/keepalive/wire.{ml,mli})
-
-; keepalive/report.ml under another name: cycle/report.ml is copied as
-; report.ml.
-(rule
- (copy ../../app/sync/keepalive/report.ml keepalive_report.ml))
-
-(rule
- (copy ../../app/sync/keepalive/report.mli keepalive_report.mli))
-
-(copy_files# ../../app/ui/screens/settings/parked_entry.{ml,mli})
-
-(copy_files#
- ../../app/store/{codec,schema,stmt,outbox,plants,observations,photos,tags,references,cascade,sync_state}.{ml,mli})
-
-(copy_files# ../../app/store/tables.ml)
-
+; The shared helpers (and the copied mock_http.ml and sqlite_cli.ml) form
+; herbier_sync_helpers, unwrapped so that they keep their bare names: the
+; tests and handoff_sample.exe both link them, and a module belongs to one
+; stanza. handoff_sample prints the hand-off test/runner reads.
 (copy_files# ../postgrest/mock_http.ml)
 
 (copy_files# ../store/sqlite_cli.ml)
 
 (library
- (name herbier_sync_copy)
+ (name herbier_sync_helpers)
  (wrapped false)
  (modules
   :standard
   \
   test_sync
+  test_lifecycle
   test_rest
   test_cycle
   test_keepalive
@@ -59,7 +28,11 @@
   test_synced
   handoff_sample)
  (libraries
+  herbier_sync_core
+  herbier_store
   herbier_domain
+  herbier_net
+  herbier_test_support
   postgrest
   postgrest-codegen
   yojson
@@ -72,13 +45,31 @@
 (executable
  (name handoff_sample)
  (modules handoff_sample)
- (libraries herbier_sync_copy herbier_domain postgrest yojson ptime uri))
+ (libraries
+  herbier_sync_helpers
+  herbier_sync_core
+  herbier_store
+  herbier_domain
+  herbier_test_support
+  postgrest
+  yojson
+  ptime
+  uri))
 
 (tests
- (names test_sync test_rest test_cycle)
- (modules test_sync test_rest test_cycle test_push_order test_synced)
+ (names test_sync test_lifecycle test_rest test_cycle)
+ (modules
+  test_sync
+  test_lifecycle
+  test_rest
+  test_cycle
+  test_push_order
+  test_synced)
  (libraries
-  herbier_sync_copy
+  herbier_sync_helpers
+  herbier_sync_core
+  herbier_store
+  herbier_test_support
   herbier_domain
   postgrest
   postgrest-codegen
@@ -101,7 +92,17 @@
 (test
  (name test_keepalive)
  (modules test_keepalive)
- (libraries herbier_sync_copy herbier_domain postgrest yojson ptime uri alcotest)
+ (libraries
+  herbier_sync_helpers
+  herbier_sync_core
+  herbier_store
+  herbier_test_support
+  herbier_domain
+  postgrest
+  yojson
+  ptime
+  uri
+  alcotest)
  (deps
   %{bin:sqlite3}
   %{project_root}/capacitor.config.ts

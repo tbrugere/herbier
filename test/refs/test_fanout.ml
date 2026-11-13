@@ -1,6 +1,7 @@
 (* Herbier_refs.Fanout: the three branches of one gbif_key's fetch, over
    Fake_net; the decide (keep/merge) rule; the due rule. *)
 
+module Value = Herbier_test_support.Value
 module Fanout = Herbier_refs.Fanout
 module Step = Herbier_refs.Step
 module Request = Herbier_refs.Request
@@ -15,6 +16,7 @@ module Ids = Herbier_domain.Ids
 module Reference = Herbier_domain.Reference
 module Source = Herbier_domain.Reference.Source
 module Status = Herbier_domain.Reference.Status
+module Fixture = Herbier_test_support.Fixture
 
 let some name = function
   | Some r -> r
@@ -29,11 +31,7 @@ let plant =
   | Some x -> x
   | None -> invalid_arg "plant id"
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
-
+let time = Value.time
 let now = time "2026-11-12T00:00:00Z"
 
 let reference_row ?(status = Status.Complete) ?deleted_at ~source ~fetched_at

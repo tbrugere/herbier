@@ -1,0 +1,5 @@
+; Native checks of herbier_net against the copies it replaced (refs, geo,
+; photos, sync), copied into test_net.ml verbatim.
+(test
+ (name test_net)
+ (libraries herbier_net yojson alcotest))

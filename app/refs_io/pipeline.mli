@@ -5,7 +5,7 @@
     back nor blanks their rows. *)
 
 module Reference := Herbier_domain.Reference
-module Db := Herbier_store.Db
+module Db := Herbier_store_io.Db
 
 type outcome =
   | Written of Reference.Status.t  (** The row was stored with that status. *)

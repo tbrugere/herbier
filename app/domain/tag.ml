@@ -1,4 +1,4 @@
-type id = Ids.Tag_id.t [@@deriving eq]
+type id = Ids.Tag_id.t [@@deriving eq, show]
 
 type t = {
   id : id;
@@ -7,10 +7,10 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
-[@@deriving eq]
+[@@deriving eq, show]
 
 module Plant_tag = struct
-  type id = Ids.Plant_tag_id.t [@@deriving eq]
+  type id = Ids.Plant_tag_id.t [@@deriving eq, show]
 
   type t = {
     id : id;
@@ -20,5 +20,5 @@ module Plant_tag = struct
     updated_at : Ptime.t;
     deleted_at : Ptime.t option;
   }
-  [@@deriving eq]
+  [@@deriving eq, show]
 end

@@ -1,5 +1,5 @@
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 
 let el db =
   match db with

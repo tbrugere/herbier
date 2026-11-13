@@ -1,14 +1,15 @@
+module Communes = Herbier_geo.Communes
+module Geocode = Herbier_geo.Geocode
+module Near = Herbier_geo.Near
+module Url = Herbier_net.Url
 module Places = Herbier_domain.Places
+module Fixture = Herbier_test_support.Fixture
+module Text = Herbier_test_support.Text
 
 (* ---------- fixture plumbing ---------- *)
 
-let read_fixture name =
-  In_channel.with_open_bin
-    (Filename.concat "../fixtures" name)
-    In_channel.input_all
-
 let json_fixture name =
-  match Geocode.json_of_string (read_fixture name) with
+  match Geocode.json_of_string (Fixture.read name) with
   | Ok j -> j
   | Error e -> failwith (name ^ ": " ^ Geocode.error_to_string e)
 
@@ -90,10 +91,10 @@ let url_tests =
     ( "encode: space, comma, quote and an accented letter",
       `Quick,
       fun () ->
-        Alcotest.(check string) "space" "%20" (Geocode.encode " ");
-        Alcotest.(check string) "comma" "%2C" (Geocode.encode ",");
-        Alcotest.(check string) "quote" "%22" (Geocode.encode "\"");
-        Alcotest.(check string) "e accent aigu" "%C3%A9" (Geocode.encode "é") );
+        Alcotest.(check string) "space" "%20" (Url.encode " ");
+        Alcotest.(check string) "comma" "%2C" (Url.encode ",");
+        Alcotest.(check string) "quote" "%22" (Url.encode "\"");
+        Alcotest.(check string) "e accent aigu" "%C3%A9" (Url.encode "é") );
     ( "coordinate: five decimals, negative kept",
       `Quick,
       fun () ->
@@ -233,18 +234,6 @@ let read_script () =
   try Some (In_channel.with_open_bin script_path In_channel.input_all)
   with Sys_error _ -> None
 
-let contains ~needle haystack =
-  let n = String.length needle and h = String.length haystack in
-  let rec at i =
-    match i > h - n with
-    | true -> false
-    | false -> (
-        match String.equal (String.sub haystack i n) needle with
-        | true -> true
-        | false -> at (i + 1))
-  in
-  match n with 0 -> true | _ -> at 0
-
 let script_tests =
   [
     ( "every recorded request's fetch line appears in the recording script",
@@ -263,7 +252,7 @@ let script_tests =
                     (Geocode.provider_to_string r.provider)
                     r.url
                 in
-                match contains ~needle:line script with
+                match Text.contains ~sub:line script with
                 | true -> ()
                 | false ->
                     Alcotest.failf "%s: line %s not found in %s" file line
@@ -274,7 +263,7 @@ let script_tests =
       fun () ->
         List.iter
           (fun (file, _) ->
-            match Sys.file_exists (Filename.concat "../fixtures" file) with
+            match Fixture.exists file with
             | true -> ()
             | false -> Alcotest.failf "missing fixture test/fixtures/%s" file)
           recorded_requests );
@@ -341,7 +330,7 @@ let near_tests =
     ( what,
       `Quick,
       fun () ->
-        Alcotest.(check (option string)) what expected (Geocode.near input) )
+        Alcotest.(check (option string)) what expected (Near.phrase input) )
   in
   [
     check "Le X" "Le Valtin" (Some "Près du Valtin");
@@ -878,7 +867,7 @@ let reverse_photon_tests =
           with
           | Error e -> Error e
           | Ok None -> Ok None
-          | Ok (Some name) -> Ok (Geocode.near name)
+          | Ok (Some name) -> Ok (Near.phrase name)
         in
         let result, reqs =
           run_program ~answer:answer_from_fixtures

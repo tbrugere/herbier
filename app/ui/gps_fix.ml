@@ -1,3 +1,4 @@
+module Gps = Herbier_ui_model.Gps
 module Geo = Herbier_bindings.Cap_geolocation
 
 let start ~on_error () =

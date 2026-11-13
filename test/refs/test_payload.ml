@@ -5,6 +5,7 @@ module Gbif = Herbier_refs.Sources.Gbif
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
 module Source = Herbier_domain.Reference.Source
+module Testable = Herbier_test_support.Testable
 
 (* ---------- fixtures ---------- *)
 
@@ -34,163 +35,43 @@ let summary_en_digitalis =
 
 let summary_fr_lis = Check.json "wikipedia_summary_fr_Lis.json"
 
-(* ---------- JSON renderings of the decoders' results, for readable diffs
-   and so that [decode (prune p b) = decode p b] can be checked by one
-   [Alcotest.check] per part ---------- *)
+(* ---------- testables ---------- *)
 
-let qid_json q = `String (Qid.to_string q)
+let qid_t = Alcotest.testable Qid.pp Qid.equal
+let taxon_t = Alcotest.testable Gbif.Taxon.pp Gbif.Taxon.equal
+let vernacular_t = Alcotest.testable Gbif.Vernacular.pp Gbif.Vernacular.equal
 
-let entity_json (e : Wikidata.Entity.t option) : Yojson.Safe.t =
-  match e with
-  | None -> `Null
-  | Some e ->
-      `Assoc
-        [
-          ("qid", qid_json e.qid);
-          ("gbif_key", Check.opt (fun n -> `Int n) e.gbif_key);
-          ("powo", Check.opt (fun s -> `String s) e.powo);
-          ("ipni", Check.opt (fun s -> `String s) e.ipni);
-          ("taxref", Check.opt (fun n -> `Int n) e.taxref);
-          ("tela", Check.opt (fun n -> `Int n) e.tela);
-          ("eppo", Check.opt (fun s -> `String s) e.eppo);
-          ("inat", Check.opt (fun n -> `Int n) e.inat);
-          ( "common_names",
-            `List
-              (List.map
-                 (fun (n : Wikidata.Entity.name) ->
-                   `Assoc [("lang", `String n.lang); ("text", `String n.text)])
-                 e.common_names) );
-          ( "sitelinks",
-            `List
-              (List.map
-                 (fun (s : Wikidata.Entity.sitelink) ->
-                   `Assoc [("lang", `String s.lang); ("title", `String s.title)])
-                 e.sitelinks) );
-        ]
+let distribution_t =
+  Alcotest.testable Gbif.Distribution.pp Gbif.Distribution.equal
 
-let summary_json (t : Wikipedia.t) : Yojson.Safe.t =
-  `Assoc
-    [
-      ( "kind",
-        `String
-          (match t.kind with
-          | Standard -> "standard"
-          | Disambiguation -> "disambiguation"
-          | Other s -> "other:" ^ s) );
-      ("title", `String t.title);
-      ("lang", Check.opt (fun s -> `String s) t.lang);
-      ("description", Check.opt (fun s -> `String s) t.description);
-      ("extract", Check.opt (fun s -> `String s) t.extract);
-      ("wikibase_item", Check.opt qid_json t.wikibase_item);
-      ("page_url", Check.opt (fun s -> `String s) t.page_url);
-      ( "thumbnail",
-        Check.opt
-          (fun (th : Wikipedia.thumbnail) ->
-            `Assoc
-              [
-                ("source", `String th.source);
-                ("width", `Int th.width);
-                ("height", `Int th.height);
-              ])
-          t.thumbnail );
-    ]
+let image_t = Alcotest.testable Gbif.Image.pp Gbif.Image.equal
+let entity_t = Alcotest.testable Wikidata.Entity.pp Wikidata.Entity.equal
+let summary_t = Alcotest.testable Wikipedia.pp Wikipedia.equal
 
-let status_json : Gbif.Status.t -> Yojson.Safe.t = function
-  | Accepted -> `String "Accepted"
-  | Doubtful -> `String "Doubtful"
-  | Synonym -> `String "Synonym"
-  | Other s -> `Assoc [("Other", `String s)]
+let page_t t =
+  Alcotest.testable
+    (Gbif.pp_page (Alcotest.pp t))
+    (Gbif.equal_page (Alcotest.equal t))
 
-let taxon_json (t : Gbif.Taxon.t) =
-  `Assoc
-    [
-      ("key", `Int t.key);
-      ("scientific_name", `String t.scientific_name);
-      ("canonical_name", Check.opt (fun s -> `String s) t.canonical_name);
-      ("authorship", Check.opt (fun s -> `String s) t.authorship);
-      ("rank", Check.opt (fun s -> `String s) t.rank);
-      ("status", Check.opt status_json t.status);
-      ("accepted_key", Check.opt (fun n -> `Int n) t.accepted_key);
-      ("family", Check.opt (fun s -> `String s) t.family);
-      ("vernacular_name", Check.opt (fun s -> `String s) t.vernacular_name);
-    ]
-
-let vernacular_json (v : Gbif.Vernacular.t) =
-  `Assoc
-    [
-      ("name", `String v.name);
-      ("language", Check.opt (fun s -> `String s) v.language);
-      ("source", Check.opt (fun s -> `String s) v.source);
-      ("country", Check.opt (fun s -> `String s) v.country);
-    ]
-
-let distribution_json (d : Gbif.Distribution.t) =
-  `Assoc
-    [
-      ("location_id", Check.opt (fun s -> `String s) d.location_id);
-      ("locality", Check.opt (fun s -> `String s) d.locality);
-      ("country", Check.opt (fun s -> `String s) d.country);
-      ("status", Check.opt (fun s -> `String s) d.status);
-      ( "establishment_means",
-        Check.opt (fun s -> `String s) d.establishment_means );
-      ("threat_status", Check.opt (fun s -> `String s) d.threat_status);
-      ("source", Check.opt (fun s -> `String s) d.source);
-    ]
-
-let organ_json o = `String (Herbier_domain.Reference.Organ.to_string o)
-
-let image_json (i : Gbif.Image.t) =
-  `Assoc
-    [
-      ("occurrence_key", `String i.occurrence_key);
-      ("url", `String i.url);
-      ("organ", Check.opt organ_json i.organ);
-      ("organ_label", Check.opt (fun s -> `String s) i.organ_label);
-      ("licence", `String i.licence);
-      ("attribution", `String i.attribution);
-      ("observation_url", Check.opt (fun s -> `String s) i.observation_url);
-    ]
-
-let page_json to_json (p : _ Gbif.page) =
-  `Assoc
-    [
-      ("results", `List (List.map to_json p.results));
-      ( "dropped",
-        `List (List.map (fun e -> `String (Decode.error_to_string e)) p.dropped)
-      );
-      ("end_of_records", `Bool p.end_of_records);
-      ("count", Check.opt (fun n -> `Int n) p.count);
-    ]
-
-(* The decoder of each part, rendered to JSON so that an [Ok] or an
-   [Error] can be compared with one [Alcotest.check]. *)
-let decode_for (part : Payload.part) (body : Yojson.Safe.t) :
-    (Yojson.Safe.t, Decode.error) result =
+(* [decode (prune p b) = decode p b], one [Alcotest.check] per part, through
+   that part's decoder. *)
+let check_prune_preserves_decoding name (part : Payload.part) body =
+  let same value decode =
+    Alcotest.(check (result value Check.error))
+      name (decode body)
+      (decode (Payload.prune part body))
+  in
   match part with
-  | Payload.Gbif_species -> Result.map taxon_json (Gbif.species_of_json body)
-  | Payload.Gbif_vernacular_names ->
-      Result.map
-        (page_json vernacular_json)
-        (Gbif.vernacular_names_of_json body)
-  | Payload.Gbif_distributions ->
-      Result.map (page_json distribution_json) (Gbif.distributions_of_json body)
-  | Payload.Gbif_occurrence_count ->
-      Result.map (fun n -> `Int n) (Gbif.occurrence_count_of_json body)
-  | Payload.Plantnet_media ->
-      Result.map (page_json image_json) (Gbif.plantnet_media_of_json body)
-  | Payload.Wikidata_search ->
-      Result.map
-        (fun l -> `List (List.map qid_json l))
-        (Wikidata.search_of_json body)
-  | Payload.Wikidata_entity ->
-      Result.map entity_json (Wikidata.entity_of_json body)
-  | Payload.Wikipedia_summary ->
-      Result.map summary_json (Wikipedia.summary_of_json body)
-
-let check_prune_preserves_decoding name part body =
-  Alcotest.(check (result Check.yojson Check.error))
-    name (decode_for part body)
-    (decode_for part (Payload.prune part body))
+  | Gbif_species -> same taxon_t Gbif.species_of_json
+  | Gbif_vernacular_names ->
+      same (page_t vernacular_t) Gbif.vernacular_names_of_json
+  | Gbif_distributions ->
+      same (page_t distribution_t) Gbif.distributions_of_json
+  | Gbif_occurrence_count -> same Alcotest.int Gbif.occurrence_count_of_json
+  | Plantnet_media -> same (page_t image_t) Gbif.plantnet_media_of_json
+  | Wikidata_search -> same (Alcotest.list qid_t) Wikidata.search_of_json
+  | Wikidata_entity -> same (Alcotest.option entity_t) Wikidata.entity_of_json
+  | Wikipedia_summary -> same summary_t Wikipedia.summary_of_json
 
 (* ---------- all, source, name, parts ---------- *)
 
@@ -639,7 +520,7 @@ let builder_tests =
     ( "gbif: all None gives Assoc []",
       `Quick,
       fun () ->
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "empty" (`Assoc [])
           (Payload.gbif ~species:None ~vernacular_names:None ~distributions:None
              ~occurrence_count:None) );
@@ -649,7 +530,7 @@ let builder_tests =
         Alcotest.(check (list string))
           "media given" ["media"]
           (keys_of (Payload.plantnet ~media:(Some small)));
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "media absent" (`Assoc [])
           (Payload.plantnet ~media:None) );
     ( "wikidata: member order is search then entity",
@@ -661,7 +542,7 @@ let builder_tests =
         Alcotest.(check (list string))
           "only entity given" ["entity"]
           (keys_of (Payload.wikidata ~search:None ~entity:(Some small)));
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "both absent" (`Assoc [])
           (Payload.wikidata ~search:None ~entity:None) );
     ( "wikipedia: one member when given, Assoc [] when None",
@@ -670,7 +551,7 @@ let builder_tests =
         Alcotest.(check (list string))
           "summary given" ["summary"]
           (keys_of (Payload.wikipedia ~summary:(Some small)));
-        Alcotest.(check Check.yojson)
+        Alcotest.(check Testable.yojson)
           "summary absent" (`Assoc [])
           (Payload.wikipedia ~summary:None) );
   ]
@@ -685,29 +566,29 @@ let get_tests =
         (* Wikipedia_summary is identity-pruned (small), so the stored member
            is exactly [small], not reshaped by the builder. *)
         let payload = Payload.wikipedia ~summary:(Some small) in
-        Alcotest.(check (option Check.yojson))
+        Alcotest.(check (option Testable.yojson))
           "summary present" (Some small)
           (Payload.get Payload.Wikipedia_summary payload) );
     ( "get is None when the member is absent",
       `Quick,
       fun () ->
         let payload = Payload.plantnet ~media:None in
-        Alcotest.(check (option Check.yojson))
+        Alcotest.(check (option Testable.yojson))
           "media absent" None
           (Payload.get Payload.Plantnet_media payload) );
     ( "get is None when the member is JSON null",
       `Quick,
       fun () ->
-        Alcotest.(check (option Check.yojson))
+        Alcotest.(check (option Testable.yojson))
           "null member" None
           (Payload.get Payload.Plantnet_media (`Assoc [("media", `Null)])) );
     ( "get is None when the payload is not an object",
       `Quick,
       fun () ->
-        Alcotest.(check (option Check.yojson))
+        Alcotest.(check (option Testable.yojson))
           "a list" None
           (Payload.get Payload.Plantnet_media (`List []));
-        Alcotest.(check (option Check.yojson))
+        Alcotest.(check (option Testable.yojson))
           "null" None
           (Payload.get Payload.Plantnet_media `Null) );
   ]

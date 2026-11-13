@@ -1,12 +1,11 @@
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Settings = Herbier_store.Settings
 module Place_name = Herbier_geo.Place_name
 
 type choice = Open_settings | Understood
 
-let log_error what e =
-  Console.(error [str ("notice: " ^ what); str (Db.error_to_string e)])
+let log_error = Log.db ~scope:"notice"
 
 let body () =
   let p text = El.p ~at:[At.class' (Jstr.v "t-body")] [El.txt' text] in

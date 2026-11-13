@@ -1,0 +1,7 @@
+; Geo over Brr: the MapLibre map (map), the geocoding queue that runs
+; geocode programs over fetch (geocoder), and the commune pack downloads
+; stored through store (commune_packs).
+(library
+ (name herbier_geo_io)
+ (public_name herbier.geo_io)
+ (libraries herbier_geo herbier_domain herbier_store herbier_store_io herbier_bindings brr yojson))

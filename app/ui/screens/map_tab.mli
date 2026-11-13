@@ -1,6 +1,6 @@
 (** 4b Carte: the observations on a full-screen MapLibre map
-    ({!Herbier_geo.Map}) under a floating search bar, the « ◎ » button and the
-    shared filter chips ({!Filter_chips}).
+    ({!Herbier_geo_io.Map}) under a floating search bar, the « ◎ » button and
+    the shared filter chips ({!Filter_chips}).
 
     Places are {!Herbier_domain.Places.cluster} of every live observation; the
     filters and the search only choose which places, and which of their members,

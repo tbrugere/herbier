@@ -1,11 +1,12 @@
 (** Statements as values: SQL text with its bound parameters, and for a query
     how each result row decodes. Pure: built by the per-table modules, run by
-    {!Db} on the device and by the sqlite3 CLI in test/store. SQL uses
-    positional [?] parameters only (no [?NNN], no named ones) and never has a
-    [?] inside a string literal, so a test may inline [params] by position. *)
+    {!Herbier_store_io.Db} on the device and by the sqlite3 CLI in test/store.
+    SQL uses positional [?] parameters only (no [?NNN], no named ones) and never
+    has a [?] inside a string literal, so a test may inline [params] by
+    position. *)
 
-(* style: transparent, not private, because a statement with its own conflict
-   target ([Tags.tag], [Settings.set]) is written as a record and test/store
+(* style: transparent, not private, because a statement with its own where
+   clause ([Tags.tag], [References.put]) is written as a record and test/store
    reads [sql] and [params] to inline them. *)
 type t = {sql : string; params : Codec.param list}
 (** One statement; [List.length params] is the number of [?] in [sql]. *)
@@ -69,3 +70,16 @@ val soft_delete :
 (** [update table set deleted_at = at, updated_at = at where id = id and
      deleted_at is null]: 1 change when the row was live, 0 when it is absent or
     already deleted (its first [deleted_at] is kept). *)
+
+(** One column of a natural key and its value, written as {!Codec.param}. *)
+type 'table key_column =
+  | Is : ('table, 'a, 'optional) Postgrest.Col.t * 'a -> 'table key_column
+
+val soft_delete_by :
+  table:'table Postgrest.Col.table ->
+  key:'table key_column * 'table key_column list ->
+  at:Ptime.t ->
+  t
+(** {!soft_delete} by another key: [where c1 = v1 and … and deleted_at is null]
+    over [key]'s columns and values, in order (a natural key: [plant_tags]'
+    plant and tag, [reference]'s plant and source). *)

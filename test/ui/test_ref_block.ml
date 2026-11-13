@@ -1,7 +1,8 @@
-(* Native checks of app/ui/ref_block.ml: which rows appear for a hand-built
+(* Native checks of app/ui_model/ref_block.ml: which rows appear for a hand-built
    projection, their order and payloads, and the rows of the two spike species
    over the recorded test/fixtures/ (read, never written). *)
 
+module Ref_block = Herbier_ui_model.Ref_block
 module Ids = Herbier_domain.Ids
 module Reference = Herbier_domain.Reference
 module Source = Herbier_domain.Reference.Source
@@ -10,15 +11,11 @@ module Decode = Herbier_refs.Decode
 module Payload = Herbier_refs.Payload
 module Projection = Herbier_refs.Projection
 module Gbif = Herbier_refs.Sources.Gbif
-
-(* ---------- a fixture reader, a copy of test/refs/fixture.ml's ---------- *)
-
-let read name =
-  let path = Filename.concat "../fixtures" name in
-  In_channel.with_open_bin path In_channel.input_all
+module Fixture = Herbier_test_support.Fixture
+module Value = Herbier_test_support.Value
 
 let json name =
-  match Decode.json_of_string (read name) with
+  match Decode.json_of_string (Fixture.read name) with
   | Ok j -> j
   | Error e -> failwith (name ^ ": " ^ Decode.error_to_string e)
 
@@ -29,11 +26,7 @@ let plant =
   | Some x -> x
   | None -> invalid_arg "plant id"
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
-
+let time = Value.time
 let t_gbif = time "2026-11-01T10:00:00Z"
 let t_other = time "2026-11-01T11:00:00Z"
 

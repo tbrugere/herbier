@@ -1,10 +1,11 @@
-(* 5b « Déplacer le point »: the pure logic of app/ui/move_plan.ml, copied
-   into this directory by test/ui/dune (the unqualified [Move_plan]). No
+(* 5b « Déplacer le point »: the pure logic of app/ui_model/move_plan.ml. No
    fixtures: hand-written observations and points. *)
 
+module Move_plan = Herbier_ui_model.Move_plan
 module Observation = Herbier_domain.Observation
 module Places = Herbier_domain.Places
 module Ids = Herbier_domain.Ids
+module Value = Herbier_test_support.Value
 
 (* ---------- building observations and points ---------- *)
 
@@ -20,11 +21,7 @@ let plant_id n =
   | Some id -> id
   | None -> Alcotest.failf "Plant_id.of_string %S gave None" (id_string n)
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> Alcotest.failf "bad rfc3339 date %S" s
-
+let time = Value.time
 let t0 = time "2026-06-01T00:00:00Z"
 let t1 = time "2026-11-10T09:00:00Z"
 let t2 = time "2026-11-10T09:05:00Z"

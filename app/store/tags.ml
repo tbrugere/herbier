@@ -79,18 +79,21 @@ let plant_tag_input (pt : Tag.Plant_tag.t) : (Pt.t, [`Full]) Postgrest.Input.t =
         ];
     }
 
-(* No deleted_at filter: a soft delete must read back the row it deleted. *)
-let reread id = query "select * from tags where id = ?" [Codec.param T.id id]
+module Writes = By_id.Make (struct
+  type table = T.t
+  type id = Tag_id.t
+  type row = Tag.t
 
-let edit id stmt =
-  Outbox.edit ~table:T.table ~reread:(reread id)
-    ~row_id:(fun (t : Tag.t) -> Tag_id.to_string t.id)
-    ~input stmt
+  let table = T.table
+  let id = T.id
+  let row = row
+  let id_of (t : Tag.t) = t.id
+  let id_to_string = Tag_id.to_string
+  let input = input
+end)
 
-let upsert (t : Tag.t) = edit t.id (Stmt.upsert ~table:T.table (input t))
-
-let soft_delete id ~at =
-  edit id (Stmt.soft_delete ~table:T.table ~id:(Codec.param T.id id) ~at)
+let upsert = Writes.upsert
+let soft_delete = Writes.soft_delete
 
 let upsert_plant_tag pt =
   Outbox.bare
@@ -132,15 +135,6 @@ let tag ~plant ~tag ~at =
 
 let untag ~plant ~tag ~at =
   plant_tag_edit ~plant ~tag
-    {
-      Stmt.sql =
-        "update plant_tags set deleted_at = ?, updated_at = ? where plant_id = \
-         ? and tag_id = ? and deleted_at is null";
-      params =
-        [
-          Codec.param Pt.deleted_at (Some at);
-          Codec.param Pt.updated_at at;
-          Codec.param Pt.plant_id plant;
-          Codec.param Pt.tag_id tag;
-        ];
-    }
+    (Stmt.soft_delete_by ~table:Pt.table
+       ~key:(Is (Pt.plant_id, plant), [Is (Pt.tag_id, tag)])
+       ~at)

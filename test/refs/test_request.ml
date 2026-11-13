@@ -1,9 +1,12 @@
 module Request = Herbier_refs.Request
+module Url = Herbier_net.Url
 module Qid = Herbier_refs.Qid
 module Gbif = Herbier_refs.Sources.Gbif
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
 module Source = Herbier_domain.Reference.Source
+module Fixture = Herbier_test_support.Fixture
+module Text = Herbier_test_support.Text
 
 let url (r : Request.t) = Request.(r.url)
 let source_name (r : Request.t) = Source.to_string Request.(r.source)
@@ -17,13 +20,13 @@ let request =
     (fun f r -> Format.pp_print_string f (Request.to_string r))
     Request.equal
 
-(* ---------- Request.encode ---------- *)
+(* ---------- Url.encode ---------- *)
 
 let encode_tests =
   let case name input expected =
     ( name,
       `Quick,
-      fun () -> Alcotest.(check string) name expected (Request.encode input) )
+      fun () -> Alcotest.(check string) name expected (Url.encode input) )
   in
   [
     case "space becomes %20, never +" "Digitalis purpurea L."
@@ -536,7 +539,7 @@ let script_tests =
                   Printf.sprintf "fetch %s %s \"%s\"" file (source_name request)
                     (url request)
                 in
-                match Check.contains ~needle:line script with
+                match Text.contains ~sub:line script with
                 | true -> ()
                 | false ->
                     Alcotest.failf "%s: line %s not found in %s" file line

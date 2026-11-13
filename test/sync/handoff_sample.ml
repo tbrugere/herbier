@@ -10,6 +10,10 @@
    Not an alcotest binary: on any failure this just prints to stderr and
    exits 1, which fails the dune rule that runs it. *)
 
+module Session = Herbier_sync_core.Auth.Session
+module Synced = Herbier_sync_core.Synced
+module Keepalive = Herbier_sync_core.Keepalive
+module Outbox = Herbier_store.Outbox
 module F = Sync_fixtures
 module Wire = Keepalive.Wire
 

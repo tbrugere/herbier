@@ -1,3 +1,4 @@
+module Ref_text = Herbier_ui_model.Ref_text
 open Brr
 module W = Widgets
 
@@ -10,7 +11,7 @@ let photo =
    stop-color='%23b8781a'/%3E%3C/linearGradient%3E%3Crect width='3' height='4' \
    fill='url(%23g)'/%3E%3C/svg%3E"
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let entry name els =
   El.div
@@ -194,9 +195,7 @@ let el () =
       ]
   in
   (* The listener's closure keeps [bindings] reachable; see {!Rb}. *)
-  let release =
-    El.button ~at:[At.type' (Jstr.v "button")] [El.txt' "release"]
-  in
+  let release = Html.button [] [El.txt' "release"] in
   ignore
     (Ev.listen Ev.click
        (fun _ ->

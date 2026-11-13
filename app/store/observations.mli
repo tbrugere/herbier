@@ -45,10 +45,10 @@ val input : Observation.t -> (Tables.Observations.t, [`Full]) Postgrest.Input.t
 
 val upsert : Observation.t -> Outbox.edit
 (** Writes the whole record ({!Stmt.upsert} of {!input}); always changes the
-    row, so {!Db.edit} appends one entry. Read back by [id]. Nothing is
-    validated here: SQLite enforces the table's checks (lat/lon both or neither,
-    ranges, accuracy ≥ 0) and foreign keys, and a record that violates them
-    makes {!Db.edit} fail with a plugin error. *)
+    row, so {!Herbier_store_io.Db.edit} appends one entry. Read back by [id].
+    Nothing is validated here: SQLite enforces the table's checks (lat/lon both
+    or neither, ranges, accuracy ≥ 0) and foreign keys, and a record that
+    violates them makes {!Herbier_store_io.Db.edit} fail with a plugin error. *)
 
 val soft_delete : Observation_id.t -> at:Ptime.t -> Outbox.edit
 (** {!Stmt.soft_delete}; read back by [id] whatever [deleted_at]. Appends an

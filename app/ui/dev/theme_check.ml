@@ -48,7 +48,7 @@ let roles =
     {cls = "t-button-secondary"; sample = "Coller un lien"};
   ]
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let swatch (name, value) =
   El.li

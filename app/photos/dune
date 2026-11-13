@@ -1,5 +1,7 @@
-; Capture, preview generation, EXIF, Drive upload queue.
+; Pure photos: EXIF reading (exif), the preview size (preview_size) and JPEG
+; segments (jpeg). No Brr, no store: the libraries below enforce it, and
+; test/photos links this library natively. The Brr side is app/photos_io/.
 (library
  (name herbier_photos)
  (public_name herbier.photos)
- (libraries herbier_domain herbier_store herbier_bindings brr yojson ptime ptime.clock.os))
+ (libraries herbier_domain herbier_net yojson ptime))

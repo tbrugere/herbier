@@ -1,15 +1,30 @@
-(* Native checks of app/sync/cycle/ (push, pull, schedule, outcome,
-   last_error, report), of app/ui/screens/settings/parked_entry.ml, and of
-   synced.ml's local / write: Push.Make and Pull.Make run over Cli_local (the
-   sqlite3 CLI) and Sync_fixtures.H (Mock_http's identity IO, as
-   test_rest.ml), answered with the recorded PostgREST fixtures. *)
+(* Native checks of app/sync_core/cycle/ (push, pull, schedule, outcome,
+   last_error, report) and of synced.ml's local / write: Push.Make and
+   Pull.Make run over Cli_local (the sqlite3 CLI) and Sync_fixtures.H
+   (Mock_http's identity IO, as test_rest.ml), answered with the recorded
+   PostgREST fixtures. *)
 
+module Backoff = Herbier_sync_core.Backoff
+module Synced = Herbier_sync_core.Synced
+module Outcome = Herbier_sync_core.Cycle.Outcome
+module Last_error = Herbier_sync_core.Cycle.Last_error
+module Schedule = Herbier_sync_core.Cycle.Schedule
+module Push = Herbier_sync_core.Cycle.Push
+module Pull = Herbier_sync_core.Cycle.Pull
+module Report = Herbier_sync_core.Cycle.Report
+module Outbox = Herbier_store.Outbox
+module Plants = Herbier_store.Plants
+module Tags = Herbier_store.Tags
+module References = Herbier_store.References
+module Sync_state = Herbier_store.Sync_state
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
 module Tag = Herbier_domain.Tag
 module Observation = Herbier_domain.Observation
 module Photo = Herbier_domain.Photo
 module Reference = Herbier_domain.Reference
+module Fixture = Herbier_test_support.Fixture
+module Text = Herbier_test_support.Text
 module Cli = Sqlite_cli
 
 (* ---------- Push.Make / Pull.Make, instantiated over the CLI ---------- *)
@@ -130,7 +145,7 @@ let push_a_rejected_entry_is_parked () =
   let db = single_entry_db () in
   Mock_http.reset ();
   Mock_http.respond ~status:409
-    (Support.fixture "sync_upsert_observations_fk_409.json");
+    (Fixture.read "sync_upsert_observations_fk_409.json");
   Alcotest.check push_result "409 parks the entry"
     (Push.Done {pushed = 0; parked = 1})
     (Push_cli.run db ~conn:conn_ok);
@@ -153,8 +168,7 @@ let push_the_second_request_rejected_parks_only_it () =
        incr n;
        match !n with
        | 2 ->
-           ok ~status:409
-             (Support.fixture "sync_upsert_observations_fk_409.json")
+           ok ~status:409 (Fixture.read "sync_upsert_observations_fk_409.json")
        | _ -> ok ~status:201 "");
   Alcotest.check push_result "seven pushed, one parked"
     (Push.Done {pushed = 7; parked = 1})
@@ -176,7 +190,7 @@ let push_a_400_is_parked () =
   let db = single_entry_db () in
   Mock_http.reset ();
   Mock_http.respond ~status:400
-    (Support.fixture "sync_upsert_observations_check_400.json");
+    (Fixture.read "sync_upsert_observations_check_400.json");
   Alcotest.check push_result "400 parks the entry"
     (Push.Done {pushed = 0; parked = 1})
     (Push_cli.run db ~conn:conn_ok);
@@ -240,7 +254,7 @@ let push_stop_cases () =
   case "540: Paused" (fun _ -> ok ~status:540 "") Outcome.Paused;
   case "401 bad jwt: Unauthorized"
     (fun _ ->
-      ok ~status:401 (Support.fixture "sync_upsert_plants_bad_jwt_401.json"))
+      ok ~status:401 (Fixture.read "sync_upsert_plants_bad_jwt_401.json"))
     Outcome.Unauthorized;
   case "offline: Offline \"boom\""
     (fun _ -> Error "boom")
@@ -392,7 +406,7 @@ let row_testable (type table row) (t : (table, row) Synced.t)
 let decode_fixture (type table row) (t : (table, row) Synced.t) file : row list
     =
   Mock_http.reset ();
-  Mock_http.respond ~status:200 (Support.fixture file);
+  Mock_http.respond ~status:200 (Fixture.read file);
   match
     Sync_fixtures.R.select_since Sync_fixtures.conn t ~since:None ~page:0
   with
@@ -609,7 +623,7 @@ let fresh_pull_fixture_tables =
 let responder_of_fixtures tables =
   by_table
     (List.map
-       (fun (table, file) -> (table, [ok ~status:200 (Support.fixture file)]))
+       (fun (table, file) -> (table, [ok ~status:200 (Fixture.read file)]))
        tables)
 
 (* The tables of [fixtures] answered their fixture, the others []. *)
@@ -621,7 +635,7 @@ let with_fixtures fixtures =
            [
              ok
                (match List.assoc_opt name fixtures with
-               | Some file -> Support.fixture file
+               | Some file -> Fixture.read file
                | None -> "[]");
            ] ))
        synced_names)
@@ -659,7 +673,7 @@ let pull_fresh_db_all_tables_inserted_once () =
           Alcotest.(check bool)
             (table ^ ": no updated_at filter")
             false
-            (Support.contains ~needle:"updated_at=gt"
+            (Text.contains ~sub:"updated_at=gt"
                (Mock_http.decoded_target r.url));
           Alcotest.(check (option string))
             (table ^ ": Range 0-499") (Some "0-499")
@@ -727,7 +741,7 @@ let pull_same_answers_again_are_unchanged () =
           Alcotest.(check bool)
             (request_table r ^ ": updated_at=gt.<cursor - 5 s>")
             true
-            (Support.contains ~needle:"updated_at=gt.2026-11-12T12:25:24Z"
+            (Text.contains ~sub:"updated_at=gt.2026-11-12T12:25:24Z"
                (Mock_http.decoded_target r.url)))
         !Mock_http.requests;
       Alcotest.(check int) "7 requests" 7 (List.length !Mock_http.requests)
@@ -782,7 +796,7 @@ let local_plant db =
 let pull_plants_again db =
   Mock_http.reset ();
   Mock_http.responder :=
-    only "plants" [ok (Support.fixture "sync_select_plants_200.json")];
+    only "plants" [ok (Fixture.read "sync_select_plants_200.json")];
   plants_report (Pull_cli.run db ~conn:conn_ok)
 
 (* A local edit to the plant, with its pending outbox entry: the pull keeps
@@ -848,9 +862,8 @@ let pull_transient_on_a_table_stops_with_nothing_written () =
   Mock_http.responder :=
     by_table
       [
-        ( "plants",
-          [ok ~status:200 (Support.fixture "sync_select_plants_200.json")] );
-        ("tags", [ok ~status:200 (Support.fixture "sync_select_tags_200.json")]);
+        ("plants", [ok ~status:200 (Fixture.read "sync_select_plants_200.json")]);
+        ("tags", [ok ~status:200 (Fixture.read "sync_select_tags_200.json")]);
         (third_table_name, [ok ~status:503 ""]);
       ];
   (match Pull_cli.run db ~conn:conn_ok with
@@ -900,7 +913,7 @@ let pull_stop_cases () =
   in
   case "540: Paused" (ok ~status:540 "") Outcome.Paused;
   case "401: Unauthorized"
-    (ok ~status:401 (Support.fixture "sync_upsert_plants_bad_jwt_401.json"))
+    (ok ~status:401 (Fixture.read "sync_upsert_plants_bad_jwt_401.json"))
     Outcome.Unauthorized;
   case "404: Rejected 404" (ok ~status:404 "") (Outcome.Rejected 404);
   case "offline: Offline \"boom\"" (Error "boom") (Outcome.Offline "boom")
@@ -993,8 +1006,8 @@ let pull_paging_stops_on_a_short_page () =
   Mock_http.responder :=
     only "tags"
       [
-        ok (Support.fixture "sync_select_tags_page0_200.json");
-        ok (Support.fixture "sync_select_tags_page1_200.json");
+        ok (Fixture.read "sync_select_tags_page0_200.json");
+        ok (Fixture.read "sync_select_tags_page1_200.json");
       ];
   let r = tags_report (Pull_cli.run db ~conn:conn_ok) in
   Alcotest.(check (list string))
@@ -1014,8 +1027,8 @@ let pull_paging_stops_on_a_short_page () =
   Mock_http.responder :=
     only "tags"
       [
-        ok (Support.fixture "sync_select_tags_page0_200.json");
-        ok (Support.fixture "sync_select_tags_page1_200.json");
+        ok (Fixture.read "sync_select_tags_page0_200.json");
+        ok (Fixture.read "sync_select_tags_page1_200.json");
       ];
   let r = tags_report (Pull_cli.run db ~conn:conn_ok) in
   Alcotest.(check int) "again: 501 unchanged" 501 r.unchanged;
@@ -1050,8 +1063,8 @@ let pull_a_full_page_then_an_empty_one_stops () =
   Mock_http.responder :=
     only "tags"
       [
-        ok (Support.fixture "sync_select_tags_page0_200.json");
-        ok (Support.fixture "sync_select_plants_empty_200.json");
+        ok (Fixture.read "sync_select_tags_page0_200.json");
+        ok (Fixture.read "sync_select_plants_empty_200.json");
       ];
   let r = tags_report (Pull_cli.run db ~conn:conn_ok) in
   Alcotest.(check (list string))
@@ -1074,10 +1087,10 @@ let pull_a_repeated_id_across_pages_keeps_the_newer_and_skips_the_cursor () =
            | true ->
                ( table,
                  [
-                   ok (Support.fixture "sync_select_tags_page0_200.json");
-                   ok (Support.fixture "sync_select_tags_page1_moved_200.json");
+                   ok (Fixture.read "sync_select_tags_page0_200.json");
+                   ok (Fixture.read "sync_select_tags_page1_moved_200.json");
                  ] )
-           | false -> (table, [ok (Support.fixture file)]))
+           | false -> (table, [ok (Fixture.read file)]))
          fresh_pull_fixture_tables);
   let r = tags_report (Pull_cli.run db ~conn:conn_ok) in
   let tag_001 = Sync_fixtures.uuid 0x1001 in
@@ -1111,12 +1124,12 @@ let pull_a_soft_deleted_row_replaces_the_live_one () =
   let db = Cli.migrated_db () in
   Mock_http.reset ();
   Mock_http.responder :=
-    only "tags" [ok (Support.fixture "sync_select_tags_200.json")];
+    only "tags" [ok (Fixture.read "sync_select_tags_200.json")];
   let (_ : Pull.t) = Pull_cli.run db ~conn:conn_ok in
   Alcotest.(check int) "the tag is live" 1 (List.length (Cli.all db Tags.list));
   Mock_http.reset ();
   Mock_http.responder :=
-    only "tags" [ok (Support.fixture "sync_select_tags_deleted_200.json")];
+    only "tags" [ok (Fixture.read "sync_select_tags_deleted_200.json")];
   let r = tags_report (Pull_cli.run db ~conn:conn_ok) in
   Alcotest.(check int) "replaced = 1" 1 r.replaced;
   Alcotest.(check int)
@@ -1362,7 +1375,7 @@ let schedule_finished_table () =
     "Running (not again) + a retried stop: Waiting, Wait (retry_delay 1)"
     running0 (Some (Outcome.Offline "x"))
     (Schedule.Waiting {attempt = 1})
-    (Schedule.Wait (Schedule.retry_delay ~attempt:1));
+    (Schedule.Wait (Backoff.delay ~attempt:1));
   check_finished "Running (background) + a retried stop: Idle, no timer"
     (Schedule.Running {attempt = 2; again = None; background = true})
     (Some (Outcome.Offline "x"))
@@ -1460,17 +1473,6 @@ let schedule_waiting_backgrounded_then_resume () =
   let _, act = Schedule.trigger st Schedule.Resume in
   Alcotest.check action "Resume runs a cycle" (Schedule.Run Resume) act
 
-let retry_delay_doubles_and_caps () =
-  let s a = Ptime.Span.to_int_s (Schedule.retry_delay ~attempt:a) in
-  let check what expected a =
-    Alcotest.(check (option int)) what (Some expected) (s a)
-  in
-  check "attempt <= 1" 10 1;
-  check "attempt 0" 10 0;
-  check "attempt 2" 20 2;
-  check "attempt 6" 300 6;
-  check "attempt max_int" 300 max_int
-
 (* Every sequence of up to 6 events (the seven triggers, plus [finished] fed
    only when the state is [Running], with [None], [Some (Offline _)] and
    [Some Signed_out]): no [Run] is ever returned while the state before the
@@ -1550,8 +1552,6 @@ let schedule_tests =
       schedule_waiting_backgrounded_then_resume;
     case "Backgrounded during a failing cycle arms no timer"
       schedule_backgrounded_during_a_failing_cycle_arms_no_timer;
-    case "retry_delay doubles from 10s, caps at 300s"
-      retry_delay_doubles_and_caps;
     case
       "exhaustive over sequences of <= 6 events: no stray Run, every Run \
        leaves Running"
@@ -1640,78 +1640,6 @@ let outcome_tests =
     case "retries is false only for Signed_out"
       outcome_retries_false_only_for_signed_out;
     case "to_string of each constructor" outcome_to_string_of_each_constructor;
-  ]
-
-(* Parked_entry: a parked outbox entry as 4m lists it. *)
-
-let parked_entry_tests =
-  let describe = Parked_entry.describe in
-  let title_of table_name payload =
-    (describe ~table_name ~payload ~last_error:"x").title
-  in
-  let detail_of last_error =
-    (describe ~table_name:"plants" ~payload:(`Assoc []) ~last_error).detail
-  in
-  let str = Alcotest.string in
-  [
-    Alcotest.test_case "every table of Synced.all has a title of its own" `Quick
-      (fun () ->
-        List.iter
-          (fun (Synced.Any t) ->
-            let name = Synced.name t in
-            Alcotest.(check bool)
-              (name ^ ": not the bare table name")
-              false
-              (String.equal name (title_of name (`Assoc []))))
-          Synced.all);
-    Alcotest.test_case "one case per table: plants, tags" `Quick (fun () ->
-        Alcotest.check str "plants" "Plante « Digitale »"
-          (title_of "plants" (`Assoc [("display_name", `String "Digitale")]));
-        Alcotest.check str "tags" "Étiquette « Forêt »"
-          (title_of "tags" (`Assoc [("name", `String "Forêt")])));
-    Alcotest.test_case "one case per table: observations, photos" `Quick
-      (fun () ->
-        Alcotest.check str "observations" "Observation"
-          (title_of "observations" (`Assoc []));
-        Alcotest.check str "photos" "Photo" (title_of "photos" (`Assoc [])));
-    Alcotest.test_case "one case per table: plant_tags, plant_refs" `Quick
-      (fun () ->
-        Alcotest.check str "plant_tags" "Étiquette d’une plante"
-          (title_of "plant_tags" (`Assoc []));
-        Alcotest.check str "plant_refs" "Lien de référence"
-          (title_of "plant_refs" (`Assoc [])));
-    Alcotest.test_case
-      "one case per table: reference, with and without a source" `Quick
-      (fun () ->
-        Alcotest.check str "reference with source" "Référence gbif"
-          (title_of "reference" (`Assoc [("source", `String "gbif")]));
-        Alcotest.check str "reference without source" "Référence"
-          (title_of "reference" (`Assoc [])));
-    Alcotest.test_case "a plant payload without display_name is the bare label"
-      `Quick (fun () ->
-        Alcotest.check str "missing field" "Plante"
-          (title_of "plants" (`Assoc []));
-        Alcotest.check str "non-string field" "Plante"
-          (title_of "plants" (`Assoc [("display_name", `Int 1)])));
-    Alcotest.test_case "an unknown table is the table name" `Quick (fun () ->
-        Alcotest.check str "unknown" "widgets" (title_of "widgets" (`Assoc [])));
-    Alcotest.test_case "the three last_error shapes" `Quick (fun () ->
-        Alcotest.check str "HTTP <n>" "Refusée par le serveur (409)"
-          (detail_of "HTTP 409");
-        Alcotest.check str "invalid entry: …" "Entrée illisible"
-          (detail_of "invalid entry: unknown table nope");
-        Alcotest.check str "anything else: the text as is" "offline: boom"
-          (detail_of "offline: boom"));
-    Alcotest.test_case "last_error boundaries are the text as is" `Quick
-      (fun () ->
-        Alcotest.check str "HTTP <n> and more" "HTTP 409 conflict"
-          (detail_of "HTTP 409 conflict");
-        Alcotest.check str "HTTP and no status" "HTTP " (detail_of "HTTP "));
-    Alcotest.test_case "a payload that is no object is the bare label" `Quick
-      (fun () ->
-        Alcotest.check str "plants, null" "Plante" (title_of "plants" `Null);
-        Alcotest.check str "reference, list" "Référence"
-          (title_of "reference" (`List [])));
   ]
 
 (* ---------- Last_error ---------- *)
@@ -1854,6 +1782,5 @@ let () =
       ("Schedule", schedule_tests);
       ("Outcome", outcome_tests);
       ("Last_error", last_error_tests);
-      ("Parked_entry", parked_entry_tests);
       ("Report", report_tests);
     ]

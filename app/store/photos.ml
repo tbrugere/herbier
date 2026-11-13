@@ -86,15 +86,18 @@ let input (p : Photo.t) : (Ph.t, [`Full]) Postgrest.Input.t =
         ];
     }
 
-(* No deleted_at filter: a soft delete must read back the row it deleted. *)
-let reread id = query "select * from photos where id = ?" [Codec.param Ph.id id]
+module Writes = By_id.Make (struct
+  type table = Ph.t
+  type id = Photo_id.t
+  type row = Photo.t
 
-let edit id stmt =
-  Outbox.edit ~table:Ph.table ~reread:(reread id)
-    ~row_id:(fun (p : Photo.t) -> Photo_id.to_string p.id)
-    ~input stmt
+  let table = Ph.table
+  let id = Ph.id
+  let row = row
+  let id_of (p : Photo.t) = p.id
+  let id_to_string = Photo_id.to_string
+  let input = input
+end)
 
-let upsert (p : Photo.t) = edit p.id (Stmt.upsert ~table:Ph.table (input p))
-
-let soft_delete id ~at =
-  edit id (Stmt.soft_delete ~table:Ph.table ~id:(Codec.param Ph.id id) ~at)
+let upsert = Writes.upsert
+let soft_delete = Writes.soft_delete

@@ -1,5 +1,6 @@
 module Places = Herbier_domain.Places
 module Observation = Herbier_domain.Observation
+module Text = Herbier_domain.Text
 
 type source = Ign_offline | Ign_online | Photon_online [@@deriving eq]
 
@@ -60,13 +61,9 @@ let allows s = function
   | Geocode.Geoplateforme -> s.ign_online
   | Geocode.Photon -> s.photon_online
 
-let finite ({lat; lon} : Places.point) =
-  Float.is_finite lat && Float.is_finite lon
-
 let labelled_place (o : Observation.t) =
   match (Places.position_point o, o.place_label) with
-  | Some point, Some l -> (
-      match String.trim l with "" -> None | l -> Some (o, point, l))
+  | Some point, Some l -> Option.map (fun l -> (o, point, l)) (Text.non_blank l)
   | Some _, None | None, (Some _ | None) -> None
 
 let own observations p =
@@ -80,7 +77,7 @@ let own observations p =
     | Some b when not (closer candidate b) -> best
     | Some _ | None -> Some candidate
   in
-  match finite p with
+  match Places.finite p with
   | false -> None
   | true ->
       observations
@@ -124,7 +121,7 @@ let offline sources communes p =
   | true -> Communes.name communes p
 
 let resolve ~sources ~online ~labelled ~communes p =
-  match finite p with
+  match Places.finite p with
   | false -> Geocode.Done (Ok Unknown)
   | true -> (
       match own labelled p with

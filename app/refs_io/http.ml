@@ -1,4 +1,5 @@
 module Source = Herbier_domain.Reference.Source
+module Timed_fetch = Herbier_bindings.Timed_fetch
 
 type error =
   | Network of string
@@ -30,10 +31,10 @@ let error_to_string = function
 
 let user_agent =
   Printf.sprintf "Herbier/%s (https://github.com/tbrugere/herbier)"
-    Herbier_domain.Version.git
+    Herbier_version.git
 
 let max_in_flight = 3
-let default_timeout_ms = 15_000
+let default_timeout_ms = Timed_fetch.timeout_ms
 
 let wikimedia = function
   | Source.Wikidata | Source.Wikipedia -> true
@@ -80,60 +81,30 @@ let rec pump () =
               job.deliver result);
           pump ())
 
-let message e = Jstr.to_string (Jv.Error.message e)
-
 let headers source =
-  Brr_io.Fetch.Headers.of_assoc
-    (match wikimedia source with
-    | true -> [(Jstr.v "Api-User-Agent", Jstr.v user_agent)]
-    | false -> [])
+  match wikimedia source with
+  | true -> [("Api-User-Agent", user_agent)]
+  | false -> []
 
+(* The Fetch API lowercases header names. *)
 let fetch ~timeout_ms source url =
-  let abort = Brr.Abort.controller () in
-  let timed_out = ref false in
-  let timer =
-    Brr.G.set_timeout ~ms:timeout_ms (fun () ->
-        timed_out := true;
-        Brr.Abort.abort abort)
-  in
-  let init =
-    Brr_io.Fetch.Request.init ~headers:(headers source)
-      ~signal:(Brr.Abort.signal abort) ()
-  in
-  let failed e =
-    match !timed_out with true -> Timeout | false -> Network (message e)
-  in
-  let open Fut.Syntax in
-  let+ result =
-    let* response = Brr_io.Fetch.url ~init (Jstr.v url) in
-    match response with
-    | Error e -> Fut.return (Error (failed e))
-    | Ok response -> (
-        let+ body =
-          Brr_io.Fetch.Body.text (Brr_io.Fetch.Response.as_body response)
-        in
-        match (Brr_io.Fetch.Response.ok response, body) with
-        | true, Ok body -> Ok (Jstr.to_string body)
-        | true, Error e -> Error (failed e)
-        | false, body ->
-            let body =
-              match body with Ok body -> Jstr.to_string body | Error _ -> ""
-            in
-            let retry_after =
-              Brr_io.Fetch.Headers.find (Jstr.v "Retry-After")
-                (Brr_io.Fetch.Response.headers response)
-              |> Option.map Jstr.to_string
-            in
-            Error
-              (Status
-                 {
-                   status = Brr_io.Fetch.Response.status response;
-                   body;
-                   retry_after;
-                 }))
-  in
-  Brr.G.stop_timer timer;
-  result
+  Fut.map
+    (function
+      | Error Timed_fetch.Timeout -> Error Timeout
+      | Error (Timed_fetch.Failed m) -> Error (Network m)
+      | Ok {Timed_fetch.status; headers; body} -> (
+          match 200 <= status && status <= 299 with
+          | true -> Ok body
+          | false ->
+              Error
+                (Status
+                   {
+                     status;
+                     body;
+                     retry_after = List.assoc_opt "retry-after" headers;
+                   })))
+    (Timed_fetch.get ~timeout_ms ~non_2xx_body:Timed_fetch.Read_or_empty
+       ~headers:(headers source) url)
 
 let get ?(timeout_ms = default_timeout_ms) (request : Herbier_refs.Request.t) =
   let source = request.source and url = request.url in

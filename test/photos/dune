@@ -1,11 +1,15 @@
-; Native checks of the pure modules of app/photos/, copied in: they must not
-; reference Brr, Fut or Herbier_bindings.
-
-(copy_files# ../../app/photos/{exif,preview_size,jpeg}.{ml,mli})
+; Native checks of herbier_photos (app/photos/: no Brr, no store; its
+; libraries enforce it).
 
 (test
  (name test_photos)
- (libraries herbier_domain yojson ptime alcotest)
+ (libraries
+  herbier_photos
+  herbier_domain
+  herbier_test_support
+  yojson
+  ptime
+  alcotest)
  (deps
   %{project_root}/scripts/exifr-fixture.mjs
   (glob_files %{project_root}/test/fixtures/exifr_*.json)))

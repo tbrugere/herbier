@@ -9,6 +9,8 @@ module Row = Postgrest.Row
    in Tables. *)
 type ref_images
 
+let table : ref_images Col.table = Col.table "ref_images"
+
 let organ_text : Organ.t Col.custom =
   Codec.text ~name:"reference_organs" ~to_string:Organ.to_string
     ~of_string:Organ.of_string
@@ -62,24 +64,22 @@ let of_plant plant =
     [Codec.param plant_id plant]
 
 let put (i : Image.t) =
-  {
-    Stmt.sql =
-      "insert into ref_images (plant_id, source, organ, remote_url, licence, \
-       attribution, thumb_path) values (?, ?, ?, ?, ?, ?, ?) on conflict \
-       (plant_id, source, organ) do update set remote_url = \
-       excluded.remote_url, licence = excluded.licence, attribution = \
-       excluded.attribution, thumb_path = excluded.thumb_path";
-    params =
-      [
-        Codec.param plant_id i.plant_id;
-        Codec.param source i.source;
-        Codec.param organ i.organ;
-        Codec.param remote_url i.remote_url;
-        Codec.param licence i.licence;
-        Codec.param attribution i.attribution;
-        Codec.param thumb_path i.thumb_path;
-      ];
-  }
+  Stmt.upsert
+    ~conflict:[plant_id.name; source.name; organ.name]
+    ~table
+    Postgrest.Input.
+      {
+        fields =
+          [
+            Mandatory (plant_id, Value i.plant_id);
+            Mandatory (source, Value i.source);
+            Mandatory (organ, Value i.organ);
+            Mandatory (remote_url, Value i.remote_url);
+            Mandatory (licence, Value i.licence);
+            Mandatory (attribution, Value i.attribution);
+            Optional (thumb_path, Value i.thumb_path);
+          ];
+      }
 
 let set_thumb ~plant ~source:s ~organ:o ~remote_url:url ~path =
   {

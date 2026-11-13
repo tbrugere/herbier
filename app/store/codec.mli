@@ -2,7 +2,8 @@
     values to bound parameters, and the plugin's JSON row text to
     {!Postgrest.Row} values. *)
 
-(** A bound parameter; {!Db} maps it one to one onto [Cap_sqlite.value]. *)
+(** A bound parameter; {!Herbier_store_io.Db} maps it one to one onto
+    [Cap_sqlite.value]. *)
 type param = Null | Int of int | Float of float | Text of string
 
 val param : ('table, 'a, 'optional) Postgrest.Col.t -> 'a -> param

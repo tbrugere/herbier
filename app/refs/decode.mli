@@ -19,6 +19,7 @@ type error =
 
 val error_to_string : error -> string
 val equal_error : error -> error -> bool
+val pp_error : Format.formatter -> error -> unit
 
 val json_of_string : string -> (Yojson.Safe.t, error) result
 (** [Yojson.Safe.from_string], with any exception turned into [Not_json]. Never
@@ -28,10 +29,6 @@ val json_of_string : string -> (Yojson.Safe.t, error) result
 
     [at] is the JSON pointer of the object the field is read from ([""] for the
     root, the default); errors report [at ^ "/" ^ name]. *)
-
-val member : string -> Yojson.Safe.t -> Yojson.Safe.t option
-(** The field of an object; [None] when absent, [null], or when the value is not
-    an object. *)
 
 val string : string -> Yojson.Safe.t -> string option
 (** An optional non-blank string field. *)
@@ -47,9 +44,6 @@ val list : string -> Yojson.Safe.t -> Yojson.Safe.t list
 
 val non_blank : string -> string option
 (** [Some s] when [s] is not blank after trimming. *)
-
-val is_digits : string -> bool
-(** [s] is not empty and only ASCII digits. *)
 
 val required_string :
   ?at:string -> string -> Yojson.Safe.t -> (string, error) result

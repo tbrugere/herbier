@@ -1,5 +1,6 @@
 (* Synced's table list and its pull order against the schema catalog. *)
 
+module Synced = Herbier_sync_core.Synced
 module Catalog = Support.Catalog
 
 (* ---------- Synced.all, name, of_name ---------- *)

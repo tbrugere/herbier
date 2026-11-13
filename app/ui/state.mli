@@ -29,6 +29,9 @@ type account = {
 
 type camera = {center : Herbier_domain.Places.point; zoom : float}
 
+val equal_camera : camera -> camera -> bool
+(** [Places.equal_point] on the centres and [Float.equal] on the zooms. *)
+
 type map_view = {
   camera : camera option;  (** [None] until 4b has been shown once *)
   selected : Herbier_domain.Ids.Observation_id.t option;

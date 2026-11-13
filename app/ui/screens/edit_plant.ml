@@ -1,5 +1,11 @@
+module Cover = Herbier_ui_model.Cover
+module Fr_date = Herbier_ui_model.Fr_date
+module Fr_text = Herbier_ui_model.Fr_text
+module List_patch = Herbier_ui_model.List_patch
+module Plant_form = Herbier_ui_model.Plant_form
+module Ref_paste = Herbier_ui_model.Ref_paste
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Observations = Herbier_store.Observations
@@ -18,11 +24,8 @@ module W = Widgets
 
 type mode = Edit of Plant_id.t | New
 
-let cls c = At.class' (Jstr.v c)
-
-let log_error what e =
-  Console.(
-    error [str ("modifier la fiche: " ^ what); str (Db.error_to_string e)])
+let cls = Html.cls
+let log_error = Log.db ~scope:"modifier la fiche"
 
 (* A stored plant carries what a delete takes with it, and its links. *)
 type origin =
@@ -224,10 +227,7 @@ let reference_part ~problem ~dirty app (plant : Plant.t) plant_refs =
       [
         [
           Rb.act change.click go_link;
-          Rb.attr change.el "aria-disabled"
-            (React.S.map
-               (function true -> None | false -> Some "true")
-               online);
+          Rb.disabled change.el (React.S.map not online);
           Rb.class_ offline_hint "is-hidden" online;
           Rb.view rows_el rows_of refs;
           Rb.act paste.added pasted;
@@ -356,17 +356,12 @@ let render app mode (d : data) =
     List.map
       (fun (photo : Photo.t) ->
         let el =
-          El.button
-            ~at:
-              [
-                At.type' (Jstr.v "button");
-                cls "edit-plant__cover";
-                At.v (Jstr.v "aria-label")
-                  (Jstr.v
-                     ("Photo du "
-                     ^ Fr_date.day_month (Zone.date photo.taken_at)
-                     ^ ", choisir comme couverture"));
-              ]
+          Html.button
+            ~label:
+              ("Photo du "
+              ^ Fr_date.day_month (Zone.date photo.taken_at)
+              ^ ", choisir comme couverture")
+            ["edit-plant__cover"]
             [W.Preview_img.v ~cls:["edit-plant__cover-img"] photo.preview_path]
         in
         let click, binding = Rb.click el in
@@ -503,8 +498,7 @@ let render app mode (d : data) =
           Rb.rlist tag_list tag tags;
           Rb.act cancel.click (fun () -> leave Route.back);
           Rb.act save.click do_save;
-          Rb.attr save.el "aria-disabled"
-            (React.S.map (function true -> None | false -> Some "true") valid);
+          Rb.disabled save.el (React.S.map not valid);
           Rb.act add_alias.added (fun a ->
               form := Plant_form.add_alias a !form;
               show ());
@@ -528,14 +522,7 @@ let render app mode (d : data) =
 
 (* A plant that is not (or no longer) live, or a form that could not be
    read: the reason under « Annuler ». *)
-let notice text =
-  let back = W.Button.text ~tone:`Ink "Annuler" in
-  ( El.div
-      [
-        El.div ~at:[cls "modal-header"] [back.el];
-        El.p ~at:[cls "t-body"] [El.txt' text];
-      ],
-    Rb.act back.click Route.back :: back.bindings )
+let notice text = Loaded.notice ~back:"Annuler" text
 
 let v app mode =
   (* Loaded once: the form does not follow saves made elsewhere while it is

@@ -4,6 +4,10 @@
    the device (no transaction, no outbox entry: [ref_images] is not synced).
    The Capacitor plugin itself is a device check (#dev/store). *)
 
+module Value = Herbier_test_support.Value
+module Outbox = Herbier_store.Outbox
+module Plants = Herbier_store.Plants
+module Ref_images = Herbier_store.Ref_images
 module Ids = Herbier_domain.Ids
 module Plant = Herbier_domain.Plant
 module Reference = Herbier_domain.Reference
@@ -11,22 +15,14 @@ module Source = Herbier_domain.Reference.Source
 module Organ = Herbier_domain.Reference.Organ
 module Image = Herbier_domain.Reference.Image
 module Cli = Sqlite_cli
+module Text = Herbier_test_support.Text
 
 (* ---------- fixtures ---------- *)
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> invalid_arg ("fixture time " ^ s)
-
+let time = Value.time
 let t1 = time "2026-10-28T12:00:00Z"
-let uuid n = Printf.sprintf "00000000-0000-4000-8000-%012x" n
-
-let id_of what of_string n =
-  match of_string (uuid n) with
-  | Some x -> x
-  | None -> invalid_arg ("fixture " ^ what)
-
+let uuid = Value.uuid4
+let id_of what of_string n = Value.id what of_string (uuid n)
 let plant_id = id_of "plant id" Ids.Plant_id.of_string
 
 let plant n display_name : Plant.t =
@@ -337,7 +333,7 @@ let unknown_organ_rejected () =
   | Error e ->
       Alcotest.(check bool)
         "rejected on the foreign key" true
-        (Cli.contains ~sub:"FOREIGN KEY constraint failed" e)
+        (Text.contains ~sub:"FOREIGN KEY constraint failed" e)
 
 let unknown_plant_rejected () =
   let db = Cli.migrated_db () in
@@ -353,7 +349,7 @@ let unknown_plant_rejected () =
   | Error e ->
       Alcotest.(check bool)
         "rejected on the foreign key" true
-        (Cli.contains ~sub:"FOREIGN KEY constraint failed" e)
+        (Text.contains ~sub:"FOREIGN KEY constraint failed" e)
 
 (* ---------- not synced ---------- *)
 

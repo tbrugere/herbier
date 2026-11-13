@@ -1,4 +1,5 @@
 module Observation = Herbier_domain.Observation
+module Json = Herbier_net.Json
 
 type t = {taken_at : Ptime.t option; position : Observation.position option}
 
@@ -16,25 +17,13 @@ let tags =
 
 let empty = {taken_at = None; position = None}
 
-let member name = function
-  | `Assoc fields -> List.assoc_opt name fields
-  | _ -> None
-
 let string_member name json =
-  match member name json with Some (`String s) -> Some s | _ -> None
+  match Json.member name json with Some (`String s) -> Some s | _ -> None
 
-let number_member name json =
-  match member name json with
-  | Some (`Float f) when Float.is_finite f -> Some f
-  | Some (`Int i) -> Some (Float.of_int i)
-  | _ -> None
+let number_member name json = Option.bind (Json.member name json) Json.number
 
 let digits s =
-  match
-    s <> "" && String.for_all (function '0' .. '9' -> true | _ -> false) s
-  with
-  | true -> int_of_string_opt s
-  | false -> None
+  match Json.is_digits s with true -> int_of_string_opt s | false -> None
 
 let date_time s =
   match

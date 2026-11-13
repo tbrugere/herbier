@@ -26,6 +26,10 @@ val attr : Brr.El.t -> string -> string option React.signal -> binding
 val class_ : Brr.El.t -> string -> bool React.signal -> binding
 (** The class is present while the signal is [true]. *)
 
+val disabled : Brr.El.t -> bool React.signal -> binding
+(** [aria-disabled="true"] while the signal is [true], no attribute otherwise:
+    the control stays focusable and its handler decides what a tap does. *)
+
 val style : Brr.El.t -> string -> string React.signal -> binding
 (** [style el prop s] sets the inline property [prop] (["transform"],
     ["--progress"]) to the signal's value; [""] removes it. *)
@@ -60,10 +64,14 @@ val view :
     again on each change, the previous rendering's bindings released (an
     {!rlist} of one item). *)
 
-val patch : 'a ReactiveData.RList.handle -> 'a List_patch.edit list -> unit
-(** [patch handle edits] applies [edits] (from {!List_patch.diff}) to the list
-    once, in order. Not a binding: it runs from outside an update step, as
-    {!act} or a resolved future does. *)
+val patch :
+  'a ReactiveData.RList.handle ->
+  'a Herbier_ui_model.List_patch.edit list ->
+  unit
+(** [patch handle edits] applies [edits] (from
+    {!Herbier_ui_model.List_patch.diff}) to the list once, in order. Not a
+    binding: it runs from outside an update step, as {!act} or a resolved future
+    does. *)
 
 val ev : Brr.El.t -> 'a Brr.Ev.type' -> 'a Brr.Ev.t React.event * binding
 (** [ev el type'] is an event fired by each DOM event [type'] on [el], outside

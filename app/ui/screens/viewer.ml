@@ -1,5 +1,8 @@
+module Cover = Herbier_ui_model.Cover
+module Fr_date = Herbier_ui_model.Fr_date
+module Journal_day = Herbier_ui_model.Journal_day
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
@@ -10,10 +13,8 @@ module Observation = Herbier_domain.Observation
 module Observation_id = Herbier_domain.Ids.Observation_id
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
-
-let log_error what e =
-  Console.(error [str ("visionneuse: " ^ what); str (Db.error_to_string e)])
+let cls = Html.cls
+let log_error = Log.db ~scope:"visionneuse"
 
 type data = {
   plant : Plant.t option;
@@ -61,18 +62,8 @@ let when_where (o : Observation.t) =
     (Fr_date.day_time ~tz_offset_s:(Zone.offset_s o.at) o.at
     :: Option.to_list (Journal_day.place [o]))
 
-let round ~label icon =
-  El.button
-    ~at:
-      [
-        At.type' (Jstr.v "button");
-        cls "viewer__round";
-        At.v (Jstr.v "aria-label") (Jstr.v label);
-      ]
-    [W.Icon.el icon]
-
-let chip label =
-  El.button ~at:[At.type' (Jstr.v "button"); cls "viewer__chip"] [El.txt' label]
+let round ~label icon = Html.button ~label ["viewer__round"] [W.Icon.el icon]
+let chip label = Html.button ["viewer__chip"] [El.txt' label]
 
 type remove = Remove | Keep
 type menu = Cover | Move | Cancel

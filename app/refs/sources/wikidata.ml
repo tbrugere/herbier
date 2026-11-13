@@ -1,3 +1,5 @@
+module Json = Herbier_net.Json
+
 module Property = struct
   type t = Gbif_key | Powo | Inat | Taxref | Tela
 
@@ -45,7 +47,7 @@ let entity qid =
     ]
 
 let api_error json =
-  match Decode.member "error" json with
+  match Json.member "error" json with
   | None -> None
   | Some error -> (
       match Decode.string "code" error with
@@ -65,9 +67,7 @@ let search_of_json json =
   match api_error json with
   | Some e -> Error e
   | None -> (
-      match
-        Option.bind (Decode.member "query" json) (Decode.member "search")
-      with
+      match Option.bind (Json.member "query" json) (Json.member "search") with
       | Some (`List hits) ->
           Ok
             (List.filter_map
@@ -77,8 +77,8 @@ let search_of_json json =
       | _ -> Decode.unexpected "/query/search" "array")
 
 module Entity = struct
-  type name = {lang : string; text : string}
-  type sitelink = {lang : string; title : string}
+  type name = {lang : string; text : string} [@@deriving eq, show]
+  type sitelink = {lang : string; title : string} [@@deriving eq, show]
 
   type t = {
     qid : Qid.t;
@@ -92,6 +92,7 @@ module Entity = struct
     common_names : name list;
     sitelinks : sitelink list;
   }
+  [@@deriving eq, show]
 end
 
 type rank = Preferred | Normal
@@ -107,13 +108,13 @@ let statements property claims =
         | Some "normal" -> Some Normal
         | _ -> None
       in
-      let snak = Decode.member "mainsnak" statement in
+      let snak = Json.member "mainsnak" statement in
       let value =
         match Option.bind snak (Decode.string "snaktype") with
         | Some "value" ->
             Option.bind
-              (Option.bind snak (Decode.member "datavalue"))
-              (Decode.member "value")
+              (Option.bind snak (Json.member "datavalue"))
+              (Json.member "value")
         | _ -> None
       in
       match (rank, value) with
@@ -136,9 +137,7 @@ let single property claims =
 
 let numeric property claims =
   Option.bind (single property claims) (fun s ->
-      match Decode.is_digits s with
-      | true -> int_of_string_opt s
-      | false -> None)
+      match Json.is_digits s with true -> int_of_string_opt s | false -> None)
 
 let common_names claims =
   List.filter_map
@@ -149,11 +148,11 @@ let common_names claims =
     (statements "P1843" claims)
 
 let sitelinks json =
-  let links = Option.value ~default:`Null (Decode.member "sitelinks" json) in
+  let links = Option.value ~default:`Null (Json.member "sitelinks" json) in
   List.filter_map
     (fun lang ->
       Option.bind
-        (Decode.member (lang ^ "wiki") links)
+        (Json.member (lang ^ "wiki") links)
         (fun link ->
           Option.map
             (fun title -> {Entity.lang; title})
@@ -164,16 +163,16 @@ let entity_of_json json =
   match api_error json with
   | Some e -> Error e
   | None -> (
-      match Decode.member "entities" json with
+      match Json.member "entities" json with
       | Some (`Assoc ((key, entity) :: _)) -> (
-          match Decode.member "missing" entity with
+          match Json.member "missing" entity with
           | Some _ -> Ok None
           | None -> (
               match Option.bind (Decode.string "id" entity) Qid.of_string with
               | None -> Decode.unexpected ("/entities/" ^ key ^ "/id") "Q-id"
               | Some qid ->
                   let claims =
-                    Option.value ~default:`Null (Decode.member "claims" entity)
+                    Option.value ~default:`Null (Json.member "claims" entity)
                   in
                   Ok
                     (Some

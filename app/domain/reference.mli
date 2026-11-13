@@ -15,6 +15,7 @@ module Source : sig
     | Plantnet
 
   val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 
   val all : t list
   (** Every constructor, in declaration order. *)
@@ -39,6 +40,7 @@ module Status : sig
   type t = Complete | Partial | Missing | Failed
 
   val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 
   val all : t list
   (** Every constructor, in declaration order. *)
@@ -60,6 +62,9 @@ end
 
 module Organ : sig
   type t = Flower | Leaf | Fruit | Habit
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 
   val all : t list
   (** Every constructor, in declaration order. *)
@@ -99,6 +104,8 @@ val equal : t -> t -> bool
     [Yojson.Safe.equal]: object key order ignored, as [jsonb] reorders keys, and
     [`Int 1] differs from [`Float 1.]. *)
 
+val pp : Format.formatter -> t -> unit
+
 (** Row of [plant_refs]: the plant's identifier at one source. At most one row
     per [(plant_id, source)]. *)
 module Plant_ref : sig
@@ -122,6 +129,8 @@ module Plant_ref : sig
 
   val equal : t -> t -> bool
   (** Field by field: [Ptime.equal] on instants (no truncation). *)
+
+  val pp : Format.formatter -> t -> unit
 end
 
 (** A reference image (handoff 4f organ photos). Device-local row: not synced.

@@ -4,7 +4,7 @@ type thumb = Image of string | Preview of string | Placeholder
 type tone = Normal | To_identify
 type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let thumb_el = function
   | Image url ->
@@ -50,8 +50,6 @@ let v ?thumb ?(tone = Normal) ~title ~meta () =
     | None -> [text; chevron]
     | Some t -> [thumb_el t; text; chevron]
   in
-  let el =
-    El.button ~at:[At.type' (Jstr.v "button"); cls "list-row"] children
-  in
+  let el = Html.button ["list-row"] children in
   let click, b = Rb.click el in
   {el; click; bindings = [b]}

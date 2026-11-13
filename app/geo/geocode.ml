@@ -1,4 +1,7 @@
 module Places = Herbier_domain.Places
+module Text = Herbier_domain.Text
+module Json = Herbier_net.Json
+module Url = Herbier_net.Url
 
 type provider = Photon | Geoplateforme [@@deriving eq]
 
@@ -18,27 +21,12 @@ let request_endpoint {provider; url} =
   in
   provider_to_string provider ^ " " ^ base
 
-(* style: [unreserved] and [encode] are Herbier_refs.Request's: geo does not
-   depend on refs (layout.md, known copies). *)
-let unreserved = function
-  | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '.' | '_' | '~' -> true
-  | _ -> false
-
-let encode s =
-  let buf = Buffer.create (String.length s * 3) in
-  String.iter
-    (fun c ->
-      match unreserved c with
-      | true -> Buffer.add_char buf c
-      | false -> Buffer.add_string buf (Printf.sprintf "%%%02X" (Char.code c)))
-    s;
-  Buffer.contents buf
-
 let coordinate = Printf.sprintf "%.5f"
 
 let make provider base query =
   let query =
-    String.concat "&" (List.map (fun (k, v) -> encode k ^ "=" ^ encode v) query)
+    String.concat "&"
+      (List.map (fun (k, v) -> Url.encode k ^ "=" ^ Url.encode v) query)
   in
   {provider; url = base ^ "?" ^ query}
 
@@ -105,50 +93,6 @@ let geoplateforme_wfs query =
 let in_france ({lat; lon} : Places.point) =
   41.3 <= lat && lat <= 51.2 && -5.5 <= lon && lon <= 9.7
 
-let apostrophe = "’"
-
-(* The contracted article and the rest of the name, when [name] starts with
-   an article (ASCII, case-insensitive) followed by its separator. *)
-let article name =
-  let lower = String.lowercase_ascii name in
-  let after prefix =
-    match String.starts_with ~prefix lower with
-    | false -> None
-    | true -> (
-        let len = String.length prefix in
-        match String.trim (String.sub name len (String.length name - len)) with
-        | "" -> None
-        | rest -> Some rest)
-  in
-  List.find_map
-    (fun (prefix, contracted) ->
-      Option.map (fun rest -> contracted ^ rest) (after prefix))
-    [
-      ("le ", "Près du ");
-      ("les ", "Près des ");
-      ("la ", "Près de la ");
-      ("l'", "Près de l" ^ apostrophe);
-      ("l" ^ apostrophe, "Près de l" ^ apostrophe);
-    ]
-
-let vowels =
-  String.split_on_char ' '
-    "A E I O U Y a e i o u y À Â Ä É È Ê Ë Î Ï Ô Ö Ù Û Ü Œ Æ à â ä é è ê ë î ï \
-     ô ö ù û ü œ æ"
-
-let near name =
-  match String.trim name with
-  | "" -> None
-  | name -> (
-      match article name with
-      | Some phrase -> Some phrase
-      | None -> (
-          match
-            List.exists (fun prefix -> String.starts_with ~prefix name) vowels
-          with
-          | true -> Some ("Près d" ^ apostrophe ^ name)
-          | false -> Some ("Près de " ^ name)))
-
 type error =
   | Not_json of string
   | Unexpected of {path : string; expected : string}
@@ -159,39 +103,26 @@ let error_to_string = function
   | Unexpected {path; expected} ->
       Printf.sprintf "unexpected payload at %S: expected %s" path expected
 
-let json_of_string s =
-  match Yojson.Safe.from_string s with
-  | json -> Ok json
-  (* Under js_of_ocaml a deeply nested body raises Failure (a JS stack
-     overflow) rather than Json_error: any exception degrades to Not_json. *)
-  | exception Yojson.Json_error msg -> Error (Not_json msg)
-  | exception e -> Error (Not_json (Printexc.to_string e))
-
-let member name = function
-  | `Assoc fields -> (
-      match List.assoc_opt name fields with
-      | None | Some `Null -> None
-      | Some v -> Some v)
-  | _ -> None
+let json_of_string s = Result.map_error (fun m -> Not_json m) (Json.parse s)
 
 (* A longer value from a provider is not a place name; it would be synced
    as is. *)
 let max_value_bytes = 200
 
 let non_blank s =
-  match String.trim s with
-  | "" -> None
-  | s when String.length s > max_value_bytes -> None
-  | s -> Some s
+  Option.bind (Text.non_blank s) (fun s ->
+      match String.length s > max_value_bytes with
+      | true -> None
+      | false -> Some s)
 
 let string name json =
-  match member name json with Some (`String s) -> non_blank s | _ -> None
+  match Json.member name json with Some (`String s) -> non_blank s | _ -> None
 
 let properties feature =
-  Option.value (member "properties" feature) ~default:(`Assoc [])
+  Option.value (Json.member "properties" feature) ~default:(`Assoc [])
 
 let features json =
-  match member "features" json with
+  match Json.member "features" json with
   | Some (`List l) -> Ok l
   | _ -> Error (Unexpected {path = "/features"; expected = "array"})
 
@@ -239,7 +170,7 @@ let geoplateforme_name json =
           match string "toponym" props with
           | Some name -> Some name
           | None -> (
-              match member "name" props with
+              match Json.member "name" props with
               | Some (`List names) ->
                   List.find_map
                     (function `String s -> non_blank s | _ -> None)
@@ -250,15 +181,12 @@ let geoplateforme_name json =
 type place = {name : string; context : string option; point : Places.point}
 [@@deriving eq]
 
-let number = function
-  | `Int i -> Some (Float.of_int i)
-  | `Float f when Float.is_finite f -> Some f
-  | _ -> None
-
 let point feature : Places.point option =
-  match Option.bind (member "geometry" feature) (member "coordinates") with
+  match
+    Option.bind (Json.member "geometry" feature) (Json.member "coordinates")
+  with
   | Some (`List (lon :: lat :: _)) -> (
-      match (number lon, number lat) with
+      match (Json.number lon, Json.number lat) with
       | Some lon, Some lat -> Some {lat; lon}
       | _ -> None)
   | _ -> None
@@ -292,7 +220,7 @@ let step request decode next =
   Get
     ( request,
       fun json ->
-        match Result.map (fun n -> Option.bind n near) (decode json) with
+        match Result.map (fun n -> Option.bind n Near.phrase) (decode json) with
         | Error e -> Done (Error e)
         | Ok (Some phrase) -> Done (Ok (Some phrase))
         | Ok None -> next () )

@@ -1,0 +1,15 @@
+; Photos over Brr: capture (camera and gallery) and the preview pipeline
+; (preview: decode, resize, encode, hash, store).
+(library
+ (name herbier_photos_io)
+ (public_name herbier.photos_io)
+ (libraries
+  herbier_photos
+  herbier_domain
+  herbier_store
+  herbier_store_io
+  herbier_bindings
+  brr
+  yojson
+  ptime
+  ptime.clock.os))

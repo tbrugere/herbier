@@ -3,12 +3,8 @@ open Brr
 type kind = Primary | Secondary | Danger
 type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
 
-let cls c = At.class' (Jstr.v c)
-
 let make classes children =
-  let el =
-    El.button ~at:(At.type' (Jstr.v "button") :: List.map cls classes) children
-  in
+  let el = Html.button classes children in
   let click, b = Rb.click el in
   {el; click; bindings = [b]}
 

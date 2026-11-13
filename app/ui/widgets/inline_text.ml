@@ -4,12 +4,7 @@ type t = {el : El.t; bindings : Rb.binding list}
 
 let v ?cls ~label ~placeholder ~save value =
   let extra = match cls with Some c -> [At.class' (Jstr.v c)] | None -> [] in
-  let shown =
-    El.button
-      ~at:
-        (At.type' (Jstr.v "button") :: At.class' (Jstr.v "inline-text") :: extra)
-      []
-  in
+  let shown = Html.button ("inline-text" :: Option.to_list cls) [] in
   let area =
     El.textarea
       ~at:

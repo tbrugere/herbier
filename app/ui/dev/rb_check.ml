@@ -2,10 +2,9 @@ open Brr
 module RList = ReactiveData.RList
 
 let button label = El.button [El.txt' label]
-let line log text = El.append_children log [El.div [El.txt' text]]
 
 let check log label ok =
-  line log (Printf.sprintf "%s: %s" label (if ok then "ok" else "FAIL"))
+  Kit.append log (Printf.sprintf "%s: %s" label (if ok then "ok" else "FAIL"))
 
 (* A row without bindings of its own. *)
 let static s = (El.li [El.txt' s], [])
@@ -167,7 +166,7 @@ let self_check () =
       check_anchor;
       check_item_bindings;
     ];
-  line log "done";
+  Kit.append log "done";
   log
 
 let el () =

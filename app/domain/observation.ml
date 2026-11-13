@@ -3,9 +3,9 @@ type position = {
   lon : float; [@equal Float.equal]
   accuracy_m : float option; [@equal Option.equal Float.equal]
 }
-[@@deriving eq]
+[@@deriving eq, show]
 
-type id = Ids.Observation_id.t [@@deriving eq]
+type id = Ids.Observation_id.t [@@deriving eq, show]
 
 type t = {
   id : id;
@@ -19,4 +19,4 @@ type t = {
   updated_at : Ptime.t;
   deleted_at : Ptime.t option;
 }
-[@@deriving eq]
+[@@deriving eq, show]

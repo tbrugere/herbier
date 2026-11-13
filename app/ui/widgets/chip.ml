@@ -3,13 +3,7 @@ open Brr
 type tone = Ink | Ochre
 type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
 
-let button classes label =
-  El.button
-    ~at:
-      (At.type' (Jstr.v "button")
-      :: List.map (fun c -> At.class' (Jstr.v c)) classes)
-    [El.txt' label]
-
+let button classes label = Html.button classes [El.txt' label]
 let tone_class = function Ink -> "chip--ink" | Ochre -> "chip--ochre"
 
 let filter ?(tone = Ink) ~label ~active () =
@@ -38,13 +32,7 @@ type fill = Outline | Paper
 
 let removable ?(fill = Outline) label =
   let x =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          At.class' (Jstr.v "chip-removable__x");
-          At.v (Jstr.v "aria-label") (Jstr.v ("Retirer " ^ label));
-        ]
+    Html.button ~label:("Retirer " ^ label) ["chip-removable__x"]
       [Icon.el ~size:16 Icon.Close]
   in
   let fill =

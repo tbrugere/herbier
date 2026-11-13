@@ -1,12 +1,14 @@
-(* Native checks of app/geo/features.ml and app/geo/style.ml (copied into
-   this directory by test/geo/dune, hence the unqualified [Features] and
-   [Style] module names). [web/map/positron.json] doubles as the shipped
+(* Native checks of app/geo/features.ml and app/geo/style.ml. [web/map/positron.json] doubles as the shipped
    style and the fixture of the with_overlays tests, read relative to the
    test's working directory ([_build/default/test/geo]). *)
 
+module Features = Herbier_geo.Features
+module Style = Herbier_geo.Style
 module Observation = Herbier_domain.Observation
 module Places = Herbier_domain.Places
 module Ids = Herbier_domain.Ids
+module Testable = Herbier_test_support.Testable
+module Text = Herbier_test_support.Text
 
 (* ---------- building test observations ---------- *)
 
@@ -62,11 +64,6 @@ let inf_lon = obs ~id:93 ~at:3 (Some (48.1, Float.infinity))
 let unplaceable = [no_position; deleted; nan_lat; inf_lon]
 
 (* ---------- testables ---------- *)
-
-let yojson =
-  Alcotest.testable
-    (fun f j -> Format.pp_print_string f (Yojson.Safe.pretty_to_string j))
-    Yojson.Safe.equal
 
 let bounds =
   let pp f (b : Features.bounds) =
@@ -154,16 +151,16 @@ let ids_of (j : Yojson.Safe.t) : string list =
 (* ---------- Features.observations ---------- *)
 
 let observations_empty_is_the_empty_collection () =
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "Features.observations [] equals Features.empty" Features.empty
     (Features.observations []);
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "Features.empty is the empty FeatureCollection" (collection [])
     Features.empty
 
 let observations_identified () =
   let o = obs ~id:1 ~at:0 ~plant:(plant_id 1) (Some (48.1, 7.2)) in
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "one feature, lon before lat, kind identified"
     (collection
        [
@@ -173,7 +170,7 @@ let observations_identified () =
 
 let observations_to_identify () =
   let o = obs ~id:1 ~at:0 (Some (48.1, 7.2)) in
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "no plant_id gives kind to_identify"
     (collection
        [
@@ -230,15 +227,8 @@ let observations_round_trips_through_json_text () =
   Alcotest.(check bool)
     "the serialised text never spells out nan or inf" false
     (let lower = String.lowercase_ascii text in
-     let contains sub =
-       let n = String.length sub and m = String.length lower in
-       let rec go i =
-         i + n <= m && (String.sub lower i n = sub || go (i + 1))
-       in
-       go 0
-     in
-     contains "nan" || contains "inf");
-  Alcotest.(check yojson)
+     Text.contains ~sub:"nan" lower || Text.contains ~sub:"inf" lower);
+  Alcotest.(check Testable.yojson)
     "parsing the text back gives an equal value" result
     (Yojson.Safe.from_string text)
 
@@ -326,7 +316,7 @@ let circle_bearings () =
 let circle_empty_on_invalid_input () =
   List.iter
     (fun (name, radius_m) ->
-      Alcotest.(check yojson)
+      Alcotest.(check Testable.yojson)
         name Features.empty
         (Features.circle ~center:centre ~radius_m ~steps:64))
     [
@@ -335,12 +325,12 @@ let circle_empty_on_invalid_input () =
       ("nan radius gives empty", Float.nan);
       ("infinite radius gives empty", Float.infinity);
     ];
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "fewer than 3 steps gives empty" Features.empty
     (Features.circle ~center:centre ~radius_m:1000. ~steps:2);
   List.iter
     (fun (name, center) ->
-      Alcotest.(check yojson)
+      Alcotest.(check Testable.yojson)
         name Features.empty
         (Features.circle ~center ~radius_m:1000. ~steps:64))
     [
@@ -551,12 +541,12 @@ let accuracy_bounds_none_on_nonfinite_position () =
 (* ---------- Features.focus ---------- *)
 
 let focus_none_is_empty () =
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "None gives Features.empty" Features.empty (Features.focus None)
 
 let focus_some_is_a_lone_point_feature_with_no_properties () =
   let p : Places.point = {lat = 45.7712; lon = 3.0823} in
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "exactly the documented FeatureCollection, lon before lat"
     (collection
        [
@@ -575,10 +565,10 @@ let focus_some_is_a_lone_point_feature_with_no_properties () =
     (Features.focus (Some p))
 
 let focus_nonfinite_coordinate_is_empty () =
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "a nan latitude gives empty" Features.empty
     (Features.focus (Some {Places.lat = Float.nan; lon = 3.}));
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "an infinite longitude gives empty" Features.empty
     (Features.focus (Some {Places.lat = 45.; lon = Float.infinity}))
 
@@ -748,7 +738,7 @@ let place_points_properties_are_exact () =
   let open Yojson.Safe.Util in
   match (places, json |> member "features" |> to_list) with
   | a :: _, first :: _ ->
-      Alcotest.(check yojson)
+      Alcotest.(check Testable.yojson)
         "A's feature has exactly id, count, identified, west, south, east, \
          north"
         (`Assoc
@@ -762,7 +752,7 @@ let place_points_properties_are_exact () =
              ("north", `Float spot_a.lat);
            ])
         (first |> member "properties");
-      Alcotest.(check yojson)
+      Alcotest.(check Testable.yojson)
         "geometry is a Point at the centroid"
         (`Assoc
            [
@@ -773,7 +763,7 @@ let place_points_properties_are_exact () =
   | _ -> Alcotest.fail "expected at least one place and one feature"
 
 let place_points_empty_for_no_places () =
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "[] gives Features.empty" Features.empty (Features.place_points [])
 
 (* One place whose two members are about 110 m apart: west/east and
@@ -862,7 +852,7 @@ let place_points_and_selection_follow_shown () =
     ids
 
 let selection_none_is_empty () =
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "None gives Features.empty" Features.empty (Features.selection None)
 
 let selection_some () =
@@ -874,11 +864,11 @@ let selection_some () =
   Alcotest.(check int)
     "one place feature plus one per shown member" 4 (List.length features);
   let first = List.hd features in
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "first feature: role place, id = key, at the centroid"
     (`Assoc [("id", `String (key_string a)); ("role", `String "place")])
     (first |> member "properties");
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "first feature's geometry is the centroid"
     (`Assoc
        [
@@ -901,7 +891,7 @@ let selection_some () =
       Alcotest.(check string)
         "role is member" "member"
         (f |> member "properties" |> member "role" |> to_string);
-      Alcotest.(check yojson)
+      Alcotest.(check Testable.yojson)
         "a member feature is a Point at its observation's position (spot A)"
         (`Assoc
            [
@@ -1059,7 +1049,7 @@ let layers_appended_after_the_base () =
   let layers = result |> member "layers" |> to_list in
   let n = List.length base_layers in
   Alcotest.(check int) "12 layers appended" (n + 12) (List.length layers);
-  Alcotest.(check (list yojson))
+  Alcotest.(check (list Testable.yojson))
     "the base layers are unchanged and in order" base_layers
     (List.filteri (fun i _ -> i < n) layers);
   let overlay_ids =
@@ -1112,7 +1102,7 @@ let sources_appended_after_the_base () =
   let base_sources = positron |> member "sources" |> to_assoc in
   let sources = result |> member "sources" |> to_assoc in
   let n = List.length base_sources in
-  Alcotest.(check (list (pair string yojson)))
+  Alcotest.(check (list (pair string Testable.yojson)))
     "the base sources are unchanged and in order" base_sources
     (List.filteri (fun i _ -> i < n) sources);
   let overlay = List.filteri (fun i _ -> i >= n) sources in
@@ -1130,7 +1120,7 @@ let sources_appended_after_the_base () =
     (List.map fst overlay);
   List.iter
     (fun id ->
-      Alcotest.(check yojson)
+      Alcotest.(check Testable.yojson)
         (Printf.sprintf
            "%s is a plain geojson source holding Features.empty, no cluster" id)
         (`Assoc [("type", `String "geojson"); ("data", Features.empty)])
@@ -1150,7 +1140,7 @@ let places_source_shape () =
   (match number_field source "clusterMaxZoom" with
   | Some v -> Alcotest.(check (float 1e-9)) "clusterMaxZoom is 14" 14. v
   | None -> Alcotest.fail "the places source has no clusterMaxZoom");
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "the places source clusters, with the summed/min/max cluster properties \
      (clusterMaxZoom checked separately above)"
     (`Assoc
@@ -1210,7 +1200,7 @@ let other_top_level_keys_unchanged () =
     (List.filter
        (fun k -> not (List.mem_assoc k (others positron)))
        ["version"; "glyphs"; "sprite"]);
-  Alcotest.(check (list (pair string yojson)))
+  Alcotest.(check (list (pair string Testable.yojson)))
     "every top-level key other than sources and layers is unchanged, in order"
     (others positron) (others result)
 
@@ -1229,7 +1219,7 @@ let colours_applied_to_the_overlay_layers () =
   Alcotest.(check string)
     "the points layer is a circle layer" "circle"
     (points |> member "type" |> to_string);
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "circle-color is the kind match expression"
     (`List
        [
@@ -1300,7 +1290,7 @@ let overlay_paints_are_exact () =
   let result = with_overlays_ok positron in
   let open Yojson.Safe.Util in
   let paint id = layer_by_id result id |> member "paint" in
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "the whole points paint"
     (`Assoc
        [
@@ -1318,18 +1308,18 @@ let overlay_paints_are_exact () =
              ] );
        ])
     (paint Style.points_layer);
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "the whole accuracy fill paint"
     (`Assoc [("fill-color", `String colours.accuracy_fill)])
     (paint Style.accuracy_fill_layer);
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "the whole accuracy line paint"
     (`Assoc
        [("line-color", `String colours.accuracy_line); ("line-width", `Int 1)])
     (paint Style.accuracy_line_layer);
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "the whole origin paint" origin_paint (paint Style.origin_layer);
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "the whole focus paint" focus_paint (paint Style.focus_layer)
 
 let check_layer_shape ~msg ~zoom_field ~zoom_value expected_without_zoom actual
@@ -1338,7 +1328,7 @@ let check_layer_shape ~msg ~zoom_field ~zoom_value expected_without_zoom actual
   | Some v ->
       Alcotest.(check (float 1e-9)) (msg ^ ": " ^ zoom_field) zoom_value v
   | None -> Alcotest.failf "%s: no %s" msg zoom_field);
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     (msg ^ ": shape apart from " ^ zoom_field)
     expected_without_zoom
     (strip_field zoom_field actual)
@@ -1531,7 +1521,7 @@ let selection_members_layer_shape () =
 
 let focus_layer_shape () =
   let result = with_overlays_ok positron in
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "focus_layer: a circle layer on focus_source, paint only, no \
      minzoom/maxzoom/filter"
     (`Assoc
@@ -1545,7 +1535,7 @@ let focus_layer_shape () =
 
 let origin_layer_shape () =
   let result = with_overlays_ok positron in
-  Alcotest.(check yojson)
+  Alcotest.(check Testable.yojson)
     "origin_layer: a circle layer on origin_source, paint only, no \
      minzoom/maxzoom/filter (shown at every zoom)"
     (`Assoc
@@ -1638,7 +1628,7 @@ let kind_matches_the_style () =
 
 let with_overlays_errors () =
   let check msg expected input =
-    Alcotest.(check (result yojson style_error))
+    Alcotest.(check (result Testable.yojson style_error))
       msg (Error expected)
       (Style.with_overlays colours input)
   in
@@ -1656,7 +1646,7 @@ let with_overlays_errors () =
 
 let with_overlays_duplicate_ids () =
   let expect_layer_dup id =
-    Alcotest.(check (result yojson style_error))
+    Alcotest.(check (result Testable.yojson style_error))
       (Printf.sprintf "a layer named %s already present" id)
       (Error (Style.Duplicate_id id))
       (Style.with_overlays colours
@@ -1667,7 +1657,7 @@ let with_overlays_duplicate_ids () =
             ]))
   in
   let expect_source_dup id =
-    Alcotest.(check (result yojson style_error))
+    Alcotest.(check (result Testable.yojson style_error))
       (Printf.sprintf "a source named %s already present" id)
       (Error (Style.Duplicate_id id))
       (Style.with_overlays colours
@@ -1758,22 +1748,14 @@ let literal_ids () =
   Alcotest.(check string)
     "Style.origin_layer" "herbier-origin" Style.origin_layer
 
-let contains ~sub s =
-  let n = String.length sub in
-  let rec go i =
-    i + n <= String.length s
-    && (String.equal (String.sub s i n) sub || go (i + 1))
-  in
-  go 0
-
 let error_to_string_covers_both_constructors () =
   Alcotest.(check bool)
     "Not_a_style names the key" true
-    (contains ~sub:"layers"
+    (Text.contains ~sub:"layers"
        (Style.error_to_string (Style.Not_a_style "layers")));
   Alcotest.(check bool)
     "Duplicate_id names the id" true
-    (contains ~sub:"herbier-points"
+    (Text.contains ~sub:"herbier-points"
        (Style.error_to_string (Style.Duplicate_id "herbier-points")))
 
 let tests =

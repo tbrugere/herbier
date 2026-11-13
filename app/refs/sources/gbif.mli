@@ -62,6 +62,9 @@ module Status : sig
         (** GBIF's taxonomic status: ["ACCEPTED"], ["DOUBTFUL"]; ["SYNONYM"] and
             every ["*_SYNONYM"] (HETEROTYPIC, HOMOTYPIC, PROPARTE) are
             [Synonym]; any other non-blank string is [Other] as given. *)
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 end
 
 module Taxon : sig
@@ -81,6 +84,9 @@ module Taxon : sig
   val latin : t -> string
   (** [canonical_name], else [scientific_name]: the name without authorship that
       is stored, shown and searched. *)
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 end
 
 type 'a page = {
@@ -94,6 +100,11 @@ type 'a page = {
 }
 (** GBIF's paging envelope: [results] (required array), [endOfRecords] (missing
     means [false]), [count] (optional). *)
+
+val equal_page : ('a -> 'a -> bool) -> 'a page -> 'a page -> bool
+
+val pp_page :
+  (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a page -> unit
 
 val species_of_json : Yojson.Safe.t -> (Taxon.t, Decode.error) result
 (** [/species/<key>]: required [key] (int) and [scientificName]; [status] from
@@ -109,6 +120,9 @@ type match_ =
           input matches [Plantae], key 6). *)
   | Matched of {taxon : Taxon.t; fuzzy : bool; confidence : int option}
       (** ["EXACT"] ([fuzzy = false]) or ["FUZZY"] ([true]). *)
+
+val equal_match_ : match_ -> match_ -> bool
+val pp_match_ : Format.formatter -> match_ -> unit
 
 val match_of_json : Yojson.Safe.t -> (match_, Decode.error) result
 (** [/species/match]: required [matchType] among [EXACT|FUZZY|HIGHERRANK|NONE]
@@ -130,6 +144,9 @@ module Vernacular : sig
     source : string option;
     country : string option;
   }
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 end
 
 val vernacular_search_of_json :
@@ -155,6 +172,9 @@ module Distribution : sig
     source : string option;
         (** ["The World Checklist of Vascular Plants (WCVP)"]… *)
   }
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 end
 
 val distributions_of_json :
@@ -187,6 +207,9 @@ module Image : sig
         (** Media [source], else the occurrence [references], unchecked (scheme
             and host): a caller checks it before using it as [href]. *)
   }
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 end
 
 val plantnet_media_of_json :

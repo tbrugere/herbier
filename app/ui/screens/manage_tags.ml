@@ -1,3 +1,5 @@
+module Fr_text = Herbier_ui_model.Fr_text
+module Tag_edits = Herbier_ui_model.Tag_edits
 open Brr
 module Tags = Herbier_store.Tags
 module Tag = Herbier_domain.Tag
@@ -5,10 +7,8 @@ module Tag_id = Herbier_domain.Ids.Tag_id
 module RList = ReactiveData.RList
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
-
-let button classes children =
-  El.button ~at:(At.type' (Jstr.v "button") :: List.map cls classes) children
+let cls = Html.cls
+let button = Html.button
 
 (* The store writes for the staged model, at [at]. *)
 let edits ~at (tags : Tag.t list) model =
@@ -23,7 +23,7 @@ let edits ~at (tags : Tag.t list) model =
       | Tag_edits.Unlink {plant; tag} -> Some (Tags.untag ~plant ~tag ~at))
     (Tag_edits.plan model)
 
-let enter ev = Jstr.equal (Ev.Keyboard.key (Ev.as_type ev)) (Jstr.v "Enter")
+let enter = Html.enter
 
 let v app =
   let state = App.state app in
@@ -152,7 +152,8 @@ let v app =
     (function
       | Error e ->
           Console.(
-            error [str "manage tags"; str (Herbier_store.Db.error_to_string e)]);
+            error
+              [str "manage tags"; str (Herbier_store_io.Db.error_to_string e)]);
           set_failure "Lecture impossible"
       | Ok usage ->
           tags := List.map (fun (u : Tag_usage.t) -> u.tag) usage;
@@ -180,7 +181,7 @@ let v app =
                 error
                   [
                     str "manage tags: save";
-                    str (Herbier_store.Db.error_to_string e);
+                    str (Herbier_store_io.Db.error_to_string e);
                   ]);
               set_failure "Enregistrement impossible : rien n’a été modifié."
           | Ok _ ->

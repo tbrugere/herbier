@@ -1,18 +1,5 @@
-(* Helpers of every suite in test/sync: a recorded fixture's text, substring
-   search for the "never contains the token" checks, and the schema catalog
-   read through postgrest-codegen's decoder. *)
-
-let fixture name =
-  In_channel.with_open_bin
-    (Filename.concat "../fixtures" name)
-    In_channel.input_all
-
-let contains ~needle haystack =
-  let n = String.length needle and h = String.length haystack in
-  let rec at i =
-    i <= h - n && (String.equal (String.sub haystack i n) needle || at (i + 1))
-  in
-  n = 0 || at 0
+(* The schema catalog read through postgrest-codegen's decoder, for the
+   suites of test/sync. *)
 
 module Catalog = struct
   include Postgrest_codegen.Catalog

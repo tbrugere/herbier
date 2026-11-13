@@ -23,7 +23,7 @@
     the picker list, [aria-controls]): it fetches {!App.departements} once per
     screen (« Chargement… », an error and « Réessayer »), then focuses a search
     field over the départements not downloaded yet, filtered with
-    [Herbier_store.Search.matches] on « <code> <name> »; a tap downloads it
+    [Herbier_domain.Fold.matches] on « <code> <name> »; a tap downloads it
     ({!App.download_pack}). While {!App.downloading} is [Some d], on this screen
     or one opened again meanwhile, the list and field are hidden and a status
     line says « Téléchargement de <d.name>… ». Success closes the picker; an

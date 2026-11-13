@@ -11,6 +11,7 @@ module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
 module Qid = Herbier_refs.Qid
 module Link = Herbier_domain.Link
+module Fixture = Herbier_test_support.Fixture
 
 let some name = function
   | Some r -> r

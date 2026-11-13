@@ -1,5 +1,10 @@
+module Collection_filter = Herbier_ui_model.Collection_filter
+module Journal_day = Herbier_ui_model.Journal_day
+module Journal_filter = Herbier_ui_model.Journal_filter
+module Map_filter = Herbier_ui_model.Map_filter
+module Map_sheet = Herbier_ui_model.Map_sheet
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Search = Herbier_store.Search
@@ -9,15 +14,16 @@ module Observation = Herbier_domain.Observation
 module Photo = Herbier_domain.Photo
 module Plant = Herbier_domain.Plant
 module Tag = Herbier_domain.Tag
+module Fold = Herbier_domain.Fold
 module Places = Herbier_domain.Places
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Features = Herbier_geo.Features
-module Geo_map = Herbier_geo.Map
+module Geo_map = Herbier_geo_io.Map
 module RList = ReactiveData.RList
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 let year_of (o : Observation.t) = Zone.year o.at
 let padding_px = 64
 
@@ -67,9 +73,7 @@ let search_seq = function Idle seq | Running {seq; frame_on_reply = _} -> seq
 
 (* style: the MapLibre handle (style guide 2.2): created asynchronously, and
    the screen may be left before it exists. *)
-type map_state = Creating | Ready of Geo_map.t | Failed | Released
-
-let log_error what e = Console.(error [str ("carte: " ^ what); str e])
+let log_error = Log.error ~scope:"carte"
 
 let row ~this_year data (o : Observation.t) =
   let photos = data.photos o.id in
@@ -118,7 +122,7 @@ let same_rows (d, s) (d', s') =
               a.shown b.shown)
        s s'
 
-let enter ev = Jstr.equal (Ev.Keyboard.key (Ev.as_type ev)) (Jstr.v "Enter")
+let enter = Html.enter
 
 let shown_members places =
   List.concat_map (fun (p : Features.place) -> p.shown) places
@@ -220,16 +224,14 @@ let v app =
      asked by another screen, the camera frames the first data ([have_data]:
      it has arrived); [saving]: a rename is being
      written. *)
-  let map = ref Creating
+  let map = ref Map_slot.Creating
   and query = ref Map_filter.Everything
   and searching = ref (Idle 0)
   and needs_fit =
     ref (Option.is_none restored.camera && Option.is_none restored.focus)
   and have_data = ref false
   and saving = ref false in
-  let alive () =
-    match !map with Released -> false | Creating | Ready _ | Failed -> true
-  in
+  let alive () = Map_slot.alive !map in
   let head_el = El.div []
   and summary_el = El.div []
   and message_el = El.div [] in
@@ -251,11 +253,11 @@ let v app =
   El.set_class (Jstr.v "map-tab__sheet") true sheet.el;
   let push_map () =
     match !map with
-    | Ready m ->
+    | Map_slot.Ready m ->
         let v = React.S.value view in
         Geo_map.set_places m v.places;
         Geo_map.set_selection m v.selected
-    | Creating | Failed | Released -> ()
+    | Map_slot.(Creating | Failed | Released) -> ()
   in
   (* Read when the map exists, not at entry: the framing is the latest one
      asked. Also taken, and dropped, when the map cannot be created, so that it
@@ -267,12 +269,12 @@ let v app =
   in
   let first_fit () =
     match (!map, !needs_fit && !have_data) with
-    | Ready m, true ->
+    | Map_slot.Ready m, true ->
         needs_fit := false;
         Option.iter
           (fun b -> Geo_map.fit m b ~padding_px)
           (Features.bounds (shown_members (React.S.value view).places))
-    | (Ready _ | Creating | Failed | Released), _ -> ()
+    | Map_slot.(Ready _ | Creating | Failed | Released), _ -> ()
   in
   (* Places from the data, the filters and the search; the selection is found
      again by any member's id, since a place's key can change when an earlier
@@ -340,8 +342,8 @@ let v app =
   let frame () =
     let places = (React.S.value view).places in
     (match (!map, Features.bounds (shown_members places)) with
-    | Ready m, Some b -> Geo_map.fit m b ~padding_px
-    | (Ready _ | Creating | Failed | Released), _ -> ());
+    | Map_slot.Ready m, Some b -> Geo_map.fit m b ~padding_px
+    | Map_slot.(Ready _ | Creating | Failed | Released), _ -> ());
     match places with [p] -> select (Some p) | [] | _ :: _ :: _ -> ()
   in
   let run_search text =
@@ -368,7 +370,7 @@ let v app =
     | Some plants ->
         let place c =
           match Map_filter.place_name c with
-          | Some name -> Search.matches ~query:text name
+          | Some name -> Fold.matches ~query:text name
           | None -> false
         in
         Fut.await (Db.all db plants) (function
@@ -412,8 +414,8 @@ let v app =
            whose places sit within a few metres is framed at max_zoom, past
            detail_zoom. *)
         match !map with
-        | Ready m -> Geo_map.fit m b ~padding_px
-        | Creating | Failed | Released -> ())
+        | Map_slot.Ready m -> Geo_map.fit m b ~padding_px
+        | Map_slot.(Creating | Failed | Released) -> ())
     | Features.Member id :: _ ->
         Option.iter
           (fun p -> select (Some p))
@@ -430,7 +432,7 @@ let v app =
      size, when MapLibre reads it. *)
   (match theme with
   | Error (Theme.Missing_tokens missing) ->
-      map := Failed;
+      map := Map_slot.Failed;
       ignore (take_focus ());
       log_error "thème" (String.concat ", " missing)
   | Ok theme ->
@@ -441,13 +443,13 @@ let v app =
         | Ok m when not (alive ()) -> Geo_map.remove m
         | Error _ when not (alive ()) -> ()
         | Error e ->
-            map := Failed;
+            map := Map_slot.Failed;
             ignore (take_focus ());
             log_error "création" (Geo_map.error_to_string e);
             let v = React.S.value view in
             set_view {v with broken = Some Map_sheet.Map_unavailable}
         | Ok m ->
-            map := Ready m;
+            map := Map_slot.Ready m;
             Geo_map.on_tap m on_tap;
             Geo_map.on_moveend m on_moveend;
             push_map ();
@@ -474,13 +476,13 @@ let v app =
               set_view {v with notice = None}
           | Some (Loading | Read_failed | Search_failed) | None -> ());
           match !map with
-          | Ready m ->
+          | Map_slot.Ready m ->
               let zoom =
                 Float.max Herbier_geo.Style.detail_zoom
                   (Option.value (Geo_map.zoom m) ~default:0.)
               in
               Geo_map.fly_to m ~center:fix ~zoom
-          | Creating | Failed | Released -> ()))
+          | Map_slot.(Creating | Failed | Released) -> ()))
   in
   let rename (p : Features.place) text =
     match (!saving, Places.rename text ~at:(Ptime_clock.now ()) p.cluster) with
@@ -505,11 +507,7 @@ let v app =
   let head_view = function
     | Line line -> (El.p ~at:[cls "map-tab__line"] [El.txt' line], [])
     | Title title ->
-        let button =
-          El.button
-            ~at:[At.type' (Jstr.v "button"); cls "map-tab__rename"]
-            [El.txt' "Renommer"]
-        in
+        let button = Html.button ["map-tab__rename"] [El.txt' "Renommer"] in
         let click, b = Rb.click button in
         ( El.div
             ~at:[cls "map-tab__title-row"]
@@ -538,15 +536,8 @@ let v app =
           :: field.bindings )
   in
   let locate_button =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "icon-button";
-          cls "map-tab__locate";
-          At.v (Jstr.v "aria-label") (Jstr.v "Ma position");
-        ]
-      [W.Icon.el W.Icon.My_location]
+    W.Icon_button.el ~classes:["map-tab__locate"] ~label:"Ma position"
+      W.Icon.My_location
   in
   let locate_click, locate_binding = Rb.click locate_button in
   let chips_el = El.div ~at:[cls "chip-row"; cls "map-tab__chips"] [] in
@@ -571,14 +562,7 @@ let v app =
   let resize =
     Ev.listen Ev.resize (fun _ -> measure ()) (Window.as_target G.window)
   in
-  let release_map =
-    Rb.on_release (fun () ->
-        match !map with
-        | Ready m ->
-            map := Released;
-            Geo_map.remove m
-        | Creating | Failed | Released -> map := Released)
-  in
+  let release_map = Rb.on_release (fun () -> Map_slot.release map) in
   {
     Screen.el;
     bindings =

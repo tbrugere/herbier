@@ -1,3 +1,6 @@
+module List_patch = Herbier_ui_model.List_patch
+module Ref_pick = Herbier_ui_model.Ref_pick
+module Ref_search = Herbier_ui_model.Ref_search
 open Brr
 module Candidate = Herbier_refs.Resolve.Candidate
 module Taxon = Herbier_refs.Sources.Gbif.Taxon
@@ -11,7 +14,7 @@ type t = {
   bindings : Rb.binding list;
 }
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 let same (a : Candidate.t) (b : Candidate.t) = Int.equal a.taxon.key b.taxon.key
 
 (* Offline, the rows found stay but their « + » waits (handoff: disabled
@@ -48,14 +51,7 @@ let meta ~mode ~current ~plants ~action (t : Taxon.t) =
   String.concat " · " (List.filter_map Fun.id [here; t.family; owner])
 
 let round_add label =
-  El.button
-    ~at:
-      [
-        At.type' (Jstr.v "button");
-        cls "ref-row__add";
-        At.v (Jstr.v "aria-label") (Jstr.v label);
-      ]
-    [W.Icon.el ~size:22 W.Icon.Add]
+  Html.button ~label ["ref-row__add"] [W.Icon.el ~size:22 W.Icon.Add]
 
 let action_button = function
   | Ref_pick.Open _ -> Some (W.Button.text "Ouvrir ›").el
@@ -105,9 +101,6 @@ let row ~mode ~current ~plants ~online ~online_s ~pick (c : Candidate.t) =
   let el = El.div ~at:[cls "ref-row"] [text; button] in
   El.set_class (Jstr.v "is-current") (Ref_pick.equal_action action Inert) el;
   let click, b = Rb.click button in
-  let offline_disabled =
-    React.S.map (function true -> None | false -> Some "true") online_s
-  in
   ( el,
     b
     :: Rb.act click (fun () ->
@@ -119,7 +112,7 @@ let row ~mode ~current ~plants ~online ~online_s ~pick (c : Candidate.t) =
     ::
     (match action with
     | Ref_pick.(Create | Link_this) ->
-        [Rb.attr button "aria-disabled" offline_disabled]
+        [Rb.disabled button (React.S.map not online_s)]
     | Ref_pick.(Inert | Open _ | Attach_to _) -> []) )
 
 let v app ~mode ~current ~plants ~query ~pick =
@@ -150,7 +143,7 @@ let v app ~mode ~current ~plants ~query ~pick =
         Fut.await (Herbier_refs_io.Resolver.search ~q) (fun result ->
             (match result with
             | Error (Herbier_refs.Resolve.Unavailable why) ->
-                Console.(error [str "refs: search"; str why])
+                Log.error ~scope:"refs" "search" why
             | Ok _ | Error Herbier_refs.Resolve.(No_species | Observation_link)
               ->
                 ());

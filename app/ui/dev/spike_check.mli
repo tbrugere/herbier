@@ -21,4 +21,4 @@
     {!Herbier_bindings.Dev_hook.heap_used}): read the heap with
     [scripts/webview.mjs heap] when [data-round] reaches each value instead. *)
 
-val el : (Herbier_store.Db.t, string) result -> Brr.El.t
+val el : (Herbier_store_io.Db.t, string) result -> Brr.El.t

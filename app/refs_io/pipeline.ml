@@ -1,6 +1,6 @@
 module Reference = Herbier_domain.Reference
 module Source = Reference.Source
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module References = Herbier_store.References
 module Fanout = Herbier_refs.Fanout
 module Step = Herbier_refs.Step
@@ -27,7 +27,9 @@ let outcomes (rows : Fanout.row list) (stored : Fanout.row list) written =
   List.map
     (fun (row : Fanout.row) ->
       match
-        List.exists (fun (s : Fanout.row) -> s.source = row.source) stored
+        List.exists
+          (fun (s : Fanout.row) -> Source.equal s.source row.source)
+          stored
       with
       | true -> (row.source, written row.status)
       | false -> (row.source, Kept))

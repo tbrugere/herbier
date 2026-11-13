@@ -2,7 +2,7 @@ open Brr
 
 type t = {el : El.t; toggle : unit React.event; bindings : Rb.binding list}
 
-let cls c = At.class' (Jstr.v c)
+let cls = Html.cls
 
 let v ?detail ?(disabled = false) ~label on () =
   let text =
@@ -15,14 +15,9 @@ let v ?detail ?(disabled = false) ~label on () =
       | None -> []))
   in
   let el =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "switch";
-          At.v (Jstr.v "role") (Jstr.v "switch");
-          At.if' disabled At.disabled;
-        ]
+    Html.button
+      ~at:[At.v (Jstr.v "role") (Jstr.v "switch"); At.if' disabled At.disabled]
+      ["switch"]
       [
         text;
         El.span ~at:[cls "switch__track"] [El.span ~at:[cls "switch__thumb"] []];

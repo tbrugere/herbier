@@ -1,5 +1,10 @@
+module Collection_filter = Herbier_ui_model.Collection_filter
+module Cover = Herbier_ui_model.Cover
+module Fr_text = Herbier_ui_model.Fr_text
+module List_patch = Herbier_ui_model.List_patch
+module Plant_version = Herbier_ui_model.Plant_version
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Search = Herbier_store.Search
@@ -7,7 +12,6 @@ module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
 module Plant = Herbier_domain.Plant
 module Tag = Herbier_domain.Tag
-module Plant_id = Herbier_domain.Ids.Plant_id
 module Tag_id = Herbier_domain.Ids.Tag_id
 module RList = ReactiveData.RList
 module W = Widgets
@@ -15,11 +19,10 @@ module Filter = Collection_filter
 
 type item = {plant : Plant.t; observations : int; cover_preview : string option}
 
-let same a b = Plant_id.equal a.plant.id b.plant.id
+let same a b = Plant_version.same a.plant b.plant
 
 let equal a b =
-  same a b
-  && Ptime.equal a.plant.updated_at b.plant.updated_at
+  Plant_version.equal a.plant b.plant
   && Int.equal a.observations b.observations
   && Option.equal String.equal a.cover_preview b.cover_preview
 
@@ -40,8 +43,7 @@ let card item =
   in
   (c.el, open_ :: c.bindings)
 
-let log_error what e =
-  Console.(error [str ("collection: " ^ what); str (Db.error_to_string e)])
+let log_error = Log.db ~scope:"collection"
 
 (* The plants of the grid for a search text and a set of tags (all
    required), in the store's order. *)

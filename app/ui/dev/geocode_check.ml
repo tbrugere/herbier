@@ -1,14 +1,13 @@
 open Brr
 module Geocode = Herbier_geo.Geocode
-module Geocoder = Herbier_geo.Geocoder
+module Geocoder = Herbier_geo_io.Geocoder
 module Place_name = Herbier_geo.Place_name
 module Places = Herbier_domain.Places
 module Observation = Herbier_domain.Observation
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Observations = Herbier_store.Observations
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 
-let append log text = El.append_children log [El.div [El.txt' text]]
 let schlucht = {Places.lat = 48.0633; lon = 7.0081}
 let belfort = {Places.lat = 47.6380; lon = 6.8628}
 
@@ -24,7 +23,7 @@ let points =
 let now_ms () = Performance.now_ms G.performance
 
 let on_start log t0 r =
-  append log
+  Kit.append log
     (Printf.sprintf "%6.0f ms start %s"
        (now_ms () -. t0)
        (Geocode.request_to_string r))
@@ -46,12 +45,12 @@ let run_reverse log =
            (Place_name.resolve ~sources:online_sources ~online:true ~labelled:[]
               ~communes:Herbier_geo.Communes.empty p))
         (fun r ->
-          append log
+          Kit.append log
             (Printf.sprintf "%6.0f ms %s: %s"
                (now_ms () -. t0)
                name (outcome r));
           decr remaining;
-          match !remaining with 0 -> append log "reverse done" | _ -> ()))
+          match !remaining with 0 -> Kit.append log "reverse done" | _ -> ()))
     points
 
 let place (p : Geocode.place) =
@@ -59,11 +58,6 @@ let place (p : Geocode.place) =
     (Option.value p.context ~default:"")
     (Geocode.coordinate p.point.lat)
     (Geocode.coordinate p.point.lon)
-
-let button label = El.button ~at:[At.type' (Jstr.v "button")] [El.txt' label]
-
-let on_click el f =
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target el) : Ev.listener)
 
 let requests () = Hooks.geocode_requests ()
 
@@ -169,16 +163,17 @@ let save_all app ~out observations =
 let place_names app =
   let opened = List.length (requests ()) in
   let line = El.p [El.txt' (status app ~opened)] in
-  let refresh = button "Rafraîchir" in
-  on_click refresh (fun () ->
+  let refresh = Kit.button "Rafraîchir" in
+  Kit.on_click refresh (fun () ->
       El.set_children line [El.txt' (status app ~opened)]);
   let out = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "status")] [] in
-  let single = button "Observation à la Schlucht" in
-  on_click single (fun () -> save_all app ~out [observation schlucht]);
-  let belfort_button = button "Observation à Belfort" in
-  on_click belfort_button (fun () -> save_all app ~out [observation belfort]);
-  let pair = button "Lieu nommé + voisine" in
-  on_click pair (fun () ->
+  let single = Kit.button "Observation à la Schlucht" in
+  Kit.on_click single (fun () -> save_all app ~out [observation schlucht]);
+  let belfort_button = Kit.button "Observation à Belfort" in
+  Kit.on_click belfort_button (fun () ->
+      save_all app ~out [observation belfort]);
+  let pair = Kit.button "Lieu nommé + voisine" in
+  Kit.on_click pair (fun () ->
       save_all app ~out
         [
           observation ~label:"Lieu test" {lat = 44.25; lon = -0.85};
@@ -193,8 +188,8 @@ let place_names app =
 
 let el app =
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
-  let reverse_button = button "Inverse" in
-  on_click reverse_button (fun () -> run_reverse log);
+  let reverse_button = Kit.button "Inverse" in
+  Kit.on_click reverse_button (fun () -> run_reverse log);
   let input =
     El.input
       ~at:
@@ -205,18 +200,18 @@ let el app =
         ]
       ()
   in
-  let search_button = button "Chercher" in
+  let search_button = Kit.button "Chercher" in
   let results = El.ul [] in
-  on_click search_button (fun () ->
+  Kit.on_click search_button (fun () ->
       let q = Jstr.to_string (El.prop El.Prop.value input) in
       let t0 = now_ms () in
       El.set_children results [];
       Fut.await
         (Geocoder.search ~on_start:(on_start log t0) ~near:schlucht q)
         (function
-          | Error e -> append log ("search: " ^ Geocoder.error_to_string e)
+          | Error e -> Kit.append log ("search: " ^ Geocoder.error_to_string e)
           | Ok places ->
-              append log
+              Kit.append log
                 (Printf.sprintf "search: %d places" (List.length places));
               El.set_children results
                 (List.map (fun p -> El.li [El.txt' (place p)]) places)));

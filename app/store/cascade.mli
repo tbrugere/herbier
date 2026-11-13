@@ -1,7 +1,7 @@
 (** Soft deletes that take a record's dependents with it, all at one instant
-    (handoff 5a). Pure: the edits for one {!Db.edit}, each soft delete appending
-    its own outbox entry. The ids are the live dependents as the caller read
-    them; a dependent already deleted appends nothing. *)
+    (handoff 5a). Pure: the edits for one {!Herbier_store_io.Db.edit}, each soft
+    delete appending its own outbox entry. The ids are the live dependents as
+    the caller read them; a dependent already deleted appends nothing. *)
 
 module Ids := Herbier_domain.Ids
 

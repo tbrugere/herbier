@@ -1,0 +1,8 @@
+; The store over Capacitor: db runs app/store/'s statements on the SQLite
+; plugin (one chained connection, migrations, the outbox edit and the bare
+; transaction), files reads and writes the app's files (previews, reference
+; thumbnails, commune packs) on the filesystem plugin.
+(library
+ (name herbier_store_io)
+ (public_name herbier.store_io)
+ (libraries herbier_store herbier_domain herbier_bindings postgrest brr))

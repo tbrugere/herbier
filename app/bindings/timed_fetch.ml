@@ -12,23 +12,50 @@ let meth_to_string : meth -> string = function
 type error = Timeout | Failed of string
 
 let error_to_string = function Timeout -> "timeout" | Failed m -> m
-
-let message e =
-  Jstr.to_string (Jv.Error.name e) ^ ": " ^ Jstr.to_string (Jv.Error.message e)
+let message e = Jstr.to_string (Jv.Error.name e) ^ ": " ^ Js_error.message e
 
 let header_list response =
   List.map
     (fun (k, v) -> (Jstr.to_string k, Jstr.to_string v))
     (Brr_io.Fetch.Headers.to_assoc (Brr_io.Fetch.Response.headers response))
 
-(* Building the headers throws on a value fetch refuses: that is an [Error],
+type non_2xx_body = Read | Read_or_empty | Skip
+
+let read_body ~non_2xx_body ~failed response =
+  let open Fut.Syntax in
+  let answer body =
+    Ok
+      {
+        status = Brr_io.Fetch.Response.status response;
+        headers = header_list response;
+        body;
+      }
+  in
+  let text () =
+    Brr_io.Fetch.Body.text (Brr_io.Fetch.Response.as_body response)
+  in
+  match (Brr_io.Fetch.Response.ok response, non_2xx_body) with
+  | false, Skip -> Fut.return (answer "")
+  | false, Read_or_empty -> (
+      let+ text = text () in
+      match text with
+      | Ok text -> answer (Jstr.to_string text)
+      | Error _ -> answer "")
+  | true, (Read | Read_or_empty | Skip) | false, Read -> (
+      let+ text = text () in
+      match text with
+      | Ok text -> answer (Jstr.to_string text)
+      | Error e -> Error (failed e))
+
+(* [describe] gives a [Failed]'s text (see the .mli). Building the headers
+   throws on a value fetch refuses: that is an [Error],
    not an exception that would leave the caller's future pending. *)
-let request ~meth ~url ~headers ~body =
+let fetch ~describe ~timeout_ms ~non_2xx_body ~meth ~url ~headers ~body =
   match
     Brr_io.Fetch.Headers.of_assoc
       (List.map (fun (k, v) -> (Jstr.v k, Jstr.v v)) headers)
   with
-  | exception Jv.Error e -> Fut.return (Error (Failed (message e)))
+  | exception Jv.Error e -> Fut.return (Error (Failed (describe e)))
   | headers ->
       let abort = Brr.Abort.controller () in
       (* style: a local ref because the timer callback and the rejection
@@ -40,7 +67,7 @@ let request ~meth ~url ~headers ~body =
             Brr.Abort.abort abort)
       in
       let failed e =
-        match !timed_out with true -> Timeout | false -> Failed (message e)
+        match !timed_out with true -> Timeout | false -> Failed (describe e)
       in
       let init =
         Brr_io.Fetch.Request.init
@@ -55,19 +82,15 @@ let request ~meth ~url ~headers ~body =
         let* response = Brr_io.Fetch.url ~init (Jstr.v url) in
         match response with
         | Error e -> Fut.return (Error (failed e))
-        | Ok response -> (
-            let+ text =
-              Brr_io.Fetch.Body.text (Brr_io.Fetch.Response.as_body response)
-            in
-            match text with
-            | Ok text ->
-                Ok
-                  {
-                    status = Brr_io.Fetch.Response.status response;
-                    headers = header_list response;
-                    body = Jstr.to_string text;
-                  }
-            | Error e -> Error (failed e))
+        | Ok response -> read_body ~non_2xx_body ~failed response
       in
       Brr.G.stop_timer timer;
       result
+
+let request ~meth ~url ~headers ~body =
+  fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url ~headers
+    ~body
+
+let get ?(timeout_ms = timeout_ms) ?(non_2xx_body = Read) ?(headers = []) url =
+  fetch ~describe:Js_error.message ~timeout_ms ~non_2xx_body ~meth:`GET ~url
+    ~headers ~body:None

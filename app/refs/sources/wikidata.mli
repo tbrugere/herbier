@@ -44,6 +44,9 @@ module Entity : sig
     common_names : name list;  (** P1843, every value, in order. *)
     sitelinks : sitelink list;  (** fr, en, de, it present, in that order. *)
   }
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 end
 
 val entity_of_json : Yojson.Safe.t -> (Entity.t option, Decode.error) result

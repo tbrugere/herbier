@@ -2,7 +2,8 @@ module Decode = Herbier_refs.Decode
 module Qid = Herbier_refs.Qid
 module Wikidata = Herbier_refs.Sources.Wikidata
 
-let qid q = `String (Qid.to_string q)
+let qid_t = Alcotest.testable Qid.pp Qid.equal
+let entity_t = Alcotest.testable Wikidata.Entity.pp Wikidata.Entity.equal
 let search_p846_5414995 = Check.json "wikidata_search_p846_5414995.json"
 let search_p846_5405976 = Check.json "wikidata_search_p846_5405976.json"
 let search_p5037 = Check.json "wikidata_search_p5037_802077-1.json"
@@ -18,30 +19,25 @@ let search_tests =
     ( "P846 = 5414995 finds Q157555",
       `Quick,
       fun () ->
-        Check.check_result "qids"
-          ~to_json:(fun l -> `List (List.map qid l))
+        Check.check_result "qids" (Alcotest.list qid_t)
           (Ok [Check.some_qid "q" "Q157555"])
           (Wikidata.search_of_json search_p846_5414995) );
     ( "P846 = 5405976 finds Q207848",
       `Quick,
       fun () ->
-        Check.check_result "qids"
-          ~to_json:(fun l -> `List (List.map qid l))
+        Check.check_result "qids" (Alcotest.list qid_t)
           (Ok [Check.some_qid "q" "Q207848"])
           (Wikidata.search_of_json search_p846_5405976) );
     ( "P5037 (POWO urn) finds the same Digitalis item",
       `Quick,
       fun () ->
-        Check.check_result "qids"
-          ~to_json:(fun l -> `List (List.map qid l))
+        Check.check_result "qids" (Alcotest.list qid_t)
           (Ok [Check.some_qid "q" "Q157555"])
           (Wikidata.search_of_json search_p5037) );
     ( "no hit is an empty list, not an error",
       `Quick,
       fun () ->
-        Check.check_result "qids"
-          ~to_json:(fun l -> `List (List.map qid l))
-          (Ok [])
+        Check.check_result "qids" (Alcotest.list qid_t) (Ok [])
           (Wikidata.search_of_json search_p846_none) );
     ( "a root error object is Api_error",
       `Quick,
@@ -62,8 +58,7 @@ let search_tests =
       `Quick,
       fun () ->
         let hit t = `Assoc [("title", `String t)] in
-        Check.check_result "qids"
-          ~to_json:(fun l -> `List (List.map qid l))
+        Check.check_result "qids" (Alcotest.list qid_t)
           (Ok [Check.some_qid "q" "Q2"; Check.some_qid "q" "Q1"])
           (Wikidata.search_of_json
              (`Assoc
@@ -200,9 +195,7 @@ let entity_tests =
                   ] );
             ]
         in
-        Check.check_result "entity"
-          ~to_json:(Check.opt (fun _ -> `String "<some>"))
-          (Ok None)
+        Check.check_result "entity" (Alcotest.option entity_t) (Ok None)
           (Wikidata.entity_of_json j) );
   ]
 

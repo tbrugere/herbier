@@ -1,0 +1,27 @@
+; js_of_ocaml build of the two queued fetches (refs_io/http.ml's Http.get and
+; geo_io/geocoder.ml's Geocoder.run) and of Timed_fetch.request, run under node with globalThis.fetch
+; replaced by a stub that answers with node's Response: what each one makes of
+; a 2xx, a non-2xx, a body that fails to read, a rejected fetch and a fetch
+; that never answers. NODE_OPTIONS is cleared so a preload in the developer's
+; shell cannot alter the run.
+
+(executable
+ (name smoke)
+ (modes js)
+ (libraries
+  herbier_bindings
+  herbier_refs_io
+  herbier_geo
+  herbier_geo_io
+  herbier_refs
+  herbier_domain
+  brr
+  yojson))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run node -r %{dep:stub.js} %{dep:smoke.bc.js}))))

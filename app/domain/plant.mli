@@ -24,6 +24,8 @@ val equal : t -> t -> bool
 (** Field by field: [Ptime.equal] on instants (no truncation), [aliases] in
     order. *)
 
+val pp : Format.formatter -> t -> unit
+
 val v : id:id -> at:Ptime.t -> string -> t
 (** A free-name plant of that display name, created and updated [at], with no
     alias, notes or cover. *)

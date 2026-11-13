@@ -1,19 +1,12 @@
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Observations = Herbier_store.Observations
 module Observation = Herbier_domain.Observation
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Places = Herbier_domain.Places
-module Geo_map = Herbier_geo.Map
+module Geo_map = Herbier_geo_io.Map
 module Features = Herbier_geo.Features
 module Dev_hook = Herbier_bindings.Dev_hook
-
-let append log text = El.append_children log [El.div [El.txt' text]]
-
-let button label f =
-  let b = El.button [El.txt' label] in
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target b));
-  b
 
 let poll_ms = 20
 let attach_timeout_ms = 2000
@@ -58,7 +51,7 @@ let show log status container colours observations =
   in
   match created with
   | Error e ->
-      append log ("erreur: " ^ Geo_map.error_to_string e);
+      Kit.append log ("erreur: " ^ Geo_map.error_to_string e);
       None
   | Ok m ->
       let total = List.length observations
@@ -76,7 +69,7 @@ let show log status container colours observations =
       let fit () =
         match Features.bounds observations with
         | Some b -> Geo_map.fit m b ~padding_px
-        | None -> append log "rien à cadrer"
+        | None -> Kit.append log "rien à cadrer"
       in
       (* Subscribed before fit: without animation (reduced motion) its
          moveend fires synchronously. *)
@@ -85,9 +78,9 @@ let show log status container colours observations =
       Geo_map.set_observations m observations;
       fit ();
       refresh ();
-      Geo_map.on_error m (fun message -> append log ("erreur: " ^ message));
+      Geo_map.on_error m (fun message -> Kit.append log ("erreur: " ^ message));
       Geo_map.on_click m (fun {at; observations = ids} ->
-          append log
+          Kit.append log
             (Printf.sprintf "clic %s → %s" (coords at)
                (String.concat ", " (List.map Observation_id.to_string ids)));
           match ids with
@@ -98,7 +91,7 @@ let show log status container colours observations =
                   Geo_map.set_accuracy m (Option.map (fun r -> (p, r)) radius_m);
                   Geo_map.fly_to m ~center:p ~zoom:16.
               | None -> Geo_map.set_accuracy m None));
-      append log "carte prête";
+      Kit.append log "carte prête";
       Some (m, fit)
 
 let el db =
@@ -115,33 +108,36 @@ let el db =
       | Some (m, _) -> List.length (Geo_map.rendered m)
       | None -> 0);
   let fit_button =
-    button "Ajuster" (fun () ->
+    Kit.action "Ajuster" (fun () ->
         match !current with Some (_, fit) -> fit () | None -> ())
   and centre_button =
-    button "Centre" (fun () ->
+    Kit.action "Centre" (fun () ->
         match !current with
         | Some (m, _) -> (
             match (Geo_map.center m, Geo_map.zoom m) with
             | Some c, Some z ->
-                append log (Printf.sprintf "centre %s · zoom %.2f" (coords c) z)
+                Kit.append log
+                  (Printf.sprintf "centre %s · zoom %.2f" (coords c) z)
             | Some _, None | None, (Some _ | None) ->
-                append log "erreur: caméra illisible")
-        | None -> append log "pas de carte")
+                Kit.append log "erreur: caméra illisible")
+        | None -> Kit.append log "pas de carte")
   in
   let start =
     let open Fut.Syntax in
     let* attached = attached ~ms:attach_timeout_ms container in
     match (attached, db, Theme.load ()) with
     | false, _, _ ->
-        Fut.return (append log "erreur: la page n'est pas dans le document")
-    | true, Error e, _ -> Fut.return (append log ("erreur: base: " ^ e))
+        Fut.return (Kit.append log "erreur: la page n'est pas dans le document")
+    | true, Error e, _ -> Fut.return (Kit.append log ("erreur: base: " ^ e))
     | true, Ok _, Error (Theme.Missing_tokens missing) ->
         Fut.return
-          (append log ("erreur: jetons absents: " ^ String.concat ", " missing))
+          (Kit.append log
+             ("erreur: jetons absents: " ^ String.concat ", " missing))
     | true, Ok db, Ok theme -> (
         let* observations = Db.all db Observations.list in
         match observations with
-        | Error e -> Fut.return (append log ("erreur: " ^ Db.error_to_string e))
+        | Error e ->
+            Fut.return (Kit.append log ("erreur: " ^ Db.error_to_string e))
         | Ok observations ->
             let+ shown = show log status container theme.map observations in
             current := shown)

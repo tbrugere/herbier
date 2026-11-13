@@ -10,6 +10,7 @@ module Gbif = Herbier_refs.Sources.Gbif
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
 module Qid = Herbier_refs.Qid
+module Fixture = Herbier_test_support.Fixture
 
 let url (r : Request.t) = Request.(r.url)
 

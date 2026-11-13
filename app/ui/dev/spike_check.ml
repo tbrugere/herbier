@@ -1,5 +1,5 @@
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Dev_hook = Herbier_bindings.Dev_hook
 
 let cycles = 50

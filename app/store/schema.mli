@@ -1,13 +1,13 @@
-(** Local schema migrations, applied in order by {!Db.open_} and recorded in
-    SQLite's [PRAGMA user_version] (0 on a new database).
+(** Local schema migrations, applied in order by {!Herbier_store_io.Db.open_}
+    and recorded in SQLite's [PRAGMA user_version] (0 on a new database).
 
     A migration is a list of statements, each string exactly one SQL statement
     (multi-line, comments allowed, without a trailing [";"]), run in order in
-    one transaction by {!Db.open_} through the plugin's [executeSet], which
-    prepares each string as given. No column is named [sql_deleted] or
-    [last_modified]: when the database has both columns (in any tables), the
-    plugin rewrites every [DELETE] into [UPDATE … set sql_deleted = 1]. Checked
-    natively by [test/store].
+    one transaction by {!Herbier_store_io.Db.open_} through the plugin's
+    [executeSet], which prepares each string as given. No column is named
+    [sql_deleted] or [last_modified]: when the database has both columns (in any
+    tables), the plugin rewrites every [DELETE] into
+    [UPDATE … set sql_deleted = 1]. Checked natively by [test/store].
 
     Local foreign keys are enforced and cascade on delete, so an upsert is
     [insert … on conflict (id) do update set …], never [insert or replace] or
@@ -25,11 +25,12 @@ val migrations : migration list
     FTS5 table [plant_search] of {!Search}, the triggers that keep it in sync
     with [plants], [plant_tags], [tags] and [observations], and indexes the
     plants already present. It needs FTS5 in the device's SQLite (the plugin's
-    SQLCipher build has it): without it, version 2 fails and {!Db.open_} returns
-    [Migration {version = 2; _}]. Version 3 creates the local lookup table
-    [reference_organs] (values [Reference.Organ.all] labels) and the device-only
-    table [ref_images] of {!Ref_images}. Version 4 creates the device-only table
-    [commune_packs] of {!Commune_packs}. *)
+    SQLCipher build has it): without it, version 2 fails and
+    {!Herbier_store_io.Db.open_} returns [Migration {version = 2; _}]. Version 3
+    creates the local lookup table [reference_organs] (values
+    [Reference.Organ.all] labels) and the device-only table [ref_images] of
+    {!Ref_images}. Version 4 creates the device-only table [commune_packs] of
+    {!Commune_packs}. *)
 
 val latest : int
 (** Version of the last migration. *)

@@ -1,7 +1,8 @@
 (** The canonical page URL of a taxon at each source, from the id
     [Herbier_domain.Link.classify] reads back out of it: 4f's derived links
-    ({!Projection}) and 5a's pasted ones (app/ui/ref_paste.ml) are built here.
-    Pure; the ids are not checked. [encode] is {!Request.encode}. *)
+    ({!Projection}) and 5a's pasted ones (app/ui_model/ref_paste.ml) are built
+    here. Pure; the ids are not checked. [encode] is {!Herbier_net.Url.encode}.
+*)
 
 val taxref : int -> string
 (** ["https://inpn.mnhn.fr/espece/cd_nom/<cd>"]. *)

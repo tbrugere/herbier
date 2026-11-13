@@ -8,10 +8,14 @@
   test_photo
   test_places
   test_link
+  test_text
+  test_bbox
+  test_fold
   test_schema_dump
   test_merge)
  (libraries
   herbier_domain
+  herbier_test_support
   postgrest-codegen
   alcotest
   ptime

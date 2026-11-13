@@ -3,7 +3,7 @@
     thumbnails are downloaded into [refthumbs/]. *)
 
 module Organ := Herbier_domain.Reference.Organ
-module Db := Herbier_store.Db
+module Db := Herbier_store_io.Db
 module Cap_error := Herbier_bindings.Cap_error
 
 (** Why a thumbnail was not had. The row keeps [thumb_path = None] and the next

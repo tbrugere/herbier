@@ -1,7 +1,8 @@
 (** The device-only [commune_packs] table (architecture §3): one row per
     downloaded département pack of « IGN hors-ligne » and its file under
-    [communes/]. Not synced: written with {!Db.write}, never through {!Db.edit},
-    no outbox entry. Knows nothing of the pack's content. *)
+    [communes/]. Not synced: written with {!Herbier_store_io.Db.write}, never
+    through {!Herbier_store_io.Db.edit}, no outbox entry. Knows nothing of the
+    pack's content. *)
 
 type t = {
   departement : string;

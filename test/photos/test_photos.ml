@@ -2,15 +2,14 @@
    (test/fixtures/exifr_*.json) and over hand-written objects for the edge
    cases; Preview_size.fit; Jpeg.has_exif over hand-built segments. *)
 
-let fixture name =
-  let path = Filename.concat "../fixtures" ("exifr_" ^ name ^ ".json") in
-  In_channel.with_open_bin path In_channel.input_all
+module Exif = Herbier_photos.Exif
+module Jpeg = Herbier_photos.Jpeg
+module Preview_size = Herbier_photos.Preview_size
+module Fixture = Herbier_test_support.Fixture
+module Value = Herbier_test_support.Value
 
-let time s =
-  match Ptime.of_rfc3339 s with
-  | Ok (t, _, _) -> t
-  | Error _ -> Alcotest.failf "bad RFC 3339 literal %S" s
-
+let fixture name = Fixture.read ("exifr_" ^ name ^ ".json")
+let time = Value.time
 let pp_time ppf t = Ptime.pp_rfc3339 ~frac_s:6 () ppf t
 let instant = Alcotest.testable pp_time Ptime.equal
 
@@ -291,6 +290,32 @@ let input_tests =
         let e = Exif.of_json ~tz_offset_at:(fixed 0) `Null in
         check_time "taken_at" None e;
         check_position "position" None e );
+    ( "a null field is an absent one",
+      `Quick,
+      fun () ->
+        let e =
+          of_fields
+            (List.map
+               (fun name -> (name, `Null))
+               ("latitude" :: "longitude" :: Exif.tags))
+        in
+        check_time "taken_at" None e;
+        check_position "position" None e;
+        check_time "null offset and sub-seconds"
+          (Some (time "2026-05-12T12:03:22Z"))
+          (of_fields ~tz_offset_s:7200
+             [
+               date; ("OffsetTimeOriginal", `Null); ("SubSecTimeOriginal", `Null);
+             ]);
+        check_position "null accuracy"
+          (Some (pos 45. 5.))
+          (of_fields
+             (refs
+             @ [
+                 ("latitude", `Float 45.);
+                 ("longitude", `Int 5);
+                 ("GPSHPositioningError", `Null);
+               ])) );
     ( "not JSON",
       `Quick,
       fun () ->

@@ -1,15 +1,10 @@
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Outbox = Herbier_store.Outbox
 module Sync_state = Herbier_store.Sync_state
 module Sync = Herbier_sync
+module Sync_core = Herbier_sync_core
 module Observation = Herbier_domain.Observation
-
-let append log text = El.append_children log [El.div [El.txt' text]]
-let button label = El.button ~at:[At.type' (Jstr.v "button")] [El.txt' label]
-
-let on_click el f =
-  ignore (Ev.listen Ev.click (fun _ -> f ()) (El.as_target el) : Ev.listener)
 
 let iso t = Ptime.to_rfc3339 ~frac_s:6 ~tz_offset_s:0 t
 
@@ -22,7 +17,7 @@ let entry_line (e : Outbox.entry) =
 let last_lines engine =
   match Sync.Engine.last engine with
   | None -> ["last cycle: none"]
-  | Some r -> ("last cycle: " ^ iso r.started) :: Sync.Cycle.Report.lines r
+  | Some r -> ("last cycle: " ^ iso r.started) :: Sync_core.Cycle.Report.lines r
 
 let rejected_entry () =
   let now = Ptime_clock.now () in
@@ -64,7 +59,7 @@ let page app =
       ["status: " ^ Auth_check.status_to_string (Sync.Auth.status auth)];
     lines_of engine_el
       (("engine: "
-       ^ Sync.Cycle.Schedule.state_to_string (Sync.Engine.state engine))
+       ^ Sync_core.Cycle.Schedule.state_to_string (Sync.Engine.state engine))
       :: last_lines engine);
     let open Fut.Syntax in
     let* count = Db.all db Outbox.count in
@@ -95,39 +90,40 @@ let page app =
         ]
       ()
   in
-  let import = button "Importer la session"
-  and sync = button "Synchroniser"
-  and reset = button "Curseurs à zéro"
-  and rejected = button "Entrée refusée"
-  and unreadable = button "Entrée illisible"
-  and update = button "Actualiser" in
+  let import = Kit.button "Importer la session"
+  and sync = Kit.button "Synchroniser"
+  and reset = Kit.button "Curseurs à zéro"
+  and rejected = Kit.button "Entrée refusée"
+  and unreadable = Kit.button "Entrée illisible"
+  and update = Kit.button "Actualiser" in
   let write ?(after = ignore) label stmt =
     Fut.await (Db.write db stmt) (function
       | Ok (_ : int) ->
-          append log (label ^ ": ok");
+          Kit.append log (label ^ ": ok");
           after ();
           refresh ()
-      | Error e -> append log (label ^ ": " ^ Db.error_to_string e))
+      | Error e -> Kit.append log (label ^ ": " ^ Db.error_to_string e))
   in
   let entry label stmt =
     write label stmt ~after:(fun () -> Sync.Engine.local_write engine)
   in
-  on_click import (fun () ->
+  Kit.on_click import (fun () ->
       let text = Jstr.to_string (El.prop El.Prop.value session) in
       El.set_prop El.Prop.value Jstr.empty session;
       Fut.await (Sync.Auth.debug_import auth text) (function
         | Ok () ->
-            append log "import: ok";
+            Kit.append log "import: ok";
             refresh ()
-        | Error e -> append log ("import: " ^ Sync.Auth.error_to_string e)));
-  on_click sync (fun () ->
+        | Error e -> Kit.append log ("import: " ^ Sync.Auth.error_to_string e)));
+  Kit.on_click sync (fun () ->
       Sync.Engine.sync_now engine;
-      append log "sync: requested";
+      Kit.append log "sync: requested";
       refresh ());
-  on_click reset (fun () -> write "reset" Sync_state.reset);
-  on_click rejected (fun () -> entry "rejected entry" (rejected_entry ()));
-  on_click unreadable (fun () -> entry "unreadable entry" (unreadable_entry ()));
-  on_click update refresh;
+  Kit.on_click reset (fun () -> write "reset" Sync_state.reset);
+  Kit.on_click rejected (fun () -> entry "rejected entry" (rejected_entry ()));
+  Kit.on_click unreadable (fun () ->
+      entry "unreadable entry" (unreadable_entry ()));
+  Kit.on_click update refresh;
   let el =
     El.div
       [
@@ -142,7 +138,7 @@ let page app =
       ]
   in
   Rb.hold el [Rb.act (App.synced app) refresh];
-  Fut.await (render ()) (fun () -> append log "done");
+  Fut.await (render ()) (fun () -> Kit.append log "done");
   el
 
 let el = function

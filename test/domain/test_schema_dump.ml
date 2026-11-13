@@ -9,6 +9,7 @@
 module Codegen = Postgrest_codegen
 module Photo = Herbier_domain.Photo
 module Reference = Herbier_domain.Reference
+module Text = Herbier_test_support.Text
 
 (* Every module a lookup table names. Reference.Organ has no lookup table:
    organs are device-only. *)
@@ -39,13 +40,6 @@ let model () =
   with
   | Ok model -> model
   | Error e -> Alcotest.fail (Codegen.Error.to_string e)
-
-let contains ~sub text =
-  let n = String.length sub in
-  let rec go i =
-    i + n <= String.length text && (String.sub text i n = sub || go (i + 1))
-  in
-  go 0
 
 (* Lookup table -> the module its metadata names. *)
 let lookup_modules () =
@@ -118,9 +112,9 @@ let tests =
         let original = generate catalog in
         let renamed = generate (List.map rename_in catalog) in
         check bool "display_name before" true
-          (contains ~sub:"let display_name :" original);
+          (Text.contains ~sub:"let display_name :" original);
         check bool "display_name after" false
-          (contains ~sub:"let display_name :" renamed);
+          (Text.contains ~sub:"let display_name :" renamed);
         check bool "display_label after" true
-          (contains ~sub:"let display_label :" renamed));
+          (Text.contains ~sub:"let display_label :" renamed));
   ]

@@ -1,14 +1,13 @@
+module Pack_text = Herbier_ui_model.Pack_text
 open Brr
-module Db = Herbier_store.Db
+module Db = Herbier_store_io.Db
 module Settings = Herbier_store.Settings
 module Original_target = Herbier_domain.Photo.Original_target
 module Place_name = Herbier_geo.Place_name
 module W = Widgets
 
-let cls c = At.class' (Jstr.v c)
-
-let log_error what e =
-  Console.(error [str ("réglages: " ^ what); str (Db.error_to_string e)])
+let cls = Html.cls
+let log_error = Log.db ~scope:"réglages"
 
 let section title children =
   El.section
@@ -17,13 +16,9 @@ let section title children =
 
 let radio ~title ~detail selected =
   let el =
-    El.button
-      ~at:
-        [
-          At.type' (Jstr.v "button");
-          cls "radio-row";
-          At.v (Jstr.v "role") (Jstr.v "radio");
-        ]
+    Html.button
+      ~at:[At.v (Jstr.v "role") (Jstr.v "radio")]
+      ["radio-row"]
       [
         El.span ~at:[cls "radio-row__dot"] [];
         El.span
@@ -73,6 +68,7 @@ type card = {
   meta : string;
   action : string option;
 }
+[@@deriving eq]
 
 (* « Changer » signs in again (the account chooser); the current session
    stays until the new one is made. *)
@@ -105,12 +101,6 @@ let card ~running : Auth.status -> card = function
         action =
           Some (match running with true -> "Connexion…" | false -> "Changer");
       }
-
-let equal_card a b =
-  String.equal a.avatar b.avatar
-  && String.equal a.title b.title
-  && String.equal a.meta b.meta
-  && Option.equal String.equal a.action b.action
 
 let account_card app =
   let auth = App.auth app and state = App.state app in
@@ -153,11 +143,8 @@ let account_card app =
                   let message = sign_in_error e in
                   Option.iter
                     (fun (_ : string) ->
-                      Console.(
-                        error
-                          [
-                            str "réglages: sign-in"; str (Auth.error_to_string e);
-                          ]))
+                      Log.error ~scope:"réglages" "sign-in"
+                        (Auth.error_to_string e))
                     message;
                   message
             in
@@ -190,8 +177,7 @@ let account_card app =
          (React.S.map (fun c -> Option.value c.action ~default:"") card)
     :: Rb.class_ button.el "is-hidden"
          (React.S.map (fun c -> Option.is_none c.action) card)
-    :: Rb.attr button.el "aria-disabled"
-         (React.S.map (function true -> Some "true" | false -> None) running)
+    :: Rb.disabled button.el running
     :: Rb.text error_el (React.S.map (Option.value ~default:"") error)
     :: Rb.class_ error_el "is-hidden" (React.S.map Option.is_none error)
     :: Rb.act button.click sign_in
@@ -204,10 +190,6 @@ type picker =
   | Loading
   | List_failed of string
   | Choosing of Herbier_geo.Communes.departement list
-
-let disabled el on =
-  Rb.attr el "aria-disabled"
-    (React.S.map (function true -> Some "true" | false -> None) on)
 
 let pack_row app ~deleting ~set_deleting ~set_message (p : App.pack) =
   let remove = W.Button.text ~tone:`Danger "Supprimer" in
@@ -259,7 +241,7 @@ let pack_row app ~deleting ~set_deleting ~set_message (p : App.pack) =
             | Ok () -> ()
             | Error e -> set_message (Some (App.pack_error_to_string e)))
   in
-  (el, disabled remove.el busy :: Rb.act remove.click act :: remove.bindings)
+  (el, Rb.disabled remove.el busy :: Rb.act remove.click act :: remove.bindings)
 
 let picker_list_id = "pack-picker-list"
 
@@ -364,7 +346,7 @@ let ign_offline_block app =
               match String.trim query with
               | "" -> true
               | _ ->
-                  Herbier_store.Search.matches ~query
+                  Herbier_domain.Fold.matches ~query
                     (Herbier_geo.Communes.Code.to_string d.code ^ " " ^ d.name))
         in
         let rows =
@@ -445,7 +427,7 @@ let ign_offline_block app =
         (React.S.l4 ~eq:( == )
            (fun p q packs d -> (p, q, packs, d))
            picker field.value (App.packs app) downloading);
-      disabled add.el downloading;
+      Rb.disabled add.el downloading;
       Rb.attr add.el "aria-expanded"
         (React.S.map
            (function

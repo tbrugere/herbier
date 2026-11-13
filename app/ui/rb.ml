@@ -1,3 +1,4 @@
+module List_patch = Herbier_ui_model.List_patch
 open Brr
 module RList = ReactiveData.RList
 
@@ -32,6 +33,10 @@ let attr el name s =
 let class_ el name s =
   let name = Jstr.v name in
   write s (fun on -> El.set_class name on el)
+
+let disabled el on =
+  attr el "aria-disabled"
+    (React.S.map (function true -> Some "true" | false -> None) on)
 
 let style el prop s =
   let prop = Jstr.v prop in

@@ -51,14 +51,7 @@ let v photos =
     List.mapi
       (fun i p ->
         let b =
-          El.button
-            ~at:
-              [
-                At.type' (Jstr.v "button");
-                At.class' (Jstr.v "photo-grid__item");
-                At.v (Jstr.v "aria-label") (Jstr.v (label ~i ~n p));
-              ]
-            [tile p]
+          Html.button ~label:(label ~i ~n p) ["photo-grid__item"] [tile p]
         in
         (b, Rb.listen b Ev.click (fun _ -> send p)))
       photos
