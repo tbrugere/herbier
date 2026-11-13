@@ -17,7 +17,8 @@
     "db:schema:dump": "uv run supabase/scripts/schema-dump.py",
     "db:schema:check": "uv run supabase/scripts/schema-dump.py --check",
     "db:catalog:dump": "scripts/catalog-dump.sh",
-    "db:catalog:check": "scripts/catalog-dump.sh --check"
+    "db:catalog:check": "scripts/catalog-dump.sh --check",
+    "db:test": "supabase test db"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.0.0",

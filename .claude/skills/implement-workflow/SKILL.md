@@ -35,7 +35,7 @@ pushbacks and device checks, then marked ready and merged by you.
   plan step's "Done:" criterion is met; the review lenses and the second scope / comment-hygiene
   pass are clean, with pushbacks written in the PR; the local checks pass on its head (GitHub
   Actions is disabled: `dune build`, `dune test`, `dune build @web`, `dune build @fmt`, plus local
-  Supabase `db reset` / `schema-dump.py --check` / `scripts/catalog-dump.sh --check` / `smoke.sql`
+  Supabase `db reset` / `schema-dump.py --check` / `scripts/catalog-dump.sh --check` / `supabase test db`
   when `supabase/` or the codegen changed); and its device checks, if the step has any, passed on
   the shared emulator (`emulator` skill: `scripts/emulator.sh lock "<step>"` first, `unlock`
   at the end, never a second AVD) with the results posted on the PR. Then squash-merge (the title

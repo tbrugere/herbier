@@ -416,9 +416,10 @@ supabase/
   schema/                 generated dump of the current schema, one file per object, committed
     catalog.json          its catalog (lib/postgrest/codegen/catalog.sql), postgrest-codegen's input, committed
   scripts/schema-dump.py  regenerates schema/ (`uv run`); `--check` fails when it is stale
-  scripts/smoke.sql       psql asserts on the seeded local db (triggers, plants_near, RLS), run in CI
-                          until pgTAP replaces it (M6)
-  tests/                  pgTAP: RLS (owner only, no anon), triggers, plants_near
+  tests/                  pgTAP run by `supabase test db`, one file per concern:
+                          structure (tables, views, functions, policies, grants, triggers),
+                          rls_owner (owner only), anon (anon reads nothing), triggers (updated_at, loc),
+                          plants_near
   seed.sql                a dev user and two plants for local `supabase start`
 ```
 
@@ -505,9 +506,9 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   spaced by 1.2 s).
 - `ci.yml`: `dune build`, `dune test`, the formatting check (`dune build @fmt`,
   ocamlformat installed from opam on the runner), `dune build @web` and checks on
-  its output. From M1.9: `dune test` also checks `app/store/tables.ml` against the catalog, and `schema-dump.py --check`,
-  `scripts/catalog-dump.sh --check` and `supabase/scripts/smoke.sql` on a local Supabase stack; from M6:
-  `supabase test db`.
+  its output. From M1.9: `dune test` also checks `app/store/tables.ml` against the catalog. A
+  `supabase` job runs `schema-dump.py --check`, `scripts/catalog-dump.sh --check` and
+  `supabase test db` (the pgTAP files of `supabase/tests/`) on a local Supabase stack.
   `android.yml`: debug APK on tag, manual run, or a pull request touching the
   Android project, uploaded as an artifact for
   sideloading; the only device build until the polish milestone.

@@ -84,7 +84,7 @@ jobs:
         run: uv run supabase/scripts/schema-dump.py --check
       - name: catalog is fresh
         run: scripts/catalog-dump.sh --check
-      - name: triggers, plants_near and RLS answer on the seeded database
-        run: psql -v ON_ERROR_STOP=1 postgresql://postgres:postgres@127.0.0.1:54322/postgres -f supabase/scripts/smoke.sql
+      - name: pgTAP (RLS, triggers, plants_near)
+        run: npx --no-install supabase test db
       - if: always()
         run: npx --no-install supabase stop --no-backup

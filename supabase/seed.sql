@@ -1,9 +1,9 @@
 -- Local development seed, loaded by `supabase start` and `supabase db reset`.
 -- One dev user so rows have an owner, and two plants owned by it. The user
 -- has no password and is not the account the app signs in with, so RLS hides
--- these plants from the app: they are for SQL and tests. The token columns
--- are '' because GoTrue reads them as non-null strings. Nothing here reaches
--- production.
+-- these plants from the app: they are for SQL by hand (the pgTAP tests create
+-- their own users and pass with --no-seed). The token columns are '' because
+-- GoTrue reads them as non-null strings. Nothing here reaches production.
 
 insert into auth.users (
   instance_id, id, aud, role, email, email_confirmed_at,
