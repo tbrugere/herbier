@@ -18,6 +18,9 @@ type modal =
   | Search of string  (** 4i, prefilled with this query (may be [""]) *)
   | Link_species of Herbier_domain.Ids.Plant_id.t
       (** 4i for one plant: 4g « Lier », 5a « Changer › » *)
+  | Intercepted of {text : string; outside : bool}
+      (** 4j for [text], never blank: a link or share from another app
+          ([outside], {!Intake}), or one given inside Herbier *)
 
 type t = Tab of Widgets.Tab_bar.tab | Modal of modal | Dev of string
 
@@ -32,14 +35,19 @@ val of_fragment : string -> t
     ["noter/enregistre/<id>"] → [Modal (Saved id)]; ["photo/<id>"] →
     [Modal (Viewer id)]; ["chercher"] → [Modal (Search "")]; ["chercher/<q>"] →
     [Modal (Search q)], [q] percent-decoded (undecodable: as is);
-    ["plante/<id>/lier"] → [Modal (Link_species id)]; ["dev/<name>"] →
-    [Dev name]. Anything else (an id that is not a UUID too) is
-    [Tab Collection]. *)
+    ["plante/<id>/lier"] → [Modal (Link_species id)]; ["lien/<t>"] →
+    [Modal (Intercepted {text = t; outside = true})], [t] percent-decoded as [q]
+    is and taken whole (it may hold ['/']), when it is not blank; ["coller/<t>"]
+    → the same with [outside = false]; ["dev/<name>"] → [Dev name]. Anything
+    else (an id that is not a UUID, ["lien"], a blank ["lien/<t>"] or
+    ["coller/<t>"] too) is [Tab Collection]. *)
 
 val to_fragment : t -> string
 (** Inverse of {!of_fragment} on its canonical forms ([Tab Collection] is
     ["collection"], [Search ""] is ["chercher"], [Search q] is ["chercher/"]
-    then [q] as [encodeURIComponent] gives it). *)
+    then [q] as [encodeURIComponent] gives it; [Intercepted {text; outside}] is
+    ["lien/"] when [outside], else ["coller/"], then [text] encoded the same
+    way). *)
 
 val current : unit -> t
 (** The route of the current fragment. *)

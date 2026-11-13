@@ -84,6 +84,8 @@ module Taxon = struct
     vernacular_name : string option;
   }
 
+  let latin t = Option.value t.canonical_name ~default:t.scientific_name
+
   (* [/species/suggest] sends no [authorship]: it is what [scientificName]
      adds after the words of [canonicalName], which leaves out the hybrid sign
      and the rank markers ("Digitalis ×purpurascens Lindl.", "Digitalis

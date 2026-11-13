@@ -437,23 +437,45 @@ gbif_key
 
 Manifest `intent-filter`s (`VIEW` + `BROWSABLE`, `https`) for Pl@ntNet's
 hosts only (user decision 2026-11-12): `identify.plantnet.org` and the
-Pl@ntUse hosts below. The resolver classifies all the hosts below, the others
-only when pasted in « Liens de référence » (5a); gbif.org may be re-added to
-the manifest if needed:
-`www.gbif.org` and `m.gbif.org`: `/species/*` and `/{lang}/species/*`;
-`identify.plantnet.org`: `/*/species/*` and `/*/observations/*`;
+Pl@ntUse hosts below. The resolver classifies all the hosts below and also a
+`www.` variant of each, the non-Pl@ntNet ones only when pasted in « Liens de
+référence » (5a) or shared as text; gbif.org may be re-added to the manifest
+if needed:
+`www.gbif.org`, `gbif.org` and `m.gbif.org`: `/species/*` and
+`/{lang}/species/*`;
+`identify.plantnet.org`: `/{project}/species/*` and
+`/{lang}/{project}/species/*`, the same two depths for `observations`;
 `plantuse.plantnet.org`, `uses.plantnet.org` and the old
-`uses.plantnet-project.org`: `/*` (the Pl@ntUse wiki, linked from Pl@ntNet
-species pages; which host is current is to verify);
+`uses.plantnet-project.org`: `/{lang}/{page}` and deeper (the Pl@ntUse wiki,
+linked from Pl@ntNet species pages; `plantuse.plantnet.org` is current, the
+old host redirects there and `uses.plantnet.org` no longer resolves, checked
+2026-11-12; old links still classify; a page the classifier rejects lands on
+4i with an empty query);
 `*.wikipedia.org` (and `*.m.wikipedia.org`): `/wiki/*`;
 `powo.science.kew.org`: `/taxon/*`;
 `inpn.mnhn.fr`: `/espece/cd_nom/*` and `/explorer/especes/*`;
-`www.tela-botanica.org`: `/bdtfx-nn-*`;
-`www.inaturalist.org` and `m.inaturalist.org`: `/taxa/*`.
+`www.tela-botanica.org` and `tela-botanica.org`: `/bdtfx-nn-*`;
+`www.inaturalist.org`, `inaturalist.org` and `m.inaturalist.org`: `/taxa/*`.
+A manifest `pathPattern` is Android's simple glob, whose `.*` stops at the
+first occurrence of the next character and never backtracks: `/.*/species/.*`
+matches one segment before `species` only, so each depth is its own pattern.
 Plus `SEND text/plain` via the share-target plugin (Pl@ntNet's share). On
-Android 12+ the user enables the Pl@ntNet hosts once under "Ouvrir par défaut" (no Digital Asset Links since we
+Android 12+ the user enables the Pl@ntNet hosts once under "Ouvrir par
+défaut" (no Digital Asset Links since we
 do not own these domains); the share sheet path needs nothing. Both paths
-ship in v1.
+ship in v1. A link or share that cold-starts the app is not lost: Capacitor
+runs the launch intent through the plugins' `handleOnNewIntent`, and both
+`appUrlOpen` and `shareReceived` are retained until the first listener
+registers (`ui/intake.ml`, after the router starts). An activity recreated
+after process death or relaunched from recents still carries its first
+intent; `MainActivity` drops it, so that link does not open 4j again.
+Android back from an outside 4j, or from the fiche it opened, returns to the
+app the link came from when Herbier had no user gesture before the link
+(cold start, or a warm app untouched since its last navigation): Chromium's
+history-manipulation intervention marks the entry under `#lien/` skippable,
+so the `backButton` event's `canGoBack` is false and the router exits. This
+is accepted as expected Android behaviour (user decision 2026-11-12); it
+matches what ✕ does, and the in-app ← still goes to Collection.
 
 Resolver (OCaml, shared by screens 4i/4j/4k/5c):
 
@@ -463,8 +485,8 @@ input (URL or text)
      gbif       → key from path
      plantnet   → decode "Genus species Author" from path → GBIF species/match
      plantnet observation → no name in the path, and Pl@ntNet's API needs a key:
-                  4i fallback with an empty query
-     plantuse   → "Genus_species" wiki page name → GBIF species/match (host to verify)
+                  4i fallback with the shared text around the link (often empty)
+     plantuse   → "Genus_species" wiki page name → GBIF species/match
      wikipedia  → REST summary → wikibase_item → Wikidata P846
      inpn/tela  → Wikidata by P3186/P3105 → P846 (not the regional APIs; gaps → 4i;
                   INPN/Tela as sources are the M4.59 regional layer)

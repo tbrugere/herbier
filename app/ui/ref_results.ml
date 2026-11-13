@@ -31,9 +31,6 @@ let failed = function
   | Ref_search.Failed _ -> true
   | Ref_search.(Blank | Pending | Found _ | Offline) -> false
 
-let latin (t : Taxon.t) =
-  Option.value t.canonical_name ~default:t.scientific_name
-
 let meta ~mode ~current ~plants ~action (t : Taxon.t) =
   let here =
     match (action : Ref_pick.action) with
@@ -77,7 +74,7 @@ let row ~mode ~current ~plants ~online ~online_s ~pick (c : Candidate.t) =
            [
              El.p
                ~at:[cls "ref-row__latin"]
-               (El.i [El.txt' (latin c.taxon)]
+               (El.i [El.txt' (Taxon.latin c.taxon)]
                :: Option.to_list
                     (Option.map
                        (fun a ->

@@ -7,6 +7,8 @@ module Observations = Herbier_store.Observations
 module Observation = Herbier_domain.Observation
 module Plant = Herbier_domain.Plant
 module Plant_id = Herbier_domain.Ids.Plant_id
+module Tag_id = Herbier_domain.Ids.Tag_id
+module Observation_id = Herbier_domain.Ids.Observation_id
 module Candidate = Herbier_refs.Resolve.Candidate
 module RList = ReactiveData.RList
 module W = Widgets
@@ -16,6 +18,7 @@ type mode =
   | Change of Herbier_domain.Ids.Observation_id.t
   | Search of string
   | Link_plant of Plant_id.t
+  | Intercept of {text : string; outside : bool}
 
 (* The two modes that move an observation. *)
 type move_mode = Identify_obs | Change_obs
@@ -660,6 +663,430 @@ let render_link app ((plant : Plant.t), plants) =
         search.bindings;
       ] )
 
+type intercepted = {
+  plants : Plant.t list;  (** live *)
+  tags : Herbier_domain.Tag.t list;  (** live *)
+  links : Herbier_domain.Tag.Plant_tag.t list;  (** live *)
+}
+
+let load_intercepted db =
+  let open Fut.Result_syntax in
+  let* plants = Db.all db Plants.list in
+  let* tags = Db.all db Tags.list in
+  let+ links = Db.all db Tags.links in
+  {plants; tags; links}
+
+let log_refs what why = Console.(error [str ("refs: " ^ what); str why])
+
+(* The app the link came from shows again; the route was popped already. *)
+let minimize () =
+  Fut.await (Herbier_bindings.Cap_app.minimize_app ()) (function
+    | Ok () -> ()
+    | Error e ->
+        Console.(
+          error
+            [
+              str "intercept: minimize";
+              str (Herbier_bindings.Cap_error.to_string e);
+            ]))
+
+let close ~outside () =
+  Route.back ();
+  match outside with true -> minimize () | false -> ()
+
+let toggle_button label on =
+  let el =
+    El.button
+      ~at:[At.type' (Jstr.v "button"); cls "intercept__toggle"]
+      [El.txt' label]
+  in
+  let click, b = Rb.click el in
+  ( el,
+    click,
+    [
+      b;
+      Rb.attr el "aria-pressed"
+        (React.S.map (fun b -> Some (Bool.to_string b)) on);
+    ] )
+
+(* « Première observation ici », or « Sans observation · Remettre » once
+   removed. *)
+let observation_card ~gps ~kept ~set_kept =
+  let remove = W.Button.text "Enlever" in
+  let restore = W.Button.text "Remettre" in
+  let line = El.p ~at:[cls "t-meta"] [] in
+  let card =
+    El.div
+      ~at:[cls "intercept__obs"]
+      [
+        El.span ~at:[cls "intercept__dot"] [];
+        El.div
+          ~at:[cls "intercept__obs-text"]
+          [
+            El.p
+              ~at:[cls "intercept__obs-title"]
+              [El.txt' "Première observation ici"];
+            line;
+          ];
+        remove.el;
+      ]
+  in
+  let removed =
+    El.div
+      ~at:[cls "intercept__obs-removed"]
+      [El.span ~at:[cls "t-meta"] [El.txt' "Sans observation"]; restore.el]
+  in
+  ( [card; removed],
+    List.concat
+      [
+        [
+          Rb.text line (React.S.map Intercept.place_line gps);
+          Rb.class_ card "is-hidden" (React.S.map not kept);
+          Rb.class_ removed "is-hidden" kept;
+          Rb.act remove.click (fun () -> set_kept false);
+          Rb.act restore.click (fun () -> set_kept true);
+        ];
+        remove.bindings;
+        restore.bindings;
+      ] )
+
+let tags_card chips ~selected ~set_selected =
+  let chip ((tag : Herbier_domain.Tag.t), _) =
+    let active =
+      React.S.map ~eq:Bool.equal (List.exists (Tag_id.equal tag.id)) selected
+    in
+    let c = W.Chip.filter ~label:tag.name ~active () in
+    ( c.el,
+      Rb.act c.click (fun () ->
+          let now = React.S.value selected in
+          set_selected
+            (match List.exists (Tag_id.equal tag.id) now with
+            | true -> List.filter (fun id -> not (Tag_id.equal id tag.id)) now
+            | false -> tag.id :: now))
+      :: c.bindings )
+  in
+  match List.map chip chips with
+  | [] -> (El.span [], [])
+  | made ->
+      ( El.div
+          ~at:[cls "intercept__tags"]
+          [
+            El.p ~at:[cls "t-section-label"] [El.txt' "Tags"];
+            El.div ~at:[cls "intercept__chips"] (List.map fst made);
+          ],
+        List.concat_map snd made )
+
+let render_found app (d : intercepted) ~gps ~search ~problem ~while_here ~close
+    (candidate : Candidate.t) (existing : Plant.t option) =
+  let except =
+    match existing with
+    | None -> []
+    | Some p ->
+        List.filter_map
+          (fun (l : Herbier_domain.Tag.Plant_tag.t) ->
+            match Plant_id.equal l.plant_id p.id with
+            | true -> Some l.tag_id
+            | false -> None)
+          d.links
+  in
+  let chips =
+    Intercept.recent_tags ~now:(Ptime_clock.now ()) ~tags:d.tags ~links:d.links
+      ~except
+  in
+  let kept, set_kept = React.S.create ~eq:Bool.equal true in
+  let selected, set_selected =
+    React.S.create ~eq:(List.equal Tag_id.equal)
+      (List.filter_map
+         (fun ((t : Herbier_domain.Tag.t), on) ->
+           match on with true -> Some t.id | false -> None)
+         chips)
+  in
+  let open_after, set_open_after = React.S.create ~eq:Bool.equal false in
+  let species =
+    El.div
+      ~at:[cls "intercept__species"]
+      [
+        El.span ~at:[cls "intercept__thumb"] [];
+        El.div
+          ~at:[cls "intercept__species-text"]
+          [
+            El.p
+              ~at:[cls "intercept__name"]
+              [El.txt' (Intercept.name candidate ~existing)];
+            El.p
+              ~at:[cls "intercept__latin"]
+              [El.txt' (Herbier_refs.Sources.Gbif.Taxon.latin candidate.taxon)];
+            El.p ~at:[cls "t-meta"] [El.txt' (Intercept.meta candidate.taxon)];
+          ];
+      ]
+  in
+  let obs_els, obs_bindings = observation_card ~gps ~kept ~set_kept in
+  let tags_el, tags_bindings = tags_card chips ~selected ~set_selected in
+  let add =
+    W.Button.v
+      (match existing with
+      | None -> "Ajouter à ma collection"
+      | Some _ -> "Ajouter cette observation")
+  in
+  let nothing_to_add =
+    React.S.l2 ~eq:Bool.equal
+      (fun kept selected ->
+        match (existing, kept, selected) with
+        | Some _, false, [] -> true
+        | Some _, true, _ | Some _, false, _ :: _ | None, _, _ -> false)
+      kept selected
+  in
+  let research = W.Button.text "Chercher" in
+  let open_el, open_click, open_bindings =
+    toggle_button "Ouvrir la fiche après" open_after
+  in
+  let guarded, release = guard () in
+  let edits ~at plant =
+    let obs =
+      match React.S.value kept with
+      | true ->
+          [
+            Observations.upsert
+              (Intercept.observation ~id:(Observation_id.fresh ()) ~at ~plant
+                 (React.S.value gps));
+          ]
+      | false -> []
+    in
+    let selected = React.S.value selected in
+    (* In chip order, whatever order they were tapped in. *)
+    let tags =
+      List.filter_map
+        (fun ((t : Herbier_domain.Tag.t), _) ->
+          match List.exists (Tag_id.equal t.id) selected with
+          | true -> Some (Tags.tag ~plant ~tag:t.id ~at)
+          | false -> None)
+        chips
+    in
+    obs @ tags
+  in
+  let after id = function
+    | Error e ->
+        release ();
+        log_error "4j save" e;
+        problem "La plante n'a pas pu être ajoutée."
+    | Ok _ ->
+        while_here (fun () ->
+            match React.S.value open_after with
+            | true -> Route.replace (Route.Modal (Route.Plant id))
+            | false -> close ())
+  in
+  let save () =
+    let at = Ptime_clock.now () in
+    match existing with
+    | Some p -> (
+        match edits ~at p.id with
+        | [] -> ()
+        | _ :: _ as edits ->
+            guarded (fun () ->
+                Fut.await (App.save app edits) (fun r -> after p.id r)))
+    | None ->
+        guarded (fun () ->
+            let plant =
+              Plant_link.create ~id:(Plant_id.fresh ()) ~at
+                ~name:(Intercept.name candidate ~existing:None)
+                candidate.taxon
+            in
+            Fut.await
+              (App.create_linked app ~extra:(edits ~at plant.id) plant
+                 candidate.taxon)
+              (fun r -> after plant.id r))
+  in
+  let footer =
+    El.div
+      ~at:[cls "intercept__footer"]
+      [
+        El.p ~at:[cls "t-meta"] [El.txt' "Pas la bonne espèce ? "; research.el];
+        open_el;
+      ]
+  in
+  ( El.div
+      ~at:[cls "intercept__found"]
+      (List.concat
+         [
+           [species];
+           obs_els;
+           [tags_el];
+           (match existing with
+           | None -> []
+           | Some _ ->
+               [
+                 El.p
+                   ~at:[cls "intercept__already"]
+                   [El.txt' "Déjà dans ma collection"];
+               ]);
+           [add.el; footer];
+         ]),
+    List.concat
+      [
+        [
+          Rb.act add.click save;
+          Rb.class_ add.el "is-inactive" nothing_to_add;
+          Rb.attr add.el "aria-disabled"
+            (React.S.map
+               (function true -> Some "true" | false -> None)
+               nothing_to_add);
+          Rb.act research.click search;
+          Rb.act open_click (fun () ->
+              set_open_after (not (React.S.value open_after)));
+        ];
+        obs_bindings;
+        tags_bindings;
+        add.bindings;
+        research.bindings;
+        open_bindings;
+      ] )
+
+let render_intercept app ~outside text (d : intercepted) =
+  let network = State.network (App.state app) in
+  let online () = (React.S.value network).online in
+  let online_s =
+    React.S.map ~eq:Bool.equal (fun (n : State.network) -> n.online) network
+  in
+  let problem_el, problem, problem_bindings = problem_line () in
+  let while_here, left_binding = leaving () in
+  let first, todo = Intercept.init ~online:(online ()) ~plants:d.plants text in
+  let link = Intercept.link first in
+  let close = close ~outside in
+  let sheet, set_sheet = React.S.create ~eq:( == ) first in
+  (* style: [alive] turns false on release, so a late answer cannot touch a
+     released screen. *)
+  let alive = ref true in
+  let rec run = function
+    | Intercept.No_effect -> ()
+    | Intercept.Resolve {seq} ->
+        Fut.await (Herbier_refs_io.Resolver.resolve link) (fun outcome ->
+            (match outcome with
+            | Herbier_refs.Resolve.Unresolved {why = Unavailable m; _} ->
+                log_refs "4j" m
+            | Herbier_refs.Resolve.(Taxon _ | Candidates _ | Unresolved _) -> ());
+            step (Intercept.resolved ~seq outcome))
+    | Intercept.Name {seq; taxon} ->
+        Fut.await (Herbier_refs_io.Resolver.named taxon)
+          (fun (candidate, failure) ->
+            Option.iter (log_refs "4j names") failure;
+            step (fun t ->
+                (Intercept.named ~seq candidate t, Intercept.No_effect)))
+  and step f =
+    match !alive with
+    | false -> ()
+    | true ->
+        let next, todo = f (React.S.value sheet) in
+        set_sheet next;
+        run todo
+  in
+  run todo;
+  let status = React.S.map ~eq:Intercept.equal_status Intercept.status sheet in
+  let search () =
+    while_here (fun () ->
+        Route.replace
+          (Route.Modal
+             (Route.Search (Intercept.search_query (React.S.value sheet)))))
+  in
+  let follow = function
+    | Intercept.Search q ->
+        while_here (fun () ->
+            (match outside with true -> Intake.fell_back q | false -> ());
+            Route.replace (Route.Modal (Route.Search q)))
+    | Intercept.(Offline | Resolving | Failed _ | Found _) -> ()
+  in
+  follow (React.S.value status);
+  let gps =
+    match React.S.value status with
+    | Intercept.Search _ -> React.S.const Gps.No_fix
+    | Intercept.(Offline | Resolving | Failed _ | Found _) ->
+        Gps_fix.start
+          ~on_error:(fun e -> Console.(error [str "intercept: gps"; str e]))
+          ()
+  in
+  let message text actions =
+    let made =
+      List.map
+        (fun (label, f) -> (W.Button.v ~kind:W.Button.Secondary label, f))
+        actions
+    in
+    ( El.div
+        ~at:[cls "intercept__message"]
+        (El.p
+           ~at:[cls "intercept__status"; At.v (Jstr.v "role") (Jstr.v "status")]
+           [El.txt' text]
+        :: List.map (fun ((b : W.Button.t), _) -> b.el) made),
+      List.concat_map
+        (fun ((b : W.Button.t), f) -> Rb.act b.click f :: b.bindings)
+        made )
+  in
+  let body = function
+    | Intercept.Resolving -> message "Recherche de l'espèce…" []
+    | Intercept.Offline ->
+        message "Hors-ligne : l'espèce sera cherchée au retour du réseau."
+          [("Chercher", search)]
+    | Intercept.Failed _ ->
+        message "La recherche de l'espèce a échoué."
+          [
+            ("Réessayer", fun () -> step (Intercept.retry ~online:(online ())));
+            ("Chercher", search);
+          ]
+    | Intercept.Search _ -> (El.div [], [])
+    | Intercept.Found {candidate; existing} ->
+        render_found app d ~gps ~search ~problem ~while_here ~close candidate
+          existing
+  in
+  let close_button =
+    El.button
+      ~at:
+        [
+          At.type' (Jstr.v "button");
+          cls "icon-button";
+          At.v (Jstr.v "aria-label") (Jstr.v "Fermer");
+        ]
+      [W.Icon.el W.Icon.Close]
+  in
+  let close_click, close_b = Rb.click close_button in
+  let body_el = El.div ~at:[cls "intercept__body"] [] in
+  let header = "Herbier · " ^ Intercept.header link in
+  let panel =
+    El.div
+      ~at:
+        [
+          cls "intercept__sheet";
+          At.v (Jstr.v "role") (Jstr.v "dialog");
+          At.v (Jstr.v "aria-modal") (Jstr.v "true");
+          At.v (Jstr.v "aria-label") (Jstr.v header);
+        ]
+      [
+        El.span ~at:[cls "intercept__handle"] [];
+        El.div
+          ~at:[cls "intercept__header"]
+          [
+            El.p
+              ~at:[cls "t-section-label"; cls "intercept__label"]
+              [El.txt' header];
+            close_button;
+          ];
+        problem_el;
+        body_el;
+      ]
+  in
+  ( El.div ~at:[cls "intercept__scrim"] [panel],
+    List.concat
+      [
+        [
+          Rb.view body_el body status;
+          Rb.act (React.S.changes status) follow;
+          Rb.act (React.S.changes online_s) (fun online ->
+              step (Intercept.network ~online));
+          close_b;
+          Rb.act close_click (fun () -> while_here close);
+          Rb.on_release (fun () -> alive := false);
+          left_binding;
+        ];
+        problem_bindings;
+      ] )
+
 let screen ~what ~failed load item =
   let el = El.div ~at:[cls "screen"; cls "resolve"] [] in
   {
@@ -693,3 +1120,7 @@ let v app = function
         (function
           | None -> Loaded.notice "Cette plante n'est plus dans l'herbier."
           | Some loaded -> render_link app loaded)
+  | Intercept {text; outside} ->
+      screen ~what:"lien" ~failed:"Le lien n'a pas pu être ouvert."
+        (fun () -> load_intercepted (App.db app))
+        (render_intercept app ~outside text)

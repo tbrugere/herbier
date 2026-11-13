@@ -77,6 +77,10 @@ module Taxon : sig
     vernacular_name : string option;
         (** GBIF's one display name, often English. *)
   }
+
+  val latin : t -> string
+  (** [canonical_name], else [scientific_name]: the name without authorship that
+      is stored, shown and searched. *)
 end
 
 type 'a page = {

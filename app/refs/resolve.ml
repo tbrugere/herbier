@@ -176,6 +176,20 @@ let search ~q =
   | None -> Step.return (Ok [])
   | Some _ -> searched ~q
 
+let named (taxon : Taxon.t) =
+  let open Step.Syntax in
+  let+ response = Step.get (Gbif.vernacular_names ~key:taxon.key) in
+  let french, failure =
+    match response with
+    | Step.Body json -> (
+        match Gbif.vernacular_names_of_json json with
+        | Ok page -> (french page.results, None)
+        | Error e -> ([], Some (Decode.error_to_string e)))
+    | Step.Absent -> ([], None)
+    | Step.Failed msg -> ([], Some msg)
+  in
+  ({Candidate.taxon; french}, failure)
+
 let candidates ~q =
   Step.map
     (Result.map (List.map (fun (c : Candidate.t) -> c.taxon)))

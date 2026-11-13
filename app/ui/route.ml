@@ -19,11 +19,14 @@ type modal =
   | Viewer of Photo_id.t
   | Search of string
   | Link_species of Plant_id.t
+  | Intercepted of {text : string; outside : bool}
 
 type t = Tab of Tab_bar.tab | Modal of modal | Dev of string
 
 let dev_prefix = "dev/"
 let search_prefix = "chercher/"
+let intercept_prefix = "lien/"
+let paste_prefix = "coller/"
 
 let after prefix f =
   let n = String.length prefix in
@@ -41,6 +44,12 @@ let encoded q =
   | Ok q -> Jstr.to_string q
   | Error _ -> ""
 
+let intercepted ~outside encoded =
+  let text = search_query encoded in
+  match String.trim text with
+  | "" -> Tab Tab_bar.Collection
+  | _ -> Modal (Intercepted {text; outside})
+
 let of_fragment = function
   | "" | "collection" -> Tab Tab_bar.Collection
   | "carte" -> Tab Tab_bar.Map
@@ -55,6 +64,10 @@ let of_fragment = function
   (* The query may hold a '/', so it is taken whole, before the split. *)
   | f when String.starts_with ~prefix:search_prefix f ->
       Modal (Search (search_query (after search_prefix f)))
+  | f when String.starts_with ~prefix:intercept_prefix f ->
+      intercepted ~outside:true (after intercept_prefix f)
+  | f when String.starts_with ~prefix:paste_prefix f ->
+      intercepted ~outside:false (after paste_prefix f)
   | f -> (
       let plant id k =
         match Plant_id.of_string id with
@@ -105,6 +118,9 @@ let to_fragment = function
   | Modal (Search "") -> "chercher"
   | Modal (Search q) -> search_prefix ^ encoded q
   | Modal (Link_species id) -> "plante/" ^ Plant_id.to_string id ^ "/lier"
+  | Modal (Intercepted {text; outside = true}) ->
+      intercept_prefix ^ encoded text
+  | Modal (Intercepted {text; outside = false}) -> paste_prefix ^ encoded text
   | Dev name -> dev_prefix ^ name
 
 let fragment () = Jstr.to_string (Uri.fragment (Window.location G.window))

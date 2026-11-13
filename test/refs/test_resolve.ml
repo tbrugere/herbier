@@ -992,6 +992,106 @@ let chosen_synonym_species_undecodable_is_unavailable () =
       Alcotest.failf "expected Error (Unavailable _), got %s"
         (chosen_result_string r)
 
+(* ---------- named (4j's French name, architecture §7) ---------- *)
+
+let run_named net taxon : Candidate.t * string option =
+  Step.run net (Resolve.named taxon)
+
+let check_taxon_kept what (expected : Gbif.Taxon.t) (got : Gbif.Taxon.t) =
+  Alcotest.(check int) (what ^ "taxon key") expected.key got.key;
+  Alcotest.(check string)
+    (what ^ "taxon scientific_name")
+    expected.scientific_name got.scientific_name
+
+let named_requests net taxon =
+  List.map
+    (fun (r : Request.t) -> r.url)
+    (Step.requests net (Resolve.named taxon))
+
+let named_digitalis_french_names () =
+  let taxon = taxon_of_species "gbif_species_5414995.json" in
+  let net =
+    Fake_net.fixtures
+      [
+        ( url (Gbif.vernacular_names ~key:5414995),
+          "gbif_vernacular_names_5414995.json" );
+      ]
+  in
+  let c, failure = run_named net taxon in
+  check_taxon_kept "" taxon c.taxon;
+  Alcotest.(check (option string)) "no failure" None failure;
+  Alcotest.(check (list string))
+    "french"
+    [
+      "Digitale pourpre";
+      "Digitale";
+      "Digitale pourprée";
+      "Gantelée";
+      "Gant de Notre-Dame";
+      "Digitale à fleurs blanches";
+      "grande digitale";
+    ]
+    c.french;
+  Alcotest.(check (list string))
+    "exactly one request"
+    [url (Gbif.vernacular_names ~key:5414995)]
+    (named_requests net taxon)
+
+let named_arnica_french_names () =
+  let taxon = taxon_of_species "gbif_species_5405976.json" in
+  let net =
+    Fake_net.fixtures
+      [
+        ( url (Gbif.vernacular_names ~key:5405976),
+          "gbif_vernacular_names_5405976.json" );
+      ]
+  in
+  let c, failure = run_named net taxon in
+  check_taxon_kept "" taxon c.taxon;
+  Alcotest.(check (option string)) "no failure" None failure;
+  Alcotest.(check (list string))
+    "french"
+    ["Arnica"; "Arnica des montagnes"; "Herbe aux prêcheurs"]
+    c.french
+
+let named_absent_is_empty_french () =
+  let taxon = taxon_of_species "gbif_species_5414995.json" in
+  let net = only [(url (Gbif.vernacular_names ~key:5414995), Step.Absent)] in
+  let c, failure = run_named net taxon in
+  check_taxon_kept "" taxon c.taxon;
+  Alcotest.(check (list string)) "french = []" [] c.french;
+  Alcotest.(check (option string)) "Absent is no failure" None failure
+
+let named_failed_is_empty_french () =
+  let taxon = taxon_of_species "gbif_species_5414995.json" in
+  let net =
+    only [(url (Gbif.vernacular_names ~key:5414995), Step.Failed "timeout")]
+  in
+  let c, failure = run_named net taxon in
+  check_taxon_kept "" taxon c.taxon;
+  Alcotest.(check (list string)) "french = []" [] c.french;
+  Alcotest.(check (option string))
+    "the failure, for the console" (Some "timeout") failure
+
+let named_undecodable_body_is_empty_french () =
+  let taxon = taxon_of_species "gbif_species_5414995.json" in
+  List.iter
+    (fun (what, body) ->
+      let net =
+        only [(url (Gbif.vernacular_names ~key:5414995), Step.Body body)]
+      in
+      let c, failure = run_named net taxon in
+      check_taxon_kept (what ^ ": ") taxon c.taxon;
+      Alcotest.(check (list string)) (what ^ ": french = []") [] c.french;
+      Alcotest.(check bool)
+        (what ^ ": the decode error is returned")
+        true (Option.is_some failure))
+    [
+      ( "a species body served at the vernacularNames url",
+        Fake_net.json_of_fixture "gbif_species_5414995.json" );
+      ("a bare JSON string", `String "x");
+    ]
+
 (* ---------- run ---------- *)
 
 let case name f = (name, `Quick, f)
@@ -1122,4 +1222,16 @@ let suite =
         chosen_synonym_species_failed_is_unavailable;
       case "chosen: an undecodable species body is Error (Unavailable _)"
         chosen_synonym_species_undecodable_is_unavailable;
+      case
+        "named: Digitalis purpurea (5414995), french names from \
+         vernacularNames, one request"
+        named_digitalis_french_names;
+      case "named: Arnica (5405976), french names from vernacularNames"
+        named_arnica_french_names;
+      case "named: vernacularNames Absent is french = [], taxon kept"
+        named_absent_is_empty_french;
+      case "named: vernacularNames Failed is french = [], taxon kept"
+        named_failed_is_empty_french;
+      case "named: an undecodable vernacularNames body is french = []"
+        named_undecodable_body_is_empty_french;
     ] )

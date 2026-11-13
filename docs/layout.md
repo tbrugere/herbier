@@ -212,11 +212,17 @@ app/
     plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml, map_filter.ml,
     map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
     ref_search.ml (4i's debounce / stale answer / offline state machine), ref_pick.ml (what a
-    reference row does per mode), ref_paste.ml (5a's pasted link → plant ref),
-    move_plan.ml (5b's texts and what « Valider » writes)
+    reference row does per mode), ref_paste.ml (5a's pasted link → plant ref), intercept.ml (4j's
+    incoming text, resolution states, card texts, recent tags, first observation), gps.ml (a new
+    observation's fix: searching, fix, none), move_plan.ml (5b's texts and what « Valider » writes)
                           pure helpers of the screens; these and list_patch are tested natively in test/ui/
     ref_results.ml        4i's « Référence · GBIF » section (Ref_search's effects, rows), shared by every
                           mode of screens/resolve.ml
+    intake.ml             appUrlOpen and shareReceived listeners for the app's lifetime → 4j
+                          (route #lien/<text>; #coller/<text> is 4j for a text given inside Herbier);
+                          a second link replaces the first sheet or the 4i it fell back to; keeps the
+                          last text for #dev/link
+    gps_fix.ml            the one GPS fix a new observation takes (4d, 4j), as a Gps.t signal
     filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     zone.ml               the phone's zone offset at an instant, for Fr_date
@@ -231,7 +237,8 @@ app/
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
                           serialisation, park/delete) and the reference payload column (put, link, unlink);
                           link_check.ml (#dev/link): resolves example links, a pasted link, and links a
-                          plant through App.link, then opens its fiche; « Chercher » opens 4i with the text;
+                          plant through App.link, then opens its fiche; « Chercher » opens 4i with the text,
+                          « 4j » opens 4j for it; shows the last text received from another app;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier`; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
@@ -378,8 +385,10 @@ edits, all under `android/app/src/main/`:
 - `AndroidManifest.xml`: the `VIEW`/`BROWSABLE` intent-filters of
   architecture §7 and the `SEND text/plain` filter for the share target;
   both ship in v1.
-- `java/re/bruge/herbier/MainActivity.kt`: generated; only touched if a
-  plugin needs manual registration.
+- `java/re/bruge/herbier/MainActivity.java`: generated; touched only to
+  register a plugin by hand and to drop a launch intent that was already
+  handled (no 4j replay after process death or from recents, architecture
+  §7).
 - `java/re/bruge/herbier/`: any further Kotlin (a WorkManager constraint
   tweak) as one small Capacitor plugin class inline here, bound from
   `app/bindings/`; no separate plugin package unless a second native piece

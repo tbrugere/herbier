@@ -22,6 +22,44 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Pl@ntNet's hosts only (docs/architecture.md §7, user decision
+                 2026-11-12); app/domain/link.ml classifies these and the other
+                 reference hosts, which are recognised only when pasted or shared
+                 as text. pathPattern's ".*" never backtracks: one pattern per
+                 path depth. -->
+
+            <!-- Pl@ntNet -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="identify.plantnet.org" />
+                <data android:pathPattern="/.*/species/.*" />
+                <data android:pathPattern="/.*/.*/species/.*" />
+                <data android:pathPattern="/.*/observations/.*" />
+                <data android:pathPattern="/.*/.*/observations/.*" />
+            </intent-filter>
+
+            <!-- Pl@ntUse: plantuse.plantnet.org is current, the two others are older links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="plantuse.plantnet.org" />
+                <data android:host="uses.plantnet.org" />
+                <data android:host="uses.plantnet-project.org" />
+                <data android:pathPattern="/.*/.*" />
+            </intent-filter>
+
+            <!-- Android share sheet (@capgo/capacitor-share-target). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+
         </activity>
 
         <provider

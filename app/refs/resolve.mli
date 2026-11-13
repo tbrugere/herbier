@@ -73,6 +73,17 @@ module Candidate : sig
   val equal : t -> t -> bool
 end
 
+val named : Taxon.t -> (Candidate.t * string option) Step.t
+(** 4j's name for a taxon reached by a link: [Gbif.vernacular_names ~key:t.key],
+    then [{taxon = t; french}] where [french] applies {!Candidate.t}'s French
+    rule (rows of language ["fra"], each name split on [','], pieces trimmed,
+    blank ones dropped, deduplicated by [String.lowercase_ascii] keeping the
+    first spelling, payload order) to every row of that page, and [None].
+    [Absent] → [french = []], [None]. [Failed msg] → [french = []], [Some msg];
+    an undecodable body → [french = []], [Some] its decode error: the candidate
+    is still usable, the message is for the console. Exactly one request; never
+    fails. *)
+
 val search : q:string -> (Candidate.t list, unresolved) result Step.t
 (** 4i / 4k / 5c reference search: the calls, order, key dedup and failure rules
     of {!candidates}, each taxon with its French names. When only the vernacular

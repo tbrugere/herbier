@@ -346,8 +346,28 @@ let equal_tests =
           (Link.equal (Link.Gbif 1) (Link.Gbif 1)) );
   ]
 
+let without_urls_case what input expected =
+  ( "without_urls: " ^ what,
+    `Quick,
+    fun () -> Alcotest.(check string) what expected (Link.without_urls input) )
+
+let without_urls_tests =
+  [
+    without_urls_case "a name and a URL with a dash between"
+      "Digitalis purpurea L. – \
+       https://identify.plantnet.org/fr/observations/1012345678"
+      "Digitalis purpurea L.";
+    without_urls_case "a bare URL" "https://www.gbif.org/species/5414995" "";
+    without_urls_case "no URL: whitespace collapsed, trimmed"
+      "  digitale \n pourpre " "digitale pourpre";
+    without_urls_case "the punctuation a URL loses goes with it"
+      "voir https://www.gbif.org/species/1, merci" "voir merci";
+    without_urls_case "two URLs" "a http://x.org b https://y.org/z c" "a b c";
+  ]
+
 let tests =
-  gbif_tests
+  without_urls_tests
+  @ gbif_tests
   @ plantnet_tests
   @ plantuse_tests
   @ wikipedia_tests

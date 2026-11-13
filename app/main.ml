@@ -69,6 +69,9 @@ let modal app = function
   | Herbier_ui.Route.Link_species id ->
       Herbier_ui.Screens.Resolve.v app
         (Herbier_ui.Screens.Resolve.Link_plant id)
+  | Herbier_ui.Route.Intercepted {text; outside} ->
+      Herbier_ui.Screens.Resolve.v app
+        (Herbier_ui.Screens.Resolve.Intercept {text; outside})
   | Herbier_ui.Route.Record -> Herbier_ui.Screens.Record.v app
   | Herbier_ui.Route.Saved id -> Herbier_ui.Screens.Saved.v app id
   | Herbier_ui.Route.Viewer id -> Herbier_ui.Screens.Viewer.v app id
@@ -161,4 +164,9 @@ let () =
           | Tab _ | Modal _ -> Herbier_ui.Location_notice.show_once app)
       | Error reason -> Console.(error [str "herbier: startup"; str reason]));
       Herbier_ui.Router.start ~root ~tab:(or_unavailable tab app)
-        ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db app))
+        ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db app);
+      (* After the router: a link that started the app opens 4j above the
+         collection, and the plugins keep it until this listener exists. *)
+      match app with
+      | Ok app -> Herbier_ui.Intake.start app
+      | Error _ -> ())

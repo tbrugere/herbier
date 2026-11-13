@@ -67,6 +67,13 @@ val classify : string -> t
     pattern (a numeric id must parse as a positive [int]), the result is [Text]
     of the trimmed input. Never raises. *)
 
+val without_urls : string -> string
+(** [input] without the [http://] and [https://] URLs {!classify} reads (each
+    with the punctuation it strips), whitespace runs turned into one space, then
+    trimmed of spaces and of the separators [-], [–], [—], [:], [|], [·] and [,]
+    at either end: ["Digitalis purpurea L. – https://identify.plantnet.org/…"] →
+    ["Digitalis purpurea L."]; a bare URL → [""]. Never raises. *)
+
 val valid_wikipedia_lang : string -> bool
 (** A Wikipedia language code as a host label: 1–12 characters of [a-z] and
     ['-'] starting with a letter (["fr"], ["zh-min-nan"], ["zh-classical"]), not

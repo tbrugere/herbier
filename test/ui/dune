@@ -2,7 +2,7 @@
 ; libraries below enforce it). test_ref_block.ml reads the recorded
 ; payloads of test/fixtures/ (never writes them) for the rows of the two spike
 ; species.
-(copy_files# ../../app/ui/{list_patch,collection_filter,fr_date,fr_text,journal_day,journal_filter,tag_edits,plant_form,local_time,to_identify,record_plan,cover,zoom,snap,map_filter,map_sheet,plant_link,ref_text,ref_block,ref_search,ref_pick,ref_paste,move_plan}.{ml,mli})
+(copy_files# ../../app/ui/{list_patch,collection_filter,fr_date,fr_text,journal_day,journal_filter,tag_edits,plant_form,local_time,to_identify,record_plan,cover,zoom,snap,map_filter,map_sheet,plant_link,ref_text,ref_block,ref_search,ref_pick,ref_paste,gps,intercept,move_plan}.{ml,mli})
 
 (tests
  (names test_ui test_ref_block test_move_plan)

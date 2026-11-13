@@ -84,6 +84,21 @@ let page app =
       Route.go
         (Route.Modal
            (Route.Search (Jstr.to_string (El.prop El.Prop.value input)))));
+  let sheet_button = button "4j" in
+  on_click sheet_button (fun () ->
+      match String.trim (Jstr.to_string (El.prop El.Prop.value input)) with
+      | "" -> append log "4j: type a link or a text first"
+      | text ->
+          Route.go (Route.Modal (Route.Intercepted {text; outside = false})));
+  (* Shown here because the console never gets user text. *)
+  let received =
+    El.p
+      [
+        El.txt'
+          ("Dernier lien reçu : "
+          ^ match Intake.last () with Some t -> t | None -> "aucun");
+      ]
+  in
   let result = El.p [] in
   let select =
     El.select ~at:[At.v (Jstr.v "aria-label") (Jstr.v "Plante")] []
@@ -129,7 +144,8 @@ let page app =
   [
     El.h1 [El.txt' "Link check"];
     El.p [examples_button];
-    El.p [input; resolve_button; search_button];
+    received;
+    El.p [input; resolve_button; search_button; sheet_button];
     result;
     El.p [select; link_button];
     log;

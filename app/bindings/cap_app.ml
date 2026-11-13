@@ -33,4 +33,8 @@ let on_back_button f =
     (fun can_go_back -> f ~can_go_back)
 
 let exit_app () = Cap_call.call plugin "exitApp" [||] ~ok:Cap_call.unit_ok
+
+let minimize_app () =
+  Cap_call.call plugin "minimizeApp" [||] ~ok:Cap_call.unit_ok
+
 let remove handle = Cap_call.on handle "remove" [||] ~ok:Cap_call.unit_ok

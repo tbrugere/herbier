@@ -21,16 +21,13 @@ let apply ~at ?name (p : Plant.t) (t : Taxon.t) =
   {
     p with
     gbif_key = Some t.key;
-    scientific_name =
-      Some (Option.value t.canonical_name ~default:t.scientific_name);
+    scientific_name = Some (Taxon.latin t);
     authorship = t.authorship;
     updated_at = at;
   }
 
 let display_name ({taxon; french} : Candidate.t) =
-  match french with
-  | name :: _ -> name
-  | [] -> Option.value taxon.canonical_name ~default:taxon.scientific_name
+  match french with name :: _ -> name | [] -> Taxon.latin taxon
 
 let create ~id ~at ~name taxon = apply ~at (Plant.v ~id ~at name) taxon
 

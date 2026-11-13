@@ -355,3 +355,51 @@ let classify input =
         | None -> go scanned.next)
   in
   go 0
+
+(* Dashes, a colon, a bar, a middle dot or a comma often sit between a name
+   and its URL ("Digitalis purpurea L. – https://…"). *)
+let separators =
+  ["-"; "\xe2\x80\x93"; "\xe2\x80\x94"; ":"; "|"; "\xc2\xb7"; ","]
+
+let rec trim_separators s =
+  let s = String.trim s in
+  match
+    List.find_opt
+      (fun sep ->
+        String.starts_with ~prefix:sep s || String.ends_with ~suffix:sep s)
+      separators
+  with
+  | None -> s
+  | Some sep ->
+      let n = String.length sep in
+      let s =
+        match String.starts_with ~prefix:sep s with
+        | true -> String.sub s n (String.length s - n)
+        | false -> s
+      in
+      let s =
+        match String.ends_with ~suffix:sep s with
+        | true -> String.sub s 0 (String.length s - n)
+        | false -> s
+      in
+      trim_separators s
+
+let without_urls input =
+  let b = Buffer.create (String.length input) in
+  let rec go from =
+    match scan_url input from with
+    | None -> Buffer.add_substring b input from (String.length input - from)
+    | Some {url; stripped; next} ->
+        let start = next - String.length url - String.length stripped in
+        Buffer.add_substring b input from (start - from);
+        Buffer.add_char b ' ';
+        go next
+  in
+  go 0;
+  String.split_on_char ' '
+    (String.map
+       (fun c -> match is_space c with true -> ' ' | false -> c)
+       (Buffer.contents b))
+  |> List.filter (fun w -> w <> "")
+  |> String.concat " "
+  |> trim_separators

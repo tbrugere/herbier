@@ -8,7 +8,6 @@ module Plant_id = Herbier_domain.Ids.Plant_id
 module Observation = Herbier_domain.Observation
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Capture = Herbier_photos.Capture
-module Geo = Herbier_bindings.Cap_geolocation
 module Object_url = Herbier_bindings.Object_url
 module Camera_stream = Herbier_bindings.Camera_stream
 module RList = ReactiveData.RList
@@ -17,7 +16,6 @@ module W = Widgets
 let cls c = At.class' (Jstr.v c)
 let log what detail = Console.(error [str ("noter: " ^ what); str detail])
 
-type gps = Searching | Fix of Observation.position | No_fix
 type suggestion = {plant : Plant.t; seen_here : bool}
 
 let button ?label classes children =
@@ -83,21 +81,7 @@ let v app =
           log "camera" (Capture.error_to_string e))
   in
   start_camera ();
-  let gps, set_gps = React.S.create Searching in
-  Fut.await
-    (Geo.current_position ~high_accuracy:true ~timeout_ms:20_000
-       ~maximum_age_ms:30_000) (function
-    | Ok p ->
-        set_gps
-          (Fix
-             {
-               lat = p.latitude;
-               lon = p.longitude;
-               accuracy_m = Some p.accuracy_m;
-             })
-    | Error e ->
-        set_gps No_fix;
-        log "gps" (Herbier_bindings.Cap_error.to_string e));
+  let gps = Gps_fix.start ~on_error:(log "gps") () in
   (* Shots *)
   let thumbs, thumbs_handle = RList.create [] in
   let items () = RList.value thumbs in
@@ -169,8 +153,8 @@ let v app =
     let text = React.S.value name.value in
     let here =
       match React.S.value gps with
-      | Fix p -> Record_plan.seen_here ~here:p !observations !plants
-      | Searching | No_fix -> []
+      | Gps.Fix p -> Record_plan.seen_here ~here:p !observations !plants
+      | Gps.Searching | Gps.No_fix -> []
     in
     let matching =
       match Search.plants text with None -> Fut.ok [] | Some q -> Db.all db q
@@ -260,11 +244,7 @@ let v app =
   let observation () =
     let open Fut.Result_syntax in
     let now = Ptime_clock.now () in
-    let fix =
-      match React.S.value gps with
-      | Fix p -> Some p
-      | Searching | No_fix -> None
-    in
+    let fix = Gps.position (React.S.value gps) in
     let at, position =
       Record_plan.when_where ~now ~fix
         (List.map
@@ -439,13 +419,14 @@ let v app =
           Rb.text gps_text
             (React.S.map
                (function
-                 | Searching -> "Position…"
-                 | Fix _ -> "Position acquise"
-                 | No_fix -> "Sans position")
+                 | Gps.Searching -> "Position…"
+                 | Gps.Fix _ -> "Position acquise"
+                 | Gps.No_fix -> "Sans position")
                gps);
           Rb.class_ gps_pill "record__pill--fix"
             (React.S.map
-               (function Fix _ -> true | Searching | No_fix -> false)
+               (function
+                 | Gps.Fix _ -> true | Gps.(Searching | No_fix) -> false)
                gps);
           Rb.text offline
             (React.S.map

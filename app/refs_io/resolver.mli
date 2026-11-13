@@ -25,3 +25,9 @@ val chosen :
   Fut.t
 (** {!Http.run} of {!Herbier_refs.Resolve.chosen}; determined without network
     for a non-synonym. *)
+
+val named :
+  Herbier_refs.Sources.Gbif.Taxon.t ->
+  (Herbier_refs.Resolve.Candidate.t * string option) Fut.t
+(** {!Http.run} of {!Herbier_refs.Resolve.named}; never fails (offline:
+    [french = []] and the failure). *)

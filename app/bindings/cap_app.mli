@@ -18,8 +18,9 @@ val on_url_open : (string -> unit) -> (listener, Cap_error.t) result Fut.t
 (** Registers [f] for [appUrlOpen] with the event's [url]. Same rules; an event
     without a string [url] is dropped. The URL comes from outside the app and is
     untrusted: classify it before any use. Fires only for intents the manifest
-    declares; a URL that cold-starts the app is not reported (that needs
-    [getLaunchUrl]). *)
+    declares. A URL that cold-starts the app is delivered too: the plugin
+    retains [appUrlOpen] until a listener registers and delivers it once, to the
+    first one. *)
 
 val on_back_button :
   (can_go_back:bool -> unit) -> (listener, Cap_error.t) result Fut.t
@@ -32,6 +33,10 @@ val on_back_button :
 
 val exit_app : unit -> (unit, Cap_error.t) result Fut.t
 (** [App.exitApp()]: finishes the activity (Android only). *)
+
+val minimize_app : unit -> (unit, Cap_error.t) result Fut.t
+(** [App.minimizeApp()] (Android only): moves the app's task to the back, so the
+    app that opened the link or shared the text shows again. *)
 
 val remove : listener -> (unit, Cap_error.t) result Fut.t
 (** [handle.remove()]: the callback is no longer called once this resolves. *)
