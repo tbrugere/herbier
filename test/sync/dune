@@ -1,5 +1,5 @@
 ; Native checks of herbier_sync_core (app/sync_core/), linked natively.
-; test_sync runs the session/nonce/gotrue suites; test_lifecycle those of
+; test_sync runs the session/gotrue suites; test_lifecycle those of
 ; auth/lifecycle.ml; test_rest those of synced.ml and net/rest.ml, with
 ; test_synced's and test_push_order's; test_cycle those of cycle/, over
 ; cli_local.ml's Local.S (the sqlite3 CLI, Mock_http's identity IO);
@@ -26,6 +26,7 @@
   test_keepalive
   test_push_order
   test_synced
+  test_drive_consent
   handoff_sample)
  (libraries
   herbier_sync_core
@@ -64,7 +65,8 @@
   test_rest
   test_cycle
   test_push_order
-  test_synced)
+  test_synced
+  test_drive_consent)
  (libraries
   herbier_sync_helpers
   herbier_sync_core

@@ -13,6 +13,9 @@ let member name = function
       | Some v -> Some v)
   | _ -> None
 
+let string_member name json =
+  match member name json with Some (`String s) -> Some s | _ -> None
+
 let number = function
   | `Int i -> Some (Float.of_int i)
   | `Float f when Float.is_finite f -> Some f

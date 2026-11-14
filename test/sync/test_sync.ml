@@ -1,6 +1,5 @@
-(* Native checks of app/sync_core/auth/session.ml, nonce.ml, gotrue.ml and
-   grant.ml (Auth.Session, Auth.Nonce, Auth.Gotrue and Auth.Grant of
-   herbier_sync_core). Fixture
+(* Native checks of app/sync_core/auth/session.ml, gotrue.ml and grant.ml
+   (Auth.Session, Auth.Gotrue and Auth.Grant of herbier_sync_core). Fixture
    bodies are read from test/fixtures/; the status that goes with each is
    given by the test, matching the fixture's name. No test sends a request or
    touches Preferences: auth.ml, the binding and the screen are
@@ -8,7 +7,6 @@
 
 module Backoff = Herbier_sync_core.Backoff
 module Session = Herbier_sync_core.Auth.Session
-module Nonce = Herbier_sync_core.Auth.Nonce
 module Gotrue = Herbier_sync_core.Auth.Gotrue
 module Grant = Herbier_sync_core.Auth.Grant
 module Fixture = Herbier_test_support.Fixture
@@ -364,37 +362,6 @@ let session_stored_format_tests =
        order, extra fields)",
       `Quick,
       of_string_reads_recorded_v1_values );
-  ]
-
-(* ---------- Nonce ---------- *)
-
-let hex_of_the_empty_string_is_empty () =
-  Alcotest.(check string) "hex \"\"" "" (Nonce.hex "")
-
-let hex_is_lowercase_two_digits_per_byte () =
-  Alcotest.(check string)
-    "hex \"\\x00\\x0f\\xffA\"" "000fff41"
-    (Nonce.hex "\x00\x0f\xffA")
-
-let hex_length_is_twice_the_input_s () =
-  let low = String.init 32 Char.chr in
-  let high = String.init 32 (fun i -> Char.chr (224 + i)) in
-  Alcotest.(check int) "32 low bytes (0-31)" 64 (String.length (Nonce.hex low));
-  Alcotest.(check int)
-    "32 high bytes (224-255)" 64
-    (String.length (Nonce.hex high))
-
-let nonce_tests =
-  [
-    ( "hex of the empty string is empty",
-      `Quick,
-      hex_of_the_empty_string_is_empty );
-    ( "hex is lowercase, two digits per byte",
-      `Quick,
-      hex_is_lowercase_two_digits_per_byte );
-    ( "hex's length is twice the input's",
-      `Quick,
-      hex_length_is_twice_the_input_s );
   ]
 
 (* ---------- Gotrue requests ---------- *)
@@ -1114,8 +1081,8 @@ let () =
     [
       ("Session", session_tests);
       ("Session: stored format (v1)", session_stored_format_tests);
-      ("Nonce", nonce_tests);
       ("Gotrue requests", gotrue_request_tests);
       ("Gotrue responses", gotrue_response_tests);
       ("Grant", grant_tests);
+      ("Drive consent", Test_drive_consent.tests);
     ]

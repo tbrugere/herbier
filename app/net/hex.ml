@@ -1,6 +1,6 @@
 let digits = "0123456789abcdef"
 
-let hex bytes =
+let encode bytes =
   String.init
     (2 * String.length bytes)
     (fun i ->

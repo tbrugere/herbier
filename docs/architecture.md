@@ -9,7 +9,7 @@ fit and what the data looks like end to end.
 
 ```
 ┌──────────────────────────── Android device ─────────────────────────────┐
-│  Capacitor shell (Kotlin: manifest intent-filters, plugins)              │
+│  Capacitor shell (Java: manifest intent-filters, plugins)              │
 │  ┌───────────────────────── WebView ─────────────────────────────────┐  │
 │  │  OCaml app (js_of_ocaml + Brr + react/ReactiveData)               │  │
 │  │   ├─ UI (screens 4a–5f)            ├─ Reference pipeline (§6)     │  │
@@ -517,6 +517,35 @@ capture / pick
   lazily at the first photo to upload (handoff 4n: "Google Photos se
   connecte plus tard, à la première photo"). Tokens are 1-hour and cached by
   Play Services; the uploader plugin asks the app for a fresh one per job.
+  It is Herbier's own inline plugin (`GoogleAuthorizationPlugin.java`,
+  `bindings/cap_google_authorization.ml`), not social-login's: that one takes
+  scopes only at sign-in and has no silent "authorize this scope" call.
+  `Auth.drive_token ~interactive`: an interactive call may show the consent
+  screen (one at a time); a silent one fails with `Consent_needed` instead.
+  The account hint is the signed-in session's email, so Drive is the same
+  Google account as the sign-in; signed out (or a session without an email),
+  no token is asked. The plugin grants `drive.file` and nothing else. A 401 from
+  Drive → `clearToken` of that token (Play Services would hand it back
+  otherwise), a new token, the same request once more.
+- Drive layout: folders are found or created on every upload (oldest wins,
+  `trashed = false`, in My Drive's root; no folder ids cached). With
+  `drive.file` the app sees only folders it created, so a user's own
+  "Herbier" folder is never taken for its own. The species folder is the
+  plant's scientific name, else its display name, else « À identifier »;
+  files are not moved when the plant changes later. File names are
+  `YYYY-MM-DD HH.MM.SS <last 8 hex digits of the photo id>.<ext>` in the
+  device's zone (a v7 id's first digits are its timestamp, its last ones
+  random). Before `files.create`, a lookup by
+  `appProperties.herbier_photo_id` makes the upload idempotent: an earlier
+  upload whose answer was lost is found, not duplicated. The upload queue
+  (plan step 52) must run `put_original` one at a time per account: two
+  first uploads of one species running together would create two folders.
+  Should Drive's search lag behind a create whose answer was lost, the next
+  run uploads a second copy; pre-generated ids (`files.generateIds`) would
+  close that window and are not used yet.
+  It also decides the uploader's request shape (the multipart frame, or a
+  resumable session created in OCaml); `Drive.folder` and
+  `Drive.find_original` run in the app either way.
 - Displaying an original (viewer, "Ouvrir dans Google Drive ↗"): open the
   `webViewLink`; the app itself only ever renders the local preview.
 - Health check (weekly, when online): `files.get?fields=trashed` on a

@@ -9,6 +9,9 @@ val parse : string -> (Yojson.Safe.t, string) result
 val member : string -> Yojson.Safe.t -> Yojson.Safe.t option
 (** The field of an object; a missing field, [null] or a non-object → [None]. *)
 
+val string_member : string -> Yojson.Safe.t -> string option
+(** {!member} when it is a string; anything else → [None]. *)
+
 val number : Yojson.Safe.t -> float option
 (** An [`Int], or a finite [`Float]; anything else → [None]. *)
 

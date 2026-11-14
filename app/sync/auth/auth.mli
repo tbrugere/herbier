@@ -123,6 +123,57 @@ val refresh_now : t -> (unit, error) result Fut.t
     failure retried later. {!Engine} calls it after a 401; #dev/auth's button
     too. *)
 
+(** {1 Drive} *)
+
+type drive_error = Drive_access.error =
+  | Drive_unconfigured  (** an [Unconfigured] build: no Google client *)
+  | Drive_signed_out
+      (** no Supabase session ([Signed_out], or still [Restoring]), or one
+          without an email: Drive is granted to the account the app is signed in
+          with *)
+  | Consent_needed
+      (** [~interactive:false] and the scope is not granted: an interactive
+          request is needed first *)
+  | Consent_refused
+      (** the user dismissed the consent screen or unchecked Drive *)
+  | Drive_offline  (** Play Services could not reach Google: retry later *)
+  | Drive_misconfigured
+      (** the OAuth client does not match the app's package or signing key *)
+  | No_google_account  (** no usable Google account on the device *)
+  | Drive_google of Herbier_bindings.Cap_error.t
+      (** anything else: no plugin (browser), Play services missing, another
+          Play Services failure (its status code in the message) *)
+
+val equal_drive_error : drive_error -> drive_error -> bool
+
+val drive_error_to_string : drive_error -> string
+(** One line for logs and the dev page; never a token. *)
+
+val drive_token : t -> interactive:bool -> (string, drive_error) result Fut.t
+(** A Drive access token for the signed-in account, asked of Play Services at
+    each call (it caches the 1-hour token and renews it; Herbier stores none:
+    stack.md, Auth). [Unconfigured] → [Error Drive_unconfigured]; no session, or
+    a session without an email → [Error Drive_signed_out] (the plugin is not
+    called); a caller that starts at launch waits for [on_change] to leave
+    [Restoring], or retries. Signed in →
+    [Cap_google_authorization.authorize ~scopes:[Drive_consent.scope]
+     ~account:(Some email) ~interactive] (the session's email, so the Drive is
+    the signed-in account's). The plugin's [NEEDS_CONSENT] → [Consent_needed];
+    [USER_CANCELLED] or [SCOPE_NOT_GRANTED] → [Consent_refused]; [NETWORK_ERROR]
+    → [Drive_offline]; [DEVELOPER_ERROR] → [Drive_misconfigured];
+    [SIGN_IN_REQUIRED] → [No_google_account]; any other failure →
+    [Drive_google e]. Interactive calls are single-flight: a call made while one
+    is running gets that one's result (one consent screen at most).
+    Non-interactive calls are not serialised. Each outcome is one console line
+    (« auth: drive token ok » / « auth: drive token <error> »). Never raises;
+    the future always resolves. *)
+
+val drop_drive_token : t -> string -> unit Fut.t
+(** ([t] mirrors {!drive_token}; the drop itself needs no state.) After Drive
+    answered 401 with that token: [Cap_google_authorization.clear_token], so the
+    next {!drive_token} gets a new one. Its failure is a console line, not an
+    error. Resolves once the plugin answered. *)
+
 (** {1 Dev page only} *)
 
 val session_expires_at : t -> Ptime.t option

@@ -3,7 +3,7 @@
 // with the MapLibre facade (map.js). Importing MapLibre's CSS makes esbuild
 // emit dist/vendor.css next to vendor.js.
 import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite';
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { Preferences } from '@capacitor/preferences';
 import { App } from '@capacitor/app';
@@ -29,6 +29,11 @@ globalThis.herbier = {
   shareTarget: CapacitorShareTarget,
   http: CapacitorHttp,
   socialLogin: SocialLogin,
+  // Herbier's own plugin (android/…/GoogleAuthorizationPlugin.java): absent
+  // in a browser, so that the binding reports it Unavailable.
+  googleAuthorization: Capacitor.isNativePlatform()
+    ? registerPlugin('GoogleAuthorization')
+    : undefined,
   exifr,
   map,
 };

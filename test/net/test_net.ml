@@ -1,8 +1,9 @@
 (* Herbier_net against the helpers it replaced, copied below verbatim from
    refs/decode.ml, refs/request.ml, geo/geocode.ml, geo/features.ml,
-   photos/exif.ml and sync_core/auth/gotrue.ml: the same answer on every input
-   here, error messages included. *)
+   photos/exif.ml, sync_core/auth/nonce.ml and sync_core/auth/gotrue.ml: the same
+   answer on every input here, error messages included. *)
 
+module Hex = Herbier_net.Hex
 module Json = Herbier_net.Json
 module Url = Herbier_net.Url
 
@@ -70,6 +71,16 @@ module Old = struct
       | true -> int_of_string_opt s
       | false -> None
   end
+
+  (* sync_core/auth/nonce.ml. *)
+  let digits = "0123456789abcdef"
+
+  let hex bytes =
+    String.init
+      (2 * String.length bytes)
+      (fun i ->
+        let b = Char.code bytes.[i / 2] in
+        digits.[match i mod 2 with 0 -> b lsr 4 | _ -> b land 15])
 
   (* sync_core/auth/gotrue.ml. *)
   let rec strip_slashes s =
@@ -142,9 +153,7 @@ let exif_members () =
       Alcotest.(check (option string))
         ("string_member " ^ shown)
         (Old.Exif.string_member name json)
-        (match Json.member name json with
-        | Some (`String s) -> Some s
-        | _ -> None);
+        (Json.string_member name json);
       Alcotest.check float_opt ("number_member " ^ shown)
         (Old.Exif.number_member name json)
         (Option.bind (Json.member name json) Json.number))
@@ -231,6 +240,21 @@ let strip () =
       "/a/b/";
     ]
 
+let hex () =
+  List.iter
+    (fun bytes ->
+      Alcotest.(check string)
+        (Printf.sprintf "encode %S" bytes)
+        (Old.hex bytes) (Hex.encode bytes))
+    [
+      "";
+      "\x00\x0f\xffA";
+      String.init 32 Char.chr;
+      String.init 32 (fun i -> Char.chr (224 + i));
+      String.init 256 Char.chr;
+    ];
+  Alcotest.(check string) "lowercase" "000fff41" (Hex.encode "\x00\x0f\xffA")
+
 let () =
   Alcotest.run "net"
     [
@@ -238,7 +262,7 @@ let () =
         [
           ("parse: same value or message as the decoders' copies", `Quick, parse);
           ("member: null and absent are None, as refs and geo", `Quick, member);
-          ( "member + match: exif's string and number fields",
+          ( "string_member and number: exif's string and number fields",
             `Quick,
             exif_members );
           ("number: Int or finite Float", `Quick, number);
@@ -249,4 +273,5 @@ let () =
           ("encode: every byte as refs and geo encoded it", `Quick, encode);
           ("strip_trailing_slashes: gotrue's strip_slashes", `Quick, strip);
         ] );
+      ("Hex", [("encode: the nonce's lowercase hex", `Quick, hex)]);
     ]

@@ -1,0 +1,909 @@
+(* Herbier_photos.Drive (app/photos/drive.mli): names, request builders,
+   error classification (over recorded fixtures and hand-written bodies for
+   the branches that need no token), decoders, and the [folder] /
+   [put_original] / [presence] programs run over a fake network. *)
+
+module Drive = Herbier_photos.Drive
+module Ids = Herbier_domain.Ids
+module Plant = Herbier_domain.Plant
+module Url = Herbier_net.Url
+module Fixture = Herbier_test_support.Fixture
+module Value = Herbier_test_support.Value
+module Text = Herbier_test_support.Text
+
+let fixture name = Fixture.read ("drive_" ^ name ^ ".json")
+
+(* ---------- testables ---------- *)
+
+let error_t = Alcotest.testable Drive.pp_error Drive.equal_error
+let meth_to_string = function `GET -> "GET" | `POST -> "POST"
+
+let pp_request ppf (r : Drive.request) =
+  Format.fprintf ppf "%s %s %s" (meth_to_string r.meth) r.url
+    (match r.body with
+    | Drive.Empty -> "(empty)"
+    | Drive.Json j -> j
+    | Drive.Multipart {boundary; prefix; suffix} ->
+        Printf.sprintf "multipart %s %S %S" boundary prefix suffix)
+
+let request_t = Alcotest.testable pp_request Drive.equal_request
+
+let pp_file ppf (f : Drive.file) =
+  Format.fprintf ppf "{id = %s; web_view_link = %s}" f.id
+    (match f.web_view_link with
+    | None -> "None"
+    | Some s -> Printf.sprintf "Some %s" s)
+
+let file_t = Alcotest.testable pp_file Drive.equal_file
+
+let pp_put ppf = function
+  | Drive.Created f -> Format.fprintf ppf "Created %a" pp_file f
+  | Drive.Already_there f -> Format.fprintf ppf "Already_there %a" pp_file f
+
+let put_t = Alcotest.testable pp_put Drive.equal_put
+
+let pp_presence ppf = function
+  | Drive.Present -> Format.pp_print_string ppf "Present"
+  | Drive.Trashed -> Format.pp_print_string ppf "Trashed"
+  | Drive.Missing -> Format.pp_print_string ppf "Missing"
+
+let presence_t = Alcotest.testable pp_presence Drive.equal_presence
+let string_result = Alcotest.(result string error_t)
+let put_result = Alcotest.(result put_t error_t)
+let presence_result = Alcotest.(result presence_t error_t)
+let file_list_result = Alcotest.(result (list file_t) error_t)
+let file_result = Alcotest.(result file_t error_t)
+
+(* ---------- id and time helpers ---------- *)
+
+let plant_id = Value.id "plant id" Ids.Plant_id.of_string (Value.uuid7 1)
+let photo_id n = Value.id "photo id" Ids.Photo_id.of_string (Value.uuid7 n)
+let t0 = Value.time "2026-01-01T00:00:00Z"
+let sha256_hex = String.concat "" (List.init 4 (fun _ -> "0123456789abcdef"))
+
+(* ---------- species_folder ---------- *)
+
+let free_plant name = Plant.v ~id:plant_id ~at:t0 name
+
+let species_folder_tests =
+  [
+    ( "no plant falls back to the unidentified folder",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "species_folder None" Drive.unidentified_folder
+          (Drive.species_folder None) );
+    ( "scientific name, trimmed, authorship dropped",
+      `Quick,
+      fun () ->
+        let p =
+          {
+            (free_plant "Digitale") with
+            scientific_name = Some "  Digitalis purpurea ";
+            authorship = Some "L.";
+          }
+        in
+        Alcotest.(check string)
+          "species_folder" "Digitalis purpurea"
+          (Drive.species_folder (Some p)) );
+    ( "no scientific name falls back to the display name",
+      `Quick,
+      fun () ->
+        let p = free_plant "Digitale" in
+        Alcotest.(check string)
+          "species_folder" "Digitale"
+          (Drive.species_folder (Some p)) );
+    ( "a blank scientific name falls back to the display name",
+      `Quick,
+      fun () ->
+        let p = {(free_plant "Digitale") with scientific_name = Some "   "} in
+        Alcotest.(check string)
+          "species_folder" "Digitale"
+          (Drive.species_folder (Some p)) );
+    ( "both blank fall back to the unidentified folder",
+      `Quick,
+      fun () ->
+        let p = {(free_plant "   ") with scientific_name = Some "  "} in
+        Alcotest.(check string)
+          "species_folder" Drive.unidentified_folder
+          (Drive.species_folder (Some p)) );
+  ]
+
+(* ---------- file_name ---------- *)
+
+let id8 =
+  Value.id "photo id" Ids.Photo_id.of_string
+    "0193a4b2-aaaa-7aaa-8aaa-aaaa5f3c91d2"
+
+let file_name_tests =
+  [
+    ( "the device offset shifts the UTC instant, same day",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "file_name" "2026-06-14 10.32.05 5f3c91d2.jpg"
+          (Drive.file_name
+             ~taken_at:(Value.time "2026-06-14T08:32:05Z")
+             ~offset_s:7200 ~id:id8 ~mime:"image/jpeg") );
+    ( "a negative offset crosses midnight to the previous day",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "file_name" "2025-12-31 23.30.00 5f3c91d2.jpg"
+          (Drive.file_name
+             ~taken_at:(Value.time "2026-01-01T00:30:00Z")
+             ~offset_s:(-3600) ~id:id8 ~mime:"image/jpeg") );
+    ( "image/png gives .png",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "file_name" "2026-06-14 10.32.05 5f3c91d2.png"
+          (Drive.file_name
+             ~taken_at:(Value.time "2026-06-14T08:32:05Z")
+             ~offset_s:7200 ~id:id8 ~mime:"image/png") );
+    ( "image/heic gives .heic",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "file_name" "2026-06-14 10.32.05 5f3c91d2.heic"
+          (Drive.file_name
+             ~taken_at:(Value.time "2026-06-14T08:32:05Z")
+             ~offset_s:7200 ~id:id8 ~mime:"image/heic") );
+    ( "image/webp gives .webp",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "file_name" "2026-06-14 10.32.05 5f3c91d2.webp"
+          (Drive.file_name
+             ~taken_at:(Value.time "2026-06-14T08:32:05Z")
+             ~offset_s:7200 ~id:id8 ~mime:"image/webp") );
+    ( "an unknown mime gives no extension",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "file_name" "2026-06-14 10.32.05 5f3c91d2"
+          (Drive.file_name
+             ~taken_at:(Value.time "2026-06-14T08:32:05Z")
+             ~offset_s:7200 ~id:id8 ~mime:"application/octet-stream") );
+    ( "the suffix is the id's last 8 digits, not its timestamp",
+      `Quick,
+      fun () ->
+        let other =
+          Value.id "photo id" Ids.Photo_id.of_string
+            "0193a4b2-aaaa-7aaa-8aaa-aaaa0e8d7c6b"
+        in
+        let name id =
+          Drive.file_name
+            ~taken_at:(Value.time "2026-06-14T08:32:05Z")
+            ~offset_s:7200 ~id ~mime:"image/jpeg"
+        in
+        Alcotest.(check string)
+          "other" "2026-06-14 10.32.05 0e8d7c6b.jpg" (name other) );
+    ( "past Ptime.max the offset is dropped: the time is UTC",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "file_name" "9999-12-31 23.59.59 5f3c91d2.jpg"
+          (Drive.file_name ~taken_at:Ptime.max ~offset_s:3600 ~id:id8
+             ~mime:"image/jpeg") );
+  ]
+
+(* ---------- quote ---------- *)
+
+let quote_tests =
+  [
+    ( "an apostrophe is escaped",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "quote" "'Herbe d\\'or'" (Drive.quote "Herbe d'or") );
+    ( "a backslash is escaped",
+      `Quick,
+      fun () -> Alcotest.(check string) "quote" "'a\\\\b'" (Drive.quote "a\\b")
+    );
+    ( "plain text is just quoted",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "quote" "'Digitalis purpurea'"
+          (Drive.quote "Digitalis purpurea") );
+  ]
+
+(* ---------- request builders ---------- *)
+
+let find_folder_q =
+  "name = 'Digitalis purpurea' and mimeType = \
+   'application/vnd.google-apps.folder' and 'root' in parents and trashed = \
+   false"
+
+let find_original_q id =
+  Printf.sprintf
+    "appProperties has { key='herbier_photo_id' and value='%s' } and trashed = \
+     false"
+    (Ids.Photo_id.to_string id)
+
+let list_url q fields =
+  Drive.api
+  ^ "?q="
+  ^ Url.encode q
+  ^ "&fields="
+  ^ Url.encode fields
+  ^ "&orderBy=createdTime&pageSize=10&spaces=drive"
+
+(* Copied verbatim from scripts/record-drive-fixtures.sh. *)
+let script_find_fixture_folder_url =
+  "https://www.googleapis.com/drive/v3/files?q=name%20%3D%20%27Herbier-fixtures%27%20and%20mimeType%20%3D%20%27application%2Fvnd.google-apps.folder%27%20and%20%27root%27%20in%20parents%20and%20trashed%20%3D%20false&fields=files%28id%29&orderBy=createdTime&pageSize=10&spaces=drive"
+
+let script_find_nil_original_url =
+  "https://www.googleapis.com/drive/v3/files?q=appProperties%20has%20%7B%20key%3D%27herbier_photo_id%27%20and%20value%3D%2700000000-0000-0000-0000-000000000000%27%20%7D%20and%20trashed%20%3D%20false&fields=files%28id%2CwebViewLink%29&orderBy=createdTime&pageSize=10&spaces=drive"
+
+let request_builder_tests =
+  [
+    ( "find_folder renders the exact URL record-drive-fixtures.sh curls",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "url" script_find_fixture_folder_url
+          (Drive.find_folder ~name:"Herbier-fixtures" ~parent:Drive.Root).url );
+    ( "find_original renders the exact URL record-drive-fixtures.sh curls",
+      `Quick,
+      fun () ->
+        let nil =
+          Value.id "nil id" Ids.Photo_id.of_string
+            "00000000-0000-0000-0000-000000000000"
+        in
+        Alcotest.(check string)
+          "url" script_find_nil_original_url (Drive.find_original ~id:nil).url
+    );
+    ( "find_folder: GET, q and fields percent-encoded, no body",
+      `Quick,
+      fun () ->
+        let r =
+          Drive.find_folder ~name:"Digitalis purpurea" ~parent:Drive.Root
+        in
+        Alcotest.(check string)
+          "meth" "GET"
+          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        (match r.body with
+        | Drive.Empty -> ()
+        | _ -> Alcotest.fail "find_folder body is not Empty");
+        Alcotest.(check string) "url" (list_url find_folder_q "files(id)") r.url;
+        Alcotest.(check (option string))
+          "content_type" None
+          (Drive.content_type r.body) );
+    ( "find_folder under a folder names that folder's id",
+      `Quick,
+      fun () ->
+        let r = Drive.find_folder ~name:"x" ~parent:(Drive.Folder "P1") in
+        match Text.contains ~sub:"%27P1%27%20in%20parents" r.url with
+        | true -> ()
+        | false -> Alcotest.failf "parent id not found in %s" r.url );
+    ( "an apostrophe in the name is escaped then percent-encoded",
+      `Quick,
+      fun () ->
+        let r = Drive.find_folder ~name:"Herbe d'or" ~parent:Drive.Root in
+        match Text.contains ~sub:"%27Herbe%20d%5C%27or%27" r.url with
+        | true -> ()
+        | false -> Alcotest.failf "escaped apostrophe not found in %s" r.url );
+    ( "create_folder posts the folder's JSON body",
+      `Quick,
+      fun () ->
+        let r =
+          Drive.create_folder ~name:"Digitalis purpurea" ~parent:Drive.Root
+        in
+        Alcotest.(check string)
+          "meth" "POST"
+          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string) "url" (Drive.api ^ "?fields=id") r.url;
+        (match r.body with
+        | Drive.Json s ->
+            Alcotest.(check Herbier_test_support.Testable.yojson)
+              "body"
+              (`Assoc
+                 [
+                   ("name", `String "Digitalis purpurea");
+                   ("mimeType", `String "application/vnd.google-apps.folder");
+                   ("parents", `List [`String "root"]);
+                 ])
+              (Yojson.Safe.from_string s)
+        | _ -> Alcotest.fail "create_folder body is not Json");
+        Alcotest.(check (option string))
+          "content_type" (Some "application/json; charset=UTF-8")
+          (Drive.content_type r.body) );
+    ( "find_original's q names the appProperties pair",
+      `Quick,
+      fun () ->
+        let id = photo_id 2 in
+        let r = Drive.find_original ~id in
+        Alcotest.(check string)
+          "meth" "GET"
+          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string)
+          "url"
+          (list_url (find_original_q id) "files(id,webViewLink)")
+          r.url );
+    ( "get_trashed renders the file id in the path",
+      `Quick,
+      fun () ->
+        let r = Drive.get_trashed ~file_id:"abc" in
+        Alcotest.(check string)
+          "url"
+          (Drive.api ^ "/abc?fields=id,trashed")
+          r.url );
+    ( "a file id with a slash is percent-encoded in the path",
+      `Quick,
+      fun () ->
+        let r = Drive.get_trashed ~file_id:"a/b" in
+        Alcotest.(check string)
+          "url"
+          (Drive.api ^ "/a%2Fb?fields=id,trashed")
+          r.url );
+  ]
+
+(* ---------- metadata_json and boundary ---------- *)
+
+let metadata : Drive.metadata =
+  {
+    name = "2026-06-14 10.32.05 5f3c91d2.jpg";
+    mime = "image/jpeg";
+    folder_id = "FOLDER1";
+    photo_id = photo_id 3;
+    sha256 = sha256_hex;
+  }
+
+let metadata_tests =
+  [
+    ( "metadata_json is the exact object Drive sends",
+      `Quick,
+      fun () ->
+        Alcotest.(check Herbier_test_support.Testable.yojson)
+          "metadata_json"
+          (`Assoc
+             [
+               ("name", `String metadata.name);
+               ("mimeType", `String metadata.mime);
+               ("parents", `List [`String metadata.folder_id]);
+               ( "appProperties",
+                 `Assoc
+                   [
+                     ( "herbier_photo_id",
+                       `String (Ids.Photo_id.to_string metadata.photo_id) );
+                     ("sha256", `String metadata.sha256);
+                   ] );
+             ])
+          (Drive.metadata_json metadata) );
+    ( "every appProperties pair stays under Drive's 124-byte limit",
+      `Quick,
+      fun () ->
+        match Drive.metadata_json metadata with
+        | `Assoc fields -> (
+            match List.assoc_opt "appProperties" fields with
+            | Some (`Assoc pairs) ->
+                List.iter
+                  (fun (k, v) ->
+                    match v with
+                    | `String s ->
+                        Alcotest.(check bool)
+                          (k ^ " fits in 124 bytes") true
+                          (String.length k + String.length s <= 124)
+                    | _ -> Alcotest.fail "appProperties value not a string")
+                  pairs
+            | _ -> Alcotest.fail "no appProperties object")
+        | _ -> Alcotest.fail "metadata_json not an object" );
+    ( "boundary is herbier- followed by the random bytes' lowercase hex",
+      `Quick,
+      fun () ->
+        let random = String.init 16 (fun i -> Char.chr i) in
+        let b = Drive.boundary ~random in
+        Alcotest.(check string)
+          "boundary" "herbier-000102030405060708090a0b0c0d0e0f" b;
+        Alcotest.(check int) "length" 40 (String.length b) );
+  ]
+
+(* ---------- create_original ---------- *)
+
+let create_original_tests =
+  [
+    ( "create_original: URL, Multipart body, content_type, prefix and suffix",
+      `Quick,
+      fun () ->
+        let boundary = "herbier-000102030405060708090a0b0c0d0e0f" in
+        let r = Drive.create_original metadata ~boundary in
+        Alcotest.(check string)
+          "meth" "POST"
+          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string)
+          "url"
+          (Drive.upload_api ^ "?uploadType=multipart&fields=id,webViewLink")
+          r.url;
+        (match r.body with
+        | Drive.Multipart {boundary = b; prefix; suffix} -> (
+            Alcotest.(check string) "boundary" boundary b;
+            Alcotest.(check string)
+              "prefix"
+              ("--"
+              ^ boundary
+              ^ "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+              ^ Yojson.Safe.to_string (Drive.metadata_json metadata)
+              ^ "\r\n--"
+              ^ boundary
+              ^ "\r\nContent-Type: image/jpeg\r\n\r\n")
+              prefix;
+            Alcotest.(check string)
+              "suffix"
+              ("\r\n--" ^ boundary ^ "--\r\n")
+              suffix;
+            match
+              Text.contains ~sub:boundary
+                (Yojson.Safe.to_string (Drive.metadata_json metadata))
+            with
+            | false -> ()
+            | true -> Alcotest.fail "boundary occurs in the metadata JSON")
+        | _ -> Alcotest.fail "create_original body is not Multipart");
+        Alcotest.(check (option string))
+          "content_type"
+          (Some ("multipart/related; boundary=" ^ boundary))
+          (Drive.content_type r.body) );
+    ( "a mime with a CRLF becomes application/octet-stream in the prefix",
+      `Quick,
+      fun () ->
+        let m = {metadata with mime = "image/jpeg\r\nX-Injected: 1"} in
+        let r = Drive.create_original m ~boundary:"herbier-abc" in
+        match r.body with
+        | Drive.Multipart {prefix; _} ->
+            Alcotest.(check bool)
+              "media part header" true
+              (String.ends_with
+                 ~suffix:
+                   "\r\n\
+                    --herbier-abc\r\n\
+                    Content-Type: application/octet-stream\r\n\
+                    \r\n"
+                 prefix)
+        | _ -> Alcotest.fail "create_original body is not Multipart" );
+    ( "media_type keeps type/subtype, replaces anything else",
+      `Quick,
+      fun () ->
+        List.iter
+          (fun (mime, expected) ->
+            Alcotest.(check string) mime expected (Drive.media_type mime))
+          [
+            ("image/jpeg", "image/jpeg");
+            ("image/vnd.ms-photo", "image/vnd.ms-photo");
+            ("", "application/octet-stream");
+            ("image", "application/octet-stream");
+            ("image/", "application/octet-stream");
+            ("image/jpeg; q=1", "application/octet-stream");
+            ("image/jpeg\r\nX: 1", "application/octet-stream");
+            ("a/b/c", "application/octet-stream");
+          ] );
+    ( "an accented name stays UTF-8 bytes in the prefix",
+      `Quick,
+      fun () ->
+        let m = {metadata with name = Drive.unidentified_folder} in
+        let r = Drive.create_original m ~boundary:"herbier-abc" in
+        match r.body with
+        | Drive.Multipart {prefix; _} -> (
+            match Text.contains ~sub:"À identifier" prefix with
+            | true -> ()
+            | false -> Alcotest.fail "accented name not verbatim in prefix")
+        | _ -> Alcotest.fail "create_original body is not Multipart" );
+  ]
+
+(* ---------- error_of_answer ---------- *)
+
+let error_of_answer_fixture_tests =
+  [
+    ( "a 401 on files.get (invalid token) is Unauthorized",
+      `Quick,
+      fun () ->
+        Alcotest.check error_t "error" Drive.Unauthorized
+          (Drive.error_of_answer ~status:401
+             ~body:(fixture "files_get_invalid_token_401")) );
+    ( "a 401 on files.create (invalid token) is Unauthorized",
+      `Quick,
+      fun () ->
+        Alcotest.check error_t "error" Drive.Unauthorized
+          (Drive.error_of_answer ~status:401
+             ~body:(fixture "files_create_invalid_token_401")) );
+    ( "a 403 with no Authorization header is Http forbidden",
+      `Quick,
+      fun () ->
+        Alcotest.check error_t "error"
+          (Drive.Http
+             {
+               status = 403;
+               reason = Some "forbidden";
+               message = Some "Permission denied on the service.";
+             })
+          (Drive.error_of_answer ~status:403
+             ~body:(fixture "files_get_no_token_403")) );
+  ]
+
+let error_of_answer_handwritten_tests =
+  let reason_body reason =
+    Printf.sprintf {|{"error":{"code":403,"errors":[{"reason":"%s"}]}}|} reason
+  in
+  let case name status body expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check error_t "error" expected
+          (Drive.error_of_answer ~status ~body) )
+  in
+  [
+    case "429 is Rate_limited" 429 "{}" Drive.Rate_limited;
+    case "403 userRateLimitExceeded is Rate_limited" 403
+      (reason_body "userRateLimitExceeded")
+      Drive.Rate_limited;
+    case "403 rateLimitExceeded is Rate_limited" 403
+      (reason_body "rateLimitExceeded")
+      Drive.Rate_limited;
+    case "403 storageQuotaExceeded is Quota_full" 403
+      (reason_body "storageQuotaExceeded")
+      Drive.Quota_full;
+    case "403 insufficientPermissions is Scope_missing" 403
+      (reason_body "insufficientPermissions")
+      Drive.Scope_missing;
+    (* errors[0].reason matches no named reason: only the details fallback
+       can classify it. *)
+    case "403 with an ErrorInfo SERVICE_DISABLED detail is Api_disabled" 403
+      {|{"error":{"code":403,"errors":[{"reason":"forbidden"}],"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED"}]}}|}
+      Drive.Api_disabled;
+    case
+      "403 with an ErrorInfo ACCESS_TOKEN_SCOPE_INSUFFICIENT detail is \
+       Scope_missing"
+      403
+      {|{"error":{"code":403,"errors":[{"reason":"forbidden"}],"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}|}
+      Drive.Scope_missing;
+    case "403 accessNotConfigured is Api_disabled" 403
+      (reason_body "accessNotConfigured")
+      Drive.Api_disabled;
+    case "404 is Not_found" 404 "{}" Drive.Not_found;
+    case "500, the lowest server status, is Server 500" 500 "{}"
+      (Drive.Server 500);
+    case "599, the highest server status, is Server 599" 599 "{}"
+      (Drive.Server 599);
+    case "600 is past the server range: Http" 600 "{}"
+      (Drive.Http {status = 600; reason = None; message = None});
+    case "503 with an HTML body is Server 503" 503
+      "<html><body>Service Unavailable</body></html>" (Drive.Server 503);
+    case "418 with a non-JSON body is Http with no reason or message" 418
+      "not json"
+      (Drive.Http {status = 418; reason = None; message = None});
+    case "a non-string reason and a null message are None" 403
+      {|{"error":{"code":403,"errors":[{"reason":5}],"message":null}}|}
+      (Drive.Http {status = 403; reason = None; message = None});
+    case "a numeric message is None" 418 {|{"error":{"message":7}}|}
+      (Drive.Http {status = 418; reason = None; message = None});
+  ]
+
+let error_to_string_tests =
+  let case expected e =
+    ( expected,
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "error_to_string" expected (Drive.error_to_string e) )
+  in
+  [
+    case "HTTP 418 r: m"
+      (Drive.Http {status = 418; reason = Some "r"; message = Some "m"});
+    case "HTTP 418 r"
+      (Drive.Http {status = 418; reason = Some "r"; message = None});
+    case "HTTP 418: m"
+      (Drive.Http {status = 418; reason = None; message = Some "m"});
+    case "HTTP 418" (Drive.Http {status = 418; reason = None; message = None});
+    case "server error HTTP 503" (Drive.Server 503);
+    case "network: timeout" (Drive.Network "timeout");
+    case "malformed answer: id" (Drive.Malformed "id");
+  ]
+
+(* ---------- decoders ---------- *)
+
+let decode_files_tests =
+  [
+    ( "an empty files array decodes to the empty list",
+      `Quick,
+      fun () ->
+        Alcotest.check file_list_result "decode_files" (Ok [])
+          (Drive.decode_files {|{"files":[]}|}) );
+    ( "two entries decode in order, webViewLink optional",
+      `Quick,
+      fun () ->
+        Alcotest.check file_list_result "decode_files"
+          (Ok
+             [
+               {Drive.id = "A"; web_view_link = Some "https://x.test/a"};
+               {Drive.id = "B"; web_view_link = None};
+             ])
+          (Drive.decode_files
+             {|{"files":[{"id":"A","webViewLink":"https://x.test/a"},{"id":"B"}]}|})
+    );
+    ( "an entry without an id is Malformed",
+      `Quick,
+      fun () ->
+        Alcotest.check file_list_result "decode_files"
+          (Error (Drive.Malformed "files[].id"))
+          (Drive.decode_files {|{"files":[{"foo":1}]}|}) );
+    ( "a missing files key is Malformed \"files\"",
+      `Quick,
+      fun () ->
+        Alcotest.check file_list_result "decode_files"
+          (Error (Drive.Malformed "files")) (Drive.decode_files "{}") );
+    ( "unparsable JSON is Malformed \"not JSON\"",
+      `Quick,
+      fun () ->
+        Alcotest.check file_list_result "decode_files"
+          (Error (Drive.Malformed "not JSON")) (Drive.decode_files "{") );
+    ( "a files value that is not a list is Malformed \"files\"",
+      `Quick,
+      fun () ->
+        Alcotest.check file_list_result "decode_files"
+          (Error (Drive.Malformed "files"))
+          (Drive.decode_files {|{"files":{}}|}) );
+  ]
+
+let decode_file_tests =
+  [
+    ( "id and webViewLink both decode",
+      `Quick,
+      fun () ->
+        Alcotest.check file_result "decode_file"
+          (Ok {Drive.id = "x"; web_view_link = Some "https://x.test/f"})
+          (Drive.decode_file {|{"id":"x","webViewLink":"https://x.test/f"}|}) );
+    ( "a missing webViewLink is None",
+      `Quick,
+      fun () ->
+        Alcotest.check file_result "decode_file"
+          (Ok {Drive.id = "x"; web_view_link = None})
+          (Drive.decode_file {|{"id":"x"}|}) );
+    ( "a non-string id is Malformed \"id\"",
+      `Quick,
+      fun () ->
+        Alcotest.check file_result "decode_file" (Error (Drive.Malformed "id"))
+          (Drive.decode_file {|{"id":3}|}) );
+    ( "a missing id is Malformed \"id\"",
+      `Quick,
+      fun () ->
+        Alcotest.check file_result "decode_file" (Error (Drive.Malformed "id"))
+          (Drive.decode_file "{}") );
+    ( "unparsable JSON is Malformed \"not JSON\"",
+      `Quick,
+      fun () ->
+        Alcotest.check file_result "decode_file"
+          (Error (Drive.Malformed "not JSON")) (Drive.decode_file "{") );
+  ]
+
+(* ---------- programs, over a fake sequential network ---------- *)
+
+(* Each program sends its requests one after another, deterministically: a
+   plain queue of canned answers, consumed in order, pins that order without
+   needing to key answers by URL (two create_folder calls share the same
+   URL: the folder name is in the JSON body, not the query). *)
+let seq_net (responses : Drive.response list) : Drive.request -> Drive.response
+    =
+  let remaining = ref responses in
+  fun (_ : Drive.request) ->
+    match !remaining with
+    | [] -> Alcotest.fail "seq_net: no more responses recorded"
+    | r :: rest ->
+        remaining := rest;
+        r
+
+let answer ?(status = 200) body : Drive.response = Drive.Answer {status; body}
+
+let check_requests msg expected reqs =
+  Alcotest.(check (list request_t)) msg expected reqs
+
+let parent9 = Drive.Folder "PARENT9"
+
+let folder_tests =
+  [
+    ( "found: one request, the oldest (first) entry wins",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder ~name:"Digitalis purpurea" ~parent:parent9 in
+        let resp = answer {|{"files":[{"id":"F1"},{"id":"F2"}]}|} in
+        check_requests "find"
+          [Drive.find_folder ~name:"Digitalis purpurea" ~parent:parent9]
+          (Drive.requests (seq_net [resp]) prog);
+        Alcotest.check string_result "folder" (Ok "F1")
+          (Drive.run (seq_net [resp]) prog) );
+    ( "absent: find then create under the same parent, the created id wins",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder ~name:"Digitalis purpurea" ~parent:parent9 in
+        let responses = [answer {|{"files":[]}|}; answer {|{"id":"NEW"}|}] in
+        check_requests "find, create"
+          [
+            Drive.find_folder ~name:"Digitalis purpurea" ~parent:parent9;
+            Drive.create_folder ~name:"Digitalis purpurea" ~parent:parent9;
+          ]
+          (Drive.requests (seq_net responses) prog);
+        Alcotest.check string_result "folder" (Ok "NEW")
+          (Drive.run (seq_net responses) prog) );
+  ]
+
+let original : Drive.original =
+  {
+    species = "Digitalis purpurea";
+    name = "2026-06-14 10.32.05 5f3c91d2.jpg";
+    mime = "image/jpeg";
+    photo_id = photo_id 4;
+    sha256 = sha256_hex;
+    boundary = "herbier-000102030405060708090a0b0c0d0e0f";
+  }
+
+let created id link = Drive.Created {Drive.id; web_view_link = Some link}
+
+let upload_into folder_id =
+  Drive.create_original
+    {
+      name = original.name;
+      mime = original.mime;
+      folder_id;
+      photo_id = original.photo_id;
+      sha256 = original.sha256;
+    }
+    ~boundary:original.boundary
+
+let put_original_tests =
+  [
+    ( "nothing in Drive: find_original, find+create root, find+create species, \
+       create_original; parents is the species folder",
+      `Quick,
+      fun () ->
+        let prog = Drive.put_original original in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[]}|};
+            answer {|{"id":"ROOT1"}|};
+            answer {|{"files":[]}|};
+            answer {|{"id":"SPEC1"}|};
+            answer {|{"id":"FILE1","webViewLink":"https://drive.test/FILE1"}|};
+          ]
+        in
+        check_requests "the six requests"
+          [
+            Drive.find_original ~id:original.photo_id;
+            Drive.find_folder ~name:Drive.root_folder ~parent:Drive.Root;
+            Drive.create_folder ~name:Drive.root_folder ~parent:Drive.Root;
+            Drive.find_folder ~name:original.species
+              ~parent:(Drive.Folder "ROOT1");
+            Drive.create_folder ~name:original.species
+              ~parent:(Drive.Folder "ROOT1");
+            upload_into "SPEC1";
+          ]
+          (Drive.requests (seq_net responses) prog);
+        Alcotest.check put_result "put_original"
+          (Ok (created "FILE1" "https://drive.test/FILE1"))
+          (Drive.run (seq_net responses) prog) );
+    ( "root and species already exist: find_original, find root, find species, \
+       create_original",
+      `Quick,
+      fun () ->
+        let prog = Drive.put_original original in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[{"id":"ROOT1"}]}|};
+            answer {|{"files":[{"id":"SPEC1"}]}|};
+            answer {|{"id":"FILE2","webViewLink":"https://drive.test/FILE2"}|};
+          ]
+        in
+        check_requests "the four requests"
+          [
+            Drive.find_original ~id:original.photo_id;
+            Drive.find_folder ~name:Drive.root_folder ~parent:Drive.Root;
+            Drive.find_folder ~name:original.species
+              ~parent:(Drive.Folder "ROOT1");
+            upload_into "SPEC1";
+          ]
+          (Drive.requests (seq_net responses) prog);
+        Alcotest.check put_result "put_original"
+          (Ok (created "FILE2" "https://drive.test/FILE2"))
+          (Drive.run (seq_net responses) prog) );
+    ( "already there: a single find_original, the oldest entry, nothing uploaded",
+      `Quick,
+      fun () ->
+        let prog = Drive.put_original original in
+        let responses =
+          [
+            answer
+              {|{"files":[{"id":"FILE0","webViewLink":"https://drive.test/FILE0"},{"id":"FILE9","webViewLink":"https://drive.test/FILE9"}]}|};
+          ]
+        in
+        let reqs = Drive.requests (seq_net responses) prog in
+        Alcotest.(check int) "one request" 1 (List.length reqs);
+        Alcotest.check put_result "put_original"
+          (Ok
+             (Drive.Already_there
+                {id = "FILE0"; web_view_link = Some "https://drive.test/FILE0"}))
+          (Drive.run (seq_net responses) prog) );
+    ( "a 401 finding root stops the program at once",
+      `Quick,
+      fun () ->
+        let prog = Drive.put_original original in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer ~status:401 (fixture "files_get_invalid_token_401");
+          ]
+        in
+        let reqs = Drive.requests (seq_net responses) prog in
+        Alcotest.(check int) "stops after two requests" 2 (List.length reqs);
+        Alcotest.check put_result "put_original" (Error Drive.Unauthorized)
+          (Drive.run (seq_net responses) prog) );
+    ( "an unreachable create_original surfaces as Network",
+      `Quick,
+      fun () ->
+        let prog = Drive.put_original original in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[]}|};
+            answer {|{"id":"ROOT1"}|};
+            answer {|{"files":[]}|};
+            answer {|{"id":"SPEC1"}|};
+            Drive.Unreachable "timeout";
+          ]
+        in
+        let reqs = Drive.requests (seq_net responses) prog in
+        Alcotest.(check int) "six requests" 6 (List.length reqs);
+        Alcotest.check put_result "put_original"
+          (Error (Drive.Network "timeout"))
+          (Drive.run (seq_net responses) prog) );
+    ( "a malformed create_folder answer stops before the upload",
+      `Quick,
+      fun () ->
+        let prog = Drive.put_original original in
+        let responses =
+          [answer {|{"files":[]}|}; answer {|{"files":[]}|}; answer "{}"]
+        in
+        let reqs = Drive.requests (seq_net responses) prog in
+        Alcotest.(check int) "stops after three requests" 3 (List.length reqs);
+        Alcotest.check put_result "put_original" (Error (Drive.Malformed "id"))
+          (Drive.run (seq_net responses) prog) );
+  ]
+
+let presence_tests =
+  let case name resp expected =
+    ( name,
+      `Quick,
+      fun () ->
+        let prog = Drive.presence ~file_id:"abc" in
+        Alcotest.check presence_result "presence" expected
+          (Drive.run (seq_net [resp]) prog) )
+  in
+  [
+    case "trashed = false is Present"
+      (answer {|{"id":"x","trashed":false}|})
+      (Ok Drive.Present);
+    case "trashed = true is Trashed"
+      (answer {|{"id":"x","trashed":true}|})
+      (Ok Drive.Trashed);
+    case "a 404 is Missing" (answer ~status:404 "{}") (Ok Drive.Missing);
+    case "a 401 is Unauthorized"
+      (answer ~status:401 (fixture "files_get_invalid_token_401"))
+      (Error Drive.Unauthorized);
+    case "an unreachable network is Network" (Drive.Unreachable "timeout")
+      (Error (Drive.Network "timeout"));
+    case "a 403 is classified, not Missing"
+      (answer ~status:403 (fixture "files_get_no_token_403"))
+      (Error
+         (Drive.Http
+            {
+              status = 403;
+              reason = Some "forbidden";
+              message = Some "Permission denied on the service.";
+            }));
+    case "a missing trashed field is Malformed \"trashed\""
+      (answer {|{"id":"x"}|}) (Error (Drive.Malformed "trashed"));
+    case "a non-bool trashed is Malformed \"trashed\""
+      (answer {|{"id":"x","trashed":"no"}|})
+      (Error (Drive.Malformed "trashed"));
+    case "a non-JSON 2xx is Malformed \"not JSON\"" (answer "<html>")
+      (Error (Drive.Malformed "not JSON"));
+  ]

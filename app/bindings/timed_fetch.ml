@@ -72,10 +72,7 @@ let fetch ~describe ~timeout_ms ~non_2xx_body ~meth ~url ~headers ~body =
       let init =
         Brr_io.Fetch.Request.init
           ~method':(Jstr.v (meth_to_string meth))
-          ~headers
-          ?body:
-            (Option.map (fun b -> Brr_io.Fetch.Body.of_jstr (Jstr.v b)) body)
-          ~signal:(Brr.Abort.signal abort) ()
+          ~headers ?body ~signal:(Brr.Abort.signal abort) ()
       in
       let open Fut.Syntax in
       let+ result =
@@ -89,7 +86,11 @@ let fetch ~describe ~timeout_ms ~non_2xx_body ~meth ~url ~headers ~body =
 
 let request ~meth ~url ~headers ~body =
   fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url ~headers
-    ~body
+    ~body:(Option.map (fun b -> Brr_io.Fetch.Body.of_jstr (Jstr.v b)) body)
+
+let request_blob ?(timeout_ms = timeout_ms) ~meth ~url ~headers blob =
+  fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url ~headers
+    ~body:(Some (Brr_io.Fetch.Body.of_blob blob))
 
 let get ?(timeout_ms = timeout_ms) ?(non_2xx_body = Read) ?(headers = []) url =
   fetch ~describe:Js_error.message ~timeout_ms ~non_2xx_body ~meth:`GET ~url

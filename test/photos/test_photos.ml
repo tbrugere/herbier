@@ -435,4 +435,20 @@ let () =
       ("exif tags", tag_tests);
       ("preview size", fit_tests);
       ("jpeg exif segment", jpeg_tests);
+      ("drive species_folder", Test_drive.species_folder_tests);
+      ("drive file_name", Test_drive.file_name_tests);
+      ("drive quote", Test_drive.quote_tests);
+      ("drive request builders", Test_drive.request_builder_tests);
+      ("drive metadata and boundary", Test_drive.metadata_tests);
+      ("drive create_original", Test_drive.create_original_tests);
+      ( "drive error_of_answer (recorded)",
+        Test_drive.error_of_answer_fixture_tests );
+      ( "drive error_of_answer (hand-written)",
+        Test_drive.error_of_answer_handwritten_tests );
+      ("drive error_to_string", Test_drive.error_to_string_tests);
+      ("drive decode_files", Test_drive.decode_files_tests);
+      ("drive decode_file", Test_drive.decode_file_tests);
+      ("drive folder program", Test_drive.folder_tests);
+      ("drive put_original program", Test_drive.put_original_tests);
+      ("drive presence program", Test_drive.presence_tests);
     ]

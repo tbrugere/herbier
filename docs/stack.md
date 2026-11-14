@@ -77,8 +77,9 @@ evidence. Open decisions are listed at the end.
   bundle +1 KB, the dev bundle +139 KB). Not `ppx_deriving_yojson` on closed
   sets sent to PostgREST: it encodes a constructor `Drive` as `["Drive"]`, so
   their `to_json`/`of_json` stay hand-written. Rules: style guide §5.5.
-- A **small Kotlin layer** is expected: the `intent-filter`s in the manifest
-  and possibly a WorkManager tweak. Nothing else native.
+- A **small native (Java) layer** is expected: the `intent-filter`s in the
+  manifest, the Drive grant's plugin and possibly a WorkManager tweak.
+  Nothing else native.
 - Screens from the design handoff are recreated in HTML/CSS from OCaml, not in
   Jetpack Compose as the handoff README assumes. Design tokens (colours,
   type, spacing) carry over as-is; Material Symbols and the two Google Fonts
@@ -168,11 +169,14 @@ blocked: nothing.
   2026-11-12): personal data (coordinates, notes) stays off GitHub, the device
   is the source of truth and Supabase its copy; originals are on Drive.
 - **Auth**: one Google sign-in on the device through Credential Manager,
-  passed to Supabase with `signInWithIdToken`; the same plugin's
+  passed to Supabase with `signInWithIdToken`; Play Services'
   `AuthorizationClient` grants the `drive.file` scope and hands out 1-hour
   access tokens cached by Play Services, so no refresh token is stored by
-  us. Sign-ups disabled in Supabase; RLS `owner_id = (select auth.uid())`.
-  Fallback: email+password.
+  us. Sign-in stays on `@capgo/capacitor-social-login`; the Drive grant is
+  a small inline plugin over `AuthorizationClient` (social-login asks scopes
+  only at sign-in and cannot renew a token silently; M7.51). Sign-ups
+  disabled in Supabase; RLS `owner_id = (select auth.uid())`. Fallback:
+  email+password.
 - Pro ($25/month) only buys "never paused" and backups. Not needed.
 - **Closed value sets are lookup tables, never Postgres enum types.** One
   table per set, `value text primary key, description text`, its rows

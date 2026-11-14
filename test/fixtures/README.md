@@ -136,6 +136,28 @@ The reference row's `payload` is sent with `vernacular` before `species` and
 `jsonb`'s reorder (`species` first, `key` first inside it), which the
 structural-equality tests of `test_rest.ml` and `test_merge.ml` rely on.
 
+`drive_files_<verb>_<case>_<status>.json`: Google Drive v3 answers for
+`Herbier_photos.Drive` (`error_of_answer`), read by `test/photos/test_drive.ml`.
+Two groups: the error answers below need no token and are recorded directly
+with curl (no `Authorization` header, or `Bearer ya29.invalid`, which Google
+always rejects); the 2xx success bodies need a real `drive.file` access token
+and are recorded by `scripts/record-drive-fixtures.sh` with
+`HERBIER_DRIVE_TOKEN`.
+
+- `drive_files_get_no_token_403.json`: `GET
+  https://www.googleapis.com/drive/v3/files/abc?fields=id,trashed`, no
+  `Authorization` header: `403 PERMISSION_DENIED`, `errors[0].reason =
+  "forbidden"`.
+- `drive_files_get_invalid_token_401.json`: the same request with
+  `Authorization: Bearer ya29.invalid`: `401 UNAUTHENTICATED`.
+- `drive_files_create_invalid_token_401.json`: `POST
+  …/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink` with
+  `Bearer ya29.invalid` and a minimal multipart body: `401` (the same
+  envelope; Drive rejects the token before reading the body).
+
+No personal data in any of them: a throwaway `abc` file id and a token that
+was never valid.
+
 `web/map/positron.json` (not in this directory: it is also the style the app
 ships) is a recorded payload, read by `test/geo` as the fixture of its
 `Style.with_overlays` tests; never hand-edited. It is re-recorded on demand

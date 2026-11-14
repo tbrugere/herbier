@@ -16,10 +16,6 @@ let tags =
   ]
 
 let empty = {taken_at = None; position = None}
-
-let string_member name json =
-  match Json.member name json with Some (`String s) -> Some s | _ -> None
-
 let number_member name json = Option.bind (Json.member name json) Json.number
 
 let digits s =
@@ -65,16 +61,18 @@ let sub_second_ps = function
 let taken_at ~tz_offset_at json =
   let open Option.Syntax in
   let* date, time =
-    Option.bind (string_member "DateTimeOriginal" json) date_time
+    Option.bind (Json.string_member "DateTimeOriginal" json) date_time
   in
   let tz =
-    match Option.bind (string_member "OffsetTimeOriginal" json) offset_s with
+    match
+      Option.bind (Json.string_member "OffsetTimeOriginal" json) offset_s
+    with
     | Some tz -> tz
     | None -> tz_offset_at date time
   in
   let+ t = Ptime.of_date_time (date, (time, tz)) in
   Option.bind
-    (Option.bind (string_member "SubSecTimeOriginal" json) sub_second_ps)
+    (Option.bind (Json.string_member "SubSecTimeOriginal" json) sub_second_ps)
     (fun ps -> Ptime.add_span t (Ptime.Span.v (0, ps)))
   |> Option.value ~default:t
 
@@ -82,8 +80,8 @@ let position json =
   match
     ( number_member "latitude" json,
       number_member "longitude" json,
-      string_member "GPSLatitudeRef" json,
-      string_member "GPSLongitudeRef" json )
+      Json.string_member "GPSLatitudeRef" json,
+      Json.string_member "GPSLongitudeRef" json )
   with
   | Some 0., Some 0., _, _ -> None
   (* Only exact refs: exifr negates on "S" / "W" alone, so any other value

@@ -12,7 +12,7 @@ val meth_to_string : meth -> string
 (** ["DELETE"], ["GET"], ["PATCH"], ["POST"]. *)
 
 type error =
-  | Timeout  (** aborted after {!timeout_ms} *)
+  | Timeout  (** aborted after the timeout ({!timeout_ms} by default) *)
   | Failed of string
       (** the fetch rejected, or the headers could not be built (a value fetch
           refuses, e.g. a control character): from {!request} the JS error's
@@ -30,6 +30,18 @@ val request :
   (response, error) result Fut.t
 (** One fetch, aborted after {!timeout_ms}. A non-2xx status is [Ok]. Never
     raises; the future always resolves. *)
+
+val request_blob :
+  ?timeout_ms:int ->
+  meth:meth ->
+  url:string ->
+  headers:(string * string) list ->
+  Brr.Blob.t ->
+  (response, error) result Fut.t
+(** {!request} with a binary body sent as is (a [Blob]: an upload's bytes, which
+    a [string] body would re-encode as UTF-8), aborted after [timeout_ms]
+    (default {!timeout_ms}). Same answer, errors and guarantees as {!request}: a
+    non-2xx status is [Ok], its body read; never raises. *)
 
 (** What {!get} does with the body of a response outside 200–299. *)
 type non_2xx_body =

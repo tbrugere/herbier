@@ -1,4 +1,5 @@
-(* Http.get, Geocoder.run and Timed_fetch.request over a stubbed fetch. Each
+(* Http.get, Geocoder.run, Timed_fetch.request and Timed_fetch.request_blob
+   over a stubbed fetch. Each
    case sets the stub's next answer, runs one request and describes the
    outcome as one line: the result, whether the Api-User-Agent header was
    sent, and how many times the response body was read. The lines must equal
@@ -64,6 +65,24 @@ let request ?(headers = []) kind =
         (Timed_fetch.request ~meth:`POST ~url:"https://example.test/token"
            ~headers ~body:(Some "{}")))
 
+(* The Drive upload's path: a Blob framed by Blob_frame, echoed back by the
+   stub, under a short timer. *)
+let request_blob kind =
+  Jv.set Jv.global "__next" (Jv.of_string kind);
+  let body =
+    Herbier_bindings.Blob_frame.wrap ~prefix:"\xc3\xa9<" ~suffix:">"
+      (Brr.Blob.of_jstr (Jstr.v "media"))
+  in
+  observed (fun () ->
+      Fut.map
+        (function
+          | Ok {Timed_fetch.status; body; headers = _} ->
+              Printf.sprintf "request_blob %s: Ok %d %s" kind status body
+          | Error e ->
+              "request_blob " ^ kind ^ ": " ^ Timed_fetch.error_to_string e)
+        (Timed_fetch.request_blob ~timeout_ms:50 ~meth:`POST
+           ~url:"https://example.test/upload" ~headers:[] body))
+
 let expected =
   [
     "http ok: Ok {\"a\":1} | ua | text read 1";
@@ -85,6 +104,8 @@ let expected =
     "request 200 unreadable: Error: boom | no ua | text read 1";
     "request rejected: TypeError: Failed to fetch | no ua | text read 0";
     "request bad header: Failed |  | text read 0";
+    "request_blob echo: Ok 200 POST \xc3\xa9<media> | no ua | text read 1";
+    "request_blob hangs: timeout | no ua | text read 0";
   ]
 
 let () =
@@ -112,6 +133,8 @@ let () =
       (fun () -> request "200 unreadable");
       (fun () -> request "rejected");
       (fun () -> request ~headers:[("x-bad", "a\nb")] "bad header");
+      (fun () -> request_blob "echo");
+      (fun () -> request_blob "hangs");
     ]
   in
   let all =

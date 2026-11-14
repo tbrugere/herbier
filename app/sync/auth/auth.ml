@@ -1,6 +1,5 @@
 module Session = Herbier_sync_core.Auth.Session
 module Gotrue = Herbier_sync_core.Auth.Gotrue
-module Nonce = Herbier_sync_core.Auth.Nonce
 module Server = Server
 module Cap_error = Herbier_bindings.Cap_error
 module Cap_preferences = Herbier_bindings.Cap_preferences
@@ -57,6 +56,7 @@ type t = {
       (* The plugin's initialisation, once per process; cleared on failure. *)
   writes : Serial.t;
   mutable on_job_session : (job_session -> unit) option;
+  drive : Drive_access.t;
 }
 
 let log = Console_line.log Auth
@@ -96,6 +96,7 @@ let create () =
     initialized = None;
     writes = Serial.create ();
     on_job_session = None;
+    drive = Drive_access.create ();
   }
 
 let on_job_session t f = t.on_job_session <- Some f
@@ -291,7 +292,7 @@ let new_session t =
   let open Fut.Result_syntax in
   let* () = Fut_result.map_error (fun e -> Google e) (initialize t) in
   let crypto r =
-    Result.map_error (fun m -> Crypto m) (Result.map Nonce.hex r)
+    Result.map_error (fun m -> Crypto m) (Result.map Herbier_net.Hex.encode r)
   in
   let* raw = Fut.return (crypto (Web_crypto.random_bytes 32)) in
   let* hashed = Fut.map crypto (Web_crypto.sha256 raw) in
@@ -403,3 +404,27 @@ let debug_import t text =
       | Ok s ->
           let attempt = started t in
           serially t (fun () -> keep t ~attempt s))
+
+type drive_error = Drive_access.error =
+  | Drive_unconfigured
+  | Drive_signed_out
+  | Consent_needed
+  | Consent_refused
+  | Drive_offline
+  | Drive_misconfigured
+  | No_google_account
+  | Drive_google of Cap_error.t
+
+let equal_drive_error = Drive_access.equal_error
+let drive_error_to_string = Drive_access.error_to_string
+
+let drive_account t : Drive_access.account =
+  match status t with
+  | Unconfigured -> Unconfigured
+  | Restoring | Signed_out | Signed_in {email = None} -> Signed_out
+  | Signed_in {email = Some email} -> Signed_in {email}
+
+let drive_token t ~interactive =
+  Drive_access.token t.drive (drive_account t) ~interactive
+
+let drop_drive_token (_ : t) token = Drive_access.drop token

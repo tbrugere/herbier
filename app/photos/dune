@@ -1,7 +1,10 @@
-; Pure photos: EXIF reading (exif), the preview size (preview_size) and JPEG
-; segments (jpeg). No Brr, no store: the libraries below enforce it, and
-; test/photos links this library natively. The Brr side is app/photos_io/.
+; Pure photos: EXIF reading (exif), the preview size (preview_size), JPEG
+; segments (jpeg) and Google Drive's requests and programs (drive). No Brr, no
+; store: the libraries below enforce it, and test/photos links this library
+; natively. The Brr side is app/photos_io/.
 (library
  (name herbier_photos)
  (public_name herbier.photos)
- (libraries herbier_domain herbier_net yojson ptime))
+ (libraries herbier_domain herbier_net yojson ptime)
+ (preprocess
+  (pps ppx_deriving.eq)))

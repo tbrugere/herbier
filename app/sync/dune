@@ -1,8 +1,8 @@
 ; Sync on the device: the account (auth/: Auth, with Auth.Server, the GoTrue
 ; calls), the PostgREST transport over fetch (net/), the engine that runs the
 ; cycles and the keep-alive job's side (keepalive/). The pure halves are
-; herbier_sync_core (app/sync_core/); Auth re-exports its Session, Gotrue and
-; Nonce, Keepalive its Wire and Report. Sub-directories are qualified:
+; herbier_sync_core (app/sync_core/); Auth re-exports its Session and Gotrue,
+; Keepalive its Wire and Report. Sub-directories are qualified:
 ; auth/auth.ml and keepalive/keepalive.ml are their groups' main modules.
 (include_subdirs qualified)
 

@@ -18,6 +18,8 @@ public class MainActivity extends BridgeActivity {
         if (savedInstanceState != null || fromHistory) {
             setIntent(new Intent(Intent.ACTION_MAIN));
         }
+        // Inline plugins are registered by hand, before the bridge is built.
+        registerPlugin(GoogleAuthorizationPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

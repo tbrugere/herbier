@@ -25,6 +25,9 @@ globalThis.fetch = (url, init) => {
       return Promise.resolve(counted(new Response(failing(), { status: 200 })));
     case "rejected":
       return Promise.reject(new TypeError("Failed to fetch"));
+    case "echo":
+      return new Response(init.body).text().then((t) =>
+        counted(new Response(init.method + " " + t, { status: 200 })));
     case "hangs":
       return new Promise((_, reject) =>
         init.signal.addEventListener("abort", () =>
