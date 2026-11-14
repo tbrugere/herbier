@@ -118,7 +118,9 @@ app/
                           fut_result (map_error, a sequential traverse); no domain, no app logic, and one
                           image step (canvas_jpeg, shared by photos and refs_io)
     cap_sqlite.ml  cap_filesystem.ml  cap_app.ml  cap_share_target.ml
-    cap_social_login.ml  cap_uploader.ml  cap_geolocation.ml  cap_camera.ml
+    cap_social_login.ml  cap_geolocation.ml  cap_camera.ml
+    cap_uploader.ml       Herbier's inline Uploader plugin (android/, §4): one WorkManager job per file that
+                          PUTs it to a Drive resumable session under a network constraint; jobs, cancel, changes
     cap_google_authorization.ml  Herbier's inline GoogleAuthorization plugin (android/, §4): a drive.file
                           access token from Play Services' AuthorizationClient, and clearToken
     cap_preferences.ml  maplibre.ml  pmtiles.ml  exifr.ml
@@ -152,11 +154,13 @@ app/
                           timestamp format; no Brr, tested natively in test/store/
     schema.ml             ordered migrations, each a list of SQL statements; `user_version`; migration 2 is the FTS5 index and its triggers;
                           migration 3 the device-only ref_images and its reference_organs lookup;
-                          migration 4 the device-only commune_packs
+                          migration 4 the device-only commune_packs; migration 5 the device-only uploads
     stmt.ml               statements as pure values (SQL, params, row decoder), run by store_io/db.ml (all, find, write)
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
     outbox.ml  sync_state.ml  settings.ml  ref_images.ml  commune_packs.ml   local-only tables, columns declared
                           next to their queries (commune_packs: « IGN hors-ligne » packs, one row per département);
+    uploads.ml            the device-only queue of originals bound for Drive (path, type, size, resumable session,
+                          attempts, last error), one row per photo this install holds the original of
                           outbox.ml also holds `edit`, the value every synced write is (statement, read-back, payload),
                           and `bare`, a synced write without entry (only Db.bare_transaction runs it);
                           sync_state.ml: the pull cursors
@@ -244,15 +248,20 @@ app/
     jpeg.ml               JPEG segment reading (is there an EXIF APP1)
     drive.ml              Google Drive v3 without IO: requests (folders find-or-create, the lookup by
                           appProperties, multipart files.create, files.get?fields=trashed), the multipart
-                          frame, decoders, error classes, folder and file names, and the programs
-                          put_original and presence over a fake-able transport
+                          frame, the resumable session, decoders, error classes, folder and file names, and the
+                          programs put_original, start_session and presence over a fake-able transport
+    upload_queue.ml       the originals' queue's decisions, without IO: from a photo row, its uploads row and
+                          its job, what to do next (start a session, enqueue, finish, retry, give up, discard)
   photos_io/              §5 of architecture, Brr part
     capture.ml            getUserMedia / pick
     preview.ml            canvas resize + JPEG encode, sha256 of the original; save: previews/<id>.jpg
                           then the pending photo row through Db.edit
     drive.ml              runs photos/drive.ml's programs over bindings/timed_fetch.ml with a Bearer token
                           from the caller (Auth.drive_token, wired in ui/), one renewal on a 401
-    upload_queue.ml  health.ml
+    upload_queue.ml       the originals' queue on the device: originals/<id> and its uploads row at save, the
+                          single-flight pass (jobs, rows, photo rows, Upload_queue.next), session starts one at
+                          a time over drive.ml, jobs through bindings/cap_uploader.ml, outcomes committed
+    health.ml
   refs/                   §6–7 of architecture, pure part: domain + yojson + ptime, no Brr
     request.ml            Request.t: source + URL of one GET; percent-encoding, URL assembly
     decode.ml             decode error variant, JSON parsing, field helpers shared by sources/
@@ -358,7 +367,8 @@ app/
     app/                  App (app.ml, the group's main module, includes the four below): wires services:
                           after-save → sync engine (local write) + reference fetch; a pull that wrote rows fires
                           `saved`, every cycle `synced`
-      core.ml             the app's state, its creation, the services' start, commit and the photos' save
+      core.ml             the app's state, its creation, the services' start, commit, the photos' save and
+                          their originals' queue (its triggers: start, resume, sign-in, online, job changes)
       geocoding.ml        place names: the background geocoding and the 4m source switches; save
       reference_fetch.ml  a plant's reference fetch, its organ thumbnails, the GBIF link
       packs.ml            the « IGN hors-ligne » packs' download and delete
@@ -381,6 +391,9 @@ app/
                           drive_check.ml (#dev/drive): the Drive token (interactive, silent, the plugin
                           alone), a generated test JPEG put into Herbier/<species>/ and put again, its
                           presence, and an invalid token's two 401s;
+                          uploader_check.ml (#dev/uploader): the upload job against scripts/upload-sink.mjs (a
+                          random file, Wi-Fi only or any network, cancel, the live job list) and the app's
+                          originals' queue (its rows, a silent or interactive pass);
                           rest_check.ml (#dev/rest): a tags upsert, a tags pull (since none / one minute) and
                           an invalid-token upsert over sync/net/transport.ml, with the session's or a pasted token;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
@@ -571,9 +584,15 @@ edits, all under `android/app/src/main/`:
   register a plugin by hand and to drop a launch intent that was already
   handled (no 4j replay after process death or from recents, architecture
   §7).
-- `java/re/bruge/herbier/`: any further Java (a WorkManager constraint
-  tweak) as small Capacitor plugin classes inline here, bound from
-  `app/bindings/`, until the native side grows a package of its own.
+- `java/re/bruge/herbier/UploaderPlugin.java` and `UploadWorker.java`: the
+  originals' uploads (architecture §5): one unique WorkManager work per
+  photo under a network constraint, PUTting the file to a Drive resumable
+  session and resuming after an interruption; `jobs`, `cancel` and a
+  `jobsChanged` event. Replaces `@capgo/capacitor-uploader` (a foreground
+  service with no network constraint).
+- `java/re/bruge/herbier/`: any further Java as small Capacitor plugin
+  classes inline here, bound from `app/bindings/`, until the native side
+  grows a package of its own.
 - `res/`: launcher icons, splash, `strings.xml`; `res/xml/backup_rules.xml`
   and `res/xml/data_extraction_rules.xml`, which keep `CapacitorStorage.xml`
   (the session) and `re.bruge.herbier.keepalive.xml` (the keep-alive job's
@@ -587,7 +606,9 @@ file depends on `com.google.android.gms:play-services-auth` for
 `GoogleAuthorizationPlugin`, at `playServicesAuthVersion` from
 `android/variables.gradle` (at least the version
 `@capgo/capacitor-social-login` pins; a regenerated `variables.gradle` must
-keep it).
+keep it), and on `androidx.work:work-runtime` for `UploaderPlugin` at
+`workManagerVersion`, also from `variables.gradle`, which
+`@capacitor/background-runner` reads too (one WorkManager in the APK).
 
 One edit under `android/app/src/debug/`, debug builds only:
 `AndroidManifest.xml` sets `android:networkSecurityConfig` to
@@ -646,13 +667,15 @@ test/
                 one <module>_tests.ml per module (fixtures.ml: the values several share); 4f's rows
                 (ref_block) for the two spike species projected from fixtures/; 5b's move plan (test_move_plan)
   store/        native, alcotest: herbier_store (app/store/: codec, schema, tables, stmt,
-                the per-table queries, references included, settings, ref_images, commune_packs, search, dev_seed,
-                sync_state); schema SQL, queries, FTS triggers and
+                the per-table queries, references included, settings, ref_images, commune_packs, uploads,
+                search, dev_seed, sync_state); schema SQL, queries, FTS triggers and
                 codec run through the sqlite3 CLI (needs sqlite3 with FTS5); not the Capacitor plugin
                 (that is #dev/store)
   photos/       native, alcotest: herbier_photos (exif, over recorded
                 exifr output in fixtures/exifr_*.json; preview_size; jpeg; drive: requests, names,
-                decoders and programs over a fake transport, errors over fixtures/drive_*.json)
+                decoders and programs (put_original, the resumable start_session) over a fake transport,
+                errors over fixtures/drive_*.json and the session PUT's over fixtures/drive_*.txt;
+                upload_queue: the queue's decisions)
   geo/          native, alcotest: herbier_geo (features, style over the
                 recorded web/map/positron.json; geocode, place_name and communes over
                 fixtures/{photon,geoplateforme}_*.json, the WFS ones geoplateforme_wfs_*.json)
@@ -677,7 +700,8 @@ test/
                 (what test/sync decodes), so a plain `dune build` runs it too: needs node >= 19
   bindings/
     jsoo/       js_of_ocaml build of herbier_bindings' pure-JS helpers run under node:
-                Fut_result.traverse against the sequential folds it replaced
+                Fut_result.traverse against the sequential folds it replaced; Cap_uploader over
+                uploader_stub.js (enqueue's wire shape, jobs' decoding, the plugin absent)
   version/      native, alcotest: the git describe stamp (herbier_version), apart so that a commit
                 relinks only this test
   net/          native, alcotest: herbier_net against the copies it replaced (copied into test_net.ml)
@@ -690,7 +714,7 @@ test/
                 scripts/record-geo-fixtures.sh; gotrue_<endpoint>_<case>_<status>.json from the local
                 stack, scripts/record-gotrue-fixtures.sh; sync_<verb>_<table>_<case>_<status>.json
                 from the local stack, scripts/record-sync-fixtures.sh; drive_files_<verb>_<case>_<status>.json
-                from Google, scripts/record-drive-fixtures.sh) and exifr output (exifr_<name>.json,
+                and drive_session_<verb>_<case>_<status>.txt from Google, scripts/record-drive-fixtures.sh) and exifr output (exifr_<name>.json,
                 scripts/exifr-fixture.mjs); never app rows
   js/           browser-side tests; added only if the UI spike's leak check fails
 ```
@@ -731,9 +755,13 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   `record-sync-fixtures.sh` (the PostgREST answers `test/fixtures/sync_*.json`
   to the requests `app/sync_core/net/rest.ml` renders, and to the keep-alive job's
   ping, same conventions), `record-drive-fixtures.sh` (Google Drive's answers
-  `test/fixtures/drive_*.json` at the URLs `app/photos/drive.ml` renders: the
-  error answers without a token, the success ones with a `drive.file` token in
-  `HERBIER_DRIVE_TOKEN`, in a throwaway folder trashed at the end) and
+  `test/fixtures/drive_*.json` at the URLs `app/photos/drive.ml` renders, and
+  `drive_*.txt` kept verbatim (a resumable session's headers, an unknown
+  session's 404): the error answers without a token, the success ones with a
+  `drive.file` token in `HERBIER_DRIVE_TOKEN`, in a throwaway folder trashed at
+  the end), `upload-sink.mjs` (a stand-in for a Drive resumable session on
+  127.0.0.1, with injected 503s and expired sessions: the device checks of the
+  originals' uploads, reached through `adb reverse`) and
   `local-session.sh <email>` (a local-stack session as JSON, the user created if
   absent: a token for `#dev/rest` without a Google account).
   `record-gotrue-fixtures.sh`, `record-sync-fixtures.sh` and `local-session.sh`

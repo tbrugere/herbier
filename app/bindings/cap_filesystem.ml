@@ -69,3 +69,7 @@ let mkdir ~path ~recursive =
         (options
            [("path", jpath); data_dir; ("recursive", Jv.of_bool recursive)])
         ~ok:unit_ok)
+
+let is_missing : Cap_error.t -> bool = function
+  | Rejected {code = Some "OS-PLUG-FILE-0008"; _} -> true
+  | Rejected _ | Unavailable _ | Unexpected _ | Invalid_path _ -> false

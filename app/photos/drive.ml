@@ -21,7 +21,7 @@ let content_type = function
   | Multipart {boundary; _} -> Some ("multipart/related; boundary=" ^ boundary)
 
 type response =
-  | Answer of {status : int; body : string}
+  | Answer of {status : int; headers : (string * string) list; body : string}
   | Unreachable of string
 
 type error =
@@ -273,6 +273,23 @@ let create_original (m : metadata) ~boundary =
     body = Multipart {boundary; prefix; suffix = "\r\n--" ^ boundary ^ "--\r\n"};
   }
 
+let create_session m =
+  {
+    meth = `POST;
+    url = upload_api ^ "?uploadType=resumable&fields=id,webViewLink";
+    body = Json (Yojson.Safe.to_string (metadata_json m));
+  }
+
+let decode_session headers =
+  match
+    List.find_opt
+      (fun (name, _) -> String.equal (String.lowercase_ascii name) "location")
+      headers
+  with
+  | Some (_, url) when String.starts_with ~prefix:(upload_api ^ "?") url ->
+      Ok url
+  | Some _ | None -> Error (Malformed "location")
+
 let get_trashed ~file_id =
   {
     meth = `GET;
@@ -339,8 +356,19 @@ let send request decode =
     ( request,
       function
       | Unreachable m -> Done (Error (Network m))
-      | Answer {status; body} when ok status -> Done (decode body)
-      | Answer {status; body} -> Done (Error (error_of_answer ~status ~body)) )
+      | Answer {status; body; _} when ok status -> Done (decode body)
+      | Answer {status; body; _} -> Done (Error (error_of_answer ~status ~body))
+    )
+
+(* As [send], for an answer read from its headers. *)
+let send_headers request decode =
+  Send
+    ( request,
+      function
+      | Unreachable m -> Done (Error (Network m))
+      | Answer {status; headers; _} when ok status -> Done (decode headers)
+      | Answer {status; body; _} -> Done (Error (error_of_answer ~status ~body))
+    )
 
 let folder ~name ~parent =
   let open Result_syntax in
@@ -351,38 +379,58 @@ let folder ~name ~parent =
       let+ created = send (create_folder ~name ~parent) decode_file in
       created.id
 
-type original = {
+type target = {
   species : string;
   name : string;
   mime : string;
   photo_id : Photo_id.t;
   sha256 : string;
-  boundary : string;
 }
 
+type original = {target : target; boundary : string}
 type put = Created of file | Already_there of file [@@deriving eq]
+type start = Already_there of file | Session of string [@@deriving eq]
+
+(* The part put_original and start_session share: the lookup by
+   [herbier_photo_id], then the folders and the new file's metadata. *)
+type located = Found of file | New of metadata
+
+let locate (t : target) =
+  let open Result_syntax in
+  let* found = send (find_original ~id:t.photo_id) decode_files in
+  match found with
+  | first :: _ -> Done (Ok (Found first))
+  | [] ->
+      let* root = folder ~name:root_folder ~parent:Root in
+      let+ species = folder ~name:t.species ~parent:(Folder root) in
+      New
+        {
+          name = t.name;
+          mime = t.mime;
+          folder_id = species;
+          photo_id = t.photo_id;
+          sha256 = t.sha256;
+        }
 
 let put_original (o : original) =
   let open Result_syntax in
-  let* found = send (find_original ~id:o.photo_id) decode_files in
-  match found with
-  | first :: _ -> Done (Ok (Already_there first))
-  | [] ->
-      let* root = folder ~name:root_folder ~parent:Root in
-      let* species = folder ~name:o.species ~parent:(Folder root) in
-      let metadata =
-        {
-          name = o.name;
-          mime = o.mime;
-          folder_id = species;
-          photo_id = o.photo_id;
-          sha256 = o.sha256;
-        }
-      in
+  let* located = locate o.target in
+  match located with
+  | Found first -> Done (Ok (Already_there first : put))
+  | New metadata ->
       let+ file =
         send (create_original metadata ~boundary:o.boundary) decode_file
       in
       Created file
+
+let start_session (t : target) =
+  let open Result_syntax in
+  let* located = locate t in
+  match located with
+  | Found first -> Done (Ok (Already_there first : start))
+  | New metadata ->
+      let+ url = send_headers (create_session metadata) decode_session in
+      Session url
 
 (* see exploratory_research/photo-storage-google.md §3.4 *)
 let presence ~file_id =

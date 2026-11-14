@@ -691,7 +691,8 @@ let seq_net (responses : Drive.response list) : Drive.request -> Drive.response
         remaining := rest;
         r
 
-let answer ?(status = 200) body : Drive.response = Drive.Answer {status; body}
+let answer ?(status = 200) ?(headers = []) body : Drive.response =
+  Drive.Answer {status; headers; body}
 
 let check_requests msg expected reqs =
   Alcotest.(check (list request_t)) msg expected reqs
@@ -727,11 +728,14 @@ let folder_tests =
 
 let original : Drive.original =
   {
-    species = "Digitalis purpurea";
-    name = "2026-06-14 10.32.05 5f3c91d2.jpg";
-    mime = "image/jpeg";
-    photo_id = photo_id 4;
-    sha256 = sha256_hex;
+    target =
+      {
+        species = "Digitalis purpurea";
+        name = "2026-06-14 10.32.05 5f3c91d2.jpg";
+        mime = "image/jpeg";
+        photo_id = photo_id 4;
+        sha256 = sha256_hex;
+      };
     boundary = "herbier-000102030405060708090a0b0c0d0e0f";
   }
 
@@ -740,11 +744,11 @@ let created id link = Drive.Created {Drive.id; web_view_link = Some link}
 let upload_into folder_id =
   Drive.create_original
     {
-      name = original.name;
-      mime = original.mime;
+      name = original.target.name;
+      mime = original.target.mime;
       folder_id;
-      photo_id = original.photo_id;
-      sha256 = original.sha256;
+      photo_id = original.target.photo_id;
+      sha256 = original.target.sha256;
     }
     ~boundary:original.boundary
 
@@ -767,12 +771,12 @@ let put_original_tests =
         in
         check_requests "the six requests"
           [
-            Drive.find_original ~id:original.photo_id;
+            Drive.find_original ~id:original.target.photo_id;
             Drive.find_folder ~name:Drive.root_folder ~parent:Drive.Root;
             Drive.create_folder ~name:Drive.root_folder ~parent:Drive.Root;
-            Drive.find_folder ~name:original.species
+            Drive.find_folder ~name:original.target.species
               ~parent:(Drive.Folder "ROOT1");
-            Drive.create_folder ~name:original.species
+            Drive.create_folder ~name:original.target.species
               ~parent:(Drive.Folder "ROOT1");
             upload_into "SPEC1";
           ]
@@ -795,9 +799,9 @@ let put_original_tests =
         in
         check_requests "the four requests"
           [
-            Drive.find_original ~id:original.photo_id;
+            Drive.find_original ~id:original.target.photo_id;
             Drive.find_folder ~name:Drive.root_folder ~parent:Drive.Root;
-            Drive.find_folder ~name:original.species
+            Drive.find_folder ~name:original.target.species
               ~parent:(Drive.Folder "ROOT1");
             upload_into "SPEC1";
           ]
@@ -906,4 +910,265 @@ let presence_tests =
       (Error (Drive.Malformed "trashed"));
     case "a non-JSON 2xx is Malformed \"not JSON\"" (answer "<html>")
       (Error (Drive.Malformed "not JSON"));
+  ]
+
+(* ---------- create_session ---------- *)
+
+(* The nil UUID and zero sha256, as scripts/record-drive-fixtures.sh's own
+   [multipart] helper builds its metadata (the fixtures below were curled
+   the same way). *)
+let nil_photo_id =
+  Value.id "nil id" Ids.Photo_id.of_string
+    "00000000-0000-0000-0000-000000000000"
+
+let nil_metadata : Drive.metadata =
+  {
+    name = "fixture.jpg";
+    mime = "image/jpeg";
+    folder_id = "root";
+    photo_id = nil_photo_id;
+    sha256 = String.make 64 '0';
+  }
+
+let create_session_tests =
+  [
+    ( "create_session: POST, the exact resumable URL, metadata_json compact as \
+       the Json body, JSON content_type",
+      `Quick,
+      fun () ->
+        let r = Drive.create_session nil_metadata in
+        Alcotest.(check string)
+          "meth" "POST"
+          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        (* Copied verbatim from scripts/record-drive-fixtures.sh's
+           create_session_url. *)
+        Alcotest.(check string)
+          "url"
+          "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink"
+          r.url;
+        (match r.body with
+        | Drive.Json s ->
+            Alcotest.(check string)
+              "body is metadata_json, compact"
+              (Yojson.Safe.to_string (Drive.metadata_json nil_metadata))
+              s
+        | _ -> Alcotest.fail "create_session body is not Json");
+        Alcotest.(check (option string))
+          "content_type" (Some "application/json; charset=UTF-8")
+          (Drive.content_type r.body) );
+  ]
+
+(* ---------- decode_session ---------- *)
+
+let session_url = Drive.upload_api ^ "?uploadType=resumable&upload_id=x"
+let other_session_url = Drive.upload_api ^ "?uploadType=resumable&upload_id=y"
+let session_result = Alcotest.(result string error_t)
+
+let decode_session_tests =
+  [
+    ( "a lowercase location header decodes the session URL",
+      `Quick,
+      fun () ->
+        Alcotest.check session_result "decode_session" (Ok session_url)
+          (Drive.decode_session [("location", session_url)]) );
+    ( "a Location header (capitalised) is accepted too",
+      `Quick,
+      fun () ->
+        Alcotest.check session_result "decode_session" (Ok session_url)
+          (Drive.decode_session [("Location", session_url)]) );
+    ( "no location header is Malformed \"location\"",
+      `Quick,
+      fun () ->
+        Alcotest.check session_result "decode_session"
+          (Error (Drive.Malformed "location")) (Drive.decode_session []) );
+    ( "a location outside upload_api is Malformed \"location\"",
+      `Quick,
+      fun () ->
+        Alcotest.check session_result "decode_session"
+          (Error (Drive.Malformed "location"))
+          (Drive.decode_session [("location", "https://evil.example/x")]) );
+    ( "two location headers: the first wins",
+      `Quick,
+      fun () ->
+        Alcotest.check session_result "decode_session" (Ok session_url)
+          (Drive.decode_session
+             [("location", session_url); ("location", other_session_url)]) );
+  ]
+
+(* ---------- start_session, over the sequential fake network ---------- *)
+
+let target : Drive.target =
+  {
+    species = "Digitalis purpurea";
+    name = "2026-06-14 10.32.05 5f3c91d2.jpg";
+    mime = "image/jpeg";
+    photo_id = photo_id 5;
+    sha256 = sha256_hex;
+  }
+
+let pp_start ppf = function
+  | Drive.Already_there f -> Format.fprintf ppf "Already_there %a" pp_file f
+  | Drive.Session url -> Format.fprintf ppf "Session %s" url
+
+let start_t = Alcotest.testable pp_start Drive.equal_start
+let start_result = Alcotest.(result start_t error_t)
+
+let start_session_tests =
+  [
+    ( "a file already there: Already_there (the oldest), exactly 1 request",
+      `Quick,
+      fun () ->
+        let prog = Drive.start_session target in
+        let resp =
+          answer
+            {|{"files":[{"id":"FILE0","webViewLink":"https://drive.test/FILE0"},{"id":"FILE9","webViewLink":"https://drive.test/FILE9"}]}|}
+        in
+        let reqs = Drive.requests (seq_net [resp]) prog in
+        check_requests "find_original alone"
+          [Drive.find_original ~id:target.photo_id]
+          reqs;
+        Alcotest.check start_result "start_session"
+          (Ok
+             (Drive.Already_there
+                {id = "FILE0"; web_view_link = Some "https://drive.test/FILE0"}))
+          (Drive.run (seq_net [resp]) prog) );
+    ( "nothing there, root found, species absent: the five requests in order, \
+       Session url",
+      `Quick,
+      fun () ->
+        let prog = Drive.start_session target in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[{"id":"ROOT1"}]}|};
+            answer {|{"files":[]}|};
+            answer {|{"id":"SPEC1"}|};
+            answer ~headers:[("location", session_url)] "{}";
+          ]
+        in
+        check_requests "the five requests"
+          [
+            Drive.find_original ~id:target.photo_id;
+            Drive.find_folder ~name:Drive.root_folder ~parent:Drive.Root;
+            Drive.find_folder ~name:target.species
+              ~parent:(Drive.Folder "ROOT1");
+            Drive.create_folder ~name:target.species
+              ~parent:(Drive.Folder "ROOT1");
+            Drive.create_session
+              {
+                name = target.name;
+                mime = target.mime;
+                folder_id = "SPEC1";
+                photo_id = target.photo_id;
+                sha256 = target.sha256;
+              };
+          ]
+          (Drive.requests (seq_net responses) prog);
+        Alcotest.check start_result "start_session"
+          (Ok (Drive.Session session_url))
+          (Drive.run (seq_net responses) prog) );
+    ( "nothing there, root and species absent: the six requests in order, \
+       Session url",
+      `Quick,
+      fun () ->
+        let prog = Drive.start_session target in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[]}|};
+            answer {|{"id":"ROOT1"}|};
+            answer {|{"files":[]}|};
+            answer {|{"id":"SPEC1"}|};
+            answer ~headers:[("location", session_url)] "{}";
+          ]
+        in
+        check_requests "the six requests"
+          [
+            Drive.find_original ~id:target.photo_id;
+            Drive.find_folder ~name:Drive.root_folder ~parent:Drive.Root;
+            Drive.create_folder ~name:Drive.root_folder ~parent:Drive.Root;
+            Drive.find_folder ~name:target.species
+              ~parent:(Drive.Folder "ROOT1");
+            Drive.create_folder ~name:target.species
+              ~parent:(Drive.Folder "ROOT1");
+            Drive.create_session
+              {
+                name = target.name;
+                mime = target.mime;
+                folder_id = "SPEC1";
+                photo_id = target.photo_id;
+                sha256 = target.sha256;
+              };
+          ]
+          (Drive.requests (seq_net responses) prog);
+        Alcotest.check start_result "start_session"
+          (Ok (Drive.Session session_url))
+          (Drive.run (seq_net responses) prog) );
+    ( "a 503 on the species lookup is Server 503, the requests end there",
+      `Quick,
+      fun () ->
+        let prog = Drive.start_session target in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[{"id":"ROOT1"}]}|};
+            answer ~status:503 "";
+          ]
+        in
+        check_requests "three requests"
+          [
+            Drive.find_original ~id:target.photo_id;
+            Drive.find_folder ~name:Drive.root_folder ~parent:Drive.Root;
+            Drive.find_folder ~name:target.species
+              ~parent:(Drive.Folder "ROOT1");
+          ]
+          (Drive.requests (seq_net responses) prog);
+        Alcotest.check start_result "start_session" (Error (Drive.Server 503))
+          (Drive.run (seq_net responses) prog) );
+    ( "a session 200 without a location header is Malformed \"location\"",
+      `Quick,
+      fun () ->
+        let prog = Drive.start_session target in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[{"id":"ROOT1"}]}|};
+            answer {|{"files":[{"id":"SPEC1"}]}|};
+            answer "{}";
+          ]
+        in
+        Alcotest.check start_result "start_session"
+          (Error (Drive.Malformed "location"))
+          (Drive.run (seq_net responses) prog) );
+    ( "the session's 401 (invalid token), recorded, is Unauthorized",
+      `Quick,
+      fun () ->
+        let prog = Drive.start_session target in
+        let responses =
+          [
+            answer {|{"files":[]}|};
+            answer {|{"files":[{"id":"ROOT1"}]}|};
+            answer {|{"files":[{"id":"SPEC1"}]}|};
+            answer ~status:401
+              (fixture "files_create_session_invalid_token_401");
+          ]
+        in
+        Alcotest.check start_result "start_session" (Error Drive.Unauthorized)
+          (Drive.run (seq_net responses) prog);
+        Alcotest.check error_t "error_of_answer on the same fixture"
+          Drive.Unauthorized
+          (Drive.error_of_answer ~status:401
+             ~body:(fixture "files_create_session_invalid_token_401")) );
+    ( "an unreachable lookup is Network, exactly 1 request",
+      `Quick,
+      fun () ->
+        let prog = Drive.start_session target in
+        let net = seq_net [Drive.Unreachable "timeout"] in
+        let reqs = Drive.requests net prog in
+        check_requests "find_original alone"
+          [Drive.find_original ~id:target.photo_id]
+          reqs;
+        Alcotest.check start_result "start_session"
+          (Error (Drive.Network "timeout"))
+          (Drive.run (seq_net [Drive.Unreachable "timeout"]) prog) );
   ]

@@ -33,4 +33,5 @@ let find db app =
   | "map" -> Some (page (fun () -> D.Map_check.el db))
   | "geocode" -> Some (page (fun () -> D.Geocode_check.el app))
   | "drive" -> Some (page (fun () -> D.Drive_check.el app))
+  | "uploader" -> Some (page (fun () -> D.Uploader_check.el app))
   | _ -> None

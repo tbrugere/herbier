@@ -14,7 +14,8 @@
   test_references
   test_ref_images
   test_commune_packs
-  test_sync_state)
+  test_sync_state
+  test_uploads)
  (libraries
   herbier_store
   herbier_domain

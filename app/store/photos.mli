@@ -35,3 +35,13 @@ val soft_delete : Photo_id.t -> at:Ptime.t -> Outbox.edit
 (** {!Stmt.soft_delete}; read back by [id] whatever [deleted_at]. Appends an
     entry (payload with [deleted_at = at]) when the photo was live, nothing when
     it is absent or already deleted. *)
+
+val set_upload :
+  Photo_id.t ->
+  state:Photo.Upload_state.t ->
+  drive_file_id:string option ->
+  at:Ptime.t ->
+  Outbox.edit
+(** [update photos set upload_state = ?, drive_file_id = ?, updated_at = ? where
+     id = ? and deleted_at is null], read back by [id]. One entry when the photo
+    is live; nothing changed (no entry) when it is absent or deleted. *)

@@ -65,7 +65,11 @@ let fresh_original ~species =
   in
   Fut.return
     (Ok
-       ( {Api.species; name; mime = Canvas_jpeg.mime; photo_id; sha256; boundary},
+       ( {
+           Api.target =
+             {species; name; mime = Canvas_jpeg.mime; photo_id; sha256};
+           boundary;
+         },
          blob ))
 
 let drive_error = Drive.error_to_string Auth.drive_error_to_string

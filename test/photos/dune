@@ -3,7 +3,7 @@
 
 (test
  (name test_photos)
- (modules test_photos test_drive)
+ (modules test_photos test_drive test_upload_queue)
  (libraries
   herbier_photos
   herbier_domain
@@ -15,4 +15,5 @@
  (deps
   %{project_root}/scripts/exifr-fixture.mjs
   (glob_files %{project_root}/test/fixtures/exifr_*.json)
-  (glob_files %{project_root}/test/fixtures/drive_*.json)))
+  (glob_files %{project_root}/test/fixtures/drive_*.json)
+  (glob_files %{project_root}/test/fixtures/drive_*.txt)))

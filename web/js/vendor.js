@@ -34,6 +34,9 @@ globalThis.herbier = {
   googleAuthorization: Capacitor.isNativePlatform()
     ? registerPlugin('GoogleAuthorization')
     : undefined,
+  // Herbier's own plugin (android/…/UploaderPlugin.java, WorkManager): absent
+  // in a browser, so that the binding reports it Unavailable.
+  uploader: Capacitor.isNativePlatform() ? registerPlugin('Uploader') : undefined,
   exifr,
   map,
 };

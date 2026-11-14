@@ -451,4 +451,15 @@ let () =
       ("drive folder program", Test_drive.folder_tests);
       ("drive put_original program", Test_drive.put_original_tests);
       ("drive presence program", Test_drive.presence_tests);
+      ("drive create_session", Test_drive.create_session_tests);
+      ("drive decode_session", Test_drive.decode_session_tests);
+      ("drive start_session program", Test_drive.start_session_tests);
+      ("upload_queue constants", Test_upload_queue.constants_tests);
+      ("upload_queue session_usable", Test_upload_queue.session_usable_tests);
+      ("upload_queue next", Test_upload_queue.next_tests);
+      ( "upload_queue start_error_scope",
+        Test_upload_queue.start_error_scope_tests );
+      ("upload_queue count_failure", Test_upload_queue.count_failure_tests);
+      ( "upload_queue on_network_change",
+        Test_upload_queue.on_network_change_tests );
     ]

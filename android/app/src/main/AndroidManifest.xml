@@ -89,8 +89,9 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- @capacitor/background-runner (the keep-alive job) merges in more
          permissions than the job uses. It keeps ACCESS_NETWORK_STATE
-         (WorkManager's network constraint); the job shows no notification,
-         reads no location and sets no exact alarm, so these go. -->
+         (WorkManager's network constraint: the keep-alive job and the
+         originals' uploads, UploaderPlugin). Neither job shows a
+         notification, reads location or sets an exact alarm, so these go. -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" tools:node="remove" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />

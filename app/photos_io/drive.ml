@@ -53,7 +53,8 @@ let send ~media ~token (request : Api.request) =
           ~headers
           (Herbier_bindings.Blob_frame.wrap ~prefix ~suffix media)
     | Multipart _, None ->
-        (* Unreachable from put_original and presence, the only callers. *)
+        (* Unreachable: only put_original sends a Multipart body, always
+           with media. *)
         Fut.return
           (Error (Timed_fetch.Failed "a multipart request without media"))
   in
@@ -61,7 +62,8 @@ let send ~media ~token (request : Api.request) =
     (fun answer ->
       let response : Api.response =
         match answer with
-        | Ok {Timed_fetch.status; body; _} -> Answer {status; body}
+        | Ok {Timed_fetch.status; headers; body} ->
+            Answer {status; headers; body}
         | Error e -> Unreachable (Timed_fetch.error_to_string e)
       in
       log request
@@ -98,6 +100,9 @@ let run ~token ~drop_token ?media program =
 
 let put_original ~token ~drop_token original media =
   run ~token ~drop_token ~media (Api.put_original original)
+
+let start_session ~token ~drop_token target =
+  run ~token ~drop_token (Api.start_session target)
 
 let presence ~token ~drop_token ~file_id =
   run ~token ~drop_token (Api.presence ~file_id)

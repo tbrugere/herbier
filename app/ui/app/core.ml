@@ -72,6 +72,11 @@ type t = {
   set_packs : ?step:React.step -> pack list -> unit;
   downloading : Communes.departement option React.signal;
   set_downloading : ?step:React.step -> Communes.departement option -> unit;
+  uploads : Herbier_photos_io.Upload_queue.t;
+  upload_watch : Rb.binding option ref;
+      (* style: mutable because {!start_uploads} sets it once, after
+         {!create}: the binding on « Envoyer seulement en Wi-Fi », held here so
+         that it stays reachable (primer §5) for the app's lifetime. *)
 }
 
 let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
@@ -105,6 +110,13 @@ let on_cycle ~send_saved ~send_synced
   | false -> ());
   send_synced ()
 
+(* [changed] runs from its own reaction on the result, so a subscriber that
+   raises cannot keep the caller's future from being determined. *)
+let commit_edits ~db ~changed edits =
+  let r = Db.edit db edits in
+  Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> changed ());
+  r
+
 let create ~db ~state ~theme ~auth =
   let saved, send = React.E.create () in
   let synced, send_synced = React.E.create () in
@@ -121,6 +133,19 @@ let create ~db ~state ~theme ~auth =
   in
   let set_downloading ?step d = set_downloading ?step d in
   let communes = ref Communes.empty in
+  let uploads =
+    Herbier_photos_io.Upload_queue.create ~db
+      ~commit:
+        (commit_edits ~db ~changed:(fun () ->
+             send_saved ();
+             Herbier_sync.Engine.local_write engine))
+      ~token:(fun ~interactive ->
+        Fut.map
+          (Result.map_error Herbier_sync.Auth.drive_error_to_string)
+          (Herbier_sync.Auth.drive_token auth ~interactive))
+      ~drop_token:(Herbier_sync.Auth.drop_drive_token auth)
+      ~wifi_only:(fun () -> (React.S.value (State.account state)).wifi_only)
+  in
   let fetching, set_fetching =
     React.S.create ~eq:(List.equal Plant_id.equal) []
   in
@@ -156,6 +181,8 @@ let create ~db ~state ~theme ~auth =
     set_packs;
     downloading;
     set_downloading;
+    uploads;
+    upload_watch = ref None;
   }
 
 let db t = t.db
@@ -166,10 +193,16 @@ let auth t = t.auth
 let engine t = t.engine
 let keepalive t = t.keepalive
 let synced t = t.synced
+let uploads t = t.uploads
 
 let changed t =
   t.send_saved ();
   Herbier_sync.Engine.local_write t.engine
+
+let upload_pending t =
+  Fut.await
+    (Herbier_photos_io.Upload_queue.run t.uploads ~interactive:false)
+    Fun.id
 
 (* Auth calls [on_change] from future and listener callbacks, never inside an
    update step, so the setter may run here. *)
@@ -178,7 +211,9 @@ let start_auth t =
       let account = React.S.value (State.account t.state) in
       State.set_account t.state {account with auth = status};
       match status with
-      | Signed_in _ -> Herbier_sync.Engine.signed_in t.engine
+      | Signed_in _ ->
+          Herbier_sync.Engine.signed_in t.engine;
+          upload_pending t
       | Unconfigured | Restoring | Signed_out -> ())
 
 let start_sync t = Herbier_sync.Engine.start t.engine
@@ -192,17 +227,56 @@ let start_keepalive t =
     | Dropped -> Fut.await (K.drop_session t.keepalive) ignore_result
     | Granted s -> Fut.await (K.replace_session t.keepalive s) ignore_result)
 
-(* [saved] fires from its own reaction on the result, so a subscriber that
-   raises cannot keep the caller's future from being determined. [commit]
-   does not geocode: the geocoder's own writes and the reference branches
-   (no observation in them) use it. *)
-let commit t edits =
-  let r = Db.edit t.db edits in
-  Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> changed t);
-  r
+let log_listener what = function
+  | Ok (_ : _) -> ()
+  | Error e ->
+      log_error ["upload:"; what; Herbier_bindings.Cap_error.to_string e]
 
+(* Every trigger calls from a listener or a microtask, outside any update
+   step. The listeners live as long as the app: their handles are not kept. *)
+let start_uploads t =
+  let module Q = Herbier_photos_io.Upload_queue in
+  upload_pending t;
+  Fut.await
+    (Herbier_bindings.Cap_app.on_state_change (function
+      | Active -> upload_pending t
+      | Inactive -> ()))
+    (log_listener "resume listener");
+  Fut.await
+    (Herbier_bindings.Cap_uploader.on_change (fun () -> upload_pending t))
+    (log_listener "job listener");
+  let wifi_only =
+    React.S.map ~eq:Bool.equal
+      (fun (a : State.account) -> a.wifi_only)
+      (State.account t.state)
+  in
+  t.upload_watch :=
+    Some
+      (Rb.act (React.S.changes wifi_only) (fun (_ : bool) ->
+           Fut.await (Q.wifi_changed t.uploads) Fun.id))
+
+(* [commit] does not geocode: the geocoder's own writes and the reference
+   branches use it; the upload queue gets the same through [commit_edits]. *)
+let commit t edits = commit_edits ~db:t.db ~changed:(fun () -> changed t) edits
 let log parts = Brr.Console.(log [str (String.concat " " parts)])
 let online t = (React.S.value (State.network t.state)).online
+
+let keep_original t (photo : Herbier_domain.Photo.t) original =
+  let module Q = Herbier_photos_io.Upload_queue in
+  Fut.map
+    (function
+      | Ok Q.Kept -> true
+      | Ok Q.Not_drive -> false
+      | Error e ->
+          Log.error "photo" (Q.keep_error_to_string e);
+          false)
+    (Q.keep t.uploads photo original)
+
+type saving = {
+  any_saved : bool;
+  any_kept : bool;
+  failed : Herbier_photos_io.Capture.shot list;
+}
 
 let save_photos t ~(observation : Herbier_domain.Observation.t) shots =
   let target = (React.S.value (State.account t.state)).storage in
@@ -212,20 +286,28 @@ let save_photos t ~(observation : Herbier_domain.Observation.t) shots =
       ~taken_at:(Option.value s.exif.taken_at ~default:(Ptime_clock.now ()))
       ~original_target:target s.original
   in
-  let step (saved, failed) s =
-    Fut.map
-      (function
-        | Ok (_ : Herbier_domain.Photo.t) -> (saved + 1, failed)
-        | Error e ->
-            Log.error "photo" (Herbier_photos_io.Preview.error_to_string e);
-            (saved, s :: failed))
-      (one s)
+  let step acc (s : Herbier_photos_io.Capture.shot) =
+    let open Fut.Syntax in
+    let* saved = one s in
+    match saved with
+    | Ok photo ->
+        let+ kept = keep_original t photo s.original in
+        {acc with any_saved = true; any_kept = acc.any_kept || kept}
+    | Error e ->
+        Log.error "photo" (Herbier_photos_io.Preview.error_to_string e);
+        Fut.return {acc with failed = s :: acc.failed}
   in
   Fut.map
-    (fun (saved, failed) ->
-      (match saved with 0 -> () | _ -> changed t);
+    (fun {any_saved; any_kept; failed} ->
+      if any_saved then changed t;
+      (* The first Drive photo may need the drive.file consent (architecture
+         §5, requested lazily): this pass may show it. *)
+      if any_kept then
+        Fut.await
+          (Herbier_photos_io.Upload_queue.run t.uploads ~interactive:true)
+          Fun.id;
       List.rev failed)
     (List.fold_left
        (fun acc s -> Fut.bind acc (fun r -> step r s))
-       (Fut.return (0, []))
+       (Fut.return {any_saved = false; any_kept = false; failed = []})
        shots)

@@ -18,7 +18,6 @@ dependencies {
     implementation project(':capacitor-preferences')
     implementation project(':capgo-capacitor-share-target')
     implementation project(':capgo-capacitor-social-login')
-    implementation project(':capgo-capacitor-uploader')
 
 }
 

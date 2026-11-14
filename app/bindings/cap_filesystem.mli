@@ -24,7 +24,12 @@ val read_base64 : path:string -> (string, Cap_error.t) result Fut.t
     {!read_text}. *)
 
 val delete_file : path:string -> (unit, Cap_error.t) result Fut.t
-(** Deletes a file; a missing file is [Error (Rejected _)]. *)
+(** Deletes a file; a missing file is [Error (Rejected _)] ({!is_missing}). *)
+
+val is_missing : Cap_error.t -> bool
+(** The plugin's « does not exist »: [Rejected] with code ["OS-PLUG-FILE-0008"]
+    (@capacitor/filesystem 8 on Android). Any other rejection (permission, IO,
+    …) is not. *)
 
 val mkdir : path:string -> recursive:bool -> (unit, Cap_error.t) result Fut.t
 (** Creates a directory; [~recursive:true] creates missing parents. An existing

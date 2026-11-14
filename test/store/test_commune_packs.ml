@@ -48,11 +48,17 @@ let check_rows what expected actual =
 
 (* ---------- migration 4 ---------- *)
 
+(* Migration 4 alone on a v3 database: migrations 1-3, then 4 by itself, not
+   Cli.migrate, which would also apply the later migrations. *)
 let migration_four_from_v3 () =
   let db = Cli.fresh_db () in
-  (match Schema.migrations with
-  | m1 :: m2 :: m3 :: _ -> Cli.apply_migrations db [m1; m2; m3]
-  | _ -> Alcotest.fail "need at least three migrations");
+  let m4 =
+    match Schema.migrations with
+    | m1 :: m2 :: m3 :: m4 :: _ ->
+        Cli.apply_migrations db [m1; m2; m3];
+        m4
+    | _ -> Alcotest.fail "need at least four migrations"
+  in
   Alcotest.(check int)
     "after migrations 1-3, user_version is 3" 3 (Cli.user_version db);
   Alcotest.(check int)
@@ -61,16 +67,14 @@ let migration_four_from_v3 () =
        "select count(*) as n from sqlite_master where type = 'table' and name \
         = 'commune_packs';\n");
   (match Schema.pending ~current:3 with
-  | Ok [m] ->
-      Alcotest.(check int) "pending ~current:3 is migration 4 alone" 4 m.version
-  | Ok ms ->
-      Alcotest.failf
-        "pending ~current:3: expected exactly one migration, got %d"
-        (List.length ms)
+  | Ok (m :: _) ->
+      Alcotest.(check int)
+        "pending ~current:3 starts with migration 4" 4 m.version
+  | Ok [] -> Alcotest.fail "expected at least migration 4 pending"
   | Error (Schema.Unknown_version _) ->
-      Alcotest.fail "expected Ok [migration 4]");
-  Cli.migrate db ~current:3;
-  Alcotest.(check int) "latest is 4" 4 Schema.latest;
+      Alcotest.fail "expected Ok (migration 4 :: _)");
+  Alcotest.(check int) "migration 4's own version is 4" 4 m4.version;
+  Cli.apply_migrations db [m4];
   Alcotest.(check int)
     "user_version after migrating is 4" 4 (Cli.user_version db);
   Alcotest.(check (list string))
@@ -208,8 +212,9 @@ let () =
       ( "migration 4",
         [
           case
-            "applies on a v3 database, latest is 4, pending ~current:3 is \
-             migration 4 alone, the table has its six columns"
+            "applies on a v3 database alone (pending ~current:3 starts with \
+             migration 4, which also has version 4), the table has its six \
+             columns"
             migration_four_from_v3;
         ] );
       ( "put, all, find",

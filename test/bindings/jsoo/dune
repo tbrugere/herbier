@@ -16,3 +16,20 @@
    NODE_OPTIONS
    ""
    (run node %{dep:smoke.bc.js}))))
+
+; Herbier_bindings.Cap_uploader over a stub globalThis.herbier.uploader
+; (uploader_stub.js, preloaded with node -r): the wire shape enqueue sends,
+; jobs' decoding and its error paths, and the plugin-absent case.
+
+(executable
+ (name cap_uploader_smoke)
+ (modes js)
+ (libraries herbier_bindings brr yojson))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run node -r %{dep:uploader_stub.js} %{dep:cap_uploader_smoke.bc.js}))))

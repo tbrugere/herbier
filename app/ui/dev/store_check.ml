@@ -57,6 +57,7 @@ let name_row : (master, string) Row.t =
 
 let table_names =
   [
+    "commune_packs";
     "observations";
     "outbox";
     "photo_original_targets";
@@ -73,6 +74,7 @@ let table_names =
     "settings";
     "sync_state";
     "tags";
+    "uploads";
   ]
 
 let print_names = String.concat ", "

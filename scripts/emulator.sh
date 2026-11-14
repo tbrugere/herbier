@@ -26,8 +26,8 @@
 #   scripts/emulator.sh open [fragment]  launch, forward, reload the page at #<fragment> (none: no
 #                                        fragment), wait until it is done (dev/* check pages: a
 #                                        "done" or "done: <summary>" line; others, and
-#                                        dev/gallery, dev/collection, dev/link: text
-#                                        unchanged for 2 s), print it
+#                                        dev/gallery, dev/collection, dev/link, dev/drive,
+#                                        dev/uploader: text unchanged for 2 s), print it
 #   scripts/emulator.sh webview <cmd>... run scripts/webview.mjs on the forwarded port
 #   scripts/emulator.sh env              print the exports this script uses (eval "$(… env)")
 #
@@ -322,7 +322,7 @@ cmd_forward() {
 webview() { node "$here/webview.mjs" --port "$port" "$@"; }
 
 # Dev pages that show a screen rather than a check log, so print no "done".
-INTERACTIVE_DEV_PAGES="dev/gallery dev/collection dev/sheet dev/photos dev/capture dev/link dev/auth"
+INTERACTIVE_DEV_PAGES="dev/gallery dev/collection dev/sheet dev/photos dev/capture dev/link dev/auth dev/drive dev/uploader"
 
 cmd_open() {
   local fragment="${1:-}"

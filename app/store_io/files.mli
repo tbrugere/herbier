@@ -4,6 +4,14 @@
 val preview : Herbier_domain.Ids.Photo_id.t -> string
 (** ["previews/<photo id>.jpg"]. *)
 
+val original : Herbier_domain.Ids.Photo_id.t -> string
+(** ["originals/<photo id>"] (no extension: the type is in the [uploads] row):
+    the original kept for Drive until it is uploaded. *)
+
+val original_of_name : string -> string
+(** ["originals/<name>"]: {!original} for a name that is not a photo id (the
+    #dev/uploader page's test files). *)
+
 val refthumb :
   plant:Herbier_domain.Ids.Plant_id.t ->
   source:Herbier_domain.Reference.Source.t ->

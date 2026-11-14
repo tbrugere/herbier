@@ -255,12 +255,32 @@ let v4 =
 )|};
   ]
 
+(* Migration 5: the device-only queue of originals bound for Drive
+   (Uploads, architecture §3, §5). Never synced: only the install that holds
+   an original uploads it. *)
+let v5 =
+  [
+    {|create table uploads (
+  photo_id text primary key not null references photos (id) on delete cascade,
+  path text not null,
+  mime text not null,
+  size_bytes integer not null check (size_bytes >= 0),
+  session_url text,
+  session_created_at text,
+  attempts integer not null default 0 check (attempts >= 0),
+  last_error text,
+  created_at text not null,
+  check ((session_url is null) = (session_created_at is null))
+)|};
+  ]
+
 let migrations =
   [
     {version = 1; statements = v1};
     {version = 2; statements = v2};
     {version = 3; statements = v3};
     {version = 4; statements = v4};
+    {version = 5; statements = v5};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

@@ -23,9 +23,9 @@ val auth : t -> Herbier_sync.Auth.t
 val start_auth : t -> unit
 (** {!Herbier_sync.Auth.start} with an [on_change] that sets {!State.account}'s
     [auth] (keeping [storage] and [wifi_only]), outside any update step, and on
-    a change to [Signed_in _] sends {!Herbier_sync.Engine.signed_in}. Called
-    once by main; dev pages never call it, so that the apps they build register
-    no app-state listener and no timer. *)
+    a change to [Signed_in _] sends {!Herbier_sync.Engine.signed_in} and runs
+    {!upload_pending}. Called once by main; dev pages never call it, so that the
+    apps they build register no app-state listener and no timer. *)
 
 val start_sync : t -> unit
 (** {!Herbier_sync.Engine.start}: called once by main, right after
@@ -44,6 +44,23 @@ val start_keepalive : t -> unit
     [Dropped] → [Keepalive.drop_session]. Failures are logged by
     {!Herbier_sync.Keepalive}. Called once by main, after {!start_sync}; dev
     pages never call it. *)
+
+val start_uploads : t -> unit
+(** Once, by main, after {!start_keepalive}: a silent pass of the originals'
+    queue now ([Upload_queue.run ~interactive:false]), and one on every resume
+    ([Cap_app.on_state_change Active]) and every change of an upload job
+    ([Cap_uploader.on_change]); [Upload_queue.wifi_changed] on every change of
+    {!State.account}'s [wifi_only] (the binding kept reachable by the app).
+    Registration failures are console lines (in a browser: no uploader). Sign-in
+    ({!start_auth}) and the network ({!upload_pending}) run passes too. Dev
+    pages never call it. *)
+
+val upload_pending : t -> unit
+(** A silent pass of the originals' queue, not awaited (sign-in, main's online
+    event). *)
+
+val uploads : t -> Herbier_photos_io.Upload_queue.t
+(** The originals' queue (architecture §5). For #dev/uploader. *)
 
 val synced : t -> unit React.event
 (** Fires after every sync cycle, outside any update step. *)
@@ -73,10 +90,14 @@ val save_photos :
 (** Saves each shot's preview file and [pending] row
     ({!Herbier_photos_io.Preview.save}, with the preview made at capture and the
     storage setting of {!State.account}), one after the other, dated by its EXIF
-    date or else now (a shutter shot is taken just before). Resolves to the
-    shots that were not saved, in order, each failure logged; fires {!saved} and
-    sends the engine a local write once after the last when at least one was
-    saved. The observation must already be stored. *)
+    date or else now (a shutter shot is taken just before). A saved photo bound
+    for Drive has its original kept for upload ([Upload_queue.keep]); a keep
+    that fails is logged and the photo committed [Failed] (its original is
+    gone). Resolves to the shots that were not saved, in order, each failure
+    logged; fires {!saved} and sends the engine a local write once after the
+    last when at least one was saved; when at least one original was kept,
+    starts an interactive pass of the queue (not awaited: the first Drive photo
+    may show the drive.file consent). The observation must already be stored. *)
 
 (** {1 References} *)
 

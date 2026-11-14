@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Record the Google Drive v3 answers of test/fixtures/drive_*.json: the bodies
-# app/photos/drive.ml classifies and decodes. The file name ends with the
-# HTTP status the request must answer; another status fails the script. The
+# Record the Google Drive v3 answers of test/fixtures/drive_*.json (and
+# drive_*.txt, kept verbatim: answers that are not JSON, and headers): the
+# bodies app/photos/drive.ml classifies and decodes, and the resumable
+# session's answers the upload job (UploadWorker.java) reads. The file name
+# ends with the HTTP status the request must answer; another status fails the
+# script. The
 # URLs are written out exactly as Drive.find_folder, create_original, … render
 # them (test/photos/test_drive.ml asserts the same strings).
 #
@@ -10,16 +13,19 @@
 # An existing file is kept unless --force: fixtures are recorded once, never
 # edited. Two groups:
 #
-# - no token needed (always recorded): a 403 without Authorization and the
-#   401s of an invalid token;
+# - no token needed (always recorded): a 403 without Authorization, the 401s
+#   of an invalid token, and the 404 of an unknown resumable session;
 # - a drive.file access token in HERBIER_DRIVE_TOKEN (from the OAuth 2.0
 #   Playground with the …/auth/drive.file scope; never committed, never
 #   printed): the success answers, made in a throwaway root folder
 #   "Herbier-fixtures" with a 1-pixel JPEG whose herbier_photo_id is the nil
-#   UUID; the folder is trashed at the end, also on failure. Skipped, with a
+#   UUID; the folder is trashed at the end, also on failure. The resumable
+#   session's headers are recorded too, filtered: the status line,
+#   content-type and location, whose upload_id (a credential while the
+#   session lives) is replaced by a fixed placeholder. Skipped, with a
 #   message, when the variable is unset. HERBIER_GOOGLE_NO_DRIVE_TOKEN, a
-#   Google token without any Drive scope (optional), adds the 403 of a missing
-#   scope.
+#   Google token without any Drive scope (optional), adds the 403 of a
+#   missing scope.
 #
 # No personal data lands in the files: no request asks for owners or emails,
 # and the ids are those of the throwaway files. Check before committing.
@@ -84,6 +90,24 @@ keep() {
   fi
 }
 
+# keep_raw <name> <file>: as keep, the answer verbatim (not JSON).
+keep_raw() {
+  local name="$1" file="$2"
+  if [ -e "$out/$file" ] && [ "$force" = 0 ]; then
+    echo "skip $file"
+  else
+    cp "$tmp/$name" "$out/$file"
+    echo "recorded $file"
+  fi
+}
+
+# The metadata Drive.create_session sends: the nil-UUID file into <parent>.
+session_metadata() {
+  jq -cn --arg parent "$1" --arg id "$nil_uuid" '{
+    name: "fixture.jpg", mimeType: "image/jpeg", parents: [$parent],
+    appProperties: {herbier_photo_id: $id, sha256: ("0" * 64)}}'
+}
+
 # The multipart body Drive.create_original frames: metadata part, then the
 # media part (a 1-pixel JPEG), with CRLFs.
 multipart() {
@@ -104,6 +128,8 @@ multipart() {
 
 get_trashed_url() { echo "$api/$1?fields=id,trashed"; }
 create_original_url="$upload_api?uploadType=multipart&fields=id,webViewLink"
+create_session_url="$upload_api?uploadType=resumable&fields=id,webViewLink"
+unknown_session_url="$upload_api?uploadType=resumable&upload_id=herbier-fixture-unknown"
 find_fixture_folder_url="$api?q=name%20%3D%20%27Herbier-fixtures%27%20and%20mimeType%20%3D%20%27application%2Fvnd.google-apps.folder%27%20and%20%27root%27%20in%20parents%20and%20trashed%20%3D%20false&fields=files%28id%29&orderBy=createdTime&pageSize=10&spaces=drive"
 find_nil_original_url="$api?q=appProperties%20has%20%7B%20key%3D%27herbier_photo_id%27%20and%20value%3D%2700000000-0000-0000-0000-000000000000%27%20%7D%20and%20trashed%20%3D%20false&fields=files%28id%2CwebViewLink%29&orderBy=createdTime&pageSize=10&spaces=drive"
 
@@ -121,6 +147,17 @@ call invalid_create 401 POST "$create_original_url" \
   -H "Content-Type: multipart/related; boundary=$boundary" \
   --data-binary "@$tmp/multipart"
 keep invalid_create drive_files_create_invalid_token_401.json
+call invalid_session 401 POST "$create_session_url" \
+  -H 'Authorization: Bearer invalid' \
+  -H 'Content-Type: application/json; charset=UTF-8' \
+  -d "$(session_metadata root)"
+keep invalid_session drive_files_create_session_invalid_token_401.json
+
+# 3. An unknown (or expired) resumable session, asked how much it holds, as
+# the upload job does at the start of every run.
+call unknown_session 404 PUT "$unknown_session_url" \
+  -H 'Content-Range: bytes */10' -H 'Content-Length: 0'
+keep_raw unknown_session drive_session_put_unknown_404.txt
 
 if [ -z "${HERBIER_DRIVE_TOKEN:-}" ]; then
   echo "HERBIER_DRIVE_TOKEN unset: success answers not recorded" >&2
@@ -131,7 +168,7 @@ printf 'Authorization: Bearer %s\n' "$HERBIER_DRIVE_TOKEN" >"$tmp/auth_header"
 auth=(-H "@$tmp/auth_header")
 json=(-H 'Content-Type: application/json; charset=UTF-8')
 
-# 3. The folder, absent then created then found.
+# 4. The folder, absent then created then found.
 call folder_absent 200 GET "$find_fixture_folder_url" "${auth[@]}"
 [ "$(jq '.files | length' "$tmp/folder_absent")" = 0 ] || {
   echo "a Herbier-fixtures folder exists already: trash it first" >&2
@@ -145,7 +182,7 @@ keep folder_created drive_files_create_folder_200.json
 call folder_found 200 GET "$find_fixture_folder_url" "${auth[@]}"
 keep folder_found drive_files_list_folder_found_200.json
 
-# 4. The original, uploaded into it, then found by its appProperties.
+# 5. The original, uploaded into it, then found by its appProperties.
 multipart "$folder_id"
 call original_created 200 POST "$create_original_url" "${auth[@]}" \
   -H "Content-Type: multipart/related; boundary=$boundary" \
@@ -155,7 +192,24 @@ keep original_created drive_files_create_original_200.json
 call original_found 200 GET "$find_nil_original_url" "${auth[@]}"
 keep original_found drive_files_list_original_found_200.json
 
-# 5. Its presence: there, trashed (the PATCH is not recorded), unknown.
+# 6. A resumable session into the folder (its headers), then its bytes in
+# one PUT, as the upload job sends them.
+call session 200 POST "$create_session_url" "${auth[@]}" "${json[@]}" \
+  -D "$tmp/session_headers" -d "$(session_metadata "$folder_id")"
+tr -d '\r' <"$tmp/session_headers" \
+  | awk 'NR == 1 || tolower($1) == "content-type:" || tolower($1) == "location:"' \
+  | sed -E 's/upload_id=[^&[:space:]]*/upload_id=herbier-fixture/' \
+  >"$tmp/session_headers_kept"
+keep_raw session_headers_kept drive_files_create_session_200.headers.txt
+session_url="$(tr -d '\r' <"$tmp/session_headers" | awk 'tolower($1) == "location:" { print $2; exit }')"
+[ -n "$session_url" ] || { echo "session: no location header" >&2; exit 1; }
+printf '%s' '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=' \
+  | base64 --decode >"$tmp/pixel.jpg"
+call session_complete 200 PUT "$session_url" -H 'Content-Type: image/jpeg' \
+  --data-binary "@$tmp/pixel.jpg"
+keep session_complete drive_session_put_complete_200.json
+
+# 7. Its presence: there, trashed (the PATCH is not recorded), unknown.
 call present 200 GET "$(get_trashed_url "$file_id")" "${auth[@]}"
 keep present drive_files_get_present_200.json
 call trash 200 PATCH "$api/$file_id?fields=id" "${auth[@]}" "${json[@]}" \
@@ -166,7 +220,7 @@ call unknown 404 GET "$(get_trashed_url 0000000000000000000000000000000)" \
   "${auth[@]}"
 keep unknown drive_files_get_unknown_404.json
 
-# 6. A token without Drive scope (optional).
+# 8. A token without Drive scope (optional).
 if [ -n "${HERBIER_GOOGLE_NO_DRIVE_TOKEN:-}" ]; then
   printf 'Authorization: Bearer %s\n' "$HERBIER_GOOGLE_NO_DRIVE_TOKEN" \
     >"$tmp/no_drive_header"

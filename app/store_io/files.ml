@@ -2,6 +2,8 @@ module Cap_error = Herbier_bindings.Cap_error
 module Cap_filesystem = Herbier_bindings.Cap_filesystem
 
 let preview id = "previews/" ^ Herbier_domain.Ids.Photo_id.to_string id ^ ".jpg"
+let original_of_name name = "originals/" ^ name
+let original id = original_of_name (Herbier_domain.Ids.Photo_id.to_string id)
 
 let refthumb ~plant ~source ~organ =
   let module Reference = Herbier_domain.Reference in

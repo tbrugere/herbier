@@ -39,6 +39,17 @@ val put_original :
     never the query: it holds species names). Never raises; the future always
     resolves. *)
 
+val start_session :
+  token:(unit -> (string, 'e) result Fut.t) ->
+  drop_token:(string -> unit Fut.t) ->
+  Api.target ->
+  (Api.start, 'e error) result Fut.t
+(** Runs {!Api.start_session} as {!put_original} runs its program (token asked
+    once, one renewal on a 401, every body JSON or empty through
+    [Timed_fetch.request] with the default timeout, the same console line per
+    request: never the token, the query or the session URL, which is only in the
+    last answer's headers). Never raises. *)
+
 val presence :
   token:(unit -> (string, 'e) result Fut.t) ->
   drop_token:(string -> unit Fut.t) ->

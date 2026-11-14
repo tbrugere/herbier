@@ -25,7 +25,9 @@ val content_type : body -> string option
     ["multipart/related; boundary=<boundary>"]. *)
 
 type response =
-  | Answer of {status : int; body : string}
+  | Answer of {status : int; headers : (string * string) list; body : string}
+      (** [headers]: names lowercased (as fetch gives them); only
+          {!start_session} reads them *)
   | Unreachable of string  (** network failure or timeout, its message *)
 
 (** {1 Errors} *)
@@ -162,6 +164,20 @@ val create_original : metadata -> boundary:string -> request
      JSON, compact> ^ "\r\n--B\r\nContent-Type: <media_type mime>\r\n\r\n"] and
     [suffix] = ["\r\n--B--\r\n"] (B the boundary). *)
 
+val create_session : metadata -> request
+(** POST {!upload_api}[?uploadType=resumable&fields=id,webViewLink], [Json] of
+    {!metadata_json} (so [mimeType], [parents] and [appProperties] travel with
+    the session; no X-Upload-* header: the metadata's [mimeType] types the
+    file). Exact URL:
+    ["https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink"].
+    The session's final answer (the last PUT of the bytes) is then the file's
+    [{"id", "webViewLink"}], {!decode_file}'s input. *)
+
+val decode_session : (string * string) list -> (string, error) result
+(** A 2xx answer's headers → the session URL: the [location] header (name
+    compared case-insensitively; the first one) when it starts with
+    [upload_api ^ "?"]; absent, or another URL → [Malformed "location"]. *)
+
 val get_trashed : file_id:string -> request
 (** GET {!api}[/<file_id, Url.encode>?fields=id,trashed]. *)
 
@@ -202,14 +218,17 @@ val folder : name:string -> parent:parent -> (string, error) result t
 (** {!find_folder}; the first (oldest) entry's id; none → {!create_folder}, its
     id. A non-2xx or [Unreachable] ends the program with its error. *)
 
-type original = {
+type target = {
   species : string;  (** folder name, from {!species_folder} *)
   name : string;  (** from {!file_name} *)
   mime : string;
   photo_id : Photo_id.t;
   sha256 : string;
-  boundary : string;  (** from {!boundary} *)
 }
+(** An original to upload: where it goes and what it is. *)
+
+type original = {target : target; boundary : string  (** from {!boundary} *)}
+(** An original sent in one multipart request. *)
 
 type put =
   | Created of file  (** uploaded now *)
@@ -222,12 +241,30 @@ val equal_put : put -> put -> bool
 val put_original : original -> (put, error) result t
 (** {!find_original}: an entry → [Already_there] (the oldest). None →
     [folder ~name:root_folder ~parent:Root], then
-    [folder ~name:o.species ~parent:(Folder <root id>)], then {!create_original}
-    into it → [Created]. Stops at the first error. These requests in this order,
-    nothing else. Two runs for one account must not overlap (two first uploads
-    of one species would create two folders). A create whose answer was lost (a
-    timeout) is found by the next run's search; should Drive's search lag behind
-    the create, that run uploads a second copy. *)
+    [folder ~name:o.target.species ~parent:(Folder <root id>)], then
+    {!create_original} into it → [Created]. Stops at the first error. These
+    requests in this order, nothing else. Two runs for one account must not
+    overlap (two first uploads of one species would create two folders). A
+    create whose answer was lost (a timeout) is found by the next run's search;
+    should Drive's search lag behind the create, that run uploads a second copy.
+*)
+
+type start =
+  | Already_there of file
+      (** a file with this [herbier_photo_id] exists: nothing to upload *)
+  | Session of string  (** the resumable session's URL: a credential *)
+
+val equal_start : start -> start -> bool
+
+val start_session : target -> (start, error) result t
+(** {!find_original}: an entry → [Already_there] (the oldest). None →
+    [folder ~name:root_folder ~parent:Root], then
+    [folder ~name:t.species ~parent:(Folder <root id>)], then {!create_session}
+    with [folder_id] the species folder → 2xx → {!decode_session} of its headers
+    → [Session url]. Stops at the first error (a non-2xx → {!error_of_answer};
+    [Unreachable m] → [Network m]). These requests in this order, nothing else.
+    Same overlap rule as {!put_original}: two runs for one account must not
+    overlap. *)
 
 val presence : file_id:string -> (presence, error) result t
 (** {!get_trashed}: 2xx [trashed = false] → [Present], [true] → [Trashed]

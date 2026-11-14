@@ -92,14 +92,18 @@ let create_app db {storage; wifi_only; place_sources} =
 
 (* The window's online and offline events update [State.network]; coming
    back online asks the enabled place-name sources for what was saved
-   meanwhile (architecture §8). The window holds the listeners for the app's
-   lifetime. *)
+   meanwhile (architecture §8) and runs the originals' queue. The window holds
+   the listeners for the app's lifetime. *)
 let watch_network app =
   let state = Herbier_ui.App.state app in
   let set online (_ : Ev.Type.void Ev.t) =
     let network = React.S.value (Herbier_ui.State.network state) in
     Herbier_ui.State.set_network state {network with online};
-    match online with true -> Herbier_ui.App.geocode_pending app | false -> ()
+    match online with
+    | true ->
+        Herbier_ui.App.geocode_pending app;
+        Herbier_ui.App.upload_pending app
+    | false -> ()
   in
   let listen name online =
     ignore
@@ -160,6 +164,7 @@ let () =
           Herbier_ui.App.start_auth app;
           Herbier_ui.App.start_sync app;
           Herbier_ui.App.start_keepalive app;
+          Herbier_ui.App.start_uploads app;
           Herbier_ui.App.geocode_pending app;
           (* A veil over a dev page would cover the emulator's checks; the
              notice shows at the next start on an app route. *)

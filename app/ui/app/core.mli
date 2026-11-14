@@ -77,6 +77,11 @@ type t = {
   set_packs : ?step:React.step -> pack list -> unit;
   downloading : Communes.departement option React.signal;
   set_downloading : ?step:React.step -> Communes.departement option -> unit;
+  uploads : Herbier_photos_io.Upload_queue.t;
+  upload_watch : Rb.binding option ref;
+      (* style: mutable because {!start_uploads} sets it once, after
+         {!create}: the binding on « Envoyer seulement en Wi-Fi », held here so
+         that it stays reachable (primer §5) for the app's lifetime. *)
 }
 
 val log_error : string list -> unit
@@ -107,6 +112,9 @@ val changed : t -> unit
 val start_auth : t -> unit
 val start_sync : t -> unit
 val start_keepalive : t -> unit
+val start_uploads : t -> unit
+val upload_pending : t -> unit
+val uploads : t -> Herbier_photos_io.Upload_queue.t
 
 val commit : t -> Herbier_store.Outbox.edit list -> (int, Db.error) result Fut.t
 (** {!Db.edit}, then {!changed} once a commit appended an entry; no geocoding

@@ -17,8 +17,9 @@ fit and what the data looks like end to end.
 │  │   ├─ Outbox / sync (§4)            ├─ Link resolver (§7)          │  │
 │  │   └─ Map (MapLibre facade, §8)                                    │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
-│  App-private files: previews/, reference thumbs/, region.pmtiles        │
-│  WorkManager (via @capgo/capacitor-uploader): Drive uploads             │
+│  App-private files: previews/, originals/, reference thumbs/,           │
+│  region.pmtiles                                                         │
+│  WorkManager (Herbier's Uploader plugin): Drive uploads                 │
 └─────────────────────────────────────────────────────────────────────────┘
         │ PostgREST (JWT)         │ Drive API (1h token)      │ GET, keyless
         ▼                         ▼                           ▼
@@ -149,7 +150,11 @@ the mean of the positions. Details in `app/domain/places.mli`.
   its `organ` column references. Migration 4 (M5.58) creates the device-only
   table `commune_packs` (`store/commune_packs.ml`: département code, name,
   file path, size, commune count, download time; not synced, hard deletes),
-  one row per « IGN hors-ligne » pack. The schema version is SQLite's `user_version`; a file at a
+  one row per « IGN hors-ligne » pack. Migration 5 (M7.52) creates the
+  device-only table `uploads` (`store/uploads.ml`: photo id (foreign key to
+  `photos`, cascade), path, type, size, the resumable session's URL and start
+  time (both or neither), attempts, last error, creation time; not synced,
+  hard deletes), one row per original this install keeps for Drive. The schema version is SQLite's `user_version`; a file at a
   version above the app's is refused, not migrated. A migration is a list of
   statements (`Schema.migration`), applied with its `user_version` bump in one
   transaction by the plugin's `executeSet`, which prepares each string as
@@ -171,6 +176,13 @@ the mean of the positions. Details in `app/domain/places.mli`.
     file; a crash in between leaves an orphan, for a future "Libérer" sweep of
     `communes/` against `commune_packs`, as for `refthumbs/`); « Supprimer »
     deletes the row, then the file.
+  - `originals/<photo_id>` (no extension: the type is in the `uploads`
+    row), an original bound for Drive, kept from the save until it is in
+    Drive or the photo is gone. Not the cache directory: Android may clear it
+    before a Wi-Fi-only upload runs. The file is written before its row (a
+    failed write or row deletes it again, and the photo goes `failed`); a
+    crash in between leaves an orphan, for a future "Libérer" sweep of
+    `originals/` against `uploads`, as for `communes/`.
   - `tiles/<region>.pmtiles`, downloaded once from Settings.
 - The binding (`Cap_sqlite.query`) returns each row as the JSON text of the
   plugin's row object; `store_io/db.ml` parses it and decodes it with
@@ -504,19 +516,64 @@ capture / pick
   → decode with createImageBitmap (applies orientation)
   → preview: resize to ≤1600 px, encode JPEG q0.7 (or WebP), write to
     previews/<id>; insert Photo(pending) + outbox row
-  → original: write to a temp file, enqueue in @capgo/capacitor-uploader
-    (WorkManager; Wi-Fi-only if the setting says so) → Drive
-    files.create (multipart) into Herbier/<scientific or display name>/
-    with appProperties {herbier_photo_id, sha256}
-  → on success: drive_file_id, upload_state=uploaded, delete temp file
-  → on failure after N attempts: failed, badge « ↑ » stays, retry from
+  → original (Drive target): write originals/<id>, insert its uploads row
+  → queue pass (one at a time): lookup by appProperties, folders, then a
+    Drive resumable session (POST uploadType=resumable, the metadata with
+    parents and appProperties {herbier_photo_id, sha256}) into
+    Herbier/<scientific or display name>/; its URL kept in the row
+  → WorkManager job (Herbier's Uploader plugin; UNMETERED when « Envoyer
+    seulement en Wi-Fi », else CONNECTED) PUTs the bytes to the session,
+    resuming after an interruption; survives the app being swiped away
+  → next pass, job succeeded: drive_file_id, upload_state=uploaded (one
+    commit, outbox), delete the row and originals/<id>
+  → on failure after 3 attempts: failed, badge « ↑ » stays, retry from
     Settings → « Envoyer maintenant »
 ```
+
+- The queue (`photos/upload_queue.ml` decides, `photos_io/upload_queue.ml`
+  runs; plan step 52): a pass reads the jobs (`Cap_uploader.jobs`), then each
+  `uploads` row, oldest first, with its photo row. Passes are single-flight
+  and run at startup, on resume, on sign-in, on coming back online, on every
+  job change while the app runs, and interactively after a save that kept an
+  original (the first Drive photo may show the consent). Only the install that
+  holds an original uploads it: a photo pulled from another install has no
+  row. A photo deleted, uploaded or switched to app-only discards its row,
+  file and job.
+- The job (`UploaderPlugin.java`, `UploadWorker.java`; the npm uploader
+  `@capgo/capacitor-uploader` was replaced: a foreground service with no
+  network constraint, no token hook and no response body): one unique
+  WorkManager work per photo (REPLACE), exponential backoff from 30 s, at
+  most 10 runs. Every run first asks the session what it holds
+  (`Content-Range: bytes */N`) and sends the rest (a replacing job starts
+  again at run 0). 200/201 → succeeded with Drive's file JSON; 404/410
+  (session gone) → one attempt counted, the next pass starts a new session
+  (a session that answers 404 at once must not start sessions forever);
+  other final 4xx or 10 transient failures → one attempt of the queue's 3; a
+  missing file is final at once. A failed job stays listed until a new job
+  replaces it, so the queue saves the attempt only then (each pass counts
+  that failure again from the same saved value). No foreground service,
+  no notification: a photo fits WorkManager's 10-minute window and an
+  interrupted run resumes. Its URL allow-list is Drive's upload endpoint
+  (plus localhost in debug builds, for `scripts/upload-sink.mjs`).
+- No token reaches the job: the session URL is the credential (Drive keeps a
+  session a week; the queue starts a new one after 6 days), so a job waiting
+  hours for Wi-Fi never needs a fresh token. A token or account-wide error
+  (API disabled, scope, quota, 401 after renewal, rate limit, 5xx, network)
+  while starting a session changes no photo: it ends the pass's starts and is
+  kept as the row's last error. « Envoyer seulement en Wi-Fi » governs the
+  bytes only: lookups and the session's start are a few hundred bytes on any
+  network; changing it re-enqueues the waiting jobs, in the next pass.
+- The session URL is kept in the `uploads` row, in the SQLite database that
+  Android's backup includes (unlike the refresh token and the keep-alive KV):
+  accepted. It can only write the bytes of one pending `drive.file` upload,
+  for at most 6 days, and the backup sits in the Google account that owns the
+  Drive.
 
 - Drive token: `AuthorizationClient` with scope `drive.file`, requested
   lazily at the first photo to upload (handoff 4n: "Google Photos se
   connecte plus tard, à la première photo"). Tokens are 1-hour and cached by
-  Play Services; the uploader plugin asks the app for a fresh one per job.
+  Play Services; only the queue's session starts need one (the job carries
+  the session URL, no token).
   It is Herbier's own inline plugin (`GoogleAuthorizationPlugin.java`,
   `bindings/cap_google_authorization.ml`), not social-login's: that one takes
   scopes only at sign-in and has no silent "authorize this scope" call.
@@ -535,17 +592,17 @@ capture / pick
   files are not moved when the plant changes later. File names are
   `YYYY-MM-DD HH.MM.SS <last 8 hex digits of the photo id>.<ext>` in the
   device's zone (a v7 id's first digits are its timestamp, its last ones
-  random). Before `files.create`, a lookup by
+  random). Before a session or `files.create`, a lookup by
   `appProperties.herbier_photo_id` makes the upload idempotent: an earlier
   upload whose answer was lost is found, not duplicated. The upload queue
-  (plan step 52) must run `put_original` one at a time per account: two
-  first uploads of one species running together would create two folders.
+  starts sessions (`start_session`, like `put_original`) one at a time per
+  account: two first uploads of one species running together would create two
+  folders; the byte uploads may run in parallel (they create no folder).
   Should Drive's search lag behind a create whose answer was lost, the next
   run uploads a second copy; pre-generated ids (`files.generateIds`) would
   close that window and are not used yet.
-  It also decides the uploader's request shape (the multipart frame, or a
-  resumable session created in OCaml); `Drive.folder` and
-  `Drive.find_original` run in the app either way.
+  `put_original` (the multipart frame) stays for #dev/drive and for a
+  foreground fallback.
 - Displaying an original (viewer, "Ouvrir dans Google Drive ↗"): open the
   `webViewLink`; the app itself only ever renders the local preview.
 - Health check (weekly, when online): `files.get?fields=trashed` on a
@@ -877,7 +934,7 @@ herbier/
     ui/           rb.ml (react↔Brr glue), screens, theme.ml (reads CSS custom properties)
     store/        hand-written SQL over the sqlite plugin, schema migrations, outbox, tables.ml (generated columns)
     sync/         Postgrest → Brr fetch adapter, pull/push
-    photos/       exif, compress, drive client, uploader binding
+    photos/       exif, compress, drive client, upload queue
     reference/    per-source clients, projection, rate limiter
     resolver/     link/text → gbif_key
     map/          maplibre facade bindings
@@ -894,8 +951,8 @@ Each is one or two days and answers a question the reports left open.
 
 1. **Shell spike**: jsoo + Brr "hello" in Capacitor 8; share-target receives
    a Pl@ntNet URL; a `VIEW` filter on `gbif.org` opens the app after
-   enabling it in "Ouvrir par défaut"; `@capgo/capacitor-uploader` uploads a
-   file to Drive with the app swiped away, on Wi-Fi only. Pass = Capacitor
+   enabling it in "Ouvrir par défaut"; a WorkManager upload (Herbier's
+   `Uploader` plugin, M7.52) completes with the app swiped away, on Wi-Fi only. Pass = Capacitor
    stays; fail = same OCaml in a TWA.
 2. **Storage spike**: `@capacitor-community/sqlite` from OCaml, FTS5 search,
    a 300 KB preview written to `Directory.Data` and read back as a blob URL.

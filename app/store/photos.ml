@@ -101,3 +101,18 @@ end)
 
 let upsert = Writes.upsert
 let soft_delete = Writes.soft_delete
+
+let set_upload id ~state ~drive_file_id ~at =
+  Writes.edit id
+    {
+      Stmt.sql =
+        "update photos set upload_state = ?, drive_file_id = ?, updated_at = ? \
+         where id = ? and deleted_at is null";
+      params =
+        [
+          Codec.param Ph.upload_state state;
+          Codec.param Ph.drive_file_id drive_file_id;
+          Codec.param Ph.updated_at at;
+          Codec.param Ph.id id;
+        ];
+    }

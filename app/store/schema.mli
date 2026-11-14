@@ -30,7 +30,8 @@ val migrations : migration list
     creates the local lookup table [reference_organs] (values
     [Reference.Organ.all] labels) and the device-only table [ref_images] of
     {!Ref_images}. Version 4 creates the device-only table [commune_packs] of
-    {!Commune_packs}. *)
+    {!Commune_packs}. Version 5 creates the device-only table [uploads] of
+    {!Uploads}. *)
 
 val latest : int
 (** Version of the last migration. *)

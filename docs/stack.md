@@ -61,8 +61,7 @@ evidence. Open decisions are listed at the end.
   releases): `@capacitor/app` (deep links), `@capgo/capacitor-share-target`
   (SEND share sheet), `@capgo/capacitor-social-login` or
   `@capawesome/capacitor-google-sign-in` (Credential Manager +
-  AuthorizationClient), `@capgo/capacitor-uploader` (WorkManager background
-  upload), `@capacitor-community/sqlite`, `@capacitor/filesystem`,
+  AuthorizationClient), `@capacitor-community/sqlite`, `@capacitor/filesystem`,
   `@capacitor/geolocation`, `@capacitor/camera` (gallery pick),
   `@capacitor/preferences`, and the core `CapacitorHttp` (plugin calls only,
   fetch patch off) for reference thumbnails. Camera
@@ -78,8 +77,17 @@ evidence. Open decisions are listed at the end.
   sets sent to PostgREST: it encodes a constructor `Drive` as `["Drive"]`, so
   their `to_json`/`of_json` stay hand-written. Rules: style guide §5.5.
 - A **small native (Java) layer** is expected: the `intent-filter`s in the
-  manifest, the Drive grant's plugin and possibly a WorkManager tweak.
+  manifest, the Drive grant's plugin and the originals' upload plugin.
   Nothing else native.
+- **Background uploads: Herbier's own `Uploader` plugin over WorkManager**
+  (M7.52, 2026-11-14), not `@capgo/capacitor-uploader`: its 8.3 Android side
+  is a foreground service (`net.gotev:uploadservice`) with no network
+  constraint (no Wi-Fi only, no waiting for a network), no hook for a fresh
+  token, and an answer without its body (no Drive file id). Two small Java
+  classes run one WorkManager job per original (UNMETERED for « Envoyer
+  seulement en Wi-Fi »), PUTting the bytes to a Drive resumable session the
+  app starts in OCaml, so no token rides with the job; WorkManager is in the
+  APK already through `@capacitor/background-runner` (architecture §5).
 - Screens from the design handoff are recreated in HTML/CSS from OCaml, not in
   Jetpack Compose as the handoff README assumes. Design tokens (colours,
   type, spacing) carry over as-is; Material Symbols and the two Google Fonts
