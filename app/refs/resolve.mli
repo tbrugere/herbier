@@ -11,7 +11,8 @@ type unresolved =
           summary, a disambiguation page). *)
   | Observation_link
       (** A Pl@ntNet observation URL: it names no species, and Pl@ntNet's API
-          needs a key; the caller falls back to the search (4i). *)
+          has no public route for an observation; the caller falls back to the
+          search (4i). *)
   | Unavailable of string
       (** A call failed (network, timeout, status, undecodable body): try again
           later. *)

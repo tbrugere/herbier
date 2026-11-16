@@ -8,6 +8,8 @@ module Web_path = Herbier_bindings.Web_path
 module Fut_result = Herbier_bindings.Fut_result
 module Preview = Herbier_photos_io.Preview
 module Preview_size = Herbier_photos.Preview_size
+module Plantnet = Herbier_identify.Plantnet
+module Proposal = Herbier_identify.Proposal
 module Fetch = Brr_io.Fetch
 
 let api = "https://my-api.plantnet.org/v2"
@@ -190,6 +192,97 @@ let projects log ~key ~flora:_ () =
     (send log ~label:"projects" ~photos:0 ~bytes:0 ~method':"GET"
        (projects_url ~key))
 
+let data name value = At.v (Jstr.v name) (Jstr.v value)
+
+let thumb ~name (i : Plantnet.image) =
+  let alt =
+    Option.fold ~none:name
+      ~some:(fun o -> name ^ ", " ^ Herbier_identify.Organ.label o)
+      i.organ
+  in
+  El.img
+    ~at:
+      [
+        At.src (Jstr.v i.small);
+        At.v (Jstr.v "alt") (Jstr.v alt);
+        At.title (Jstr.v (Proposal.credit i));
+        At.v (Jstr.v "loading") (Jstr.v "lazy");
+      ]
+    ()
+
+let proposal (p : Plantnet.proposal) =
+  let line =
+    Printf.sprintf "%.0f %% · %s · %s · %s · GBIF %s" (p.score *. 100.)
+      p.scientific_name
+      (Option.value p.family ~default:"—")
+      (String.concat ", " p.common_names)
+      (Option.fold ~none:"—" ~some:string_of_int p.gbif)
+  in
+  El.li
+    ~at:[data "data-score" (Printf.sprintf "%g" p.score)]
+    (El.txt' line
+     :: List.map (thumb ~name:p.scientific_name) (Proposal.closest p)
+    @ Option.to_list (Option.map El.txt' (Proposal.more_label p)))
+
+let error_text : App.identify_error -> string = function
+  | Identify_offline -> "hors-ligne : rien envoyé"
+  | Preview_unreadable id ->
+      "aperçu illisible : "
+      ^ Herbier_domain.Ids.Photo_id.to_string id
+      ^ ", rien envoyé"
+  | Plantnet e -> "erreur : " ^ Plantnet.error_to_string e
+
+let show_identified log = function
+  | App.Superseded -> Kit.append log "réponse dépassée"
+  | Settled (Error e) -> Kit.append log (error_text e)
+  | Settled (Ok ({answer; uncertain} : Herbier_identify.identified)) ->
+      Kit.append log
+        (Printf.sprintf "flore : %s, reste : %s, incertain : %b"
+           (Option.value answer.flora ~default:"?")
+           (Option.fold ~none:"?" ~some:string_of_int answer.remaining)
+           uncertain);
+      El.append_children log
+        [
+          El.ol
+            ~at:[data "data-proposals" ""]
+            (List.map proposal answer.proposals);
+        ]
+
+let app_floras app log ~key ~flora:_ () =
+  Fut.map
+    (function
+      | Ok l -> Kit.append log (Printf.sprintf "flores : %d" (List.length l))
+      | Error e -> Kit.append log ("flores : " ^ error_text e))
+    (App.floras app ~key)
+
+let app_identify app channel log ~key ~flora image =
+  Fut.map (show_identified log)
+    (App.identify app channel ~key ~flora
+       [(image, Herbier_identify.Organ.Auto)])
+
+let app_gallery app channel log ~key ~flora () =
+  or_log log
+    (let open Fut.Result_syntax in
+     let* original, _ = originals ~limit:1 in
+     let* jpegs = previews [original] in
+     match jpegs with
+     | [] -> Fut.return (Error "aucun aperçu")
+     | jpeg :: _ ->
+         Fut.map Result.ok
+           (app_identify app channel log ~key ~flora (App.Preview jpeg)))
+
+let app_stored app channel log ~key ~flora () =
+  Fut.bind
+    (Herbier_store_io.Db.all (App.db app) Herbier_store.Photos.live)
+    (function
+      | Error e ->
+          Fut.return
+            (Kit.append log
+               ("photos : " ^ Herbier_store_io.Db.error_to_string e))
+      | Ok [] -> Fut.return (Kit.append log "aucune photo stockée")
+      | Ok ((p : Herbier_domain.Photo.t) :: _) ->
+          app_identify app channel log ~key ~flora (App.Stored p.id))
+
 let input ~label ~type' ~value =
   El.input
     ~at:
@@ -202,34 +295,90 @@ let input ~label ~type' ~value =
       ]
     ()
 
-let el () =
-  let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
-  let key = input ~label:"Clé API (essai)" ~type':"password" ~value:""
-  and flora = input ~label:"Flore" ~type':"text" ~value:"all" in
-  let value field =
-    String.trim (Jstr.to_string (El.prop El.Prop.value field))
-  in
-  let actions =
-    [
-      ("Flores (gratuit)", projects);
-      ("1 aperçu", previews_of ~limit:1 ~label:"one");
-      ("Aperçu q0.7 et q0.9", qualities);
-      ("5 aperçus", previews_of ~limit:5 ~label:"five");
-    ]
-  in
+(* The spike's buttons: one request at a time (all disabled while one is in
+   flight), a blank key refused, both fields trimmed. *)
+let spike_buttons ~key_value ~flora_value log actions =
   let wired = List.map (fun (label, run) -> (Kit.button label, run)) actions in
   let buttons = List.map fst wired in
   let set_busy busy = List.iter (fun b -> Kit.set_disabled b busy) buttons in
   List.iter
     (fun (button, run) ->
       Kit.on_click button (fun () ->
-          match value key with
+          match String.trim (key_value ()) with
           | "" -> Kit.append log "pas de clé"
           | k ->
               set_busy true;
               Fut.await
-                (run log ~key:k ~flora:(value flora) ())
+                (run log ~key:k ~flora:(String.trim (flora_value ())) ())
                 (fun () -> set_busy false)))
     wired;
+  buttons
+
+(* Unlike the spike's buttons: fields untrimmed and never disabled (see the
+   mli). *)
+let app_buttons ~key_value ~flora_value log actions =
+  List.map
+    (fun (label, run) ->
+      let button = Kit.button label in
+      Kit.on_click button (fun () ->
+          Fut.await
+            (run log ~key:(key_value ()) ~flora:(flora_value ()) ())
+            Fun.id);
+      button)
+    actions
+
+let app_block app ~key_value ~flora_value =
+  let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
+  match app with
+  | Error e ->
+      let buttons =
+        List.map Kit.button
+          [
+            "Flores (Identify_io)";
+            "Identifier 1 photo (Identify_io)";
+            "Identifier le dernier aperçu stocké";
+          ]
+      in
+      List.iter (fun b -> Kit.set_disabled b true) buttons;
+      El.div
+        [
+          El.h2 [El.txt' "Identify_io"];
+          El.p [El.txt' ("no app: " ^ e)];
+          El.div buttons;
+          log;
+        ]
+  | Ok app ->
+      let channel = App.channel () in
+      let buttons =
+        app_buttons ~key_value ~flora_value log
+          [
+            ("Flores (Identify_io)", app_floras app);
+            ("Identifier 1 photo (Identify_io)", app_gallery app channel);
+            ("Identifier le dernier aperçu stocké", app_stored app channel);
+          ]
+      in
+      El.div [El.h2 [El.txt' "Identify_io"]; El.div buttons; log]
+
+let el app =
+  let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
+  let key = input ~label:"Clé API (essai)" ~type':"password" ~value:""
+  and flora = input ~label:"Flore" ~type':"text" ~value:"all" in
+  let value field = Jstr.to_string (El.prop El.Prop.value field) in
+  let key_value () = value key and flora_value () = value flora in
+  let buttons =
+    spike_buttons ~key_value ~flora_value log
+      [
+        ("Flores (gratuit)", projects);
+        ("1 aperçu", previews_of ~limit:1 ~label:"one");
+        ("Aperçu q0.7 et q0.9", qualities);
+        ("5 aperçus", previews_of ~limit:5 ~label:"five");
+      ]
+  in
   El.div
-    [El.h1 [El.txt' "Identify check"]; El.div [key; flora]; El.div buttons; log]
+    [
+      El.h1 [El.txt' "Identify check"];
+      El.div [key; flora];
+      El.div buttons;
+      log;
+      app_block app ~key_value ~flora_value;
+    ]

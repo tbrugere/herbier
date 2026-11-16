@@ -16,6 +16,7 @@
   herbier_photos_io
   herbier_refs
   herbier_ui_model
+  herbier_identify
   yojson
   herbier_refs_io
   herbier_geo

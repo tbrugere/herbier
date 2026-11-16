@@ -1165,7 +1165,7 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
          no-reject, which may still answer 404)
     429  the day's 500 are used up until 00:00 UTC · 401 the key is refused
     403  "CORS error: Origin not allowed": the key is not exposed for the app
-         (fixed on my.plantnet.org)
+         (a generic error on screen; the console line names it)
     timeout, network, 5xx: unreachable (« Réessayer »)
   → a choice: Refs.Resolve.resolve (Gbif id), or the name match without an id,
     as for a link (§7: the one-hop synonym rule)
@@ -1199,12 +1199,13 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   decodes the answer, classifies the errors and applies the rules below; its
   tests run it over a fake transport replaying the recorded answers. There is
   no `identify_io` library: the Brr transport (`Form.Data` with the preview
-  Blobs, previews read through `store_io/files.ml`, the 30 s timed fetch,
-  error mapping without the URL) is one module, `ui/app/plantnet_transport.ml`,
-  and `ui/app/identification.ml` applies
+  Blobs, the 30 s timed fetch, error mapping without the URL) is one module,
+  `ui/app/plantnet_transport.ml`, and `ui/app/identification.ml` applies
   `module Identify_io = Identify.Make (Plantnet_transport)` and keeps the
   key (Preferences), the per-caller staleness and the session's flora list,
-  as `sync/` applies `Rest.Make` over its own transport (layout §2).
+  as `sync/` applies `Rest.Make` over its own transport (layout §2). It also
+  reads the stored previews (through `store_io/files.ml`) before a request,
+  so an unreadable one is its own error, never a network failure.
 - **What leaves the phone.** The device previews (≤ 1600 px, JPEG q0.7,
   re-encoded on a canvas, so without EXIF) and the flora's id: no position
   (the identify route takes none, and the flora list is asked without
@@ -1229,6 +1230,15 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
 - **The key never reaches a log.** It rides in the query string, so the
   console line is `identify: POST <flora> <n> photo(s) → <status>, <remaining>
   left today`, never the URL; the fixtures are recorded with the key stripped.
+  A non-2xx's line names its error class (`→ 403, key not exposed for the
+  app`), never the body.
+- **A key not exposed is a generic error to the user** (Tristan,
+  2026-11-16: « juste une erreur générique », with a hidden log for that
+  case, never the CORS cause on screen). The 403 « CORS error: Origin not
+  allowed » keeps its own class (`Key_not_exposed`) for the console line;
+  6g shows it, like a refused request or a malformed answer, as the same
+  generic error, without « Réessayer » (resending would fail the same way).
+  The setup help in 4m's key row (66) still asks for the key to be exposed.
 - **The answer, fields used.** Per proposal: `score` (0 to 1, shown as a
   percent), `species.scientificNameWithoutAuthor` and
   `scientificNameAuthorship` (the Latin line), `species.commonNames` (French

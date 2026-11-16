@@ -9,10 +9,19 @@ let outcome_of_failure : Transport.failure -> string = function
   | Timeout -> "timeout"
   | Network _ -> "network failure"
 
-(* A 2xx that does not decode: its status and the reason, a fixed text
-   (Malformed only). *)
-let undecoded status e =
+(* An answer that is not used: its status and its error class, a fixed text
+   (never the body), so a cause the user is not shown (a key not exposed, a
+   refused request) can still be told apart in the console. *)
+let classified status e =
   Printf.sprintf "%d, %s" status (Plantnet.error_to_string e)
+
+let identify_not_sent ~flora photos reason =
+  Printf.sprintf "identify: POST %s %d photo(s) not sent: %s"
+    (Plantnet.asked_flora flora)
+    (min (List.length photos) Organ.max_photos)
+    reason
+
+let projects_not_sent reason = "identify: GET projects not sent: " ^ reason
 
 module Make (T : Transport.TRANSPORT) = struct
   module Syntax = struct
@@ -25,11 +34,7 @@ module Make (T : Transport.TRANSPORT) = struct
         T.return
           {
             result = Error e;
-            line =
-              Printf.sprintf "identify: POST %s %d photo(s) not sent: %s"
-                (Plantnet.asked_flora flora)
-                (min (List.length photos) Organ.max_photos)
-                (Plantnet.error_to_string e);
+            line = identify_not_sent ~flora photos (Plantnet.error_to_string e);
           }
     | Ok (request : T.image Plantnet.request) -> (
         let open Syntax in
@@ -60,13 +65,10 @@ module Make (T : Transport.TRANSPORT) = struct
                     Ok {answer; uncertain = Proposal.uncertain answer.proposals};
                   line = Printf.sprintf "%s%d%s" head status left;
                 }
-            | Error e -> {result = Error e; line = head ^ undecoded status e})
+            | Error e -> {result = Error e; line = head ^ classified status e})
         | Ok {status; body} ->
-            {
-              result =
-                Error (Plantnet.error_of_answer ~route:Identify ~status ~body);
-              line = head ^ Int.to_string status;
-            })
+            let e = Plantnet.error_of_answer ~route:Identify ~status ~body in
+            {result = Error e; line = head ^ classified status e})
 
   let projects ~key =
     let head = "identify: GET projects " in
@@ -75,7 +77,7 @@ module Make (T : Transport.TRANSPORT) = struct
         T.return
           {
             result = Error e;
-            line = head ^ "not sent: " ^ Plantnet.error_to_string e;
+            line = projects_not_sent (Plantnet.error_to_string e);
           }
     | Ok url -> (
         let open Syntax in
@@ -94,11 +96,8 @@ module Make (T : Transport.TRANSPORT) = struct
                   line = head ^ "→ " ^ Int.to_string status;
                 }
             | Error e ->
-                {result = Error e; line = head ^ "→ " ^ undecoded status e})
+                {result = Error e; line = head ^ "→ " ^ classified status e})
         | Ok {status; body} ->
-            {
-              result =
-                Error (Plantnet.error_of_answer ~route:Projects ~status ~body);
-              line = head ^ "→ " ^ Int.to_string status;
-            })
+            let e = Plantnet.error_of_answer ~route:Projects ~status ~body in
+            {result = Error e; line = head ^ "→ " ^ classified status e})
 end

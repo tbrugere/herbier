@@ -12,6 +12,16 @@ type identified = {answer : Plantnet.answer; uncertain : bool}
 
 val equal_identified : identified -> identified -> bool
 
+val identify_not_sent : flora:string -> 'a list -> string -> string
+(** [identify_not_sent ~flora photos reason] is an identify call's line when
+    nothing is sent: ["identify: POST <flora> <n> photo(s) not sent: <reason>"],
+    [<flora>] {!Plantnet.asked_flora}, [<n>] the photos given, at most
+    {!Organ.max_photos}. Make's own refusals use it, and so does a caller with a
+    gate of its own (the network, a preview it cannot read). *)
+
+val projects_not_sent : string -> string
+(** ["identify: GET projects not sent: <reason>"], likewise. *)
+
 module Make (T : Transport.TRANSPORT) : sig
   val identify :
     key:string ->
@@ -34,11 +44,13 @@ module Make (T : Transport.TRANSPORT) : sig
       - a 2xx that does not decode:
         ["identify: POST <flora> <n> photo(s) → <status>, malformed answer:
          <what>"];
-      - a non-2xx: ["identify: POST <flora> <n> photo(s) → <status>"];
+      - a non-2xx: ["identify: POST <flora> <n> photo(s) → <status>, <class>"],
+        [<class>] {!Plantnet.error_to_string} of its error (e.g.
+        ["→ 403, key not exposed for the app"]): the console tells apart the
+        causes the user sees as one generic error;
       - transport failure: ["… → timeout"] or ["… → network failure"];
-      - not sent: ["identify: POST <flora> <n> photo(s) not sent: no key"]
-        (resp. [": no photo"], [<n> = 0]), with [<flora>]
-        {!Plantnet.asked_flora}. *)
+      - not sent: {!identify_not_sent} with ["no key"] (resp. ["no photo"],
+        [<n> = 0]). *)
 
   val projects :
     key:string -> (Plantnet.project list, Plantnet.error) result logged T.io
@@ -46,7 +58,7 @@ module Make (T : Transport.TRANSPORT) : sig
       error, nothing sent. Else one [T.get ~url]: 2xx →
       {!Plantnet.decode_projects}; non-2xx →
       [Plantnet.error_of_answer ~route:Projects]; failure → as above. [line]:
-      ["identify: GET projects → <status>"]
-      (["→ <status>, malformed answer: <what>"], ["→ timeout"],
-      ["→ network failure"], ["not sent: no key"]). *)
+      ["identify: GET projects → <status>"] for a 2xx (["→ <status>, <class>"]
+      for a non-2xx, ["→ <status>, malformed answer: <what>"], ["→ timeout"],
+      ["→ network failure"]), not sent: {!projects_not_sent} ["no key"]. *)
 end

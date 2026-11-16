@@ -17,7 +17,8 @@ type error =
       (** the fetch rejected, or the headers could not be built (a value fetch
           refuses, e.g. a control character): from {!request} the JS error's
           name and message (["TypeError: Failed to fetch"]), from {!get} its
-          message alone (["Failed to fetch"]) *)
+          message alone (["Failed to fetch"]). The text may hold the URL: a
+          caller whose URL holds a secret must not log or show it. *)
 
 val error_to_string : error -> string
 (** ["timeout"], or the [Failed] message. *)
@@ -42,6 +43,24 @@ val request_blob :
     a [string] body would re-encode as UTF-8), aborted after [timeout_ms]
     (default {!timeout_ms}). Same answer, errors and guarantees as {!request}: a
     non-2xx status is [Ok], its body read; never raises. *)
+
+type form_file = {field : string; filename : string; blob : Brr.Blob.t}
+(** A file part of a form: its [field] name, the [filename] put in its
+    Content-Disposition, and its bytes. *)
+
+val request_form :
+  ?timeout_ms:int ->
+  url:string ->
+  fields:(string * string) list ->
+  form_file list ->
+  (response, error) result Fut.t
+(** One [POST] to [url] with a fresh [FormData] body: every [(name, value)] of
+    [fields] as a text part, in order, then every file part, in order. No header
+    is set: the WebView sets [Content-Type: multipart/form-data; boundary=…] (a
+    caller's Content-Type would break the boundary, so none can be given).
+    Aborted after [timeout_ms] (default {!timeout_ms}). Same answers, errors and
+    guarantees as {!request}: a non-2xx status is [Ok], its body read; never
+    raises. *)
 
 (** What {!get} does with the body of a response outside 200–299. *)
 type non_2xx_body =

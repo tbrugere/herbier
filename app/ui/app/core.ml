@@ -19,6 +19,20 @@ type geocode_run =
 (* A plant's running thumbnail sync, and whether another was asked for
    meanwhile. *)
 type thumb_sync = Running | Rerun_requested
+
+(* The session's flora list (Identification): not asked yet (or the last
+   request failed), the request in flight (shared by concurrent callers), or
+   the list received. *)
+type flora_list =
+  | Not_asked
+  | Asking of
+      ( Herbier_identify.Plantnet.project list,
+        Herbier_identify.Plantnet.error )
+      result
+      Herbier_identify.logged
+      Fut.t
+  | Received of Herbier_identify.Plantnet.project list
+
 type pack = {code : Code.t; row : Pack_rows.t; usable : bool} [@@deriving eq]
 
 type t = {
@@ -91,6 +105,9 @@ type t = {
   drive_folder : Drive_text.folder React.signal;
   set_drive_folder : ?step:React.step -> Drive_text.folder -> unit;
   health : Health.t;
+  floras : flora_list ref;
+      (* style: mutable because a flora request settles in a future's
+         callback. *)
 }
 
 let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
@@ -277,6 +294,7 @@ let create ~db ~state ~theme ~auth =
     drive_folder;
     set_drive_folder;
     health;
+    floras = ref Not_asked;
   }
 
 let db t = t.db

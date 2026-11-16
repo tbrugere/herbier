@@ -426,16 +426,18 @@ let line_tests =
   [
     case
       (Fake.fixture "plantnet_identify_not_plant_404.json")
-      "identify: POST all 1 photo(s) → 404";
+      "identify: POST all 1 photo(s) → 404, no plant";
     case
       (Fake.fixture "plantnet_identify_invalid_key_401.json")
-      "identify: POST all 1 photo(s) → 401";
+      "identify: POST all 1 photo(s) → 401, key refused";
     case
       (Fake.fixture "plantnet_projects_origin_refused_403.json")
-      "identify: POST all 1 photo(s) → 403";
-    case (Fake.status 429) "identify: POST all 1 photo(s) → 429";
-    case (Fake.status 413) "identify: POST all 1 photo(s) → 413";
-    case (Fake.status 503) "identify: POST all 1 photo(s) → 503";
+      "identify: POST all 1 photo(s) → 403, key not exposed for the app";
+    case (Fake.status 429) "identify: POST all 1 photo(s) → 429, quota used up";
+    case (Fake.status 413)
+      "identify: POST all 1 photo(s) → 413, refused request (HTTP 413)";
+    case (Fake.status 503)
+      "identify: POST all 1 photo(s) → 503, unreachable: HTTP 503";
     case
       (Ok {Transport.status = 200; body = "oops"})
       "identify: POST all 1 photo(s) → 200, malformed answer: not JSON";
@@ -520,6 +522,20 @@ let not_sent_tests =
         in
         Alcotest.(check string)
           "line" "identify: POST all 1 photo(s) not sent: no key" logged.line );
+    ( "a caller's own gate: the same line with its reason",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "identify" "identify: POST k-world-flora 5 photo(s) not sent: offline"
+          (Identify.identify_not_sent ~flora:" k-world-flora "
+             (List.init 6 Fun.id) "offline");
+        Alcotest.(check string)
+          "blank flora"
+          "identify: POST all 1 photo(s) not sent: preview unreadable"
+          (Identify.identify_not_sent ~flora:"" [()] "preview unreadable");
+        Alcotest.(check string)
+          "projects" "identify: GET projects not sent: offline"
+          (Identify.projects_not_sent "offline") );
   ]
 
 (* ---------- projects ---------- *)
@@ -557,7 +573,12 @@ let projects_tests =
         ignore (one_get calls);
         expect_error "Key_not_exposed" Plantnet.Key_not_exposed logged.result;
         Alcotest.(check string)
-          "line" "identify: GET projects → 403" logged.line );
+          "line" "identify: GET projects → 403, key not exposed for the app"
+          logged.line;
+        (* The class only: never the body's own text. *)
+        Alcotest.(check bool)
+          "no body text" false
+          (Text.contains ~sub:"CORS" logged.line) );
     ( "transport failures: Unreachable, line without the failure text",
       `Quick,
       fun () ->

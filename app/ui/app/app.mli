@@ -462,3 +462,81 @@ val delete_pack :
     drop it. Names already stored stay (a [place_derived] is a snapshot); the
     switch is not touched. An error is logged ([communes: delete …]). Never
     raises. *)
+
+(** {1 Identification}
+
+    Pl@ntNet identification (architecture §12) through the app's one transport
+    ({!Plantnet_transport}: the timed fetch, 30 s for an identify POST, no
+    retry). The key is the caller's (the Preferences key [plantnet.api_key]):
+    nothing is built into the APK, no Supabase call or session is involved (it
+    works signed out and while the project is paused). Never stores anything; no
+    console line holds the key or a request's URL, nor a fetch error's text (the
+    one line with a JS error's text is a preview read's, the Filesystem plugin's
+    message). *)
+
+type image = Identification.image =
+  | Preview of Brr.Blob.t  (** a preview in memory (4d's shots) *)
+  | Stored of Herbier_domain.Ids.Photo_id.t
+      (** a stored photo's preview, [previews/<id>.jpg] (4k, 4g), read just
+          before the request *)
+
+type channel
+(** One per caller (4d, 4k, 4g, a dev page): a newer {!identify} on a channel
+    makes the older one's answer {!Superseded}. *)
+
+val channel : unit -> channel
+
+type identify_error =
+  | Identify_offline  (** {!State.network} offline: nothing sent *)
+  | Preview_unreadable of Herbier_domain.Ids.Photo_id.t
+      (** that [Stored] photo's preview could not be read (missing on a device
+          that has not rebuilt it yet): nothing sent *)
+  | Plantnet of Herbier_identify.Plantnet.error
+
+type 'a current =
+  | Settled of ('a, identify_error) result
+  | Superseded
+      (** a newer {!identify} on the same channel was asked since; this answer
+          (sent and paid for) is dropped *)
+
+val identify :
+  t ->
+  channel ->
+  key:string ->
+  flora:string ->
+  ?no_reject:bool ->
+  (image * Herbier_identify.Organ.sent) list ->
+  Herbier_identify.identified current Fut.t
+(** Supersedes every earlier call on [channel], sent or not (the user's latest
+    tap wins; the older request is not aborted). Then, in this order:
+    - {!Herbier_identify.Plantnet.identify_request}'s refusal (blank key →
+      [No_key], no photo → [No_photo]) → [Error (Plantnet e)], nothing sent,
+      Make's « not sent » line logged;
+    - {!State.network} offline → [Error Identify_offline], nothing sent, the
+      line {!Herbier_identify.identify_not_sent} ["offline"]
+      ([identify: POST <flora> <n> photo(s) not sent: offline]);
+    - the [Stored] previews of the photos sent (the first
+      {!Herbier_identify.Organ.max_photos}) read in order; the first that cannot
+      be → [Error (Preview_unreadable id)], nothing sent, the read error logged
+      with the photo id and the line [… not sent: preview unreadable];
+    - else one [Make.identify] request; its line is logged when it settles, even
+      when superseded (a credit was spent), and its error is [Plantnet e].
+
+    An answer whose call is no longer the channel's latest resolves
+    [Superseded], never a pending future. Never raises, never retries. *)
+
+val floras :
+  t ->
+  key:string ->
+  (Herbier_identify.Plantnet.project list, identify_error) result Fut.t
+(** The flora list ([GET /v2/projects]), asked once per session: blank key →
+    [Error (Plantnet No_key)], nothing sent, its line logged (even with the list
+    cached); the session's list when one was received (no request, no line,
+    whatever key is given since: the list is the same for every key); the
+    request in flight when there is one (concurrent callers share it); offline →
+    [Error Identify_offline], nothing sent, the line
+    [identify: GET projects not sent: offline]; else one request, its line
+    logged, an [Ok] kept for the session, an error not kept (the next call asks
+    again). A caller that joins the request in flight gets its result, errors
+    included, whatever its own key: an [Ok] is never a check of the key. Never
+    raises. *)

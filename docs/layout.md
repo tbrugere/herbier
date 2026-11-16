@@ -141,8 +141,9 @@ app/
     web_path.ml           fetch of a plugin's webPath as a Blob, a non-ok status as an error
     timed_fetch.ml        fetch aborted after a timeout (15 s by default), the answer as status, headers and
                           text (sync's GoTrue and PostgREST calls, geocoder, http); request_blob sends a
-                          binary body (Drive uploads); request_form a Form.Data body (M9: the identify
-                          request's photos, the WebView setting the multipart boundary)
+                          binary body (Drive uploads); request_form a Form.Data body built from text fields
+                          then Blob files, in order, no header (M9: the identify request's photos, the
+                          WebView setting the multipart boundary)
     web_crypto.ml         getRandomValues and the SHA-256 digest, bytes as a string (the sign-in nonce)
     blob_frame.ml         new Blob([prefix, blob, suffix]): a multipart upload's frame around a photo
     camera_stream.ml      getUserMedia back/front camera, <video> attach, ImageCapture.takePhoto, a video frame as JPEG
@@ -328,7 +329,9 @@ app/
   identify/               §12 of architecture, pure part (M9): domain + net + yojson, no Brr, tested in
                           test/identify/
     herbier_identify.ml   the main module: re-exports Organ, Plantnet, Proposal, Transport, TRANSPORT,
-                          logged, identified and Make (= Make.Make), so callers write Identify.Make (T)
+                          logged, identified, identify_not_sent, projects_not_sent (the not-sent console
+                          lines, reused by Identification's offline and unreadable-preview gates) and Make
+                          (= Make.Make), so callers write Identify.Make (T)
     plantnet.ml           the identify request as a value (flora, lang=fr, related images, nb-results, no-reject;
                           the images and organs parts, at most five), its answer decoded (proposals, related
                           images on https://bs.plantnet.org/ only, predicted organs, credits left; a GBIF id
@@ -345,7 +348,10 @@ app/
                           log
     make.ml               Identify.Make (T : TRANSPORT): identify (request built with the key as api-key,
                           sent, decoded, errors classified, uncertain rule applied) and projects (the flora
-                          list), each with its console line, never the URL; no identify_io library, see Notes
+                          list), each with its console line, never the URL (a non-2xx names its error class:
+                          the console tells apart what the user sees as one generic error); builds the
+                          not-sent lines that callers with a gate of their own reuse; no identify_io
+                          library, see Notes
   geo/                    §8 of architecture, pure part: domain + yojson, no Brr, tested in test/geo/
     style.ml              online (OpenFreeMap) style plus Herbier's overlay sources and layers (5b's
                           origin ghost among them), merged in OCaml; pure, tested in test/geo/; the
@@ -454,15 +460,19 @@ app/
       drive_folder.ml     4m « Dossier Drive » sheet's services: the Picker's build config, the account
                           chooser, the token for the sheet's account, the Picker, the pick's files.get check
                           and store with its account, « Par défaut » (serialised with the upload passes)
-      plantnet_transport.ml  M9: Identify.TRANSPORT over Brr: 'a io = Fut.t, an image is a preview Blob in
-                          memory (4d) or previews/<id>.jpg read through store_io/files.ml (4k, 4g),
+      plantnet_transport.ml  M9: Identify.TRANSPORT over Brr: 'a io = Fut.t, an image is a preview Blob,
                           post_form through bindings/timed_fetch.ml's request_form (Form.Data, 30 s, no
-                          retry), get through request; JS errors and timeouts mapped without the URL
+                          retry), get through request; JS errors and timeouts mapped to constant texts,
+                          never the URL or the JS message
       identification.ml   M9: module Identify_io = Identify.Make (Plantnet_transport); the user's Pl@ntNet key (Capacitor Preferences `plantnet.api_key` through
                           bindings/cap_preferences.ml, never in the SQLite settings, never logged) and
                           whether it is there, the network, 4m's two identification settings as
-                          signals, the flora list (once per session), the identify requests (one at a time
-                          per caller, a newer one making the older stale), and a choice resolved through
+                          signals, the flora list (once per session, Core's one ref), the identify requests
+                          (one current per caller: an abstract channel, a newer one making the older
+                          answer Superseded), the offline gate (Identify_offline, nothing sent), the
+                          stored previews (4k, 4g) read through store_io/files.ml before the request
+                          (Preview_unreadable, nothing sent), and a
+                          choice resolved through
                           refs_io/resolver.ml then App.link or App.create_linked
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
@@ -494,8 +504,9 @@ app/
                           rest_check.ml (#dev/rest): a tags upsert, a tags pull (since none / one minute) and
                           an invalid-token upsert over sync/net/transport.ml, with the session's or a pasted token;
                           identify_check.ml (#dev/identify, M9): the identification spike (one gallery
-                          photo's preview sent with a key pasted on the page, never stored) and, from
-                          67, the layer's states replayed from the recorded fixtures through a fake transport;
+                          photo's preview sent with a key pasted on the page, never stored), an
+                          « Identify_io » block through App.identify / App.floras (a gallery preview, the
+                          newest stored preview, the flora list) and, from 67, the layer's states replayed from the recorded fixtures through a fake transport;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier` in one Db.bare_transaction; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
@@ -622,8 +633,8 @@ Notes:
   a functor, `Identify.Make (T : TRANSPORT)`, so the request building,
   decoding, error classes and rules all stay in the native library and are
   tested there over a fake transport replaying the recorded answers. The
-  only Brr code left is the transport itself (Form.Data, reading previews,
-  the timed fetch, error mapping), one module, `ui/app/plantnet_transport.ml`,
+  only Brr code left is the transport itself (Form.Data, the timed fetch,
+  error mapping), one module, `ui/app/plantnet_transport.ml`,
   and the functor is applied next to it in `ui/app/identification.ml`, a
   jsoo-only library, as `Postgrest.Client.Make` and `Rest.Make` are applied
   in `sync/` over `sync/net/transport.ml`. A library around one adapter

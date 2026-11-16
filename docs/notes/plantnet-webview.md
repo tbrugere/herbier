@@ -179,7 +179,7 @@ an unknown key and the projects route cost none). The emulator checks spent
 
 - 64: a 403 whose body is `{"message":"CORS error: Origin not allowed"}` is
   "key not exposed for the app" (the user fixes it on my.plantnet.org), not a
-  network error; the 401 body is `{"statusCode":401,…,"message":"Bad token"}`;
+  network error (what the user sees: architecture.md §12); the 401 body is `{"statusCode":401,…,"message":"Bad token"}`;
   the 404 is `"Species not found"`, with or without `no-reject`. `gbif` can
   be `null` and `gbif.id` comes as a string. Related images are under
   `https://bs.plantnet.org/`, at most six per species.

@@ -28,6 +28,23 @@ globalThis.fetch = (url, init) => {
     case "echo":
       return new Response(init.body).text().then((t) =>
         counted(new Response(init.method + " " + t, { status: 200 })));
+    case "form":
+      return (async () => {
+        const parts = [];
+        for (const [name, value] of init.body.entries()) {
+          if (value instanceof File) {
+            const text = await value.text();
+            parts.push(name + "=@" + value.name + ":" + value.type + ":" + text);
+          } else {
+            parts.push(name + "=" + value);
+          }
+        }
+        // init.headers only: a FormData's computed Content-Type is not seen.
+        const ct = headers.get("content-type") === null ? "none" : "set";
+        return counted(new Response(
+          init.method + " " + url + " ct " + ct + " | " + parts.join(";"),
+          { status: 200 }));
+      })();
     case "hangs":
       return new Promise((_, reject) =>
         init.signal.addEventListener("abort", () =>

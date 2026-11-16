@@ -37,5 +37,5 @@ let find db app =
   | "drive" -> Some (page (fun () -> D.Drive_check.el app))
   | "uploader" -> Some (page (fun () -> D.Uploader_check.el app))
   | "picker" -> Some (page (fun () -> D.Picker_check.el app))
-  | "identify" -> Some (page D.Identify_check.el)
+  | "identify" -> Some (page (fun () -> D.Identify_check.el app))
   | _ -> None

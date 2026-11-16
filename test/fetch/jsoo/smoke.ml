@@ -1,5 +1,5 @@
-(* Http.get, Geocoder.run, Timed_fetch.request and Timed_fetch.request_blob
-   over a stubbed fetch. Each
+(* Http.get, Geocoder.run, Timed_fetch.request, Timed_fetch.request_blob and
+   Timed_fetch.request_form over a stubbed fetch. Each
    case sets the stub's next answer, runs one request and describes the
    outcome as one line: the result, whether the Api-User-Agent header was
    sent, and how many times the response body was read. The lines must equal
@@ -83,6 +83,32 @@ let request_blob kind =
         (Timed_fetch.request_blob ~timeout_ms:50 ~meth:`POST
            ~url:"https://example.test/upload" ~headers:[] body))
 
+(* The identify request's multipart body: fields before files, in order, no
+   Content-Type set by the caller (the WebView sets the boundary). *)
+let request_form kind =
+  Jv.set Jv.global "__next" (Jv.of_string kind);
+  let file filename text =
+    {
+      Timed_fetch.field = "images";
+      filename;
+      blob =
+        Brr.Blob.of_jstr
+          ~init:(Brr.Blob.init ~type':(Jstr.v "image/jpeg") ())
+          (Jstr.v text);
+    }
+  in
+  observed (fun () ->
+      Fut.map
+        (function
+          | Ok {Timed_fetch.status; body; headers = _} ->
+              Printf.sprintf "request_form %s: Ok %d %s" kind status body
+          | Error e ->
+              "request_form " ^ kind ^ ": " ^ Timed_fetch.error_to_string e)
+        (Timed_fetch.request_form ~timeout_ms:50
+           ~url:"https://example.test/identify"
+           ~fields:[("organs", "auto"); ("organs", "flower")]
+           [file "photo-1.jpg" "one"; file "photo-2.jpg" "two"]))
+
 let expected =
   [
     "http ok: Ok {\"a\":1} | ua | text read 1";
@@ -106,6 +132,12 @@ let expected =
     "request bad header: Failed |  | text read 0";
     "request_blob echo: Ok 200 POST \xc3\xa9<media> | no ua | text read 1";
     "request_blob hangs: timeout | no ua | text read 0";
+    "request_form form: Ok 200 POST https://example.test/identify ct none | \
+     organs=auto;organs=flower;images=@photo-1.jpg:image/jpeg:one;images=@photo-2.jpg:image/jpeg:two \
+     | no ua | text read 1";
+    "request_form 503: Ok 503 busy | no ua | text read 1";
+    "request_form rejected: TypeError: Failed to fetch | no ua | text read 0";
+    "request_form hangs: timeout | no ua | text read 0";
   ]
 
 let () =
@@ -135,6 +167,10 @@ let () =
       (fun () -> request ~headers:[("x-bad", "a\nb")] "bad header");
       (fun () -> request_blob "echo");
       (fun () -> request_blob "hangs");
+      (fun () -> request_form "form");
+      (fun () -> request_form "503");
+      (fun () -> request_form "rejected");
+      (fun () -> request_form "hangs");
     ]
   in
   let all =

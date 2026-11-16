@@ -92,6 +92,26 @@ let request_blob ?(timeout_ms = timeout_ms) ~meth ~url ~headers blob =
   fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url ~headers
     ~body:(Some (Brr_io.Fetch.Body.of_blob blob))
 
+type form_file = {field : string; filename : string; blob : Brr.Blob.t}
+
+let form_data ~fields files =
+  let data = Brr_io.Form.Data.create () in
+  List.iter
+    (fun (name, value) ->
+      Brr_io.Form.Data.append data (Jstr.v name) (Jstr.v value))
+    fields;
+  List.iter
+    (fun {field; filename; blob} ->
+      Brr_io.Form.Data.append_blob ~filename:(Jstr.v filename) data
+        (Jstr.v field) blob)
+    files;
+  data
+
+let request_form ?(timeout_ms = timeout_ms) ~url ~fields files =
+  fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth:`POST ~url
+    ~headers:[]
+    ~body:(Some (Brr_io.Fetch.Body.of_form_data (form_data ~fields files)))
+
 let get ?(timeout_ms = timeout_ms) ?(non_2xx_body = Read) ?(headers = []) url =
   fetch ~describe:Js_error.message ~timeout_ms ~non_2xx_body ~meth:`GET ~url
     ~headers ~body:None
