@@ -964,6 +964,208 @@ let presence_tests =
       (Error (Drive.Malformed "not JSON"));
   ]
 
+(* ---------- get_folder, decode_folder, folder_info ---------- *)
+
+let get_folder_tests =
+  [
+    ( "get_folder renders the exact files.get URL",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "url"
+          (Drive.api ^ "/F1?fields=id,name,mimeType,trashed")
+          (Drive.get_folder ~file_id:"F1").url );
+    ( "a file id with a space and a slash is percent-encoded",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "url"
+          (Drive.api ^ "/a%20b%2Fc?fields=id,name,mimeType,trashed")
+          (Drive.get_folder ~file_id:"a b/c").url );
+    ( "get_folder: GET, no body",
+      `Quick,
+      fun () ->
+        let r = Drive.get_folder ~file_id:"F1" in
+        Alcotest.(check string)
+          "meth" "GET"
+          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        match r.body with
+        | Drive.Empty -> ()
+        | _ -> Alcotest.fail "get_folder body is not Empty" );
+  ]
+
+let pp_folder_info ppf = function
+  | Drive.Usable {id; name} ->
+      Format.fprintf ppf "Usable {id = %S; name = %S}" id name
+  | Drive.Not_a_folder -> Format.pp_print_string ppf "Not_a_folder"
+  | Drive.Folder_trashed -> Format.pp_print_string ppf "Folder_trashed"
+  | Drive.No_access -> Format.pp_print_string ppf "No_access"
+
+let folder_info_t = Alcotest.testable pp_folder_info Drive.equal_folder_info
+let folder_info_result = Alcotest.(result folder_info_t error_t)
+
+let folder_meta ?(trashed = false) ~id ~name ~mime () =
+  Printf.sprintf {|{"id":"%s","name":"%s","mimeType":"%s","trashed":%b}|} id
+    name mime trashed
+
+let decode_folder_tests =
+  [
+    ( "a folder, not trashed: Usable {id; name}",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Ok (Drive.Usable {id = "F1"; name = "Mes plantes"}))
+          (Drive.decode_folder
+             (folder_meta ~id:"F1" ~name:"Mes plantes" ~mime:Drive.folder_mime
+                ())) );
+    ( "a non-folder mime: Not_a_folder",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Ok Drive.Not_a_folder)
+          (Drive.decode_folder
+             (folder_meta ~id:"F1" ~name:"x.jpg" ~mime:"image/jpeg" ())) );
+    ( "a non-folder mime that is also trashed: Not_a_folder, checked first",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Ok Drive.Not_a_folder)
+          (Drive.decode_folder
+             (folder_meta ~trashed:true ~id:"F1" ~name:"x.jpg"
+                ~mime:"image/jpeg" ())) );
+    ( "a folder, trashed: Folder_trashed",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Ok Drive.Folder_trashed)
+          (Drive.decode_folder
+             (folder_meta ~trashed:true ~id:"F1" ~name:"Mes plantes"
+                ~mime:Drive.folder_mime ())) );
+    ( "a missing name is Malformed \"name\"",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Error (Drive.Malformed "name"))
+          (Drive.decode_folder
+             (Printf.sprintf {|{"id":"F1","mimeType":"%s","trashed":false}|}
+                Drive.folder_mime)) );
+    ( "a missing id is Malformed \"id\"",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Error (Drive.Malformed "id"))
+          (Drive.decode_folder
+             (Printf.sprintf
+                {|{"name":"Mes plantes","mimeType":"%s","trashed":false}|}
+                Drive.folder_mime)) );
+    ( "a missing mimeType is Malformed \"mimeType\"",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Error (Drive.Malformed "mimeType"))
+          (Drive.decode_folder
+             {|{"id":"F1","name":"Mes plantes","trashed":false}|}) );
+    ( "a non-bool trashed is Malformed \"trashed\"",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Error (Drive.Malformed "trashed"))
+          (Drive.decode_folder
+             (Printf.sprintf
+                {|{"id":"F1","name":"Mes plantes","mimeType":"%s","trashed":"no"}|}
+                Drive.folder_mime)) );
+    ( "\"<html>\" is Malformed \"not JSON\"",
+      `Quick,
+      fun () ->
+        Alcotest.check folder_info_result "decode_folder"
+          (Error (Drive.Malformed "not JSON"))
+          (Drive.decode_folder "<html>") );
+  ]
+
+let folder_info_program_tests =
+  [
+    ( "404 is Ok No_access, exactly one request (get_folder)",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder_info ~file_id:"F1" in
+        let resp = answer ~status:404 "{}" in
+        Alcotest.(check (list request_t))
+          "get_folder alone"
+          [Drive.get_folder ~file_id:"F1"]
+          (Drive.requests (seq_net [resp]) prog);
+        Alcotest.check folder_info_result "folder_info" (Ok Drive.No_access)
+          (Drive.run (seq_net [resp]) prog) );
+    ( "403 appNotAuthorizedToFile is Ok No_access",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder_info ~file_id:"F1" in
+        let body =
+          {|{"error":{"code":403,"message":"m","errors":[{"reason":"appNotAuthorizedToFile"}]}}|}
+        in
+        Alcotest.check folder_info_result "folder_info" (Ok Drive.No_access)
+          (Drive.run (seq_net [answer ~status:403 body]) prog) );
+    ( "401 is Error Unauthorized (recorded fixture)",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder_info ~file_id:"F1" in
+        Alcotest.check folder_info_result "folder_info"
+          (Error Drive.Unauthorized)
+          (Drive.run
+             (seq_net
+                [
+                  answer ~status:401
+                    (fixture "files_get_folder_meta_invalid_token_401");
+                ])
+             prog) );
+    ( "403 accessNotConfigured is Error Api_disabled",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder_info ~file_id:"F1" in
+        let body =
+          {|{"error":{"code":403,"errors":[{"reason":"accessNotConfigured"}]}}|}
+        in
+        Alcotest.check folder_info_result "folder_info"
+          (Error Drive.Api_disabled)
+          (Drive.run (seq_net [answer ~status:403 body]) prog) );
+    ( "an unreachable network is Error (Network m)",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder_info ~file_id:"F1" in
+        Alcotest.check folder_info_result "folder_info"
+          (Error (Drive.Network "x"))
+          (Drive.run (seq_net [Drive.Unreachable "x"]) prog) );
+    ( "403 insufficientFilePermissions stays Error (Http 403), not No_access",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder_info ~file_id:"F1" in
+        let body =
+          {|{"error":{"code":403,"message":"m","errors":[{"reason":"insufficientFilePermissions"}]}}|}
+        in
+        Alcotest.check folder_info_result "folder_info"
+          (Error
+             (Drive.Http
+                {
+                  status = 403;
+                  reason = Some "insufficientFilePermissions";
+                  message = Some "m";
+                }))
+          (Drive.run (seq_net [answer ~status:403 body]) prog) );
+    ( "403 with no token (recorded fixture) stays Error (Http 403)",
+      `Quick,
+      fun () ->
+        let prog = Drive.folder_info ~file_id:"F1" in
+        match
+          Drive.run
+            (seq_net [answer ~status:403 (fixture "files_get_no_token_403")])
+            prog
+        with
+        | Error (Drive.Http {status = 403; _}) -> ()
+        | r ->
+            Alcotest.failf "expected Error (Http 403), got %a"
+              (Alcotest.pp folder_info_result)
+              r );
+  ]
+
 (* ---------- create_session ---------- *)
 
 (* The nil UUID and zero sha256, as scripts/record-drive-fixtures.sh's own

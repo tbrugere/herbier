@@ -91,6 +91,77 @@ val account_meta :
 (** 4m account card (signed in): the address (« Adresse inconnue » without),
     then « · Drive » when [storage = Drive] and [Granted]. *)
 
+(** {1 The Drive folder (4m « Dossier Drive »)} *)
+
+(** Where originals go: the app's « Herbier », or a folder the user picked. *)
+type folder = Default | Picked of string  (** its name *)
+
+val equal_folder : folder -> folder -> bool
+
+val folder :
+  root:string option ->
+  picked:Herbier_store.Settings.drive_folder option ->
+  folder
+(** [Picked p.name] iff [picked = Some p] and [root = Some p.id]; else [Default]
+    (no pick, or an upload replaced the picked root). *)
+
+val folder_name : folder -> string
+(** [Default] → « Herbier »; [Picked n] → [n], or « (sans nom) » when blank. *)
+
+(** Whether this build can open Google Picker (its Cloud project number set). *)
+type picker_config = Picker_unconfigured | Picker_ready
+
+val equal_picker_config : picker_config -> picker_config -> bool
+
+val picker_config_of_project_number : string -> picker_config
+(** [Picker_ready] iff the Cloud project number is non-empty and all ASCII
+    digits (not trimmed: the release script refuses anything else). *)
+
+(** « Choisir »: enabled, or disabled with the one line shown under the row. *)
+type choose = Enabled | Disabled of string
+
+val equal_choose : choose -> choose -> bool
+
+type folder_row = {
+  detail : string;
+  choose : choose;
+  default : bool;  (** « Par défaut » shown *)
+}
+
+val equal_folder_row : folder_row -> folder_row -> bool
+
+val folder_row : picker_config -> access -> folder -> folder_row
+(** The row under the storage radios (its title « Dossier Drive » is the
+    screen's). [detail]: [Default] → « Herbier · créé par l’app »; [Picked n] →
+    {!folder_name}. [default] = [folder <> Default] (also while [choose] is
+    disabled: resetting needs no Picker). [choose], first that applies:
+    [Picker_unconfigured] or [Denied Unconfigured] → [Disabled] « Choix du
+    dossier indisponible dans cette version. »; [Denied Signed_out] → [Disabled]
+    « Connectez-vous pour choisir un dossier. »; [Denied No_account] /
+    [Denied Misconfigured] → [Disabled] of their {!blocker} text; anything else
+    (Unknown, Granted, consent needed or refused, offline, failed: the tap asks
+    interactively and reports) → [Enabled]. *)
+
+(** Why « Choisir » did not change the folder. *)
+type pick_error =
+  | Not_a_folder
+  | Trashed
+  | No_access
+  | Offline
+  | Token of denial
+  | Picker_unavailable  (** Google Picker did not load or could not open *)
+  | Not_saved  (** the settings write failed *)
+  | Drive_failed  (** any other Drive error *)
+
+val equal_pick_error : pick_error -> pick_error -> bool
+
+val pick_error_text : pick_error -> string
+(** « Ce n’est pas un dossier. »; « Ce dossier est dans la corbeille. »; «
+    Herbier n’a pas accès à ce dossier. »; « Pas de réseau : réessayez plus
+    tard. »; [Token d] → {!blocker} [(Denied d) ~online:true]; « Google Picker
+    n’a pas pu s’ouvrir. »; « Le réglage n’a pas pu être enregistré. »; « Drive
+    n’a pas répondu : réessayez. ». *)
+
 type prompt = {text : string; action : string option  (** a button label *)}
 
 val equal_prompt : prompt -> prompt -> bool
@@ -125,6 +196,7 @@ val has_drive_photo : Photo.t list -> bool
 (** Some photo has [original_target = Drive]: {!saved_card} is [Some _]. *)
 
 val saved_card :
+  folder:folder ->
   access ->
   online:bool ->
   wifi_only:bool ->
@@ -133,17 +205,17 @@ val saved_card :
   card option
 (** 4e's Drive card from the observation's photos: [None] when none has
     [original_target = Drive]. [queued]: the photos with a queue row ({!queue}'s
-    [queued]). Title: « <n> photo(s) → Google Drive, dossier Herbier » (n = the
-    Drive-bound photos). Detail, first that applies over them: all [Uploaded] →
-    « Envoyée(s) dans Google Drive. Copies compressées gardées sur le téléphone.
-    »; some [Original_missing] → « Original introuvable dans Google Drive : la
-    copie compressée reste. »; some [Failed] with a queue row → « Échec de
-    l’envoi : « Envoyer maintenant » dans Réglages. »; some [Failed] without one
-    (its original could not be kept when it was saved) → « Original non conservé
-    : la copie compressée reste. »; {!blocker}; [wifi_only] → « Envoi en Wi-Fi
-    seulement. Copies compressées gardées sur le téléphone. »; some [Uploaded] →
-    « <k> sur <n> envoyées. »; else « Envoi en cours. Copies compressées gardées
-    sur le téléphone. ». *)
+    [queued]). Title: « <n> photo(s) → Google Drive, dossier <folder_name
+    folder> » (n = the Drive-bound photos). Detail, first that applies over
+    them: all [Uploaded] → « Envoyée(s) dans Google Drive. Copies compressées
+    gardées sur le téléphone. »; some [Original_missing] → « Original
+    introuvable dans Google Drive : la copie compressée reste. »; some [Failed]
+    with a queue row → « Échec de l’envoi : « Envoyer maintenant » dans
+    Réglages. »; some [Failed] without one (its original could not be kept when
+    it was saved) → « Original non conservé : la copie compressée reste. »;
+    {!blocker}; [wifi_only] → « Envoi en Wi-Fi seulement. Copies compressées
+    gardées sur le téléphone. »; some [Uploaded] → « <k> sur <n> envoyées. »;
+    else « Envoi en cours. Copies compressées gardées sur le téléphone. ». *)
 
 val viewer_badge : Photo.t -> string
 (** 5e provenance: [Drive, Uploaded] → « Google Drive »;

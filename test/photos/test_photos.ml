@@ -452,6 +452,9 @@ let () =
       ("drive folder program", Test_drive.folder_tests);
       ("drive put_original program", Test_drive.put_original_tests);
       ("drive presence program", Test_drive.presence_tests);
+      ("drive get_folder", Test_drive.get_folder_tests);
+      ("drive decode_folder", Test_drive.decode_folder_tests);
+      ("drive folder_info program", Test_drive.folder_info_program_tests);
       ("drive create_session", Test_drive.create_session_tests);
       ("drive decode_session", Test_drive.decode_session_tests);
       ("drive start_session program", Test_drive.start_session_tests);
@@ -463,6 +466,9 @@ let () =
       ("drive put_original ~root", Test_drive_root.put_original_root_tests);
       ( "drive root folder: moved, renamed, trashed, deleted",
         Test_drive_root.move_rename_trash_tests );
+      ( "drive picked folder as root, outside My Drive's root",
+        Test_drive_root.picked_folder_tests );
+      ("drive pick_root, default_root", Test_drive_root.root_ids_tests);
       ( "drive resolve_root (recorded fixtures)",
         Test_drive_root.fixture_root_tests );
       ("drive pp_root_change", Test_drive_root.root_change_pp_tests);

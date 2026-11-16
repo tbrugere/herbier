@@ -18,9 +18,11 @@
     ({!App.stop_drive_uploads}, then the setting only when it succeeded) or «
     Annuler ». A failed write leaves one line under the radios (« Le réglage n’a
     pas pu être enregistré. », or « Les photos en attente n’ont pas pu être
-    retirées : rien n’a changé. ») until the next successful choice. « Envoyer
-    seulement en Wi-Fi » is written to the local [settings] table and kept in
-    {!State.account}. « File d'envoi » follows {!App.upload_queue}:
+    retirées : rien n’a changé. ») until the next successful choice. Below them,
+    while the storage is Drive, {!Folder_row} (« Dossier Drive »); the Drive
+    radio's title names {!App.drive_folder}. « Envoyer seulement en Wi-Fi » is
+    written to the local [settings] table and kept in {!State.account}. « File
+    d'envoi » follows {!App.upload_queue}:
     {!Herbier_ui_model.Drive_text.queue_title},
     {!Herbier_ui_model.Drive_text.queue_status} (hidden when [None]),
     {!Herbier_ui_model.Drive_text.last_sent} (read again when the queue

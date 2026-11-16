@@ -94,6 +94,8 @@ type t = {
          stays reachable for the app's lifetime *)
   upload_queue : Drive_text.queue React.signal;
   set_upload_queue : ?step:React.step -> Drive_text.queue -> unit;
+  drive_folder : Drive_text.folder React.signal;
+  set_drive_folder : ?step:React.step -> Drive_text.folder -> unit;
   health : Herbier_photos_io.Health.t;
 }
 
@@ -132,6 +134,20 @@ val drive_access : t -> Drive_text.access React.signal
 val check_drive_access : t -> unit
 val authorize_drive : t -> unit
 val upload_queue : t -> Drive_text.queue React.signal
+val drive_folder : t -> Drive_text.folder React.signal
+
+val refresh_folder : t -> unit Fut.t
+(** Reads [Drive_root.read_choice] into {!drive_folder}; a read error is a
+    console line and keeps the last value. Also run after every pass (with the
+    {!upload_queue} read): a pass may store or forget the root. *)
+
+val drive_token :
+  t -> interactive:bool -> (string, Herbier_sync.Auth.drive_error) result Fut.t
+(** [Auth.drive_token], its outcome recorded into {!drive_access}. *)
+
+val denial : Herbier_sync.Auth.drive_error -> Drive_text.denial
+(** The mapping {!drive_access} documents. *)
+
 val send_now : t -> unit
 val stop_drive_uploads : t -> (unit, Db.error) result Fut.t
 

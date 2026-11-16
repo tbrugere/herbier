@@ -198,6 +198,15 @@ val decode_session : (string * string) list -> (string, error) result
 val get_trashed : file_id:string -> request
 (** GET {!api}[/<file_id, Url.encode>?fields=id,trashed]. *)
 
+val folder_mime : string
+(** ["application/vnd.google-apps.folder"]. *)
+
+val get_folder : file_id:string -> request
+(** GET {!api}[/<file_id, Url.encode>?fields=id,name,mimeType,trashed]. Exact
+    URL for id ["F1"]:
+    ["https://www.googleapis.com/drive/v3/files/F1?fields=id,name,mimeType,trashed"].
+*)
+
 val view_url : file_id:string -> string
 (** ["https://drive.google.com/file/d/<file_id, Url.encode>/view"]: the page 5e
     « Ouvrir dans Google Drive ↗ » opens (the form of a file's [webViewLink],
@@ -229,6 +238,26 @@ type presence =
   | Missing  (** 404: deleted for good, or no longer accessible *)
 
 val equal_presence : presence -> presence -> bool
+
+(** A folder the user picked (4m « Dossier Drive »), as this token sees it. *)
+type folder_info =
+  | Usable of {id : string; name : string}
+      (** a folder, not trashed, readable with this token *)
+  | Not_a_folder  (** [mimeType] is not {!folder_mime} *)
+  | Folder_trashed
+  | No_access
+      (** 404, or 403 [appNotAuthorizedToFile]: the token's drive.file grant
+          does not cover it *)
+
+val equal_folder_info : folder_info -> folder_info -> bool
+
+val decode_folder : string -> (folder_info, error) result
+(** A 2xx body [{"id", "name", "mimeType", "trashed"}]: a missing or non-string
+    [id] / [name] / [mimeType] → [Malformed "<field>"]; [trashed] missing or not
+    a bool → [Malformed "trashed"]; not JSON → [Malformed "not JSON"].
+    [mimeType] ≠ {!folder_mime} → [Not_a_folder] (checked before [trashed]);
+    trashed → [Folder_trashed]; else [Usable {id; name}] ([name] as sent, even
+    blank). *)
 
 (** {1 Programs} *)
 
@@ -280,6 +309,27 @@ val resolve_root : stored:string option -> (string, error) result rooted t
     Every [Error e] whose {!error_scope} is [This_file] comes out as
     [Root_folder e] ([Account]): a root folder that fails fails every file. The
     caller passes a non-blank id (the settings codec refuses blanks). *)
+
+type root_ids = {
+  root : string option;  (** the stored root ([Drive_root_folder]) *)
+  picked : string option;  (** the picked folder's id *)
+  default : string option;
+      (** the root that was in force before the current pick *)
+}
+(** The three root folder ids kept in settings (4m « Dossier Drive »). A pick is
+    in force while [picked = root]. *)
+
+val equal_root_ids : root_ids -> root_ids -> bool
+
+val pick_root : root_ids -> id:string -> root_ids
+(** « Choisir » of the folder [id]: [root] and [picked] become [id]; [default]
+    is kept while a pick is in force, else it becomes the current [root] (so a
+    second pick does not lose the app's folder). *)
+
+val default_root : root_ids -> root_ids
+(** « Par défaut »: while a pick is in force, [root] goes back to [default]
+    ([None]: the next upload finds or creates « Herbier » at My Drive's root);
+    else [root] is kept. [picked] and [default] become [None]. *)
 
 type target = {
   species : string;  (** folder name, from {!species_folder} *)
@@ -334,6 +384,11 @@ val presence : file_id:string -> (presence, error) result t
 (** {!get_trashed}: 2xx [trashed = false] → [Present], [true] → [Trashed]
     ([trashed] absent or not a bool → [Malformed "trashed"]); 404 → [Missing];
     anything else → its error. *)
+
+val folder_info : file_id:string -> (folder_info, error) result t
+(** One {!get_folder}: 2xx → {!decode_folder}; 404 → [Ok No_access]; 403 whose
+    reason is ["appNotAuthorizedToFile"] → [Ok No_access]; any other non-2xx →
+    {!error_of_answer}; [Unreachable m] → [Error (Network m)]. *)
 
 val run : (request -> response) -> 'a t -> 'a
 (** Runs the program, answering each request with the function, in order. *)

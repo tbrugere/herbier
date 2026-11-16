@@ -89,6 +89,34 @@ let card_opt (c : Drive_text.card option) =
 
 let card_option_t = Alcotest.(option (pair string string))
 
+let pp_folder ppf = function
+  | Drive_text.Default -> Format.pp_print_string ppf "Default"
+  | Drive_text.Picked n -> Format.fprintf ppf "Picked %S" n
+
+let folder_t = Alcotest.testable pp_folder Drive_text.equal_folder
+
+let pp_folder_row ppf (r : Drive_text.folder_row) =
+  Format.fprintf ppf "{detail = %S; choose = %s; default = %b}" r.detail
+    (match r.choose with
+    | Enabled -> "Enabled"
+    | Disabled s -> Printf.sprintf "Disabled %S" s)
+    r.default
+
+let folder_row_t = Alcotest.testable pp_folder_row Drive_text.equal_folder_row
+
+let pick_error_to_string = function
+  | Drive_text.Not_a_folder -> "Not_a_folder"
+  | Drive_text.Trashed -> "Trashed"
+  | Drive_text.No_access -> "No_access"
+  | Drive_text.Offline -> "Offline"
+  | Drive_text.Token d -> "Token " ^ denial_to_string d
+  | Drive_text.Picker_unavailable -> "Picker_unavailable"
+  | Drive_text.Not_saved -> "Not_saved"
+  | Drive_text.Drive_failed -> "Drive_failed"
+
+let pp_pick_error ppf e = Format.pp_print_string ppf (pick_error_to_string e)
+let pick_error_t = Alcotest.testable pp_pick_error Drive_text.equal_pick_error
+
 (* ---------- access ---------- *)
 
 let access_tests =
@@ -575,10 +603,232 @@ let stop_dialog_tests =
           (dialog (Drive_text.stop_dialog 3)) );
   ]
 
+(* ---------- folder, folder_name ---------- *)
+
+let drive_folder ~id ~name : Herbier_store.Settings.drive_folder = {id; name}
+
+let folder_tests =
+  let case name ~root ~picked expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check folder_t "folder" expected
+          (Drive_text.folder ~root ~picked) )
+  in
+  [
+    case "picked id = root: Picked, the picked name" ~root:(Some "F1")
+      ~picked:(Some (drive_folder ~id:"F1" ~name:"Mes plantes"))
+      (Drive_text.Picked "Mes plantes");
+    case "picked id <> root (a pass replaced it): Default" ~root:(Some "OTHER")
+      ~picked:(Some (drive_folder ~id:"F1" ~name:"Mes plantes"))
+      Drive_text.Default;
+    case "root None, picked present: Default" ~root:None
+      ~picked:(Some (drive_folder ~id:"F1" ~name:"Mes plantes"))
+      Drive_text.Default;
+    case "root present, no picked value: Default" ~root:(Some "F1") ~picked:None
+      Drive_text.Default;
+    case "neither root nor picked: Default" ~root:None ~picked:None
+      Drive_text.Default;
+  ]
+
+let folder_name_tests =
+  [
+    ( "Default: \"Herbier\"",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "folder_name" "Herbier"
+          (Drive_text.folder_name Drive_text.Default) );
+    ( "Picked n: n verbatim",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "folder_name" "Mes plantes"
+          (Drive_text.folder_name (Drive_text.Picked "Mes plantes")) );
+    ( "Picked \"\" (blank): \"(sans nom)\"",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "folder_name" "(sans nom)"
+          (Drive_text.folder_name (Drive_text.Picked "")) );
+    ( "Picked \"  \" (whitespace only): \"(sans nom)\"",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "folder_name" "(sans nom)"
+          (Drive_text.folder_name (Drive_text.Picked "  ")) );
+  ]
+
+(* ---------- folder_row ---------- *)
+
+let unconfigured_reason = "Choix du dossier indisponible dans cette version."
+let herbier_detail = "Herbier \xc2\xb7 cr\xc3\xa9\xc3\xa9 par l\xe2\x80\x99app"
+
+let folder_row_tests =
+  let case name config access folder expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check folder_row_t "folder_row" expected
+          (Drive_text.folder_row config access folder) )
+  in
+  Drive_text.
+    [
+      case "Picker_unconfigured, Granted, Default: disabled, not resettable"
+        Picker_unconfigured Granted Default
+        {
+          detail = herbier_detail;
+          default = false;
+          choose = Disabled unconfigured_reason;
+        };
+      case
+        "Picker_unconfigured, Granted, Picked: disabled, but resettable \
+         (default is true for a Picked folder even when unconfigured)"
+        Picker_unconfigured Granted (Picked "Mes plantes")
+        {
+          detail = "Mes plantes";
+          default = true;
+          choose = Disabled unconfigured_reason;
+        };
+      case
+        "Picker_unconfigured, Denied Signed_out: the build reason wins over \
+         the sign-in line (first that applies)"
+        Picker_unconfigured (Denied Signed_out) Default
+        {
+          detail = herbier_detail;
+          default = false;
+          choose = Disabled unconfigured_reason;
+        };
+      case "Picker_ready, Denied Unconfigured: disabled, the same reason"
+        Picker_ready (Denied Unconfigured) Default
+        {
+          detail = herbier_detail;
+          default = false;
+          choose = Disabled unconfigured_reason;
+        };
+      case "Picker_ready, Denied Signed_out: disabled, the sign-in line"
+        Picker_ready (Denied Signed_out) Default
+        {
+          detail = herbier_detail;
+          default = false;
+          choose = Disabled "Connectez-vous pour choisir un dossier.";
+        };
+      case "Picker_ready, Denied No_account: disabled, its blocker text"
+        Picker_ready (Denied No_account) Default
+        {
+          detail = herbier_detail;
+          default = false;
+          choose =
+            Disabled "Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone.";
+        };
+      case "Picker_ready, Denied Misconfigured: disabled, its blocker text"
+        Picker_ready (Denied Misconfigured) Default
+        {
+          detail = herbier_detail;
+          default = false;
+          choose =
+            Disabled
+              "Google refuse l\xe2\x80\x99acc\xc3\xa8s \xc3\xa0 Drive \
+               (configuration de l\xe2\x80\x99app).";
+        };
+      case "Picker_ready, Unknown, Default: enabled, no reason" Picker_ready
+        Unknown Default
+        {detail = herbier_detail; choose = Enabled; default = false};
+      case "Picker_ready, Granted, Picked: enabled, resettable, named"
+        Picker_ready Granted (Picked "Mes plantes")
+        {detail = "Mes plantes"; choose = Enabled; default = true};
+      case
+        "Picker_ready, Denied Consent_needed: enabled (the tap asks \
+         interactively and reports)"
+        Picker_ready (Denied Consent_needed) Default
+        {detail = herbier_detail; choose = Enabled; default = false};
+      case "Picker_ready, Denied Consent_refused: enabled" Picker_ready
+        (Denied Consent_refused) Default
+        {detail = herbier_detail; choose = Enabled; default = false};
+      case "Picker_ready, Denied Offline: enabled" Picker_ready (Denied Offline)
+        Default
+        {detail = herbier_detail; choose = Enabled; default = false};
+      case "Picker_ready, Denied Failed: enabled" Picker_ready (Denied Failed)
+        Default
+        {detail = herbier_detail; choose = Enabled; default = false};
+      case
+        "Picker_ready, Granted, Picked \"\": enabled, resettable, the \
+         blank-name fallback in detail"
+        Picker_ready Granted (Picked "")
+        {detail = "(sans nom)"; choose = Enabled; default = true};
+    ]
+
+(* ---------- picker_config_of_project_number ---------- *)
+
+let picker_config_tests =
+  let case name number ready =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check bool)
+          "Picker_ready" ready
+          (Drive_text.equal_picker_config
+             (Drive_text.picker_config_of_project_number number)
+             Picker_ready) )
+  in
+  [
+    case "\"\": unconfigured" "" false;
+    case "all digits: ready" "123456789012" true;
+    case "a leading space: unconfigured (not trimmed)" " 123" false;
+    case "a trailing newline: unconfigured (not trimmed)" "123\n" false;
+    case "letters: unconfigured" "abc" false;
+    case "a placeholder: unconfigured" "<project-number>" false;
+  ]
+
+(* ---------- pick_error_text ---------- *)
+
+let pick_error_text_tests =
+  let case name e expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "pick_error_text" expected
+          (Drive_text.pick_error_text e) )
+  in
+  Drive_text.
+    [
+      case "Not_a_folder" Not_a_folder "Ce n\xe2\x80\x99est pas un dossier.";
+      case "Trashed" Trashed "Ce dossier est dans la corbeille.";
+      case "No_access" No_access
+        "Herbier n\xe2\x80\x99a pas acc\xc3\xa8s \xc3\xa0 ce dossier.";
+      case "Offline" Offline
+        "Pas de r\xc3\xa9seau : r\xc3\xa9essayez plus tard.";
+      case "Token Unconfigured" (Token Unconfigured)
+        "Envoi vers Drive indisponible dans cette version.";
+      case "Token Signed_out" (Token Signed_out)
+        "Connectez-vous pour envoyer les photos.";
+      case "Token Consent_needed" (Token Consent_needed)
+        "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.";
+      case "Token Consent_refused" (Token Consent_refused)
+        "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.";
+      case "Token No_account" (Token No_account)
+        "Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone.";
+      case "Token Misconfigured" (Token Misconfigured)
+        "Google refuse l\xe2\x80\x99acc\xc3\xa8s \xc3\xa0 Drive (configuration \
+         de l\xe2\x80\x99app).";
+      case "Token Offline" (Token Offline)
+        "Envoi d\xc3\xa8s le retour du r\xc3\xa9seau.";
+      case "Token Failed" (Token Failed)
+        "Envoi d\xc3\xa8s le retour du r\xc3\xa9seau.";
+      case "Picker_unavailable" Picker_unavailable
+        "Google Picker n\xe2\x80\x99a pas pu s\xe2\x80\x99ouvrir.";
+      case "Not_saved" Not_saved
+        "Le r\xc3\xa9glage n\xe2\x80\x99a pas pu \xc3\xaatre enregistr\xc3\xa9.";
+      case "Drive_failed" Drive_failed
+        "Drive n\xe2\x80\x99a pas r\xc3\xa9pondu : r\xc3\xa9essayez.";
+    ]
+
 (* ---------- saved_card ---------- *)
 
-let saved_card ?(queued = []) access ~online ~wifi_only photos =
-  Drive_text.saved_card access ~online ~wifi_only ~queued photos
+let saved_card ?(queued = []) ?(folder = Drive_text.Default) access ~online
+    ~wifi_only photos =
+  Drive_text.saved_card access ~online ~wifi_only ~queued ~folder photos
 
 let saved_card_tests =
   [
@@ -795,6 +1045,23 @@ let saved_card_tests =
           (card_opt
              (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
     );
+    ( "a picked folder names itself in the title, not \"Herbier\"",
+      `Quick,
+      fun () ->
+        let photos =
+          [
+            photo ~state:Photo.Upload_state.Uploaded 1;
+            photo ~state:Photo.Upload_state.Uploaded 2;
+          ]
+        in
+        Alcotest.check card_option_t "saved_card"
+          (Some
+             ( "2 photos \xe2\x86\x92 Google Drive, dossier Mes plantes",
+               "Envoy\xc3\xa9es dans Google Drive. Copies compress\xc3\xa9es \
+                gard\xc3\xa9es sur le t\xc3\xa9l\xc3\xa9phone." ))
+          (card_opt
+             (saved_card ~folder:(Drive_text.Picked "Mes plantes")
+                Drive_text.Granted ~online:true ~wifi_only:false photos)) );
     ( "App_only photos are ignored in the count",
       `Quick,
       fun () ->
@@ -925,6 +1192,11 @@ let drive_text =
       account_meta_tests;
       drive_prompt_tests;
       stop_dialog_tests;
+      folder_tests;
+      folder_name_tests;
+      folder_row_tests;
+      picker_config_tests;
+      pick_error_text_tests;
       saved_card_tests;
       has_drive_photo_tests;
       viewer_badge_tests;

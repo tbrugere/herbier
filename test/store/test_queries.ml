@@ -1644,6 +1644,96 @@ let settings_root_folder () =
     "an untrimmed value is trimmed on read" (Some "F1")
     (find db (Settings.get key))
 
+let drive_folder_t =
+  Alcotest.testable
+    (fun ppf (f : Settings.drive_folder) ->
+      Format.fprintf ppf "{id = %S; name = %S}" f.id f.name)
+    Settings.equal_drive_folder
+
+let settings_drive_root_folder_picked () =
+  let db = Cli.migrated_db () in
+  let key = Settings.Drive_root_folder_picked in
+  Alcotest.(check string)
+    "named drive_root_folder_picked" "drive_root_folder_picked"
+    (Settings.name key);
+  Alcotest.(check (option drive_folder_t))
+    "never set is None" None
+    (find db (Settings.get key));
+  let value : Settings.drive_folder =
+    {id = "F1"; name = "Herbe d'or \xc2\xab x \xc2\xbb"}
+  in
+  check_changes "set changes 1 row" 1 db (Settings.set key value);
+  Alcotest.(check (option drive_folder_t))
+    "get gives the value back" (Some value)
+    (find db (Settings.get key));
+  Alcotest.(check (option string))
+    "stored as compact JSON, id then name"
+    (Some (Printf.sprintf {|{"id":"F1","name":"%s"}|} value.name))
+    (stored_value db "drive_root_folder_picked");
+  check_changes "unset changes 1 row" 1 db (Settings.unset key);
+  Alcotest.(check (option drive_folder_t))
+    "unset: None again" None
+    (find db (Settings.get key));
+  check_changes "unset again changes nothing" 0 db (Settings.unset key);
+  Cli.exec_ok "not JSON" db
+    "insert into settings (key, value) values ('drive_root_folder_picked', \
+     'nope');\n";
+  Alcotest.(check (result (option drive_folder_t) Cli.codec_error))
+    "a stored value that is not JSON is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get key));
+  Cli.exec_ok "blank id" db
+    "update settings set value = '{\"id\":\" \",\"name\":\"x\"}' where key = \
+     'drive_root_folder_picked';\n";
+  Alcotest.(check (result (option drive_folder_t) Cli.codec_error))
+    "a blank id is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get key));
+  Cli.exec_ok "no name" db
+    "update settings set value = '{\"id\":\"F1\"}' where key = \
+     'drive_root_folder_picked';\n";
+  Alcotest.(check (result (option drive_folder_t) Cli.codec_error))
+    "a missing name is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get key));
+  Cli.exec_ok "padded id" db
+    "update settings set value = '{\"id\":\" F1 \",\"name\":\"x\"}' where key \
+     = 'drive_root_folder_picked';\n";
+  Alcotest.(check (option drive_folder_t))
+    "an untrimmed id is trimmed on read"
+    (Some {Settings.id = "F1"; name = "x"})
+    (find db (Settings.get key));
+  let quoted : Settings.drive_folder = {id = "F2"; name = {|a "b" \ c|}} in
+  check_changes "set a name with a quote and a backslash" 1 db
+    (Settings.set key quoted);
+  Alcotest.(check (option string))
+    "stored escaped" (Some {|{"id":"F2","name":"a \"b\" \\ c"}|})
+    (stored_value db "drive_root_folder_picked");
+  Alcotest.(check (option drive_folder_t))
+    "a quote and a backslash round-trip" (Some quoted)
+    (find db (Settings.get key))
+
+let settings_drive_root_folder_default () =
+  let db = Cli.migrated_db () in
+  let key = Settings.Drive_root_folder_default in
+  Alcotest.(check string)
+    "named drive_root_folder_default" "drive_root_folder_default"
+    (Settings.name key);
+  Alcotest.(check (option string))
+    "never set is None" None
+    (find db (Settings.get key));
+  check_changes "set changes 1 row" 1 db (Settings.set key "H1");
+  Alcotest.(check (option string))
+    "get gives the id back" (Some "H1")
+    (find db (Settings.get key));
+  Alcotest.(check (option string))
+    "stored as the id's text" (Some "H1")
+    (stored_value db "drive_root_folder_default");
+  check_changes "unset changes 1 row" 1 db (Settings.unset key);
+  Cli.exec_ok "blank default row" db
+    "insert into settings (key, value) values ('drive_root_folder_default', ' \
+     ');\n";
+  Alcotest.(check (result (option string) Cli.codec_error))
+    "a blank value is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get key))
+
 let settings_unset_keeps_others () =
   let db = Cli.migrated_db () in
   check_changes "set Wifi_only" 1 db (Settings.set Settings.Wifi_only true);
@@ -2420,6 +2510,15 @@ let () =
             "the root folder key round-trips the id's text, trimmed, a blank \
              stored value is Row WrongType"
             settings_root_folder;
+          case
+            "the picked-folder key round-trips {id; name} as compact JSON, id \
+             then name; invalid JSON, a blank id or a missing name is Row \
+             WrongType"
+            settings_drive_root_folder_picked;
+          case
+            "the default-folder key round-trips the id's text; a blank value \
+             is Row WrongType"
+            settings_drive_root_folder_default;
         ] );
       ( "Search.match_expression",
         [

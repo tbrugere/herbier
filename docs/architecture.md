@@ -126,8 +126,9 @@ the mean of the positions. Details in `app/domain/places.mli`.
     Drive bookkeeping (`last_upload_at` and `drive_health_checked_at`,
     `Codec.timestamp` text; `drive_health_cursor`, a photo id;
     `drive_root_folder`, the Drive id of the photo root folder, non-blank
-    text). A value that does not parse is a decode error, not a silent
-    default.
+    text; `drive_root_folder_picked`, the folder picked in 4m, compact JSON
+    `{"id","name"}`; `drive_root_folder_default`, the root a pick replaced).
+    A value that does not parse is a decode error, not a silent default.
 - Local column types (`store/schema.ml`, migration 1): ids, lookup values
   and text are `text`; timestamps are `text` in one fixed-width UTC format with
   microseconds (`Codec.timestamp`), so text order is time order; `text[]`
@@ -644,8 +645,25 @@ capture / pick
   folders it created, so a user's own "Herbier" folder is never taken for its
   own. A different Google account answers 404 (or 403
   `appNotAuthorizedToFile`) for the old id, so the root is found again for
-  the new account. Species folders are still found or created by name inside
-  the root (no species ids cached). The health check and « Ouvrir dans Google
+  the new account. 4m « Dossier Drive » can replace the root with a folder
+  the user picks in Google Picker (M7.61; `setAppId` with the Cloud project
+  number puts the pick in the app's `drive.file` grant, no API key): the
+  pick is checked with `files.get?fields=id,name,mimeType,trashed` (a
+  folder, not trashed, reachable with the token), then stored as
+  `drive_root_folder` (the source of truth for uploads), its name in
+  `drive_root_folder_picked` (shown while the two ids match; the name is the
+  one read at pick time, not refreshed after a rename in Drive), and the
+  root it replaced in `drive_root_folder_default` (kept across later picks).
+  The three keys are written in one transaction, which waits for the upload
+  pass running and holds off the next (`Upload_queue.exclusive`), so a pass
+  cannot store « Herbier » over it; the `files.get` check runs inside that
+  hold too. An upload whose resumable session already started finishes in
+  the folder it began in. From then on the root rules above apply
+  unchanged: a picked folder that is trashed or lost falls back to
+  « Herbier » at the root. « Par défaut » restores the saved default (the
+  app's « Herbier », wherever it was moved), or unsets the root when none was
+  saved. Species folders are still found or created by name inside the root
+  (no species ids cached). The health check and « Ouvrir dans Google
   Drive » go by file id and are unaffected by moves. The species folder is the
   plant's scientific name, else its display name, else « À identifier »;
   files are not moved when the plant changes later. File names are

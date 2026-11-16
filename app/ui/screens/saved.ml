@@ -33,23 +33,23 @@ let load db id =
       let+ photos = Db.all db (Photos.of_observation id) in
       Some {observation = o; plant; photos}
 
-(* The Drive card follows the access, the network and the queue without a
-   reload; the photos, and so whether there is a card, come with each
-   reload. *)
+(* The Drive card follows the access, the network, the queue and the folder
+   without a reload; the photos, and so whether there is a card, come with
+   each reload. *)
 let drive_card app (photos : Photo.t list) =
   match Drive_text.has_drive_photo photos with
   | false -> ([], [])
   | true ->
       let state = App.state app in
       let card =
-        React.S.l4
+        React.S.l5
           ~eq:(Option.equal Drive_text.equal_card)
           (fun access (n : State.network) (a : State.account)
-               (q : Drive_text.queue) ->
-            Drive_text.saved_card access ~online:n.online ~wifi_only:a.wifi_only
-              ~queued:q.queued photos)
+               (q : Drive_text.queue) folder ->
+            Drive_text.saved_card ~folder access ~online:n.online
+              ~wifi_only:a.wifi_only ~queued:q.queued photos)
           (App.drive_access app) (State.network state) (State.account state)
-          (App.upload_queue app)
+          (App.upload_queue app) (App.drive_folder app)
       in
       let title = El.p ~at:[cls "saved__card-title"] [] in
       let detail = El.p ~at:[cls "t-meta"] [] in

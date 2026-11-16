@@ -127,6 +127,9 @@ let start_session ~token ~drop_token ~root target =
 let presence ~token ~drop_token ~file_id =
   run ~token ~drop_token (Api.presence ~file_id)
 
+let folder_info ~token ~drop_token ~file_id =
+  run ~token ~drop_token (Api.folder_info ~file_id)
+
 let health ~token ~drop_token items =
   exec ~token ~drop_token (Herbier_photos.Health.program items)
 

@@ -98,6 +98,43 @@ val upload_queue : t -> Herbier_ui_model.Drive_text.queue React.signal
     {!Herbier_ui_model.Drive_text.empty_queue}; read once by {!start_uploads}.
 *)
 
+val drive_folder : t -> Herbier_ui_model.Drive_text.folder React.signal
+(** Where originals go (4m « Dossier Drive », 4e's card):
+    [Drive_root.read_choice] through {!Herbier_ui_model.Drive_text.folder}, read
+    by {!start_uploads}, after every pass (a pass may store or forget the root),
+    and after {!choose_drive_folder} and {!default_drive_folder}. A read error
+    is a console line and keeps the last value. Starts [Default]. *)
+
+val picker_config : Herbier_ui_model.Drive_text.picker_config
+(** {!Herbier_ui_model.Drive_text.picker_config_of_project_number} of
+    {!Herbier_sync.Backend.google_cloud_project_number}. No API key is passed
+    (notes/google-picker-webview.md). *)
+
+val choose_drive_folder :
+  t -> (unit, Herbier_ui_model.Drive_text.pick_error) result Fut.t
+(** 4m « Choisir »: a [Google_picker.ticket] (leaving 4m from now on cancels the
+    pick), [Auth.drive_token ~interactive:true] (recorded into {!drive_access};
+    [Error d] → [Token] of d mapped), then Google Picker on the folders
+    ([Google_picker.pick_folder], app id the project number, no key, origin
+    [window.location.origin]; [Load_failed] while offline → [Offline], any other
+    error → [Picker_unavailable]). [Cancelled] → [Ok ()], nothing written.
+    [Picked p] → inside [Upload_queue.exclusive] (no pass reads or writes the
+    root meanwhile; a raise → [Drive_failed]): [Photos_io.Drive.folder_info] of
+    its id: [Usable {id; name}] → [Drive_root.choose {id; name}] (Drive's name,
+    not the Picker's; a write error → [Not_saved]); [Not_a_folder],
+    [Folder_trashed], [No_access] → their error, nothing written; a token error
+    → [Token]; [Network] → [Offline]; any other Drive error → [Drive_failed].
+    Then the {!drive_folder} read, and on [Ok], {!upload_pending}: originals not
+    started yet go to the new folder; an upload whose resumable session already
+    started finishes in the folder it began in (the parent is fixed when the
+    session starts). Never raises. *)
+
+val default_drive_folder : t -> (unit, Herbier_store_io.Db.error) result Fut.t
+(** 4m « Par défaut »: inside [Upload_queue.exclusive], [Drive_root.reset] (its
+    outcome, logged by it; a raise → [Raised]), then the {!drive_folder} read.
+    As for {!choose_drive_folder}, a session already started finishes in its
+    folder. *)
+
 val send_now : t -> unit
 (** [Upload_queue.send_now], then the {!upload_queue} read. Not awaited. *)
 

@@ -677,6 +677,196 @@ let move_rename_trash_tests =
       renamed_root_kept );
   ]
 
+(* ---------- a picked folder as root, outside My Drive's root ---------- *)
+
+let picked_folder_as_root () =
+  let fake = Fake_drive.create () in
+  let species = "Digitalis purpurea" in
+  let parent_p = Fake_drive.add_folder fake ~name:"P" ~parent:Drive.Root in
+  let picked =
+    Fake_drive.add_folder fake ~name:"Mes plantes"
+      ~parent:(Drive.Folder parent_p)
+  in
+  let a, stored = start fake (Some picked) (mk_target ~species 30) in
+  let (_ : Drive.start) = expect_ok "A" a in
+  check_keep "A" a;
+  Alcotest.(check (option string))
+    "A: the root is unchanged" (Some picked) stored;
+  let spec = folder_named fake ~name:species ~parent:(Drive.Folder picked) in
+  Alcotest.(check (list string))
+    "A: one session, into the species folder inside the picked folder" [spec.id]
+    (Fake_drive.sessions fake);
+  Alcotest.(check int)
+    "A: no folder named Herbier anywhere" 0
+    (List.length (folders_named fake Drive.root_folder))
+
+let picked_folder_moved_and_renamed () =
+  let fake = Fake_drive.create () in
+  let species = "Digitalis purpurea" in
+  let parent_p = Fake_drive.add_folder fake ~name:"P" ~parent:Drive.Root in
+  let picked =
+    Fake_drive.add_folder fake ~name:"Mes plantes"
+      ~parent:(Drive.Folder parent_p)
+  in
+  let a, stored = start fake (Some picked) (mk_target ~species 31) in
+  let (_ : Drive.start) = expect_ok "A" a in
+  check_keep "A" a;
+  let spec_a = folder_named fake ~name:species ~parent:(Drive.Folder picked) in
+  let archives =
+    Fake_drive.add_folder fake ~name:"Archives" ~parent:Drive.Root
+  in
+  Fake_drive.move fake ~id:picked ~parent:(Drive.Folder archives);
+  Fake_drive.rename fake ~id:picked ~name:"Mes plantes 2026";
+  let folder_count = List.length (Fake_drive.folders fake) in
+  let b, (_ : string option) = start fake stored (mk_target ~species 32) in
+  let (_ : Drive.start) = expect_ok "B" b in
+  check_keep "B" b;
+  Alcotest.(check int)
+    "B: no folder created" folder_count
+    (List.length (Fake_drive.folders fake));
+  Alcotest.(check (list string))
+    "B: session into the same species folder" [spec_a.id; spec_a.id]
+    (Fake_drive.sessions fake)
+
+let picked_folder_gone_is_forgotten ~forget () =
+  let fake = Fake_drive.create () in
+  let species = "Digitalis purpurea" in
+  let parent_p = Fake_drive.add_folder fake ~name:"P" ~parent:Drive.Root in
+  let picked =
+    Fake_drive.add_folder fake ~name:"Mes plantes"
+      ~parent:(Drive.Folder parent_p)
+  in
+  let a, stored = start fake (Some picked) (mk_target ~species 33) in
+  let (_ : Drive.start) = expect_ok "A" a in
+  check_keep "A" a;
+  forget fake ~id:picked;
+  let d, stored = start fake stored (mk_target ~species 34) in
+  let (_ : Drive.start) = expect_ok "D" d in
+  let new_root_id = expect_store "D" d in
+  let new_root = folder_named fake ~name:Drive.root_folder ~parent:Drive.Root in
+  Alcotest.(check string)
+    "D: the new id is a new Herbier folder, at My Drive's root" new_root.id
+    new_root_id;
+  let spec_d =
+    folder_named fake ~name:species ~parent:(Drive.Folder new_root_id)
+  in
+  Alcotest.(check (option string))
+    "D: its session is into the new species folder, inside the new root"
+    (Some spec_d.id)
+    (List.nth_opt (Fake_drive.sessions fake) 1);
+  let e, (_ : string option) = start fake stored (mk_target ~species 35) in
+  let (_ : Drive.start) = expect_ok "E" e in
+  check_keep "E" e;
+  Alcotest.(check (option string))
+    "E: into the same new species folder" (Some spec_d.id)
+    (List.nth_opt (Fake_drive.sessions fake) 2)
+
+let picked_folder_trashed_is_forgotten () =
+  picked_folder_gone_is_forgotten
+    ~forget:(fun fake ~id -> Fake_drive.trash fake ~id)
+    ()
+
+let picked_folder_deleted_is_forgotten () =
+  picked_folder_gone_is_forgotten
+    ~forget:(fun fake ~id -> Fake_drive.delete fake ~id)
+    ()
+
+let moved_herbier_pick_then_default () =
+  let fake = Fake_drive.create () in
+  let species = "Digitalis purpurea" in
+  let a, stored = start fake None (mk_target ~species 40) in
+  let (_ : Drive.start) = expect_ok "A" a in
+  let herbier = expect_store "A" a in
+  let archives =
+    Fake_drive.add_folder fake ~name:"Archives" ~parent:Drive.Root
+  in
+  Fake_drive.move fake ~id:herbier ~parent:(Drive.Folder archives);
+  Fake_drive.rename fake ~id:herbier ~name:"Herbier 2026";
+  let picked =
+    Fake_drive.add_folder fake ~name:"Mes plantes" ~parent:Drive.Root
+  in
+  let ids =
+    Drive.pick_root {root = stored; picked = None; default = None} ~id:picked
+  in
+  let b, (_ : string option) = start fake ids.root (mk_target ~species 41) in
+  let (_ : Drive.start) = expect_ok "B" b in
+  let ids = Drive.default_root ids in
+  Alcotest.(check (option string))
+    "« Par défaut »: the moved Herbier is the root again" (Some herbier)
+    ids.root;
+  let folder_count = List.length (Fake_drive.folders fake) in
+  let c, (_ : string option) = start fake ids.root (mk_target ~species 42) in
+  let (_ : Drive.start) = expect_ok "C" c in
+  check_keep "C" c;
+  Alcotest.(check int)
+    "C: no folder created" folder_count
+    (List.length (Fake_drive.folders fake));
+  let spec = folder_named fake ~name:species ~parent:(Drive.Folder herbier) in
+  Alcotest.(check (option string))
+    "C: its session is into the moved Herbier's species folder" (Some spec.id)
+    (List.nth_opt (Fake_drive.sessions fake) 2)
+
+let picked_folder_tests =
+  [
+    ( "a picked folder under an arbitrary parent (not Root) is the root: the \
+       species folder is created inside it, no Herbier folder is ever looked \
+       up or created",
+      `Quick,
+      picked_folder_as_root );
+    ( "a picked folder, moved and renamed in Drive, keeps uploads going into it",
+      `Quick,
+      picked_folder_moved_and_renamed );
+    ( "a picked folder, trashed, is forgotten: the next upload goes into a new \
+       Herbier folder at My Drive's root",
+      `Quick,
+      picked_folder_trashed_is_forgotten );
+    ( "a picked folder, deleted (404), is forgotten: the same fallback",
+      `Quick,
+      picked_folder_deleted_is_forgotten );
+    ( "Herbier moved, a pick, « Par défaut »: uploads go into the moved Herbier",
+      `Quick,
+      moved_herbier_pick_then_default );
+  ]
+
+(* ---------- pick_root, default_root ---------- *)
+
+let pp_root_ids ppf (ids : Drive.root_ids) =
+  let o = Format.(pp_print_option ~none:(fun ppf () -> fprintf ppf "None")) in
+  Format.fprintf ppf "{root = %a; picked = %a; default = %a}"
+    (o Format.pp_print_string) ids.root (o Format.pp_print_string) ids.picked
+    (o Format.pp_print_string) ids.default
+
+let root_ids_t = Alcotest.testable pp_root_ids Drive.equal_root_ids
+let ids ?root ?picked ?default () : Drive.root_ids = {root; picked; default}
+
+let root_ids_tests =
+  let case name expected actual =
+    (name, `Quick, fun () -> Alcotest.check root_ids_t name expected actual)
+  in
+  [
+    case "first pick: the app's root is saved as the default"
+      (ids ~root:"P" ~picked:"P" ~default:"H" ())
+      (Drive.pick_root (ids ~root:"H" ()) ~id:"P");
+    case "first pick with no root yet: no default"
+      (ids ~root:"P" ~picked:"P" ())
+      (Drive.pick_root (ids ()) ~id:"P");
+    case "a second pick keeps the saved default"
+      (ids ~root:"Q" ~picked:"Q" ~default:"H" ())
+      (Drive.pick_root (ids ~root:"P" ~picked:"P" ~default:"H" ()) ~id:"Q");
+    case
+      "a pick after an upload replaced a lost pick: that new root is the \
+       default"
+      (ids ~root:"Q" ~picked:"Q" ~default:"N" ())
+      (Drive.pick_root (ids ~root:"N" ~picked:"P" ~default:"H" ()) ~id:"Q");
+    case "default while a pick is in force: back to the saved default"
+      (ids ~root:"H" ())
+      (Drive.default_root (ids ~root:"P" ~picked:"P" ~default:"H" ()));
+    case "default with nothing saved: the root is unset" (ids ())
+      (Drive.default_root (ids ~root:"P" ~picked:"P" ()));
+    case "default with no pick in force: the root is kept" (ids ~root:"N" ())
+      (Drive.default_root (ids ~root:"N" ~picked:"P" ~default:"H" ()));
+  ]
+
 (* ---------- recorded fixtures (when present) ---------- *)
 
 let id_field file fields =
@@ -710,6 +900,20 @@ let present_or_moved_test name =
             Drive.{result = Ok id; root = Keep}
             (Drive.run (seq_net responses) prog)) )
 
+let pp_folder_info_result = Alcotest.pp Test_drive.folder_info_result
+
+(* A recorded files.get of a folder's metadata, through folder_info. *)
+let folder_meta_test name check =
+  ( Printf.sprintf "%s: folder_info decodes it" name,
+    `Quick,
+    fun () ->
+      with_fixture_id name (fun ~body ~id ->
+          let prog = Drive.folder_info ~file_id:id in
+          check_requests "get_folder alone"
+            [Drive.get_folder ~file_id:id]
+            (Drive.requests (seq_net [answer body]) prog);
+          check ~id (Drive.run (seq_net [answer body]) prog)) )
+
 let fixture_root_tests =
   [
     present_or_moved_test "files_get_folder_present_200";
@@ -733,6 +937,35 @@ let fixture_root_tests =
             Alcotest.check string_result_rooted "resolve_root"
               Drive.{result = Ok "N1"; root = Store "N1"}
               (Drive.run (seq_net responses) prog)) );
+    folder_meta_test "files_get_folder_meta_usable_200" (fun ~id -> function
+      | Ok (Drive.Usable {id = id'; name = (_ : string)}) ->
+          Alcotest.(check string) "the folder's id" id id'
+      | r -> Alcotest.failf "expected Usable, got %a" pp_folder_info_result r);
+    folder_meta_test "files_get_folder_meta_trashed_200"
+      (fun ~id:(_ : string) ->
+        Alcotest.check Test_drive.folder_info_result "folder_info"
+          (Ok Drive.Folder_trashed));
+    folder_meta_test "files_get_folder_meta_not_folder_200"
+      (fun ~id:(_ : string) ->
+        Alcotest.check Test_drive.folder_info_result "folder_info"
+          (Ok Drive.Not_a_folder));
+    ( "files_get_folder_meta_unknown_404: folder_info is Ok No_access",
+      `Quick,
+      fun () ->
+        let file = "drive_files_get_folder_meta_unknown_404.json" in
+        match Fixture.exists file with
+        | false -> print_endline ("not recorded yet, skipped: " ^ file)
+        | true ->
+            Alcotest.check Test_drive.folder_info_result "folder_info"
+              (Ok Drive.No_access)
+              (Drive.run
+                 (seq_net
+                    [
+                      answer ~status:404
+                        (fixture "files_get_folder_meta_unknown_404");
+                    ])
+                 (Drive.folder_info ~file_id:"0000000000000000000000000000000"))
+    );
   ]
 
 (* ---------- pp_root_change ---------- *)

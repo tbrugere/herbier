@@ -311,6 +311,13 @@ let get_trashed ~file_id =
     body = Empty;
   }
 
+let get_folder ~file_id =
+  {
+    meth = `GET;
+    url = api ^ "/" ^ Url.encode file_id ^ "?fields=id,name,mimeType,trashed";
+    body = Empty;
+  }
+
 let view_url ~file_id =
   "https://drive.google.com/file/d/" ^ Url.encode file_id ^ "/view"
 
@@ -349,6 +356,34 @@ let decode_trashed body =
       | Some (`Bool false) -> Ok Present
       | Some (`Bool true) -> Ok Trashed
       | Some _ | None -> Error (Malformed "trashed"))
+
+type folder_info =
+  | Usable of {id : string; name : string}
+  | Not_a_folder
+  | Folder_trashed
+  | No_access
+[@@deriving eq]
+
+let decode_folder body =
+  let open Result.Syntax in
+  let* json = parse body in
+  let field name =
+    match Json.string_member name json with
+    | Some v -> Ok v
+    | None -> Error (Malformed name)
+  in
+  let* id = field "id" in
+  let* name = field "name" in
+  let* mime = field "mimeType" in
+  let* trashed =
+    match Json.member "trashed" json with
+    | Some (`Bool b) -> Ok b
+    | Some _ | None -> Error (Malformed "trashed")
+  in
+  match (String.equal mime folder_mime, trashed) with
+  | false, (true | false) -> Ok Not_a_folder
+  | true, true -> Ok Folder_trashed
+  | true, false -> Ok (Usable {id; name})
 
 (* Programs *)
 
@@ -402,6 +437,22 @@ let presence ~file_id =
     (send (get_trashed ~file_id) decode_trashed)
     (function Error Not_found -> Done (Ok Missing) | r -> Done r)
 
+(* The token's drive.file grant does not cover this id: lasting. *)
+let lost_access = function
+  | Http {status = 403; reason = Some "appNotAuthorizedToFile"; _} -> true
+  | Http _ | Unauthorized | Api_disabled | Scope_missing | Quota_full
+  | Rate_limited | Not_found | Server _ | Malformed _ | Network _
+  | Root_folder _ ->
+      false
+
+let folder_info ~file_id =
+  bind
+    (send (get_folder ~file_id) decode_folder)
+    (function
+      | Error Not_found -> Done (Ok No_access)
+      | Error e when lost_access e -> Done (Ok No_access)
+      | r -> Done r)
+
 type root_change = Keep | Store of string | Forget [@@deriving eq]
 
 let pp_root_change ppf = function
@@ -433,11 +484,32 @@ let resolve_root ~stored =
       bind (presence ~file_id:id) (function
         | Ok Present -> Done {result = Ok id; root = Keep}
         | Ok (Trashed | Missing) -> at_root ~on_error:Forget
-        (* the app is off the folder's ACL: lasting *)
-        | Error (Http {status = 403; reason = Some "appNotAuthorizedToFile"; _})
-          ->
-            at_root ~on_error:Forget
+        | Error e when lost_access e -> at_root ~on_error:Forget
         | Error e -> Done {result = Error (root_error e); root = Keep})
+
+type root_ids = {
+  root : string option;
+  picked : string option;
+  default : string option;
+}
+[@@deriving eq]
+
+let pick_in_force ids =
+  match (ids.root, ids.picked) with
+  | Some root, Some picked -> String.equal root picked
+  | (Some _ | None), (Some _ | None) -> false
+
+let pick_root ids ~id =
+  let default =
+    match pick_in_force ids with true -> ids.default | false -> ids.root
+  in
+  {root = Some id; picked = Some id; default}
+
+let default_root ids =
+  let root =
+    match pick_in_force ids with true -> ids.default | false -> ids.root
+  in
+  {root; picked = None; default = None}
 
 type target = {
   species : string;

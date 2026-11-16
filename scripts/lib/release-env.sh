@@ -95,6 +95,26 @@ release_env_check_backend() {
     HERBIER_GOOGLE_WEB_CLIENT_ID
 }
 
+# Optional: without HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER the APK builds and
+# 4m's « Dossier Drive » row is disabled with its reason (no Google Picker).
+# Not a secret.
+release_env_check_picker() {
+  case "${HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER:-}" in
+    "")
+      echo "release.sh: Drive folder picker disabled (HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER unset)" >&2
+      ;;
+    *"<"*)
+      echo "release.sh: HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER still has a <placeholder> from .env.prod.example" >&2
+      return 1
+      ;;
+    *[!0-9]*)
+      echo "release.sh: HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER must be digits only" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
 # release_env_check_signing <release|debug> <root>: a release needs the
 # release key; a debug build takes it entirely or not at all (then Gradle
 # signs with the default debug key). The rotation is release-only, all or

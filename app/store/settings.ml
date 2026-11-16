@@ -1,6 +1,8 @@
 module Col = Postgrest.Col
 module Original_target = Herbier_domain.Photo.Original_target
 
+type drive_folder = {id : string; name : string} [@@deriving eq]
+
 type _ key =
   | Storage_target : Original_target.t key
   | Wifi_only : bool key
@@ -12,6 +14,8 @@ type _ key =
   | Last_upload_at : Ptime.t key
   | Drive_health_cursor : Herbier_domain.Ids.Photo_id.t key
   | Drive_root_folder : string key
+  | Drive_root_folder_picked : drive_folder key
+  | Drive_root_folder_default : string key
 
 let name : type a. a key -> string = function
   | Storage_target -> "storage_target"
@@ -24,6 +28,8 @@ let name : type a. a key -> string = function
   | Last_upload_at -> "last_upload_at"
   | Drive_health_cursor -> "drive_health_cursor"
   | Drive_root_folder -> "drive_root_folder"
+  | Drive_root_folder_picked -> "drive_root_folder_picked"
+  | Drive_root_folder_default -> "drive_root_folder_default"
 
 (* A local-only table: its columns live next to its queries (layout §2), not
    in Tables. *)
@@ -54,6 +60,23 @@ let drive_id_text : string Col.custom =
   Codec.text ~name:"drive_id" ~to_string:Fun.id
     ~of_string:Herbier_domain.Text.non_blank
 
+let drive_folder_text : drive_folder Col.custom =
+  Codec.text ~name:"drive_folder"
+    ~to_string:(fun {id; name} ->
+      Yojson.Safe.to_string
+        (`Assoc [("id", `String id); ("name", `String name)]))
+    ~of_string:(fun s ->
+      match Yojson.Safe.from_string s with
+      | `Assoc fields -> (
+          match (List.assoc_opt "id" fields, List.assoc_opt "name" fields) with
+          | Some (`String id), Some (`String name) ->
+              Option.map
+                (fun id -> {id; name})
+                (Herbier_domain.Text.non_blank id)
+          | (Some _ | None), (Some _ | None) -> None)
+      | _ -> None
+      | exception Yojson.Json_error (_ : string) -> None)
+
 let codec : type a. a key -> a Col.custom = function
   | Storage_target -> Tables.photo_original_target
   | Wifi_only -> bool_text
@@ -65,6 +88,8 @@ let codec : type a. a key -> a Col.custom = function
   | Last_upload_at -> timestamp_text
   | Drive_health_cursor -> photo_id_text
   | Drive_root_folder -> drive_id_text
+  | Drive_root_folder_picked -> drive_folder_text
+  | Drive_root_folder_default -> drive_id_text
 
 let value_column key : (settings, _, [`Mandatory]) Col.t =
   {ty = Not_Null (Custom (codec key)); name = "value"}

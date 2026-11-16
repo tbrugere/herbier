@@ -88,6 +88,8 @@ type t = {
   drive_access : Drive_text.access React.signal;
   upload_queue : Drive_text.queue React.signal;
   set_upload_queue : ?step:React.step -> Drive_text.queue -> unit;
+  drive_folder : Drive_text.folder React.signal;
+  set_drive_folder : ?step:React.step -> Drive_text.folder -> unit;
   health : Health.t;
 }
 
@@ -181,6 +183,10 @@ let create ~db ~state ~theme ~auth =
     React.S.create ~eq:Drive_text.equal_queue Drive_text.empty_queue
   in
   let set_upload_queue ?step q = set_upload_queue ?step q in
+  let drive_folder, set_drive_folder =
+    React.S.create ~eq:Drive_text.equal_folder Drive_text.Default
+  in
+  let set_drive_folder ?step f = set_drive_folder ?step f in
   let commit =
     commit_edits ~db ~changed:(fun () ->
         send_saved ();
@@ -247,6 +253,8 @@ let create ~db ~state ~theme ~auth =
     drive_access;
     upload_queue;
     set_upload_queue;
+    drive_folder;
+    set_drive_folder;
     health;
   }
 
@@ -261,6 +269,7 @@ let synced t = t.synced
 let uploads t = t.uploads
 let drive_access t = t.drive_access
 let upload_queue t = t.upload_queue
+let drive_folder t = t.drive_folder
 let health t = t.health
 
 let changed t =
@@ -306,8 +315,19 @@ let refresh_queue t =
       in
       t.set_upload_queue q
 
+let refresh_folder t =
+  Fut.map
+    (function
+      | Ok (root, picked) ->
+          t.set_drive_folder (Drive_text.folder ~root ~picked)
+      | Error e -> log_error ["drive: folder:"; Db.error_to_string e])
+    (Herbier_photos_io.Drive_root.read_choice t.db)
+
 let after_pass t pass =
-  Fut.await (Fut.bind pass (fun () -> refresh_queue t)) Fun.id
+  Fut.await
+    (Fut.bind pass (fun () ->
+         Fut.bind (refresh_queue t) (fun () -> refresh_folder t)))
+    Fun.id
 
 let upload_pending t =
   after_pass t (Upload_queue.run t.uploads ~interactive:false)
@@ -411,6 +431,7 @@ let log_listener what = function
 let start_uploads t =
   let module Q = Herbier_photos_io.Upload_queue in
   Fut.await (refresh_queue t) Fun.id;
+  Fut.await (refresh_folder t) Fun.id;
   upload_pending t;
   check_originals t;
   Fut.await

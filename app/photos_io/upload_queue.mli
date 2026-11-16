@@ -95,6 +95,18 @@ val run : t -> interactive:bool -> unit Fut.t
     outcome (never a token or a session URL). Always resolves, as long as the
     pass's continuations do not raise (they return results). *)
 
+val exclusive : t -> on_raise:(string -> 'a) -> (unit -> 'a Fut.t) -> 'a Fut.t
+(** Runs [f] when no pass is running (it waits for the current one, and the
+    passes asked for during it, to end); a pass asked for while [f] runs starts
+    after [f] resolves (single-flight rule unchanged), and resolves then. For
+    writes to the root folder settings that must not interleave with a pass's
+    {!Drive_root.run} (which reads the root before and writes its change after).
+    [f] must not wait for {!run} or {!exclusive} (each would wait for [f]). An
+    exception raised starting [f] (as {!run}'s pass: [Failure],
+    [Invalid_argument], [Not_found], a JS error) is a console error « upload:
+    exclusive: … » and the result is [on_raise] of its text; the passes go on. A
+    raise in a later continuation of [f] is not caught. *)
+
 val wifi_changed : t -> unit Fut.t
 (** After « Envoyer seulement en Wi-Fi » changed: {!run} [~interactive:false],
     whose next pass (this one, or the one after a pass already running) first

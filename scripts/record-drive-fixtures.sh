@@ -21,7 +21,9 @@
 #   "Herbier-fixtures" with a 1-pixel JPEG whose herbier_photo_id is the nil
 #   UUID; the folder is trashed at the end, also on failure. Among them, a
 #   root folder's files.get present, after a move and rename, and trashed
-#   (drive_files_get_folder_{present,moved,trashed}_200.json). The resumable
+#   (drive_files_get_folder_{present,moved,trashed}_200.json), and the
+#   metadata Drive.get_folder reads of a folder, a trashed folder, a file and
+#   an unknown id (drive_files_get_folder_meta_*.json). The resumable
 #   session's headers are recorded too, filtered: the status line,
 #   content-type and location, whose upload_id (a credential while the
 #   session lives) is replaced by a fixed placeholder. Skipped, with a
@@ -129,6 +131,8 @@ multipart() {
 }
 
 get_trashed_url() { echo "$api/$1?fields=id,trashed"; }
+# Drive.get_folder's URL (id, name, mimeType, trashed).
+get_folder_meta_url() { echo "$api/$1?fields=id,name,mimeType,trashed"; }
 create_original_url="$upload_api?uploadType=multipart&fields=id,webViewLink"
 create_session_url="$upload_api?uploadType=resumable&fields=id,webViewLink"
 unknown_session_url="$upload_api?uploadType=resumable&upload_id=herbier-fixture-unknown"
@@ -143,6 +147,9 @@ keep no_token drive_files_get_no_token_403.json
 call invalid_get 401 GET "$(get_trashed_url abc)" \
   -H 'Authorization: Bearer ya29.invalid'
 keep invalid_get drive_files_get_invalid_token_401.json
+call invalid_folder_meta 401 GET "$(get_folder_meta_url abc)" \
+  -H 'Authorization: Bearer ya29.invalid'
+keep invalid_folder_meta drive_files_get_folder_meta_invalid_token_401.json
 multipart root
 call invalid_create 401 POST "$create_original_url" \
   -H 'Authorization: Bearer ya29.invalid' \
@@ -205,10 +212,14 @@ call root_move 200 PATCH \
   "${auth[@]}" "${json[@]}" -d '{"name":"Herbier-fixtures-renamed"}'
 call root_moved 200 GET "$(get_trashed_url "$root_id")" "${auth[@]}"
 keep root_moved drive_files_get_folder_moved_200.json
+call root_meta_usable 200 GET "$(get_folder_meta_url "$root_id")" "${auth[@]}"
+keep root_meta_usable drive_files_get_folder_meta_usable_200.json
 call root_trash 200 PATCH "$api/$root_id?fields=id" "${auth[@]}" "${json[@]}" \
   -d '{"trashed":true}'
 call root_trashed 200 GET "$(get_trashed_url "$root_id")" "${auth[@]}"
 keep root_trashed drive_files_get_folder_trashed_200.json
+call root_meta_trashed 200 GET "$(get_folder_meta_url "$root_id")" "${auth[@]}"
+keep root_meta_trashed drive_files_get_folder_meta_trashed_200.json
 
 # 5. The original, uploaded into it, then found by its appProperties.
 multipart "$folder_id"
@@ -240,6 +251,8 @@ keep session_complete drive_session_put_complete_200.json
 # 7. Its presence: there, trashed (the PATCH is not recorded), unknown.
 call present 200 GET "$(get_trashed_url "$file_id")" "${auth[@]}"
 keep present drive_files_get_present_200.json
+call meta_not_folder 200 GET "$(get_folder_meta_url "$file_id")" "${auth[@]}"
+keep meta_not_folder drive_files_get_folder_meta_not_folder_200.json
 call trash 200 PATCH "$api/$file_id?fields=id" "${auth[@]}" "${json[@]}" \
   -d '{"trashed":true}'
 call trashed 200 GET "$(get_trashed_url "$file_id")" "${auth[@]}"
@@ -247,6 +260,9 @@ keep trashed drive_files_get_trashed_200.json
 call unknown 404 GET "$(get_trashed_url 0000000000000000000000000000000)" \
   "${auth[@]}"
 keep unknown drive_files_get_unknown_404.json
+call meta_unknown 404 GET \
+  "$(get_folder_meta_url 0000000000000000000000000000000)" "${auth[@]}"
+keep meta_unknown drive_files_get_folder_meta_unknown_404.json
 
 # 8. A token without Drive scope (optional).
 if [ -n "${HERBIER_GOOGLE_NO_DRIVE_TOKEN:-}" ]; then

@@ -192,13 +192,88 @@ type card = {title : string; detail : string} [@@deriving eq]
 
 let kept = "Copies compressées gardées sur le téléphone."
 
+type folder = Default | Picked of string [@@deriving eq]
+
+let folder ~root ~(picked : Herbier_store.Settings.drive_folder option) =
+  match (root, picked) with
+  | Some root, Some p when String.equal root p.id -> Picked p.name
+  | (Some _ | None), (Some _ | None) -> Default
+
+let folder_name = function
+  | Default -> "Herbier"
+  | Picked n -> (
+      match Herbier_domain.Text.non_blank n with
+      | Some _ -> n
+      | None -> "(sans nom)")
+
+type picker_config = Picker_unconfigured | Picker_ready [@@deriving eq]
+
+let picker_config_of_project_number number =
+  match
+    String.length number > 0
+    && String.for_all (function '0' .. '9' -> true | _ -> false) number
+  with
+  | true -> Picker_ready
+  | false -> Picker_unconfigured
+
+type choose = Enabled | Disabled of string [@@deriving eq]
+
+type folder_row = {detail : string; choose : choose; default : bool}
+[@@deriving eq]
+
+let folder_row config access folder =
+  let detail =
+    match folder with
+    | Default -> "Herbier · créé par l’app"
+    | Picked _ -> folder_name folder
+  and default = match folder with Default -> false | Picked _ -> true in
+  let unavailable = "Choix du dossier indisponible dans cette version." in
+  let choose =
+    match config with
+    | Picker_unconfigured -> Disabled unavailable
+    | Picker_ready -> (
+        match access with
+        | Denied Unconfigured -> Disabled unavailable
+        | Denied Signed_out ->
+            Disabled "Connectez-vous pour choisir un dossier."
+        | Denied No_account -> Disabled no_account
+        | Denied Misconfigured -> Disabled misconfigured
+        | Unknown | Granted
+        | Denied (Consent_needed | Consent_refused | Offline | Failed) ->
+            Enabled)
+  in
+  {detail; choose; default}
+
+type pick_error =
+  | Not_a_folder
+  | Trashed
+  | No_access
+  | Offline
+  | Token of denial
+  | Picker_unavailable
+  | Not_saved
+  | Drive_failed
+[@@deriving eq]
+
+let pick_error_text = function
+  | Not_a_folder -> "Ce n’est pas un dossier."
+  | Trashed -> "Ce dossier est dans la corbeille."
+  | No_access -> "Herbier n’a pas accès à ce dossier."
+  | Offline -> "Pas de réseau : réessayez plus tard."
+  | Token d ->
+      Option.value (blocker (Denied d) ~online:true) ~default:not_authorized
+  | Picker_unavailable -> "Google Picker n’a pas pu s’ouvrir."
+  | Not_saved -> "Le réglage n’a pas pu être enregistré."
+  | Drive_failed -> "Drive n’a pas répondu : réessayez."
+
 let has_drive_photo (photos : Photo.t list) =
   List.exists
     (fun (p : Photo.t) ->
       match p.original_target with Drive -> true | App_only -> false)
     photos
 
-let saved_card access ~online ~wifi_only ~queued (photos : Photo.t list) =
+let saved_card ~folder access ~online ~wifi_only ~queued (photos : Photo.t list)
+    =
   let drive =
     List.filter
       (fun (p : Photo.t) ->
@@ -256,7 +331,8 @@ let saved_card access ~online ~wifi_only ~queued (photos : Photo.t list) =
         {
           title =
             Fr_text.plural n "photo" "photos"
-            ^ " → Google Drive, dossier Herbier";
+            ^ " → Google Drive, dossier "
+            ^ folder_name folder;
           detail;
         }
 

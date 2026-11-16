@@ -9,6 +9,7 @@
   herbier_sync_core
   herbier_domain
   herbier_refs
+  herbier_store
   herbier_test_support
   ptime
   yojson

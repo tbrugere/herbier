@@ -1,6 +1,12 @@
 (** The local [settings(key, value)] table (architecture §3): typed keys, values
     stored as text. Not synced. *)
 
+type drive_folder = {id : string; name : string}
+(** A Drive folder the user picked (4m « Dossier Drive »): its id and the name
+    Drive gave when it was picked. *)
+
+val equal_drive_folder : drive_folder -> drive_folder -> bool
+
 type _ key =
   | Storage_target : Herbier_domain.Photo.Original_target.t key
       (** 4m « Où vont mes photos »; stored as the enum label. *)
@@ -25,18 +31,32 @@ type _ key =
           skipped, Health.report.reached); stored as the id's text; unset = the
           next round starts from the first photo. *)
   | Drive_root_folder : string key
-      (** The Drive id of the root folder originals go into (« Herbier », found
-          or created by the app; [Herbier_photos.Drive.resolve_root]); stored as
-          the id's text, trimmed on read, a blank value refused
-          ([Row `WrongType], read as unset); unset = find or create « Herbier »
-          in My Drive's root at the next upload. *)
+      (** The Drive id of the root folder originals go into: either « Herbier »,
+          found or created by the app ([Herbier_photos.Drive.resolve_root]), or
+          the folder picked in 4m ({!Drive_root_folder_picked}); stored as the
+          id's text, trimmed on read, a blank value refused ([Row `WrongType],
+          read as unset); unset = find or create « Herbier » in My Drive's root
+          at the next upload. *)
+  | Drive_root_folder_picked : drive_folder key
+      (** 4m « Dossier Drive »: the folder last picked with « Choisir ». Stored
+          as compact JSON [{"id","name"}]. It is the root only while its [id]
+          equals {!Drive_root_folder}'s value: an upload that replaced the root
+          (picked folder trashed or gone) makes it stale without writing it. The
+          [id] is trimmed on read; invalid JSON, a blank [id] or a missing
+          [name] → [Row `WrongType] (read as unset). *)
+  | Drive_root_folder_default : string key
+      (** The {!Drive_root_folder} value that was in force before the current
+          pick (the app's « Herbier », wherever the user moved it), restored by
+          4m « Par défaut »; as {!Drive_root_folder}'s text; unset = none (« Par
+          défaut » then finds or creates « Herbier » at My Drive's root). *)
 
 val name : _ key -> string
 (** The stored key: ["storage_target"], ["wifi_only"],
     ["place_source_ign_offline"], ["place_source_ign_online"],
     ["place_source_photon_online"], ["location_notice_seen"],
     ["drive_health_checked_at"], ["last_upload_at"], ["drive_health_cursor"],
-    ["drive_root_folder"]. *)
+    ["drive_root_folder"], ["drive_root_folder_picked"],
+    ["drive_root_folder_default"]. *)
 
 val get : 'a key -> 'a Stmt.query
 (** 0 or 1 row: run it with [Db.find]. [None] means the key was never set, and

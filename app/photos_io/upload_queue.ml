@@ -575,28 +575,49 @@ let safe_pass t ~interactive =
       List.iter (fun answer -> answer (Error (Db.Raised raised))) stop;
       Fut.return ()
 
+let drain t ~first =
+  let done_, finished = Fut.create () in
+  t.pass := Running {again = None; done_; finished};
+  let rec loop step =
+    Fut.await (step ()) (fun () ->
+        match !(t.pass) with
+        | Running ({again = Some interactive; _} as r) ->
+            t.pass := Running {r with again = None};
+            loop (fun () -> safe_pass t ~interactive)
+        | Running {again = None; finished; _} ->
+            t.pass := Idle;
+            finished ()
+        | Idle -> ())
+  in
+  loop first;
+  done_
+
 let run t ~interactive =
   match !(t.pass) with
   | Running r ->
       let again = Some (interactive || Option.value r.again ~default:false) in
       t.pass := Running {r with again};
       r.done_
+  | Idle -> drain t ~first:(fun () -> safe_pass t ~interactive)
+
+let rec exclusive t ~on_raise f =
+  match !(t.pass) with
+  | Running r -> Fut.bind r.done_ (fun () -> exclusive t ~on_raise f)
   | Idle ->
-      let done_, finished = Fut.create () in
-      t.pass := Running {again = None; done_; finished};
-      let rec loop interactive =
-        Fut.await (safe_pass t ~interactive) (fun () ->
-            match !(t.pass) with
-            | Running ({again = Some interactive; _} as r) ->
-                t.pass := Running {r with again = None};
-                loop interactive
-            | Running {again = None; finished; _} ->
-                t.pass := Idle;
-                finished ()
-            | Idle -> ())
+      let result, give = Fut.create () in
+      (* As [safe_pass]: a raise starting [f] would leave the state Running. *)
+      let first () =
+        match f () with
+        | fut -> Fut.map give fut
+        | exception
+            ((Failure _ | Invalid_argument _ | Not_found | Jv.Error _) as e) ->
+            let raised = Printexc.to_string e in
+            log_error ["exclusive:"; raised];
+            give (on_raise raised);
+            Fut.return ()
       in
-      loop interactive;
-      done_
+      let (_ : unit Fut.t) = drain t ~first in
+      result
 
 let wifi_changed t =
   t.network_changed := true;

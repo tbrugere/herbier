@@ -63,6 +63,14 @@ val presence :
   (Api.presence, 'e error) result Fut.t
 (** Runs {!Api.presence} the same way as {!put_original} (one request). *)
 
+val folder_info :
+  token:(unit -> (string, 'e) result Fut.t) ->
+  drop_token:(string -> unit Fut.t) ->
+  file_id:string ->
+  (Api.folder_info, 'e error) result Fut.t
+(** Runs {!Api.folder_info} as {!presence} runs its program (token asked once,
+    one renewal on a 401, the same console line). Never raises. *)
+
 val health :
   token:(unit -> (string, 'e) result Fut.t) ->
   drop_token:(string -> unit Fut.t) ->

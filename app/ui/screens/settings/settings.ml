@@ -16,6 +16,7 @@ let section title children =
     (El.h2 ~at:[cls "t-section-label"] [El.txt' title] :: children)
 
 let radio ~title ~detail selected =
+  let title_el = El.span ~at:[cls "radio-row__title"] [] in
   let el =
     Html.button
       ~at:[At.v (Jstr.v "role") (Jstr.v "radio")]
@@ -24,10 +25,7 @@ let radio ~title ~detail selected =
         El.span ~at:[cls "radio-row__dot"] [];
         El.span
           ~at:[cls "radio-row__text"]
-          [
-            El.span ~at:[cls "radio-row__title"] [El.txt' title];
-            El.span ~at:[cls "t-meta"] [El.txt' detail];
-          ];
+          [title_el; El.span ~at:[cls "t-meta"] [El.txt' detail]];
       ]
   in
   let click, b = Rb.click el in
@@ -35,6 +33,7 @@ let radio ~title ~detail selected =
     click,
     [
       b;
+      Rb.text title_el title;
       Rb.class_ el "radio-row--on" selected;
       Rb.attr el "aria-checked"
         (React.S.map (fun v -> Some (string_of_bool v)) selected);
@@ -608,14 +607,27 @@ let v app =
   in
   let account, account_b = account_card app in
   let drive_el, drive_click, drive_b =
-    radio ~title:"Google Drive · dossier “Herbier”"
+    radio
+      ~title:
+        (React.S.map ~eq:String.equal
+           (fun f ->
+             "Google Drive · dossier “" ^ Drive_text.folder_name f ^ "”")
+           (App.drive_folder app))
       ~detail:"Un sous-dossier par espèce. Aperçus gardés sur le téléphone."
       (React.S.map
          (function Original_target.Drive -> true | App_only -> false)
          storage)
   in
+  let folder =
+    Folder_row.v app
+      ~visible:
+        (React.S.map ~eq:Bool.equal
+           (function Original_target.Drive -> true | App_only -> false)
+           storage)
+  in
   let local_el, local_click, local_b =
-    radio ~title:"Dans Herbier seulement"
+    radio
+      ~title:(React.S.const "Dans Herbier seulement")
       ~detail:"Compressées à 1600 px, sur le téléphone seulement."
       (React.S.map
          (function Original_target.App_only -> true | Drive -> false)
@@ -710,6 +722,7 @@ let v app =
                 ]
               [drive_el; local_el];
             storage_error_el;
+            folder.el;
           ];
         section "Sur le téléphone"
           (El.div
@@ -752,6 +765,7 @@ let v app =
           queue_b;
           [stop_b];
           drive_b;
+          folder.bindings;
           local_b;
           [
             Rb.act drive_click (fun () -> apply_storage Original_target.Drive);
