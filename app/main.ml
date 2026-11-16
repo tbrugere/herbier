@@ -148,6 +148,7 @@ let unavailable msg _ =
         ~at:[At.class' (Jstr.v "screen")]
         [El.p [El.txt' "Herbier n’a pas pu démarrer."]; El.p [El.txt' msg]];
     bindings = [];
+    ready = Herbier_ui.Screen.now;
   }
 
 let or_unavailable screen app =

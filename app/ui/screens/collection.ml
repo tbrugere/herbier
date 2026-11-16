@@ -41,6 +41,7 @@ let card item =
     Rb.act c.click (fun () ->
         Route.go (Route.Modal (Route.Plant item.plant.id)))
   in
+  Transition.mark_hero c.el item.plant.id;
   (c.el, open_ :: c.bindings)
 
 let log_error = Log.db ~scope:"collection"
@@ -75,6 +76,9 @@ let v app =
   let counter, set_counter = React.S.create "" in
   let failure, set_failure = React.S.create "" in
   let empty, set_empty = React.S.create false in
+  (* [ready] once the first query's grid (or a read failure) is shown: the
+     hero transition from a fiche waits for its card. *)
+  let ready, mark_ready = Screen.once () in
   let search =
     W.Text_field.v ~icon:W.Icon.Search ~action:"Coller un lien"
       ~placeholder:"Nom, tag, lieu…" ()
@@ -121,11 +125,13 @@ let v app =
       | Error e when mine = !seq ->
           log_error "query" e;
           set_failure
-            "Recherche impossible : la grille montre le résultat précédent."
+            "Recherche impossible : la grille montre le résultat précédent.";
+          mark_ready ()
       | Ok next when mine = !seq ->
           set_failure "";
           Rb.patch grid_handle (List_patch.diff ~same ~equal !shown next);
-          shown := next
+          shown := next;
+          mark_ready ()
       | Error _ | Ok _ -> ())
   in
   (* The load's result arrives through [loaded], so that a released screen
@@ -134,7 +140,8 @@ let v app =
   let on_loaded = function
     | Error e ->
         log_error "load" e;
-        set_counter "Lecture impossible"
+        set_counter "Lecture impossible";
+        mark_ready ()
     | Ok (observations, plants, all_photos, all_tags) ->
         counts := Filter.counts observations;
         photos := Cover.by_plant observations all_photos;
@@ -257,4 +264,4 @@ let v app =
         tags_link.bindings;
       ]
   in
-  {Screen.el; bindings}
+  {Screen.el; bindings; ready}

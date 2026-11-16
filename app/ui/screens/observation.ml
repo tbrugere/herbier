@@ -71,7 +71,7 @@ let action ?(tone = `Plain) label =
   (el, click, [b; Rb.text el label])
 
 let card label children =
-  W.Card.panel (El.h2 ~at:[cls "t-section-label"] [El.txt' label] :: children)
+  W.Card.panel (El.h2 ~at:[cls "t-card-label"] [El.txt' label] :: children)
 
 type delete = Delete | Keep
 
@@ -298,15 +298,15 @@ let render app (data : data React.signal) =
       (React.S.map
          (fun d ->
            match d.observation.plant_id with
-           | Some _ -> "Changer d'espèce ›"
-           | None -> "Identifier ›")
+           | Some _ -> "Changer d'espèce"
+           | None -> "Identifier")
          data)
   in
   let journal_el, journal_click, b_journal =
-    action (React.S.const "Voir dans le journal ›")
+    action (React.S.const "Voir dans le journal")
   in
   let delete_el, delete_click, b_delete =
-    action ~tone:`Danger (React.S.const "Supprimer l'observation ›")
+    action ~tone:`Danger (React.S.const "Supprimer l'observation")
   in
   let delete () =
     let at = Ptime_clock.now () in
@@ -425,6 +425,7 @@ let v app id =
   let el = El.div ~at:[cls "screen"; cls "observation"] [] in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       Loaded.live ~reload:(App.saved app) ~what:"observation"
         ~gone:(fun () ->

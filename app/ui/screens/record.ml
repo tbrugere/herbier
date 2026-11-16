@@ -438,4 +438,4 @@ let v app =
         discard.bindings;
       ]
   in
-  {Screen.el; bindings}
+  {Screen.el; bindings; ready = Screen.now}

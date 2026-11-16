@@ -1,5 +1,7 @@
 open Brr
 module Tab_bar = Widgets.Tab_bar
+module Motion = Herbier_ui_model.Motion
+module Navigation = Herbier_bindings.Navigation
 
 (* A route resolved against the build's dev pages: an unknown dev page is
    Collection, like any unknown fragment. *)
@@ -17,10 +19,23 @@ let route_of = function
 let equal_target a b =
   String.equal (Route.to_fragment (route_of a)) (Route.to_fragment (route_of b))
 
+let place_of = function
+  | Tab_target Tab_bar.Collection -> Motion.Collection
+  | Tab_target (Tab_bar.Map | Journal | Settings) -> Tab
+  | Modal_target (Route.Plant id) -> Fiche id
+  | Modal_target
+      ( Route.Tags | Manage_tags | Edit_plant _ | New_plant | Observation _
+      | Change_species _ | Move_point _ | Identify _ | Record | Saved _
+      | Viewer _ | Search _ | Link_species _ | Intercepted _ ) ->
+      Modal
+  | Dev_target _ -> Dev
+
 type shown =
   | Tab_screen of Tab_bar.tab * Screen.t
   | Alone of Screen.t
   | Dev_screen of Screen.t
+
+let screen_of = function Tab_screen (_, s) | Alone s | Dev_screen s -> s
 
 (* Style guide 8.2: the router is the screen boundary. A screen that raises
    is replaced by an error message, so the update step that builds it still
@@ -38,6 +53,7 @@ let guarded screen =
             ~at:[At.class' (Jstr.v "screen")]
             [El.p [El.txt' "Cet écran n’a pas pu s’ouvrir."]];
         bindings = [];
+        ready = Screen.now;
       }
 
 let warn_cap what = function
@@ -124,8 +140,28 @@ let start ~root ~tab ~modal ~dev =
      the effects, which hold [shown] and through it the current screen's
      bindings and the route. The shell's bindings live as long as the app. *)
   Rb.hold root (effects @ bar.bindings);
-  ignore
-    (Ev.listen Ev.hashchange
-       (fun _ -> send (current ()))
-       (Window.as_target G.window));
+  (* style: [requested] is the target last handed to a transition, [index]
+     the Navigation index at the last hashchange; written by the hashchange
+     listener only. A change still waiting in a transition's update is where
+     the next one comes from, and a late update sends the newest target, never
+     its own (a later Now commit may already have shown it). *)
+  let requested = ref (React.S.value target)
+  and index = ref (Navigation.current_index ()) in
+  let follow _ =
+    let next = current () and after = Navigation.current_index () in
+    let direction = Motion.direction ~before:!index ~after in
+    index := after;
+    match equal_target next !requested with
+    | true -> ()
+    | false ->
+        let from = place_of !requested in
+        requested := next;
+        Transition.run
+          (Motion.kind ~from ~to_:(place_of next) direction)
+          ~root
+          ~commit:(fun () ->
+            send !requested;
+            screen_of (React.S.value shown))
+  in
+  ignore (Ev.listen Ev.hashchange follow (Window.as_target G.window));
   listen_back_button ()

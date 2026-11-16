@@ -88,3 +88,13 @@ $dark: #1d1a14
   // The fiche hero's gradient: dark at the top under the bar, dark at the
   // bottom under the names.
   --hero-gradient: linear-gradient(to bottom, #{color.change($dark, $alpha: .4)}, transparent 28%, transparent 50%, #{color.change($dark, $alpha: .82)})
+
+  // Motion (handoff « Interactions » › Transitions): modals rise from the
+  // bottom in 300 ms, decelerating; the fiche's hero is shared from its
+  // Collection card in 350 ms.
+  --motion-modal: 300ms
+  --motion-hero: 350ms
+  --motion-fade: 200ms
+  --ease-decelerate: cubic-bezier(0, 0, .2, 1)
+  --ease-accelerate: cubic-bezier(.4, 0, 1, 1)
+  --ease-standard: cubic-bezier(.2, 0, 0, 1)

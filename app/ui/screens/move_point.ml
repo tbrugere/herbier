@@ -408,6 +408,7 @@ let v app id =
   let item = function None -> notice gone_text | Some o -> render app o in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       Loaded.v ~what:"déplacer"
         ~failed:(fun () -> notice "L'observation n'a pas pu être lue.")

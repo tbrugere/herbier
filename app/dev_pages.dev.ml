@@ -6,6 +6,7 @@ let page el () =
   {
     Herbier_ui.Screen.el = El.div ~at:[At.class' (Jstr.v "dev-page")] [el ()];
     bindings = [];
+    ready = Herbier_ui.Screen.now;
   }
 
 let () = Herbier_ui.Dev.Hooks.install ()

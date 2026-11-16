@@ -199,7 +199,7 @@ let v app ~mode ~current ~plants ~query ~pick =
         El.h2
           ~at:[cls "ref-results__head"]
           [
-            El.span ~at:[cls "t-section-label-ref"] [El.txt' "Référence · GBIF"];
+            El.span ~at:[cls "t-section-label"] [El.txt' "Référence · GBIF"];
             El.span ~at:[cls "t-meta"] [El.txt' "Plantae"];
           ];
         line;

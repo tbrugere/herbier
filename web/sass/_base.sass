@@ -91,6 +91,12 @@ $latin-ext: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0
   +ui($size, $weight)
   color: var(--muted)
 
+// The small sentence-case label at the top of a sand card (4h « Date », 5a
+// « Nom affiché »).
+@mixin card-label
+  +meta(12px)
+  margin: 0 0 2px
+
 @mixin section-label($color: var(--muted))
   +ui(11px, 700)
   text-transform: uppercase
@@ -175,6 +181,8 @@ img
   +notes
 .t-meta
   +meta
+.t-card-label
+  +card-label
 .t-section-label
   +section-label
 .t-section-label-ref

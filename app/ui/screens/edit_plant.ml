@@ -76,7 +76,7 @@ let delete_edits ~at (d : data) ~observations ~photos =
     d.plant.id
 
 let field_card label children =
-  W.Card.panel (El.h2 ~at:[cls "t-section-label"] [El.txt' label] :: children)
+  W.Card.panel (El.h2 ~at:[cls "t-card-label"] [El.txt' label] :: children)
 
 let its_observations = function
   | 1 -> "son observation"
@@ -534,6 +534,7 @@ let v app mode =
   in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       Loaded.v ~what:"modifier la fiche"
         ~failed:(fun () -> notice "La fiche n'a pas pu être lue.")

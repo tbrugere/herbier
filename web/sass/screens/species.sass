@@ -1,5 +1,4 @@
-// 4f / 4g Fiche espèce and 5a Modifier la fiche (app/ui/screens/species.ml,
-// edit_plant.ml).
+// 4f / 4g Fiche espèce (app/ui/screens/species.ml).
 @use '../base'
 @use '../widgets'
 
@@ -144,19 +143,27 @@
   justify-content: space-between
   gap: 12px
 
+// Rows between `line` rules, › at the right (handoff 4f: « lignes bordées »).
 .species__obs-list
   display: flex
   flex-direction: column
-  gap: 8px
+  border-top: 1px solid var(--line)
 
 .species__obs
   +widgets.bare-button
+  position: relative
   width: 100%
-  padding: 12px 14px
-  border: 1px solid var(--line)
-  border-radius: 14px
-  &:active
-    background: var(--sand)
+  padding: 10px 24px 10px 0
+  border-bottom: 1px solid var(--line)
+  +widgets.pressed-row
+  &::after
+    content: '›' / ''
+    position: absolute
+    right: 4px
+    top: 50%
+    transform: translateY(-50%)
+    +base.ui(18px, 600)
+    color: var(--muted)
 
 .species__obs-date
   +base.ui(15px, 700)
@@ -287,6 +294,8 @@
   color: var(--ink)
   text-decoration: none
   +base.ui(13px, 700)
+  // On the sand reference block.
+  +widgets.pressed-bordered(var(--sand-deep))
   &::before
     content: ""
     position: absolute
@@ -305,71 +314,3 @@
 
 .species__gone
   padding: calc(16px + env(safe-area-inset-top)) 20px 20px
-
-// 5a
-
-.edit-plant
-  padding-bottom: 40px
-
-.edit-plant__content
-  display: flex
-  flex-direction: column
-  gap: 14px
-
-.edit-plant__name
-  background: var(--paper)
-  .text-field__input
-    +base.ui(18px, 800)
-
-.edit-plant__chips
-  display: flex
-  flex-wrap: wrap
-  gap: 12px 8px
-  margin-top: 10px
-
-.edit-plant__footer
-  margin-top: 12px
-
-// « Espèce de référence »: the latin name, « Changer › » at the end.
-.edit-plant__species
-  display: flex
-  align-items: center
-  justify-content: space-between
-  gap: 12px
-  .text-button[aria-disabled]
-    opacity: .5
-    cursor: default
-
-.edit-plant__latin
-  +base.sci(18px)
-
-.edit-plant__author
-  +base.author(13px)
-
-.edit-plant__refs
-  display: contents
-
-.edit-plant__problem
-  color: var(--danger)
-
-.edit-plant__covers
-  display: flex
-  gap: 8px
-  overflow-x: auto
-  // Room for the selected tile's outline, which the scroll box would clip.
-  padding: 5px
-
-.edit-plant__cover
-  +widgets.bare-button
-  flex: none
-  width: 56px
-  height: 56px
-  border-radius: 12px
-  overflow: hidden
-  &.is-selected
-    outline: 2.5px solid var(--moss)
-    outline-offset: 2px
-
-.edit-plant__cover-img
-  width: 100%
-  height: 100%

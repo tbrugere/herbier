@@ -1,4 +1,4 @@
-// 4d Noter (dark) and 4e Enregistré (app/ui/screens/record.ml, saved.ml).
+// 4d Noter, dark (app/ui/screens/record.ml).
 @use '../base'
 @use '../widgets'
 
@@ -41,6 +41,7 @@
   border-radius: 50%
   background: var(--veil)
   color: var(--paper)
+  +widgets.pressed-bordered(var(--paper-field-line))
 
 .record__close
   width: 40px
@@ -110,6 +111,7 @@
   justify-content: flex-end
   padding: 2px
   color: var(--paper)
+  +widgets.pressed-text
 
 .record__thumb-disc
   display: flex
@@ -129,6 +131,7 @@
   border: 1.5px dashed var(--paper-dash)
   +base.ui(11px, 700)
   text-align: center
+  +widgets.pressed-bordered(var(--paper-field-line))
 
 .record__name
   background: var(--paper-field)
@@ -154,6 +157,7 @@
   min-height: 34px
   padding: 4px 12px
   background: var(--paper-chip)
+  +widgets.pressed-bordered(var(--paper-field-line))
   &.record__suggestion--here
     order: 2
 
@@ -180,6 +184,7 @@
   background: var(--paper)
   color: var(--ink)
   text-align: center
+  +widgets.pressed-bordered
   &[aria-busy]
     opacity: .6
 
@@ -198,58 +203,4 @@
   border-radius: 50%
   background: var(--moss)
   box-shadow: 0 0 0 3px var(--paper)
-  &:active
-    background: var(--moss-dark)
-
-// 4e
-
-.saved__content
-  display: flex
-  flex-direction: column
-  gap: 12px
-
-.saved__check
-  display: flex
-  align-items: center
-  justify-content: center
-  width: 64px
-  height: 64px
-  border-radius: 50%
-  background: var(--moss)
-  color: var(--paper)
-
-.saved__title
-  +base.ui(30px, 800)
-
-.saved__thumbs
-  display: grid
-  grid-template-columns: 1fr 1fr
-  gap: 10px
-
-.saved__thumb
-  aspect-ratio: 1
-  border-radius: 16px
-
-.saved__card-title
-  +base.ui(15px, 700)
-
-// Sand action row (handoff 4e): bold label, › at the right.
-.saved__action
-  +widgets.bare-button
-  +base.ui(15px, 700)
-  display: flex
-  justify-content: space-between
-  align-items: center
-  gap: 12px
-  min-height: 52px
-  padding: 14px
-  border-radius: 14px
-  background: var(--sand)
-  &:active
-    background: var(--sand-deep)
-
-.saved__chevron
-  color: var(--muted)
-
-.saved__spacer
-  flex: 1
+  +widgets.pressed-filled

@@ -337,6 +337,7 @@ let v app id =
   in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       Loaded.v ~reload:(App.saved app) ~what:"visionneuse" el
         (fun () -> load (App.db app) !focus)

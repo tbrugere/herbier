@@ -1,0 +1,76 @@
+// Route transitions (app/ui/transition.ml, Herbier_ui_model.Motion). A View
+// Transition's look is chosen by <html data-motion>, set for the length of
+// the transition; where the API is missing the new screen fades in through
+// .motion-fade-in. Tabs switch without animation (no rule). Nothing here
+// names a screen.
+
+@keyframes modal-up
+  from
+    transform: translateY(100%)
+
+@keyframes modal-down
+  to
+    transform: translateY(100%)
+
+@keyframes fade-in
+  from
+    opacity: 0
+
+@keyframes fade-out
+  to
+    opacity: 0
+
+// Keeps a snapshot on screen, unchanged, for as long as the other one moves.
+@keyframes hold
+  from
+    opacity: 1
+  to
+    opacity: 1
+
+// A modal rises over the screen it leaves, which stays still under it.
+\:root[data-motion="modal-in"]
+  &::view-transition-old(root)
+    animation: hold var(--motion-modal) linear
+  &::view-transition-new(root)
+    animation: modal-up var(--motion-modal) var(--ease-decelerate)
+
+// The modal goes down, uncovering the screen under it.
+\:root[data-motion="modal-out"]
+  &::view-transition-old(root)
+    z-index: 1
+    animation: modal-down var(--motion-modal) var(--ease-accelerate)
+  &::view-transition-new(root)
+    animation: hold var(--motion-modal) linear
+
+\:root[data-motion="fade"]
+  &::view-transition-old(root)
+    animation: fade-out var(--motion-fade) var(--ease-standard)
+  &::view-transition-new(root)
+    animation: fade-in var(--motion-fade) var(--ease-standard)
+
+// The shared hero's ends: transition.ml marks one element per captured state.
+[data-hero-named]
+  view-transition-name: hero
+
+// The card grows into the fiche's hero (and back); the rest cross-fades over
+// the same time.
+\:root[data-motion="hero-in"], :root[data-motion="hero-out"]
+  &::view-transition-group(hero)
+    animation-duration: var(--motion-hero)
+    animation-timing-function: var(--ease-standard)
+  &::view-transition-old(root)
+    animation: fade-out var(--motion-hero) var(--ease-standard)
+  &::view-transition-new(root)
+    animation: fade-in var(--motion-hero) var(--ease-standard)
+
+// The fallback, where document.startViewTransition is missing.
+.motion-fade-in
+  animation: fade-in var(--motion-fade) var(--ease-decelerate)
+
+// OCaml already swaps without animation then (Motion.how); this is the second
+// guard.
+@media (prefers-reduced-motion: reduce)
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*)
+    animation: none !important
+  .motion-fade-in
+    animation: none

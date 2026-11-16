@@ -1,0 +1,70 @@
+// 5a Modifier la fiche (app/ui/screens/edit_plant.ml).
+@use '../base'
+@use '../widgets'
+
+.edit-plant
+  padding-bottom: 40px
+
+.edit-plant__content
+  display: flex
+  flex-direction: column
+  gap: 14px
+
+.edit-plant__name
+  background: var(--paper)
+  .text-field__input
+    +base.ui(18px, 800)
+
+.edit-plant__chips
+  display: flex
+  flex-wrap: wrap
+  gap: 12px 8px
+  margin-top: 10px
+
+.edit-plant__footer
+  margin-top: 12px
+
+// « Espèce de référence »: the latin name, « Changer › » at the end.
+.edit-plant__species
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 12px
+  .text-button[aria-disabled]
+    opacity: .5
+    cursor: default
+
+.edit-plant__latin
+  +base.sci(18px)
+
+.edit-plant__author
+  +base.author(13px)
+
+.edit-plant__refs
+  display: contents
+
+.edit-plant__problem
+  color: var(--danger)
+
+.edit-plant__covers
+  display: flex
+  gap: 8px
+  overflow-x: auto
+  // Room for the selected tile's outline, which the scroll box would clip.
+  padding: 5px
+
+.edit-plant__cover
+  +widgets.bare-button
+  flex: none
+  width: 56px
+  height: 56px
+  border-radius: 12px
+  overflow: hidden
+  +widgets.pressed-text(.85)
+  &.is-selected
+    outline: 2.5px solid var(--moss)
+    outline-offset: 2px
+
+.edit-plant__cover-img
+  width: 100%
+  height: 100%

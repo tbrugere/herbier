@@ -1,0 +1,68 @@
+// 4e Enregistré (app/ui/screens/saved.ml).
+@use '../base'
+@use '../widgets'
+
+// Full height, so the spacer puts the two buttons at the bottom (handoff:
+// « Bas : … »).
+.saved
+  min-height: 100vh
+  min-height: 100dvh
+
+.saved__content
+  flex: 1
+  display: flex
+  flex-direction: column
+  gap: 12px
+
+// The confirmation is centred (mockup 4e): ✓, title, what and where.
+.saved__summary
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 12px
+  text-align: center
+
+.saved__check
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 64px
+  height: 64px
+  border-radius: 50%
+  background: var(--moss)
+  color: var(--paper)
+
+.saved__title
+  +base.ui(30px, 800)
+
+.saved__thumbs
+  display: grid
+  grid-template-columns: 1fr 1fr
+  gap: 10px
+
+.saved__thumb
+  aspect-ratio: 1
+  border-radius: 16px
+
+.saved__card-title
+  +base.ui(15px, 700)
+
+// Sand action row (handoff 4e): bold label, › at the right.
+.saved__action
+  +widgets.bare-button
+  +base.ui(15px, 700)
+  display: flex
+  justify-content: space-between
+  align-items: center
+  gap: 12px
+  min-height: 52px
+  padding: 14px
+  border-radius: 14px
+  background: var(--sand)
+  +widgets.pressed-row(var(--sand-deep))
+
+.saved__chevron
+  color: var(--muted)
+
+.saved__spacer
+  flex: 1

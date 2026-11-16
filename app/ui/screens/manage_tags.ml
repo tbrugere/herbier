@@ -220,6 +220,7 @@ let v app =
   in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       [
         Rb.rlist list_el row rows;

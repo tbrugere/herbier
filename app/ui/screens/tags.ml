@@ -92,6 +92,7 @@ let v app =
   in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       Rb.rlist grid card cards
       :: Rb.rlist chip_row chip chips

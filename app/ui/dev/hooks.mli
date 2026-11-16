@@ -6,7 +6,9 @@ val install : unit -> unit
 (** Sets [herbierDev.live()], the number of bindings not released ({!Rb.live}):
     the leak check; and [herbierDev.geocodeRequests()], {!geocode_requests} as
     ["<provider> <url>"] strings ([Geocode.request_to_string]): the "no request
-    leaves the phone" check. Call it once, at startup. *)
+    leaves the phone" check; and [herbierDev.transitions()], every route
+    transition run since then, oldest first, as {!Transition.record_to_string}
+    gives it. Call it once, at startup. *)
 
 val geocode_requests : unit -> Herbier_geo.Geocode.request list
 (** Every geocode request started since {!install} ([Geocoder.observe]), oldest

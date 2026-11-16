@@ -565,6 +565,7 @@ let v app =
   let release_map = Rb.on_release (fun () -> Map_slot.release map) in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       List.concat
         [

@@ -65,8 +65,8 @@
   gap: 14px
   width: 100%
   padding: 14px 16px
-  &:active
-    background: var(--sand-deep)
+  // Radio rows sit on a sand card.
+  +widgets.pressed-row(var(--sand-deep))
 
 .radio-row__dot
   flex: none
@@ -133,8 +133,7 @@
   .list-row
     padding-left: 16px
     padding-right: 16px
-    &:active
-      background: var(--sand-deep)
+    +widgets.pressed-row(var(--sand-deep))
     // The card draws the line under the list (.settings__card > * + *).
     &:last-child
       border-bottom: none

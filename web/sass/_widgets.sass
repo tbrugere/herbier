@@ -1,11 +1,39 @@
 // Shared widgets (app/ui/widgets/) and the mixins screens reuse. Sizes, radii
 // and shadows from the handoff's "Espacements & rayons"; pressed states from
 // "Interactions" (filled moss buttons → moss-dark, bordered chips and rows →
-// sand). Filled chips, which the handoff does not cover, press one shade
-// lighter or darker.
+// sand), every one through the pressed mixins below. Filled chips, which the
+// handoff does not cover, press one shade lighter or darker.
 @use 'base'
 
 // Mixins
+
+// The pressed state of an enabled control, shown at once (no transition).
+@mixin pressed
+  &:active:not(:disabled):not([aria-disabled])
+    transition: none
+    @content
+
+// Filled buttons (handoff: « boutons pleins → mossDark »).
+@mixin pressed-filled
+  +pressed
+    background: var(--moss-dark)
+
+// Bordered pills and chips (handoff: « pastilles bordées → fond sand »); a
+// control on a photo or a dark screen passes the fill that shows there.
+@mixin pressed-bordered($fill: var(--sand))
+  +pressed
+    background: $fill
+
+// List rows (handoff: « lignes de liste → fond sand »); a row on a sand card
+// passes --sand-deep, since sand on sand does not show.
+@mixin pressed-row($fill: var(--sand))
+  +pressed
+    background: $fill
+
+// Text, icon and photo controls, which the handoff does not cover: they fade.
+@mixin pressed-text($opacity: .6)
+  +pressed
+    opacity: $opacity
 
 @mixin pill
   border-radius: 999px
@@ -45,8 +73,7 @@
   border: 1px solid var(--ink)
   color: var(--ink)
   white-space: nowrap
-  &:active
-    background: var(--sand)
+  +pressed-bordered
   // The chip is about 31 px tall; the hit area reaches the handoff's 44 px
   // minimum without changing its look. Horizontally it takes at most half the
   // 8 px gap, so neighbouring hit areas meet without overlapping.
@@ -63,14 +90,15 @@
 .chip--active
   background: var(--ink)
   color: var(--paper)
-  &:active
+  +pressed
     background: var(--ink-soft)
   // Ink on ochre: paper on ochre is only 3.3:1.
   &.chip--ochre
     background: var(--ochre)
     color: var(--ink)
     // The palette has no darker ochre for the pressed state.
-    &:active
+    +pressed
+      background: var(--ochre)
       filter: brightness(.88)
 
 .chip--link
@@ -78,7 +106,7 @@
   padding: 5px 4px
   color: var(--moss)
   font-weight: 700
-  &:active
+  +pressed
     background: none
     color: var(--moss-dark)
 
@@ -112,6 +140,7 @@ $card-padding: 16px
   border-radius: 16px
   overflow: hidden
   +striped
+  +pressed-text(.85)
   img
     +cover-img
 
@@ -176,8 +205,7 @@ $card-padding: 16px
   min-height: 72px
   padding: 10px 0
   border-bottom: 1px solid var(--line)
-  &:active
-    background: var(--sand)
+  +pressed-row
 
 .list-row__thumb
   flex: none
@@ -243,6 +271,7 @@ $card-padding: 16px
   min-height: 44px
   color: var(--muted)
   text-align: center
+  +pressed-text
 
 .tab-bar__tab--active
   color: var(--ink)
@@ -259,8 +288,7 @@ $card-padding: 16px
   background: var(--moss)
   color: var(--paper)
   box-shadow: var(--shadow-note-button)
-  &:active
-    background: var(--moss-dark)
+  +pressed-filled
 
 // Text field
 
@@ -295,7 +323,7 @@ $card-padding: 16px
   min-height: 44px
   color: var(--moss)
   white-space: nowrap
-  &:active
+  +pressed
     color: var(--moss-dark)
 
 // An rlist container inside a chip row: its chips lay out as the row's own.
@@ -321,9 +349,8 @@ $card-padding: 16px
   height: calc(var(--sheet-height) + env(safe-area-inset-bottom))
   padding-bottom: env(safe-area-inset-bottom)
 
-// Timing borrowed from the handoff's "Transitions" (bottom modals).
 .sheet--settling
-  transition: transform 300ms cubic-bezier(0, 0, .2, 1)
+  transition: transform var(--motion-modal) var(--ease-decelerate)
 
 .sheet__grab
   flex: none
@@ -361,15 +388,13 @@ $card-padding: 16px
   min-height: 60px
   background: var(--moss)
   color: var(--paper)
-  &:active
-    background: var(--moss-dark)
+  +pressed-filled
 
 .button--secondary, .button--danger
   +base.button-secondary
   min-height: 52px
   border: 1px solid var(--ink)
-  &:active
-    background: var(--sand)
+  +pressed-bordered
 
 .button--danger
   border-color: var(--danger)
@@ -385,15 +410,15 @@ $card-padding: 16px
   +base.ui(15px, 700)
   min-height: 44px
   white-space: nowrap
-  &:active
-    opacity: .6
+  +pressed-text
   &[aria-disabled]
     opacity: .4
 
 .text-button--moss
   color: var(--moss)
 .text-button--ink
-  color: var(--ink)
+  color: var(--ink-soft)
+  font-weight: 500
 .text-button--danger
   color: var(--danger)
 
@@ -424,6 +449,7 @@ $card-padding: 16px
   width: 44px
   height: 44px
   color: var(--ink)
+  +pressed-text
 
 // 4f hero buttons.
 .round-button
@@ -436,8 +462,7 @@ $card-padding: 16px
   border-radius: 50%
   background: var(--paper-veil)
   color: var(--ink)
-  &:active
-    background: var(--sand)
+  +pressed-bordered
 
 // 4f tags: bordered, inert.
 .chip-tag
@@ -477,6 +502,7 @@ $card-padding: 16px
   width: 32px
   height: 32px
   color: var(--muted)
+  +pressed-text
   &::before
     content: ''
     position: absolute
@@ -495,8 +521,7 @@ $card-padding: 16px
   padding: 4px 12px
   border: 1.5px dashed var(--hint)
   color: var(--muted)
-  &:active
-    background: var(--sand)
+  +pressed-bordered
   // 44 px high to the touch, like the ✕.
   &::before
     content: ''
@@ -552,6 +577,7 @@ $card-padding: 16px
   width: 100%
   white-space: pre-wrap
   overflow-wrap: anywhere
+  +pressed-text
   &.inline-text--empty
     color: var(--hint)
 
@@ -575,8 +601,8 @@ $card-padding: 16px
   width: 100%
   min-height: 60px
   padding: 10px 16px
-  &:active:not(:disabled)
-    background: var(--sand-deep)
+  // Switches sit on 4m's sand cards.
+  +pressed-row(var(--sand-deep))
   &:disabled
     cursor: default
     .switch__track
@@ -670,6 +696,7 @@ $card-padding: 16px
 .photo-grid__item
   +bare-button
   display: block
+  +pressed-text(.85)
 
 .photo-tile
   aspect-ratio: 1

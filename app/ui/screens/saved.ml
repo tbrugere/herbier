@@ -150,10 +150,16 @@ let render (d : data) =
          [
            [
              El.div ~at:[cls "modal-header"] [close];
-             El.div ~at:[cls "saved__check"] [W.Icon.el ~size:36 W.Icon.Check];
-             El.h1 ~at:[cls "saved__title"] [El.txt' "Enregistré"];
-             El.p ~at:[cls "t-body"] added;
-             El.p ~at:[cls "t-meta"] [El.txt' (String.concat " · " where)];
+             El.div
+               ~at:[cls "saved__summary"]
+               [
+                 El.div
+                   ~at:[cls "saved__check"]
+                   [W.Icon.el ~size:36 W.Icon.Check];
+                 El.h1 ~at:[cls "saved__title"] [El.txt' "Enregistré"];
+                 El.p ~at:[cls "t-body"] added;
+                 El.p ~at:[cls "t-meta"] [El.txt' (String.concat " · " where)];
+               ];
              El.div ~at:[cls "saved__thumbs"] (List.map thumb d.photos);
            ];
            where_cards;
@@ -203,6 +209,7 @@ let v app id =
   let item = function None -> gone () | Some d -> render d in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       Loaded.v ~what:"enregistré" el (fun () -> load (App.db app) id) item;
   }

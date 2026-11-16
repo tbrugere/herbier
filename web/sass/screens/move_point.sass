@@ -79,6 +79,7 @@
   border-radius: 50%
   background: var(--paper)
   box-shadow: var(--shadow-map-search)
+  +widgets.pressed-bordered
 
 .move-point__pill
   +widgets.pill
@@ -126,8 +127,7 @@
   min-height: 52px
   padding: 8px 0
   border-bottom: 1px solid var(--line)
-  &:active
-    background: var(--sand)
+  +widgets.pressed-row
 
 .move-point__result-name
   +base.ui(15px, 700)

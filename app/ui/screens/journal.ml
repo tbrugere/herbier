@@ -171,6 +171,7 @@ let v app =
   let this_year () = Zone.this_year () in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       [
         Rb.text counter_el counter;

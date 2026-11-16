@@ -118,7 +118,8 @@ Why not the two runners-up (see `ocaml-android-stacks.md`):
 - Several interactions are CSS only on a modern WebView: swipe between
   photos and pager-style grids via `scroll-snap`, sheets and tab bar via
   `position: sticky` and `<dialog>`, shared-element transitions via the View
-  Transitions API (Chrome 111+, plain fade as fallback).
+  Transitions API (Chrome 111+, plain fade as fallback). Measured: the
+  emulator's WebView (Chrome 124, API 35) has it; the phone's is pending.
 - Three pieces are imperative and hold JS-library state: the MapLibre map,
   the camera `<video>`, the pinch-zoom viewer. With signals they need no
   special "island" machinery: the widget subscribes to a signal

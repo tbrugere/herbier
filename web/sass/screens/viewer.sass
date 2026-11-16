@@ -70,6 +70,7 @@
   border-radius: 50%
   background: var(--veil)
   color: var(--paper)
+  +widgets.pressed-bordered(var(--paper-field-line))
 
 // Holds ⋯'s place when the photo has no plant (no action to offer).
 .viewer__spacer
@@ -90,20 +91,27 @@
   +base.photo-scrim
   pointer-events: none
 
+// Mockup 5e: the provenance in an outlined pill, « COUVERTURE » as plain
+// spaced capitals beside it.
 .viewer__badges
   display: flex
-  gap: 6px
+  align-items: center
+  gap: 8px
 
 .viewer__badge
   +widgets.pill
   +base.ui(11px, 700)
   padding: 2px 8px
+  border: 1px solid var(--paper-field-line)
   background: var(--veil)
-  text-transform: uppercase
-  letter-spacing: .04em
 
 .viewer__badge--cover
-  background: var(--moss)
+  +base.ui(11px, 500)
+  padding: 0
+  border: none
+  background: none
+  text-transform: uppercase
+  letter-spacing: .1em
 
 .viewer__name
   +base.ui(22px, 800)
@@ -126,3 +134,4 @@
   padding: 6px 14px
   background: var(--paper-pill)
   pointer-events: auto
+  +widgets.pressed-bordered(var(--paper-field-line))

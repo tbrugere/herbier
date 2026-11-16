@@ -12,8 +12,9 @@ Two scripts do the work; this skill is how to use them and what goes wrong.
   `kill-app`, `forward`, `open [fragment]`, `webview <cmd>…`, `env`.
   Run with no argument for the usage text.
 - `scripts/webview.mjs` (Node 22+, no dependency): `targets`, `eval <js>`,
-  `text`, `screenshot <file>`, `wait-for <js> [ms]`,
-  `wait-stable [quiet-ms] [ms]`, on `--port` (default 9222).
+  `text`, `screenshot <file> [selector]`, `pressed <selector>`, `heap`,
+  `wait-for <js> [ms]`, `wait-stable [quiet-ms] [ms]`, `drag <x,y[,ms]>…`, on
+  `--port` (default 9222).
 
 ## One shared emulator, one check at a time
 
@@ -165,6 +166,43 @@ Playwright headless shell works:
 `~/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell --remote-debugging-port=9333 --user-data-dir=<scratch> 'http://127.0.0.1:8765/#dev/storage'`
 with `python3 -m http.server 8765 -d _build/default/web/dist`, then
 `node scripts/webview.mjs --port 9333 wait-stable`.
+
+## Pressed states and transitions
+
+- `webview pressed '.button--primary'` forces `:active` on the first match
+  (CDP `CSS.forcePseudoState`) and prints its computed `background-color`,
+  `color`, `border-color` and `opacity`, then releases it. Compare with the
+  tokens: moss-dark is `rgb(58, 80, 41)`, sand `rgb(236, 229, 214)`,
+  sand-deep `rgb(226, 219, 203)`.
+- Route transitions are logged in dev builds: `webview eval
+  "herbierDev.transitions()"` lists one `<kind> <now|fade|view>
+  <finished|skipped|immediate> hero=<old>/<new>` line per route change,
+  oldest first. Fallback: `eval "Document.prototype.startViewTransition =
+  undefined"`; reduced motion: `adb shell settings put global
+  animator_duration_scale 0`, then `kill-app` and `open <fragment>`: the
+  WebView reads the setting when its process starts, so
+  `matchMedia('(prefers-reduced-motion: reduce)').matches` stays false in a
+  running app (WebView 124). Restore it to 1, then `kill-app` again.
+- `webview eval` clicks carry no user activation, so the history entries
+  they add are skipped by Android back (`canGoBack` false: back exits the
+  app). To test Android back, open screens with real taps (`adb shell input
+  tap`, coordinates as in step 4) or go back with `eval "history.back()"`.
+
+## Side by side with the mockup
+
+1. Mockup: a desktop headless Chrome (see Desktop browser) on
+   `'file://<repo>/docs/design_handoff_herbier/Herbier v2.dc.html'` with
+   `--remote-debugging-port=9333`, then
+   `node scripts/webview.mjs --port 9333 screenshot mock-4a.png "[id='4a'] > div:nth-child(2)"`
+   (each frame is the element with the handoff id; `#4a` is not a valid
+   selector, an id cannot start with a digit; the frame's second child is the
+   390 × 844 phone, status bar included). Open Chrome with
+   `--window-size=1600,6000` so every frame is laid out.
+2. App: the same id's route on the emulator (seeded with `open dev/seed`),
+   `scripts/emulator.sh webview screenshot app-4a.png`.
+3. Compare spacing, sizes, radii, type roles, colours and pressed states;
+   fix in that id's `web/sass/screens/*.sass`. Screenshots stay in the
+   scratch space and the PR, never in the repo.
 
 ## Pitfalls
 

@@ -607,6 +607,7 @@ let v app =
   in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       List.concat
         [

@@ -14,4 +14,6 @@ val dynamic : ?kind:kind -> ?icon:Icon.t -> string React.signal -> t
 
 val text : ?tone:[`Moss | `Ink | `Danger] -> string -> t
 (** A bare text button for headers and links ("Gérer", "Terminé", "Annuler"),
-    15/700, at least 44 px high. Default tone [`Moss]. *)
+    15/700 (the neutral [`Ink] tone, « Annuler », « Retour »: 15/500 in
+    ink-soft, as in the mockup's 5a and 5d), at least 44 px high. Default tone
+    [`Moss]. *)

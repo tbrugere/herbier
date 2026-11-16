@@ -494,6 +494,7 @@ let render app (data : data React.signal) =
       ~at:[cls "species__hero"]
       [media; El.div ~at:[cls "species__hero-buttons"] [back; edit]; hero_names]
   in
+  Transition.mark_hero hero id;
   let photos = El.div ~at:[cls "species__photos"] [] in
   let photos_section (d : data) =
     match d.photos with
@@ -637,13 +638,24 @@ let v app id =
   (* Once per entry, never on the reloads the fetch itself causes, which
      would loop on a plant still due. *)
   App.refresh_if_due app id;
+  (* [ready] once the first load is shown, whatever it found ([Loaded.live]
+     renders again after a reload): the hero transition from Collection waits
+     for the hero. *)
+  let ready, mark_ready = Screen.once () in
   {
     Screen.el;
     bindings =
       Loaded.live ~reload:(App.saved app) ~what:"fiche"
-        ~gone:(fun () -> notice "Cette plante n'est plus dans l'herbier.")
-        ~failed:(fun () -> notice "La fiche n'a pas pu être lue.")
+        ~gone:(fun () ->
+          mark_ready ();
+          notice "Cette plante n'est plus dans l'herbier.")
+        ~failed:(fun () ->
+          mark_ready ();
+          notice "La fiche n'a pas pu être lue.")
         el
         (fun () -> load (App.db app) id)
-        (render app);
+        (fun data ->
+          mark_ready ();
+          render app data);
+    ready;
   }

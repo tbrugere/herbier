@@ -1,14 +1,13 @@
-// 4h Observation, 4k À identifier and 5c Changer d'espèce
-// (app/ui/screens/observation.ml, resolve.ml).
+// 4h Observation (app/ui/screens/observation.ml).
 @use '../base'
 @use '../widgets'
 
-.observation__content, .resolve__content
+.observation__content
   display: flex
   flex-direction: column
   gap: 14px
 
-.observation__title, .resolve__title
+.observation__title
   display: flex
   flex-direction: column
   align-items: center
@@ -21,7 +20,8 @@
   +base.ui(15px, 800)
   padding: 11px 8px
   margin: -11px -8px
-  color: var(--moss)
+  color: var(--ink)
+  +widgets.pressed-text
   &.observation__plant--to-identify
     color: var(--ochre)
 
@@ -52,61 +52,30 @@
 .observation__problem
   color: var(--danger)
 
-// Bordered action rows at the bottom of 4h.
+// The action rows at the bottom of 4h: between `line` rules, › at the right.
 .observation__actions
   display: flex
   flex-direction: column
-  gap: 8px
   margin-top: 6px
+  border-top: 1px solid var(--line)
 
 .observation__action
   +widgets.bare-button
   +base.ui(15px, 700)
-  min-height: 52px
-  padding: 0 16px
-  border: 1px solid var(--line)
-  border-radius: 14px
-  &:active
-    background: var(--sand)
+  position: relative
+  min-height: 46px
+  padding: 0 24px 0 0
+  border-bottom: 1px solid var(--line)
+  +widgets.pressed-row
+  &::after
+    content: '›' / ''
+    position: absolute
+    right: 4px
+    top: 50%
+    transform: translateY(-50%)
+    +base.ui(18px, 600)
   &.observation__action--danger
     color: var(--danger)
-
-.resolve__ochre
-  color: var(--ochre)
-
-.resolve__subtitle
-  +base.ui(13px, 600)
-
-.resolve__obs-date
-  +base.ui(16px, 700)
-
-.resolve__note
-  +base.sci(16px)
-  margin-top: 4px
-
-.resolve__rows
-  display: flex
-  flex-direction: column
-  .is-current
-    opacity: .5
-    pointer-events: none
-
-.resolve__footer
-  display: grid
-  grid-template-columns: 1fr 1fr
-  gap: 10px
-  &:has(> :only-child)
-    grid-template-columns: 1fr
-
-.resolve .button[aria-disabled]
-  opacity: .5
-  cursor: default
-
-.resolve .button.is-inactive
-  opacity: .5
-
-.resolve__problem
-  color: var(--danger)
 
 // 4h mosaic
 .observation__mosaic
@@ -151,8 +120,7 @@
   border: 1.5px dashed var(--hint)
   border-radius: 12px
   color: var(--muted)
-  &:active
-    background: var(--sand)
+  +widgets.pressed-bordered
   // Alone in the column (one photo): both rows.
   &:only-child
     grid-row: 1 / -1

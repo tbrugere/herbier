@@ -1070,6 +1070,7 @@ let screen ~what ~failed load item =
   let el = El.div ~at:[cls "screen"; cls "resolve"] [] in
   {
     Screen.el;
+    ready = Screen.now;
     bindings =
       Loaded.v ~what ~failed:(fun () -> Loaded.notice failed) el load item;
   }

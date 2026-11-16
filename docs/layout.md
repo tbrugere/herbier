@@ -147,6 +147,10 @@ app/
     keep.ml               keeps OCaml values reachable from a DOM node (Rb.hold)
     pointer_capture.ml    Element.setPointerCapture (missing from Brr 0.0.9), best effort: the sheet's drag
     location.ml           window.location.replace, which Brr lacks: the router's tab switch without a history entry
+    view_transition.ml    document.startViewTransition (missing from Brr 0.0.9): start, finished/skipped as a
+                          never-failing future, a console warning on an unexpected skip
+    navigation.ml         the Navigation API's navigation.currentEntry.index: the history direction of a route change
+    media_query.ml        window.matchMedia(q).matches (prefers-reduced-motion)
   store/                  local SQLite (§3 of architecture), sans IO; hand-written SQL, no query DSL; no Brr
     tables.ml             Postgrest columns of every synced table (~7 tables, ~50 columns), generated
                           from supabase/schema/catalog.json by postgrest-codegen, committed, a dune diff rule keeps it fresh
@@ -334,6 +338,8 @@ app/
     observation's fix: searching, fix, none), move_plan.ml (5b's texts and what « Valider » writes),
     plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys)
     snap.ml               the sheet's snap points: nearest, clamp, release projection
+    motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
+                          how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
     parked_entry.ml       4m's parked outbox entry: its title and French reason, from Last_error
   ui/
@@ -346,9 +352,13 @@ app/
                           a one-shot framing asked by 4c/4h (handoff « État »), the place-name sources
     location_notice.ml    the one-time dialog of first opening on location use (M5.57), mounted on
                           body by main.ml
-    router.ml             route = URL fragment, builds the new screen and releases the old one on switch;
-                          the shell holds the tab bar
-    screen.ml             a screen's root element + its bindings, as the router takes them
+    router.ml             route = URL fragment, builds the new screen and releases the old one on switch,
+                          through Transition.run; the shell holds the tab bar
+    screen.ml             a screen's root element + its bindings + when its first content shows (ready),
+                          as the router takes them
+    transition.ml         runs a Motion kind around a route change: View Transitions API, the hero's
+                          view-transition-name on its two ends (data-hero), the CSS fade fallback, the
+                          dev observer (herbierDev.transitions())
     route.ml              route = parsed URL fragment (tabs, modals, dev pages); go / replace / back
     ref_results.ml        4i's « Référence · GBIF » section (Ref_search's effects, rows), shared by every
                           mode of screens/resolve.ml
@@ -526,14 +536,20 @@ web/
                           copy ../app/main.bc.js → dist/app.js
   index.html              loads dist/vendor.css, dist/app.css, dist/vendor.js then dist/app.js
   sass/                   indented Sass syntax (.sass), not SCSS
-    app.sass              entry: @use the four partials, then every screens/*.sass
+    app.sass              entry: @use the five partials, then every screens/*.sass
     _tokens.sass          custom properties on :root; the only source of design tokens
     _base.sass            reset, @font-face, type-role, icon and photo-scrim mixins with their .t-* classes,
                           sun-readability rules (5f)
-    _widgets.sass         chips, cards, tab bar, sheets, dialogs, fields, and the widget mixins
+    _widgets.sass         chips, cards, tab bar, sheets, dialogs, fields, and the widget mixins, among
+                          them the pressed-state mixins every :active rule goes through
     _shell.sass           the router's shell: scrolling screen above the tab bar, screen margins
-    screens/              one file per handoff screen (collection.sass, map_tab.sass, …),
-                          handoff id in a header comment
+    _motion.sass          route transitions: keyframes, ::view-transition-* rules per <html data-motion>,
+                          the .motion-fade-in fallback, reduced motion
+    screens/              one file per screens/*.ml module, its handoff ids in a header comment:
+                          collection (4a, 4n), map_tab (4b), journal (4c), record (4d), saved (4e),
+                          species (4f, 4g), observation (4h), resolve (4i, 4j, 4k, 5c), tags (4l),
+                          settings (4m), edit_plant (5a), move_point (5b), manage_tags (5d), viewer (5e);
+                          5f lives in _base.sass and _tokens.sass
   fonts/                  Manrope, Newsreader (variable woff2), Material Symbols subset
   js/
     vendor.js             esbuild entry: imports Capacitor plugins, maplibre-gl, pmtiles,
@@ -665,7 +681,8 @@ test/
                 also through a pruned Pl@ntNet payload
   ui/           native, alcotest: herbier_ui_model (app/ui_model/); test_ui runs
                 one <module>_tests.ml per module (fixtures.ml: the values several share); 4f's rows
-                (ref_block) for the two spike species projected from fixtures/; 5b's move plan (test_move_plan)
+                (ref_block) for the two spike species projected from fixtures/; 5b's move plan (test_move_plan);
+                the route transitions' rules (motion)
   store/        native, alcotest: herbier_store (app/store/: codec, schema, tables, stmt,
                 the per-table queries, references included, settings, ref_images, commune_packs, uploads,
                 search, dev_seed, sync_state); schema SQL, queries, FTS triggers and
@@ -739,7 +756,8 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   §5), `emulator.sh` (one shared headless Android emulator: create the AVD,
   boot, a lock so device checks take turns, debug install, open a dev page;
   skill `.claude/skills/emulator/`) and `webview.mjs` (a dependency-free
-  DevTools Protocol client for the app's WebView: eval, page text, screenshot),
+  DevTools Protocol client for the app's WebView: eval, page text, screenshot
+  of the viewport or of one element, a forced :active state's colours),
   `exif-fixture-jpegs.py` (`uv run`: the Pillow JPEGs behind
   `test/fixtures/exifr_pil_*.json`) and `exifr-fixture.mjs` (exifr output of a
   photo into `test/fixtures/exifr_<name>.json`, with the options of

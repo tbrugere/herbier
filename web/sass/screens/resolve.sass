@@ -1,7 +1,56 @@
-// 4i « Référence · GBIF », shared by 4i, 4k and 5c
-// (app/ui/ref_results.ml, screens/resolve.ml); 4j's sheet at the end.
+// 4i Chercher, 4j Lien intercepté, 4k À identifier and 5c Changer d'espèce
+// (app/ui/screens/resolve.ml): the « Référence · GBIF » results they share
+// (app/ui/ref_results.ml), then each mode's own parts; 4j's sheet at the end.
 @use '../base'
 @use '../widgets'
+
+.resolve__content
+  display: flex
+  flex-direction: column
+  gap: 14px
+
+.resolve__title
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 2px
+
+.resolve__ochre
+  color: var(--ochre)
+
+.resolve__subtitle
+  +base.ui(13px, 600)
+
+.resolve__obs-date
+  +base.ui(16px, 700)
+
+.resolve__note
+  +base.sci(16px)
+  margin-top: 4px
+
+.resolve__rows
+  display: flex
+  flex-direction: column
+  .is-current
+    opacity: .5
+    pointer-events: none
+
+.resolve__footer
+  display: grid
+  grid-template-columns: 1fr 1fr
+  gap: 10px
+  &:has(> :only-child)
+    grid-template-columns: 1fr
+
+.resolve .button[aria-disabled]
+  opacity: .5
+  cursor: default
+
+.resolve .button.is-inactive
+  opacity: .5
+
+.resolve__problem
+  color: var(--danger)
 
 .ref-results
   display: flex
@@ -33,10 +82,11 @@
   +base.sci(18px)
   color: var(--ink)
 
+// Roman, after the italic name it sits in (mockup 4i: « Gentiana verna L. »).
 .ref-row__author
-  +base.ui(13px, 400)
+  +base.author(13px)
   color: var(--muted)
-  margin-left: 6px
+  margin-left: 4px
 
 .ref-row__french
   +base.ui(14px, 400)
@@ -53,6 +103,7 @@
   border-radius: 50%
   background: var(--sand)
   color: var(--ink)
+  +widgets.pressed-bordered(var(--sand-deep))
   // 36 px circle, 44 px touch area (handoff: « cible tactile minimale 44 »).
   // It spills 4 px around: rows are at least 56 px tall.
   position: relative
@@ -207,6 +258,7 @@
   +base.ui(15px, 700)
   min-height: var(--touch-min)
   color: var(--muted)
+  +widgets.pressed-text
   &[aria-pressed="true"]
     color: var(--moss)
     text-decoration: underline

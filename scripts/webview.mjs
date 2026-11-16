@@ -8,7 +8,13 @@
 //   targets                       list the debuggable targets (JSON)
 //   eval <js>                     evaluate an expression in the page (promises awaited), print the value
 //   text                          print document.body.innerText
-//   screenshot <file.png>         save a PNG of the viewport
+//   screenshot <file.png> [selector]
+//                                 save a PNG of the viewport, or of the first element matching
+//                                 selector, scrolled to the top of its scroller first (clipped
+//                                 to its box; a box taller than an inner scroller, such as
+//                                 .shell__screen, is cut at the scroller's edge)
+//   pressed <selector>            force :active on the first match, print its computed
+//                                 background-color, color, border-color and opacity, release
 //   heap                          force a full GC, then print the JS heap in use (bytes)
 //   wait-for <js> [timeout-ms]    poll until the expression is truthy (default 30000)
 //   wait-stable [quiet-ms] [timeout-ms]
@@ -22,7 +28,7 @@ import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 const usage = () => {
-  console.error("usage: webview.mjs [--port N] targets | eval <js> | text | screenshot <file> | heap | wait-for <js> [ms] | wait-stable [quiet-ms] [ms] | drag <x,y[,ms]>...");
+  console.error("usage: webview.mjs [--port N] targets | eval <js> | text | screenshot <file> [selector] | pressed <selector> | heap | wait-for <js> [ms] | wait-stable [quiet-ms] [ms] | drag <x,y[,ms]>...");
   process.exit(2);
 };
 
@@ -111,9 +117,46 @@ async function main() {
         return print(await evaluate(cdp, pageText));
       case "screenshot": {
         if (!rest[0]) usage();
-        const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
+        const params = { format: "png" };
+        if (rest[1]) {
+          const box = await evaluate(
+            cdp,
+            `(() => {
+              const el = document.querySelector(${JSON.stringify(rest[1])});
+              if (!el) return null;
+              el.scrollIntoView({ block: "start" });
+              const r = el.getBoundingClientRect();
+              return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height };
+            })()`,
+          );
+          if (!box) throw new Error(`no element matches ${rest[1]}`);
+          if (!box.width || !box.height) throw new Error(`${rest[1]} has an empty box`);
+          Object.assign(params, { clip: { ...box, scale: 1 }, captureBeyondViewport: true });
+        }
+        const { data } = await cdp.send("Page.captureScreenshot", params);
         writeFileSync(rest[0], Buffer.from(data, "base64"));
         return console.log(rest[0]);
+      }
+      case "pressed": {
+        if (!rest[0]) usage();
+        await cdp.send("DOM.enable");
+        await cdp.send("CSS.enable");
+        const { root } = await cdp.send("DOM.getDocument", { depth: 0 });
+        const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector: rest[0] });
+        if (!nodeId) throw new Error(`no element matches ${rest[0]}`);
+        await cdp.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["active"] });
+        try {
+          const { computedStyle } = await cdp.send("CSS.getComputedStyleForNode", { nodeId });
+          const wanted = ["background-color", "color", "border-color", "opacity"];
+          const props = Object.fromEntries(
+            computedStyle.filter((p) => wanted.includes(p.name)).map((p) => [p.name, p.value]),
+          );
+          // border-color is a shorthand: the protocol lists its longhands.
+          props["border-color"] ??= computedStyle.find((p) => p.name === "border-top-color")?.value;
+          return print(props);
+        } finally {
+          await cdp.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [] });
+        }
       }
       case "heap": {
         // performance.memory is bucketed and cached outside a site-locked

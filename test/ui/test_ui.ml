@@ -25,4 +25,5 @@ let () =
       ("fr_text", Fr_text_tests.fr_text);
       ("snap", Snap_tests.snap);
       ("parked_entry", Parked_entry_tests.parked_entry);
+      ("motion", Motion_tests.motion);
     ]
