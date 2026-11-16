@@ -13,3 +13,9 @@ val install : unit -> unit
 val geocode_requests : unit -> Herbier_geo.Geocode.request list
 (** Every geocode request started since {!install} ([Geocoder.observe]), oldest
     first. Never cleared: dev builds only. *)
+
+val install_app : App.t -> unit
+(** Sets [herbierDev.markOriginal(state)], [state] ["uploaded"] or
+    ["original_missing"]: {!Drive_check.mark_original} on the newest live
+    Drive-bound photo, its outcome a console line (so 4e and 5e can be checked
+    live while open). Called once, by [Dev_pages.find], with the app. *)

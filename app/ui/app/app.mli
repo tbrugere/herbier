@@ -23,9 +23,11 @@ val auth : t -> Herbier_sync.Auth.t
 val start_auth : t -> unit
 (** {!Herbier_sync.Auth.start} with an [on_change] that sets {!State.account}'s
     [auth] (keeping [storage] and [wifi_only]), outside any update step, and on
-    a change to [Signed_in _] sends {!Herbier_sync.Engine.signed_in} and runs
-    {!upload_pending}. Called once by main; dev pages never call it, so that the
-    apps they build register no app-state listener and no timer. *)
+    a change to [Signed_in _] resets the last Drive token outcome
+    ({!drive_access}) in the same step, sends {!Herbier_sync.Engine.signed_in},
+    and runs {!upload_pending}, {!check_drive_access} and {!check_originals}.
+    Called once by main; dev pages never call it, so that the apps they build
+    register no app-state listener and no timer. *)
 
 val start_sync : t -> unit
 (** {!Herbier_sync.Engine.start}: called once by main, right after
@@ -50,17 +52,76 @@ val start_uploads : t -> unit
     queue now ([Upload_queue.run ~interactive:false]), and one on every resume
     ([Cap_app.on_state_change Active]) and every change of an upload job
     ([Cap_uploader.on_change]); [Upload_queue.wifi_changed] on every change of
-    {!State.account}'s [wifi_only] (the binding kept reachable by the app).
-    Registration failures are console lines (in a browser: no uploader). Sign-in
-    ({!start_auth}) and the network ({!upload_pending}) run passes too. Dev
-    pages never call it. *)
+    {!State.account}'s [wifi_only] (the binding kept reachable by the app). It
+    also reads {!upload_queue} once, re-reads it after every pass it runs, and
+    runs {!check_originals} now and on every resume. Registration failures are
+    console lines (in a browser: no uploader). Sign-in ({!start_auth}) and the
+    network ({!upload_pending}) run passes too. Dev pages never call it. *)
 
 val upload_pending : t -> unit
-(** A silent pass of the originals' queue, not awaited (sign-in, main's online
-    event). *)
+(** A silent pass of the originals' queue, then the {!upload_queue} read; not
+    awaited (sign-in, main's online event). *)
 
 val uploads : t -> Herbier_photos_io.Upload_queue.t
 (** The originals' queue (architecture §5). For #dev/uploader. *)
+
+(** {1 Drive} *)
+
+val drive_access : t -> Herbier_ui_model.Drive_text.access React.signal
+(** {!Herbier_ui_model.Drive_text.access} of {!State.account}'s [auth] and the
+    last Drive token outcome since the last sign-in: every [Auth.drive_token]
+    the app asks (the queue's, the health check's, {!check_drive_access},
+    {!authorize_drive}) sets it ([Ok _] → [Granted]; [Error e] → [Denied] of e
+    mapped: [Drive_unconfigured] → [Unconfigured], [Drive_signed_out] →
+    [Signed_out], [Consent_needed], [Consent_refused], [Drive_offline] →
+    [Offline], [Drive_misconfigured] → [Misconfigured], [No_google_account] →
+    [No_account], [Drive_google _] → [Failed]); a new [Signed_in] resets it to
+    [Unknown]. Set outside any update step. *)
+
+val check_drive_access : t -> unit
+(** A silent [Auth.drive_token ~interactive:false] when signed in and the
+    storage is Drive, or photos still wait in the {!upload_queue} (its
+    [pending_count > 0], after « Les envoyer quand même ») (4m's mount, after a
+    sign-in, the radio set to Drive); else nothing. Not awaited. *)
+
+val authorize_drive : t -> unit
+(** 4m « Autoriser »: [Auth.drive_token ~interactive:true] (the consent), then,
+    on [Ok], {!upload_pending}. Not awaited. *)
+
+val upload_queue : t -> Herbier_ui_model.Drive_text.queue React.signal
+(** The originals' queue as 4m and 4e show it: [Upload_queue.entries] and
+    [Settings.get Last_upload_at] read again after every pass (resume, job
+    change, sign-in, online, Wi-Fi setting, {!save_photos}' keep), {!send_now}
+    and {!stop_drive_uploads}. 4d's « N en attente » is its
+    {!Herbier_ui_model.Drive_text.pending_count}. A read error is a console line
+    and keeps the last value. Starts at
+    {!Herbier_ui_model.Drive_text.empty_queue}; read once by {!start_uploads}.
+*)
+
+val send_now : t -> unit
+(** [Upload_queue.send_now], then the {!upload_queue} read. Not awaited. *)
+
+val stop_drive_uploads : t -> (unit, Herbier_store_io.Db.error) result Fut.t
+(** [Upload_queue.stop_drive] (its outcome), then the {!upload_queue} read. *)
+
+val set_storage :
+  t ->
+  Herbier_domain.Photo.Original_target.t ->
+  (unit, Herbier_store_io.Db.error) result Fut.t
+(** The 4m radio: [Db.write (Settings.set Storage_target target)], then
+    {!State.account}'s [storage] (a write error is a console line, changes
+    nothing and is the result); a choice of [Drive] also runs
+    {!check_drive_access}. *)
+
+val health : t -> Herbier_photos_io.Health.t
+(** The Drive health check, its token silent and recorded into {!drive_access}.
+    For #dev/drive. *)
+
+val check_originals : t -> unit
+(** [Health.run ~force:false] when {!State.network} says online and the account
+    is signed in; not awaited. Triggers: {!start_uploads} (startup), resume
+    ([Cap_app] Active), a change to [Signed_in] ({!start_auth}), and main's
+    [online] event. Not on job changes. *)
 
 val synced : t -> unit React.event
 (** Fires after every sync cycle, outside any update step. *)

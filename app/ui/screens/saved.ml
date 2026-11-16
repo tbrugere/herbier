@@ -1,5 +1,6 @@
 module Fr_date = Herbier_ui_model.Fr_date
 module Fr_text = Herbier_ui_model.Fr_text
+module Drive_text = Herbier_ui_model.Drive_text
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -32,7 +33,38 @@ let load db id =
       let+ photos = Db.all db (Photos.of_observation id) in
       Some {observation = o; plant; photos}
 
-let render (d : data) =
+(* The Drive card follows the access, the network and the queue without a
+   reload; the photos, and so whether there is a card, come with each
+   reload. *)
+let drive_card app (photos : Photo.t list) =
+  match Drive_text.has_drive_photo photos with
+  | false -> ([], [])
+  | true ->
+      let state = App.state app in
+      let card =
+        React.S.l4
+          ~eq:(Option.equal Drive_text.equal_card)
+          (fun access (n : State.network) (a : State.account)
+               (q : Drive_text.queue) ->
+            Drive_text.saved_card access ~online:n.online ~wifi_only:a.wifi_only
+              ~queued:q.queued photos)
+          (App.drive_access app) (State.network state) (State.account state)
+          (App.upload_queue app)
+      in
+      let title = El.p ~at:[cls "saved__card-title"] [] in
+      let detail = El.p ~at:[cls "t-meta"] [] in
+      let text f =
+        React.S.map ~eq:String.equal
+          (function Some c -> f c | None -> "")
+          card
+      in
+      ( [W.Card.panel [title; detail]],
+        [
+          Rb.text title (text (fun (c : Drive_text.card) -> c.title));
+          Rb.text detail (text (fun (c : Drive_text.card) -> c.detail));
+        ] )
+
+let render app (d : data) =
   let o = d.observation in
   let tz_offset_s = Zone.offset_s o.at in
   let where =
@@ -73,13 +105,11 @@ let render (d : data) =
     | false -> ());
     box
   in
-  let bound_for target =
+  let app_only =
     List.length
       (List.filter
          (fun (p : Photo.t) ->
-           match (p.original_target, target) with
-           | Drive, Photo.Original_target.Drive | App_only, App_only -> true
-           | Drive, App_only | App_only, Drive -> false)
+           match p.original_target with Drive -> false | App_only -> true)
          d.photos)
   in
   let card title meta =
@@ -89,20 +119,12 @@ let render (d : data) =
         El.p ~at:[cls "t-meta"] [El.txt' meta];
       ]
   in
+  let drive_cards, drive_b = drive_card app d.photos in
   let where_cards =
     List.concat
       [
-        (match bound_for Drive with
-        | 0 -> []
-        | n ->
-            [
-              card
-                (Fr_text.plural n "photo" "photos"
-                ^ " → Google Drive, dossier Herbier")
-                "Envoi dès le retour du réseau. Copies compressées gardées sur \
-                 le téléphone.";
-            ]);
-        (match bound_for App_only with
+        drive_cards;
+        (match app_only with
         | 0 -> []
         | n ->
             [
@@ -185,6 +207,7 @@ let render (d : data) =
               Route.replace (Route.Modal Route.Record));
         ];
         again.bindings;
+        drive_b;
         (match fiche with
         | Some (p, b) ->
             Rb.act b.click (fun () ->
@@ -206,10 +229,12 @@ let gone () =
 
 let v app id =
   let el = El.div ~at:[cls "screen"; cls "saved"] [] in
-  let item = function None -> gone () | Some d -> render d in
+  let item = function None -> gone () | Some d -> render app d in
   {
     Screen.el;
     ready = Screen.now;
     bindings =
-      Loaded.v ~what:"enregistré" el (fun () -> load (App.db app) id) item;
+      Loaded.v ~reload:(App.saved app) ~what:"enregistré" el
+        (fun () -> load (App.db app) id)
+        item;
   }

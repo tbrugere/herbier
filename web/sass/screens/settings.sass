@@ -45,6 +45,22 @@
 .settings__row .text-button[aria-disabled]
   opacity: .5
 
+// The Drive row under the account: why Drive is not usable, and « Autoriser ».
+.settings__prompt
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 14px
+  margin-top: 12px
+  .settings__text
+    flex: 1
+    min-width: 0
+  .text-button
+    flex: none
+
+.settings__status
+  display: block
+
 .settings__error
   margin-top: 8px
   padding: 0 4px

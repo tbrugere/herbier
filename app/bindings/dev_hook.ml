@@ -13,6 +13,11 @@ let export_strings name f =
   Jv.set (hook ()) name
     (Jv.callback ~arity:1 (fun _ -> Jv.of_list Jv.of_string (f ())))
 
+let export_action name f =
+  Jv.set (hook ()) name
+    (Jv.callback ~arity:1 (fun arg ->
+         f (match Jv.is_none arg with true -> "" | false -> Jv.to_string arg)))
+
 let heap_used () =
   Jv.find_path Jv.global ["performance"; "memory"; "usedJSHeapSize"]
   |> Option.map Jv.to_float

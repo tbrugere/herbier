@@ -8,6 +8,50 @@ module Cap_error = Herbier_bindings.Cap_error
 module Photo_id = Herbier_domain.Ids.Photo_id
 module Drive_consent = Herbier_sync_core.Auth.Drive_consent
 module C2d = Brr_canvas.C2d
+module Photo = Herbier_domain.Photo
+module Photos = Herbier_store.Photos
+module Db = Herbier_store_io.Db
+module Health = Herbier_photos_io.Health
+
+type mark = Uploaded | Missing
+
+let dev_file_id = "herbier-dev-file"
+
+(* The newest live Drive-bound photo ([Photos.live] is newest first). *)
+let mark_original app mark =
+  let open Fut.Syntax in
+  let* photos = Db.all (App.db app) Photos.live in
+  match photos with
+  | Error e -> Fut.return (Error (Db.error_to_string e))
+  | Ok photos -> (
+      match
+        List.find_opt
+          (fun (p : Photo.t) ->
+            match p.original_target with Drive -> true | App_only -> false)
+          photos
+      with
+      | None -> Fut.return (Error "no Drive photo")
+      | Some p -> (
+          let state, drive_file_id =
+            match mark with
+            | Uploaded -> (Photo.Upload_state.Uploaded, Some dev_file_id)
+            | Missing ->
+                ( Photo.Upload_state.Original_missing,
+                  Some (Option.value p.drive_file_id ~default:dev_file_id) )
+          in
+          let+ saved =
+            App.save app
+              [
+                Photos.set_upload p.id ~state ~drive_file_id
+                  ~at:(Ptime_clock.now ());
+              ]
+          in
+          match saved with
+          | Ok (_ : int) ->
+              Ok
+                (Printf.sprintf "%s %s" (Photo_id.to_string p.id)
+                   (Photo.Upload_state.to_string state))
+          | Error e -> Error (Db.error_to_string e)))
 
 let token_detail token = Printf.sprintf "token, %d chars" (String.length token)
 
@@ -185,6 +229,24 @@ let page app =
                   !drops)
               upload))
   in
+  let originals =
+    Kit.action "Vérifier les originaux" (fun () ->
+        let open Fut.Syntax in
+        Fut.await
+          (let* outcome = Health.run (App.health app) ~force:true in
+           Kit.append log ("health: " ^ Health.outcome_to_string outcome);
+           Db.find (App.db app)
+             (Herbier_store.Settings.get Drive_health_checked_at))
+          (function
+            | Ok (Some at) ->
+                Kit.append log ("checked at: " ^ Ptime.to_rfc3339 at)
+            | Ok None -> Kit.append log "checked at: never"
+            | Error e -> Kit.append log ("checked at: " ^ Db.error_to_string e)))
+  in
+  let mark label m =
+    Kit.action label (fun () ->
+        step "mark" ~detail:Option.some ~error:Fun.id (mark_original app m))
+  in
   El.div
     [
       El.h1 [El.txt' "Drive check"];
@@ -192,6 +254,12 @@ let page app =
       El.p [El.txt' ("scope: " ^ Drive_consent.scope)];
       El.div [authorize; silent; plugin];
       El.div [species; upload; again; check; invalid];
+      El.div
+        [
+          originals;
+          mark "Original envoyé (factice)" Uploaded;
+          mark "Original introuvable" Missing;
+        ];
       log;
     ]
 

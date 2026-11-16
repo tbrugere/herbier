@@ -33,6 +33,17 @@ type t = {
   network_changed : bool ref;
       (* style: mutable for the same reason: set by {!wifi_changed}, read and
          cleared by the next pass, which enqueues the waiting jobs again. *)
+  retry_failed : bool ref;
+      (* style: mutable for the same reason: set by {!send_now}, read and
+         cleared by the next pass, which first resets the failed rows. *)
+  stop_requested : ((unit, Db.error) result -> unit) list ref;
+      (* style: mutable for the same reason: the waiting {!stop_drive} calls,
+         answered and cleared by the next pass, which first makes the waiting
+         photos app-only. *)
+  reset : Photo_id.t list ref;
+      (* style: mutable for the same reason: the photos « Envoyer maintenant »
+         reset, whose old failed job (WorkManager keeps listing it after a
+         cancel) is ignored until a new job replaces it, or the row ends. *)
 }
 
 let create ~db ~commit ~token ~drop_token ~wifi_only =
@@ -44,12 +55,18 @@ let create ~db ~commit ~token ~drop_token ~wifi_only =
     wifi_only;
     pass = ref Idle;
     network_changed = ref false;
+    retry_failed = ref false;
+    stop_requested = ref [];
+    reset = ref [];
   }
 
 let log parts = Brr.Console.(log [str (String.concat " " ("upload:" :: parts))])
 
 let log_error parts =
   Brr.Console.(error [str (String.concat " " ("upload:" :: parts))])
+
+let forget_reset t photo_id =
+  t.reset := List.filter (fun id -> not (Photo_id.equal id photo_id)) !(t.reset)
 
 let set_upload t photo_id ~state ~drive_file_id =
   t.commit
@@ -167,6 +184,7 @@ let delete_file (row : Uploads.t) =
 
 let forget t (row : Uploads.t) =
   let open Fut.Syntax in
+  forget_reset t row.photo_id;
   let* removed = Db.write t.db (Uploads.remove row.photo_id) in
   match removed with
   | Error e ->
@@ -189,10 +207,20 @@ let finish t (row : Uploads.t) (file : Api.file) =
   match committed with
   | Error e ->
       Fut.return (log_error [id_string row; "finish:"; Db.error_to_string e])
-  | Ok (_ : int) -> forget t row
+  | Ok (_ : int) ->
+      let* written =
+        Db.write t.db
+          (Herbier_store.Settings.set Last_upload_at (Ptime_clock.now ()))
+      in
+      (match written with
+      | Ok (_ : int) -> ()
+      | Error e ->
+          log_error [id_string row; "last upload:"; Db.error_to_string e]);
+      forget t row
 
 let give_up t (row : Uploads.t) ~attempts ~error =
   let open Fut.Syntax in
+  forget_reset t row.photo_id;
   let* () = write_row t {row with attempts; last_error = Some error} in
   let+ committed =
     set_upload t row.photo_id ~state:Failed ~drive_file_id:None
@@ -221,6 +249,7 @@ let enqueue t (row : Uploads.t) ~attempts (session : Queue.session) =
   in
   match enqueued with
   | Ok () -> (
+      forget_reset t row.photo_id;
       match attempts = row.attempts with
       | true -> Fut.return ()
       | false -> write_row t {row with attempts})
@@ -293,11 +322,11 @@ let start t ~interactive ~attempts (row : Uploads.t) photo =
       | Error (Drive e) -> (
           let error = Api.error_to_string e in
           log [id_string row; "start:"; error];
-          match Queue.start_error_scope e with
+          match Api.error_scope e with
           | Account ->
               let+ () = write_row t {row with last_error = Some error} in
               Closed
-          | This_photo ->
+          | This_file ->
               (* Counted from the saved row: a failed job this start was to
                  replace is still listed, and the next pass counts it again.
                  That pass starts again, not this one. *)
@@ -358,9 +387,16 @@ let step t ~interactive ~network_changed ~jobs gate (row : Uploads.t) =
       Fut.return gate
   | Ok photo -> (
       let job =
-        Option.map
-          (fun (j : Cap_uploader.job) -> job j.state)
-          (job_of jobs row.photo_id)
+        match List.exists (Photo_id.equal row.photo_id) !(t.reset) with
+        | true ->
+            (* Its failed job was cancelled by « Envoyer maintenant »; a
+               finished job stays listed as failed, and must not be counted
+               again. *)
+            None
+        | false ->
+            Option.map
+              (fun (j : Cap_uploader.job) -> job j.state)
+              (job_of jobs row.photo_id)
       in
       let now = Ptime_clock.now () in
       let action = Queue.next ~now ~photo (pending row) job in
@@ -380,8 +416,126 @@ let step t ~interactive ~network_changed ~jobs gate (row : Uploads.t) =
               log [id_string row; Format.asprintf "%a" Queue.pp_action action]);
           act t ~interactive gate row photo action)
 
+(* Before a pass: the rows and their live photos; the first read error. *)
+let rows_with_photos t =
+  let open Fut.Syntax in
+  let* rows = Db.all t.db Uploads.all in
+  match rows with
+  | Error e -> Fut.return (Error e)
+  | Ok rows ->
+      List.fold_right
+        (fun (row : Uploads.t) acc ->
+          let* acc = acc in
+          match acc with
+          | Error _ -> Fut.return acc
+          | Ok acc -> (
+              let+ photo = Db.find t.db (Photos.get row.photo_id) in
+              match photo with
+              | Error e -> Error e
+              | Ok photo -> Ok ((row, photo) :: acc)))
+        rows (Fut.return (Ok []))
+
+let commit_edits t edits =
+  match edits with
+  | [] -> Fut.return (Ok ())
+  | edits -> Fut.map (Result.map (fun (_ : int) -> ())) (t.commit edits)
+
+(* « Ne pas les envoyer »: the photos still waiting become app-only, which the
+   pass then discards. *)
+let make_app_only t =
+  let open Fut.Result_syntax in
+  let* rows = rows_with_photos t in
+  let now = Ptime_clock.now () in
+  let waiting =
+    List.filter_map
+      (fun ((row : Uploads.t), photo) ->
+        match photo with
+        | Some p when Photo.awaiting_drive p -> Some row
+        | Some _ | None -> None)
+      rows
+  in
+  List.iter (fun row -> log [id_string row; "app-only"]) waiting;
+  commit_edits t
+    (List.map
+       (fun (row : Uploads.t) -> Photos.set_app_only row.photo_id ~at:now)
+       waiting)
+
+let reset_row t (row : Uploads.t) =
+  let open Fut.Syntax in
+  let* cancelled = Cap_uploader.cancel ~id:(id_string row) in
+  (match cancelled with
+  | Ok () -> ()
+  | Error e -> log_error [id_string row; "cancel:"; Cap_error.to_string e]);
+  log [id_string row; "reset"];
+  write_row t {row with attempts = 0; last_error = None}
+
+(* « Envoyer maintenant »: the failed photos' rows reset, the photos back to
+   [Pending]; their ids join [t.reset]. *)
+let reset_failed t =
+  let open Fut.Syntax in
+  let* rows = rows_with_photos t in
+  let rows =
+    match rows with
+    | Ok rows -> rows
+    | Error e ->
+        log_error ["reset:"; Db.error_to_string e];
+        []
+  in
+  let failed =
+    List.filter_map
+      (fun (row, photo) ->
+        match Queue.retryable photo with true -> Some row | false -> None)
+      rows
+  in
+  let* () =
+    List.fold_left
+      (fun acc row -> Fut.bind acc (fun () -> reset_row t row))
+      (Fut.return ()) failed
+  in
+  let now = Ptime_clock.now () in
+  let+ committed =
+    commit_edits t
+      (List.map
+         (fun (row : Uploads.t) ->
+           Photos.set_upload row.photo_id ~state:Pending ~drive_file_id:None
+             ~at:now)
+         failed)
+  in
+  (match committed with
+  | Ok () -> ()
+  | Error e -> log_error ["reset:"; Db.error_to_string e]);
+  t.reset :=
+    List.map (fun (row : Uploads.t) -> row.photo_id) failed
+    @ List.filter
+        (fun id ->
+          not
+            (List.exists
+               (fun (row : Uploads.t) -> Photo_id.equal id row.photo_id)
+               failed))
+        !(t.reset)
+
+let stop t answers =
+  let open Fut.Syntax in
+  match answers with
+  | [] -> Fut.return ()
+  | answers ->
+      let+ result = make_app_only t in
+      (match result with
+      | Ok () -> ()
+      | Error e -> log_error ["app-only:"; Db.error_to_string e]);
+      List.iter (fun answer -> answer result) answers
+
+let prepare t ~stop:answers ~retry =
+  let open Fut.Syntax in
+  let* () = stop t answers in
+  match retry with true -> reset_failed t | false -> Fut.return ()
+
 let pass t ~interactive =
   let open Fut.Syntax in
+  let stop = !(t.stop_requested) and retry = !(t.retry_failed) in
+  t.stop_requested := [];
+  t.retry_failed := false;
+  let* () = prepare t ~stop ~retry in
   let* jobs = Cap_uploader.jobs () in
   match jobs with
   | Error e -> Fut.return (log ["jobs:"; Cap_error.to_string e])
@@ -406,11 +560,15 @@ let pass t ~interactive =
    continuation is not caught here (Fut has no rejection handler): the pass
    relies on its continuations being total, results and no exceptions. *)
 let safe_pass t ~interactive =
+  let stop = !(t.stop_requested) in
   match pass t ~interactive with
   | fut -> fut
   | exception ((Failure _ | Invalid_argument _ | Not_found | Jv.Error _) as e)
     ->
-      log_error ["pass:"; Printexc.to_string e];
+      let raised = Printexc.to_string e in
+      log_error ["pass:"; raised];
+      t.stop_requested := [];
+      List.iter (fun answer -> answer (Error (Db.Raised raised))) stop;
       Fut.return ()
 
 let run t ~interactive =
@@ -439,6 +597,17 @@ let run t ~interactive =
 let wifi_changed t =
   t.network_changed := true;
   run t ~interactive:false
+
+let send_now t =
+  t.retry_failed := true;
+  run t ~interactive:true
+
+let stop_drive t =
+  let result, answer = Fut.create () in
+  t.stop_requested := answer :: !(t.stop_requested);
+  let open Fut.Syntax in
+  let* () = run t ~interactive:false in
+  result
 
 type entry = {
   row : Uploads.t;

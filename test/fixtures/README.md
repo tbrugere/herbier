@@ -137,7 +137,12 @@ The reference row's `payload` is sent with `vernacular` before `species` and
 structural-equality tests of `test_rest.ml` and `test_merge.ml` rely on.
 
 `drive_files_<verb>_<case>_<status>.json`: Google Drive v3 answers for
-`Herbier_photos.Drive` (`error_of_answer`), read by `test/photos/test_drive.ml`.
+`Herbier_photos.Drive` (`error_of_answer`), read by `test/photos/test_drive.ml`
+and, for the `files_get` ones, by `test/photos/test_health.ml` (the weekly
+health check's program). The health tests also use
+`drive_files_get_{present,trashed}_200.json` and
+`drive_files_get_unknown_404.json` once the token run has recorded them, and
+skip that case until then.
 Two groups: the error answers below need no token and are recorded directly
 with curl (no `Authorization` header, or `Bearer ya29.invalid`, which Google
 always rejects); the 2xx success bodies need a real `drive.file` access token

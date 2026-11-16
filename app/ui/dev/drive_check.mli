@@ -16,7 +16,23 @@
     même » (same photo id and bytes: must log [Already_there]); « Vérifier »
     ([Photos_io.Drive.presence] of the last file id); « Jeton invalide »:
     [put_original] with a token source that always answers ["ya29.invalid"] and
-    a counting [drop_token]: two 401s, one drop, then [Drive Unauthorized]. *)
+    a counting [drop_token]: two 401s, one drop, then [Drive Unauthorized].
+
+    The health check and 5e's Drive rows: « Vérifier les originaux »
+    ([Photos_io.Health.run ~force:true] on {!App.health}, then the stored
+    [Drive_health_checked_at]); « Original envoyé (factice) » / « Original
+    introuvable »: {!mark_original}, to reach 5e's rows on a device with no
+    Drive. Its writes go through {!App.save}, so they sync: use it against the
+    local Supabase stack only. *)
+
+type mark = Uploaded | Missing
+
+val mark_original : App.t -> mark -> (string, string) result Fut.t
+(** On the newest live Drive-bound photo, through {!App.save}:
+    [Photos.set_upload ~state:Uploaded ~drive_file_id:(Some "herbier-dev-file")],
+    or [~state:Original_missing] keeping its file id (["herbier-dev-file"] when
+    it has none). [Ok "<photo id> <state>"]; no such photo or a store error →
+    [Error]. Also [herbierDev.markOriginal] ({!Hooks.install_app}). *)
 
 val el : (App.t, string) result -> Brr.El.t
 (** A fresh element on the app's {!App.auth}; without an app (a desktop browser,

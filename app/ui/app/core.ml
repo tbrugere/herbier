@@ -7,6 +7,9 @@ module Communes = Herbier_geo.Communes
 module Commune_packs = Herbier_geo_io.Commune_packs
 module Pack_rows = Herbier_store.Commune_packs
 module Code = Communes.Code
+module Drive_text = Herbier_ui_model.Drive_text
+module Upload_queue = Herbier_photos_io.Upload_queue
+module Health = Herbier_photos_io.Health
 
 type geocode_run =
   | Idle
@@ -77,6 +80,12 @@ type t = {
       (* style: mutable because {!start_uploads} sets it once, after
          {!create}: the binding on « Envoyer seulement en Wi-Fi », held here so
          that it stays reachable (primer §5) for the app's lifetime. *)
+  drive_last : Drive_text.access React.signal;
+  set_drive_last : ?step:React.step -> Drive_text.access -> unit;
+  drive_access : Drive_text.access React.signal;
+  upload_queue : Drive_text.queue React.signal;
+  set_upload_queue : ?step:React.step -> Drive_text.queue -> unit;
+  health : Health.t;
 }
 
 let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
@@ -117,6 +126,29 @@ let commit_edits ~db ~changed edits =
   Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> changed ());
   r
 
+let denial : Herbier_sync.Auth.drive_error -> Drive_text.denial = function
+  | Drive_unconfigured -> Unconfigured
+  | Drive_signed_out -> Signed_out
+  | Consent_needed -> Consent_needed
+  | Consent_refused -> Consent_refused
+  | Drive_offline -> Offline
+  | Drive_misconfigured -> Misconfigured
+  | No_google_account -> No_account
+  | Drive_google _ -> Failed
+
+(* Every Drive token the app asks goes through here, so that its outcome is
+   what 4m and 4e show. The setter runs in the token's future callback,
+   outside any update step. *)
+let recorded_drive_token auth ~set_last ~interactive =
+  Fut.map
+    (fun result ->
+      set_last
+        (match result with
+        | Ok (_ : string) -> Drive_text.Granted
+        | Error e -> Denied (denial e));
+      result)
+    (Herbier_sync.Auth.drive_token auth ~interactive)
+
 let create ~db ~state ~theme ~auth =
   let saved, send = React.E.create () in
   let synced, send_synced = React.E.create () in
@@ -133,18 +165,41 @@ let create ~db ~state ~theme ~auth =
   in
   let set_downloading ?step d = set_downloading ?step d in
   let communes = ref Communes.empty in
+  let drive_last, set_drive_last =
+    React.S.create ~eq:Drive_text.equal_access Drive_text.Unknown
+  in
+  let set_drive_last ?step a = set_drive_last ?step a in
+  let drive_access =
+    React.S.l2 ~eq:Drive_text.equal_access
+      (fun (a : State.account) last -> Drive_text.access ~account:a.auth ~last)
+      (State.account state) drive_last
+  in
+  let upload_queue, set_upload_queue =
+    React.S.create ~eq:Drive_text.equal_queue Drive_text.empty_queue
+  in
+  let set_upload_queue ?step q = set_upload_queue ?step q in
+  let commit =
+    commit_edits ~db ~changed:(fun () ->
+        send_saved ();
+        Herbier_sync.Engine.local_write engine)
+  in
+  let token ~interactive =
+    Fut.map
+      (Result.map_error Herbier_sync.Auth.drive_error_to_string)
+      (recorded_drive_token auth
+         ~set_last:(fun a -> set_drive_last a)
+         ~interactive)
+  in
+  let drop_token = Herbier_sync.Auth.drop_drive_token auth in
   let uploads =
-    Herbier_photos_io.Upload_queue.create ~db
-      ~commit:
-        (commit_edits ~db ~changed:(fun () ->
-             send_saved ();
-             Herbier_sync.Engine.local_write engine))
-      ~token:(fun ~interactive ->
-        Fut.map
-          (Result.map_error Herbier_sync.Auth.drive_error_to_string)
-          (Herbier_sync.Auth.drive_token auth ~interactive))
-      ~drop_token:(Herbier_sync.Auth.drop_drive_token auth)
-      ~wifi_only:(fun () -> (React.S.value (State.account state)).wifi_only)
+    Upload_queue.create ~db ~commit ~token ~drop_token ~wifi_only:(fun () ->
+        (React.S.value (State.account state)).wifi_only)
+  in
+  (* Silent: a background check never shows the consent screen. *)
+  let health =
+    Health.create ~db ~commit
+      ~token:(fun () -> token ~interactive:false)
+      ~drop_token
   in
   let fetching, set_fetching =
     React.S.create ~eq:(List.equal Plant_id.equal) []
@@ -183,6 +238,12 @@ let create ~db ~state ~theme ~auth =
     set_downloading;
     uploads;
     upload_watch = ref None;
+    drive_last;
+    set_drive_last;
+    drive_access;
+    upload_queue;
+    set_upload_queue;
+    health;
   }
 
 let db t = t.db
@@ -194,26 +255,135 @@ let engine t = t.engine
 let keepalive t = t.keepalive
 let synced t = t.synced
 let uploads t = t.uploads
+let drive_access t = t.drive_access
+let upload_queue t = t.upload_queue
+let health t = t.health
 
 let changed t =
   t.send_saved ();
   Herbier_sync.Engine.local_write t.engine
 
+let log parts = Brr.Console.(log [str (String.concat " " parts)])
+let online t = (React.S.value (State.network t.state)).online
+
+let job_running : Herbier_bindings.Cap_uploader.job option -> bool = function
+  | Some {state = Running; _} -> true
+  | Some {state = Enqueued | Blocked | Succeeded _ | Failed _ | Cancelled; _}
+  | None ->
+      false
+
+let last_upload t =
+  Fut.map
+    (function
+      | Ok last -> last
+      | Error e ->
+          log_error ["upload: last upload:"; Db.error_to_string e];
+          None)
+    (Db.find t.db (Herbier_store.Settings.get Last_upload_at))
+
+(* Called from futures' callbacks, outside any update step. *)
+let refresh_queue t =
+  let open Fut.Syntax in
+  let* entries = Upload_queue.entries t.uploads in
+  let+ last_upload = last_upload t in
+  match entries with
+  | Error e -> log_error ["upload: queue:"; Db.error_to_string e]
+  | Ok entries ->
+      let q =
+        Drive_text.queue_of ~last_upload
+          (List.map
+             (fun (e : Upload_queue.entry) ->
+               {
+                 Drive_text.photo_id = e.row.photo_id;
+                 state = e.photo;
+                 running = job_running e.job;
+               })
+             entries)
+      in
+      t.set_upload_queue q
+
+let after_pass t pass =
+  Fut.await (Fut.bind pass (fun () -> refresh_queue t)) Fun.id
+
 let upload_pending t =
-  Fut.await
-    (Herbier_photos_io.Upload_queue.run t.uploads ~interactive:false)
-    Fun.id
+  after_pass t (Upload_queue.run t.uploads ~interactive:false)
+
+let send_now t = after_pass t (Upload_queue.send_now t.uploads)
+
+let stop_drive_uploads t =
+  let open Fut.Syntax in
+  let* stopped = Upload_queue.stop_drive t.uploads in
+  let+ () = refresh_queue t in
+  stopped
+
+let drive_token t ~interactive =
+  recorded_drive_token t.auth
+    ~set_last:(fun a -> t.set_drive_last a)
+    ~interactive
+
+let signed_in t =
+  match (React.S.value (State.account t.state)).auth with
+  | Signed_in _ -> true
+  | Unconfigured | Restoring | Signed_out -> false
+
+(* Photos may still wait for Drive with the storage App_only (« Les envoyer
+   quand même »): they need the access too. *)
+let check_drive_access t =
+  let needed =
+    match (React.S.value (State.account t.state)).storage with
+    | Drive -> true
+    | App_only -> Drive_text.pending_count (React.S.value t.upload_queue) > 0
+  in
+  match (signed_in t, needed) with
+  | true, true ->
+      Fut.await (drive_token t ~interactive:false)
+        (fun (_ : (string, Herbier_sync.Auth.drive_error) result) -> ())
+  | true, false | false, (true | false) -> ()
+
+let authorize_drive t =
+  Fut.await (drive_token t ~interactive:true) (function
+    | Ok (_ : string) -> upload_pending t
+    | Error (_ : Herbier_sync.Auth.drive_error) -> ())
+
+(* Signed out (or still restoring), no token can come: the sign-in runs it. *)
+let check_originals t =
+  match (online t, signed_in t) with
+  | true, true ->
+      Fut.await (Health.run t.health ~force:false) (fun (_ : Health.outcome) ->
+          ())
+  | true, false | false, (true | false) -> ()
+
+let set_storage t (target : Herbier_domain.Photo.Original_target.t) =
+  Fut.map
+    (function
+      | Error e ->
+          log_error ["réglages: storage"; Db.error_to_string e];
+          Error e
+      | Ok (_ : int) ->
+          let account = React.S.value (State.account t.state) in
+          State.set_account t.state {account with storage = target};
+          (match target with Drive -> check_drive_access t | App_only -> ());
+          Ok ())
+    (Db.write t.db (Herbier_store.Settings.set Storage_target target))
 
 (* Auth calls [on_change] from future and listener callbacks, never inside an
-   update step, so the setter may run here. *)
+   update step, so the setters may run here. A new sign-in forgets the last
+   Drive token outcome: it was another account's, or no account's. *)
 let start_auth t =
   Herbier_sync.Auth.start t.auth ~on_change:(fun status ->
       let account = React.S.value (State.account t.state) in
-      State.set_account t.state {account with auth = status};
+      let step = React.Step.create () in
+      State.set_account t.state ~step {account with auth = status};
+      (match status with
+      | Signed_in _ -> t.set_drive_last ~step Drive_text.Unknown
+      | Unconfigured | Restoring | Signed_out -> ());
+      React.Step.execute step;
       match status with
       | Signed_in _ ->
           Herbier_sync.Engine.signed_in t.engine;
-          upload_pending t
+          upload_pending t;
+          check_drive_access t;
+          check_originals t
       | Unconfigured | Restoring | Signed_out -> ())
 
 let start_sync t = Herbier_sync.Engine.start t.engine
@@ -236,10 +406,14 @@ let log_listener what = function
    step. The listeners live as long as the app: their handles are not kept. *)
 let start_uploads t =
   let module Q = Herbier_photos_io.Upload_queue in
+  Fut.await (refresh_queue t) Fun.id;
   upload_pending t;
+  check_originals t;
   Fut.await
     (Herbier_bindings.Cap_app.on_state_change (function
-      | Active -> upload_pending t
+      | Active ->
+          upload_pending t;
+          check_originals t
       | Inactive -> ()))
     (log_listener "resume listener");
   Fut.await
@@ -253,13 +427,11 @@ let start_uploads t =
   t.upload_watch :=
     Some
       (Rb.act (React.S.changes wifi_only) (fun (_ : bool) ->
-           Fut.await (Q.wifi_changed t.uploads) Fun.id))
+           after_pass t (Q.wifi_changed t.uploads)))
 
 (* [commit] does not geocode: the geocoder's own writes and the reference
    branches use it; the upload queue gets the same through [commit_edits]. *)
 let commit t edits = commit_edits ~db:t.db ~changed:(fun () -> changed t) edits
-let log parts = Brr.Console.(log [str (String.concat " " parts)])
-let online t = (React.S.value (State.network t.state)).online
 
 let keep_original t (photo : Herbier_domain.Photo.t) original =
   let module Q = Herbier_photos_io.Upload_queue in
@@ -303,9 +475,7 @@ let save_photos t ~(observation : Herbier_domain.Observation.t) shots =
       (* The first Drive photo may need the drive.file consent (architecture
          §5, requested lazily): this pass may show it. *)
       if any_kept then
-        Fut.await
-          (Herbier_photos_io.Upload_queue.run t.uploads ~interactive:true)
-          Fun.id;
+        after_pass t (Upload_queue.run t.uploads ~interactive:true);
       List.rev failed)
     (List.fold_left
        (fun acc s -> Fut.bind acc (fun r -> step r s))

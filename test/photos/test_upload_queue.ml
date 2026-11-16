@@ -1,5 +1,5 @@
 (* Herbier_photos.Upload_queue (app/photos/upload_queue.mli): the pure
-   decision table — session_usable, next, start_error_scope, count_failure,
+   decision table — session_usable, next, count_failure,
    missing_file and on_network_change — with no IO. Photos are built with
    herbier_test_support's Value, as test_outbox.ml's fixtures do. *)
 
@@ -14,12 +14,6 @@ module Fixture = Herbier_test_support.Fixture
 
 let action_t =
   Alcotest.testable Upload_queue.pp_action Upload_queue.equal_action
-
-let pp_scope ppf = function
-  | Upload_queue.Account -> Format.pp_print_string ppf "Account"
-  | Upload_queue.This_photo -> Format.pp_print_string ppf "This_photo"
-
-let scope_t = Alcotest.testable pp_scope Upload_queue.equal_scope
 
 (* ---------- fixtures ---------- *)
 
@@ -362,31 +356,6 @@ let next_tests =
              None) );
   ]
 
-(* ---------- start_error_scope ---------- *)
-
-let start_error_scope_tests =
-  let case name e expected =
-    ( name,
-      `Quick,
-      fun () ->
-        Alcotest.check scope_t "start_error_scope" expected
-          (Upload_queue.start_error_scope e) )
-  in
-  [
-    case "Unauthorized: Account" Drive.Unauthorized Upload_queue.Account;
-    case "Api_disabled: Account" Drive.Api_disabled Upload_queue.Account;
-    case "Scope_missing: Account" Drive.Scope_missing Upload_queue.Account;
-    case "Quota_full: Account" Drive.Quota_full Upload_queue.Account;
-    case "Rate_limited: Account" Drive.Rate_limited Upload_queue.Account;
-    case "Server _: Account" (Drive.Server 500) Upload_queue.Account;
-    case "Network _: Account" (Drive.Network "timeout") Upload_queue.Account;
-    case "Not_found: This_photo" Drive.Not_found Upload_queue.This_photo;
-    case "Http _: This_photo"
-      (Drive.Http {status = 418; reason = None; message = None})
-      Upload_queue.This_photo;
-    case "Malformed _: This_photo" (Drive.Malformed "x") Upload_queue.This_photo;
-  ]
-
 (* ---------- count_failure, missing_file ---------- *)
 
 let pp_counted ppf = function
@@ -452,4 +421,24 @@ let on_network_change_tests =
     case "Cancelled: the pass's" ~session:usable_session
       (Some Upload_queue.Cancelled) None;
     case "no job: the pass's" ~session:usable_session None None;
+  ]
+
+(* ---------- retryable ---------- *)
+
+let retryable_tests =
+  let case name expected p =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check bool) "retryable" expected (Upload_queue.retryable p) )
+  in
+  [
+    case "None (absent or deleted): false" false None;
+    case "Drive, Failed: true" true (Some (photo ~upload_state:Failed ()));
+    case "Drive, Pending: false" false (Some (photo ~upload_state:Pending ()));
+    case "Drive, Uploaded: false" false (Some (photo ~upload_state:Uploaded ()));
+    case "Drive, Original_missing: false" false
+      (Some (photo ~upload_state:Original_missing ()));
+    case "App_only, Failed: false" false
+      (Some (photo ~original_target:App_only ~upload_state:Failed ()));
   ]

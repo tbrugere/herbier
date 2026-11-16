@@ -1245,6 +1245,153 @@ let photos_upsert_overwrites () =
     (photo 0xf1 ~observation:0x31 t1)
     full_photo
 
+(* Every (target x state x file id x deleted) combination: the health
+   check's list is exactly the live, Drive-bound, non-null-file-id photos
+   whose state is Uploaded or Original_missing. *)
+let photos_in_drive () =
+  let db = Cli.migrated_db () in
+  writes "observation" db [Observations.upsert (observation 0x31 t1)];
+  let targets = Photo.Original_target.[Drive; App_only]
+  and states = Photo.Upload_state.[Pending; Uploaded; Failed; Original_missing]
+  and file_ids = [None; Some "FILE"]
+  and deleteds = [None; Some t2] in
+  let combos =
+    List.concat_map
+      (fun target ->
+        List.concat_map
+          (fun state ->
+            List.concat_map
+              (fun file_id ->
+                List.map
+                  (fun deleted_at -> (target, state, file_id, deleted_at))
+                  deleteds)
+              file_ids)
+          states)
+      targets
+  in
+  let rows =
+    List.mapi
+      (fun i (target, state, file_id, deleted_at) ->
+        photo (0x40 + i) ~observation:0x31 t1 ~original_target:target
+          ~upload_state:state ?drive_file_id:file_id ?deleted_at)
+      combos
+  in
+  writes "every combination" db (List.map Photos.upsert rows);
+  let included (target, state, file_id, deleted_at) =
+    Photo.Original_target.equal target Drive
+    && (Photo.Upload_state.equal state Uploaded
+       || Photo.Upload_state.equal state Original_missing)
+    && Option.is_some file_id
+    && Option.is_none deleted_at
+  in
+  let expected =
+    combos
+    |> List.mapi (fun i combo -> (i, combo))
+    |> List.filter_map (fun (i, combo) ->
+        match included combo with
+        | true -> Some (uuid (0x40 + i))
+        | false -> None)
+  in
+  Alcotest.(check (list string))
+    "exactly the live drive/(uploaded|original_missing)/non-null rows, by id"
+    (List.sort String.compare expected)
+    (photo_ids (all db Photos.in_drive));
+  (* A live photo of a soft-deleted observation: its original is still the
+     user's, so it stays in the list. *)
+  writes "a photo of a soft-deleted observation" db
+    [
+      Observations.upsert (observation 0x32 t1);
+      Photos.upsert
+        (photo 0x90 ~observation:0x32 t1
+           ~original_target:Photo.Original_target.Drive
+           ~upload_state:Photo.Upload_state.Uploaded ~drive_file_id:"FILE");
+      Observations.soft_delete (observation_id 0x32) ~at:t2;
+    ];
+  Alcotest.(check bool)
+    "a live photo of a soft-deleted observation is included" true
+    (List.mem (uuid 0x90) (photo_ids (all db Photos.in_drive)))
+
+(* ---------- Photos.set_app_only ---------- *)
+
+let last_payload db =
+  match List.rev (Cli.outbox db) with
+  | r :: _ -> Yojson.Safe.from_string (Cli.string_field "payload_json" r)
+  | [] -> Alcotest.fail "the outbox is empty"
+
+let payload_field name payload =
+  match payload with
+  | `Assoc fields -> Option.value (List.assoc_opt name fields) ~default:`Null
+  | _ -> Alcotest.fail "payload is not an object"
+
+let check_edit what expected db edits =
+  Alcotest.(check int) what expected (Cli.edit_ok what db edits)
+
+let photos_set_app_only () =
+  let db = Cli.migrated_db () in
+  writes "observation" db [Observations.upsert (observation 0x31 t1)];
+  let pending =
+    photo 0xb1 ~observation:0x31 t1 ~upload_state:Photo.Upload_state.Pending
+  in
+  let failed =
+    photo 0xb2 ~observation:0x31 t1 ~upload_state:Photo.Upload_state.Failed
+  in
+  let uploaded =
+    photo 0xb3 ~observation:0x31 t1 ~upload_state:Photo.Upload_state.Uploaded
+  in
+  let original_missing =
+    photo 0xb4 ~observation:0x31 t1
+      ~upload_state:Photo.Upload_state.Original_missing
+  in
+  let app_only_pending =
+    photo 0xb5 ~observation:0x31 t1
+      ~original_target:Photo.Original_target.App_only
+      ~upload_state:Photo.Upload_state.Pending
+  in
+  let deleted =
+    photo 0xb6 ~observation:0x31 t1 ~upload_state:Photo.Upload_state.Pending
+  in
+  writes "every photo" db
+    (List.map Photos.upsert
+       [pending; failed; uploaded; original_missing; app_only_pending; deleted]);
+  writes "soft delete" db [Photos.soft_delete deleted.id ~at:t2];
+  List.iter
+    (fun (what, (p : Photo.t)) ->
+      check_edit
+        (what ^ ": set_app_only appends 1 entry")
+        1 db
+        [Photos.set_app_only p.id ~at:t2];
+      Alcotest.(check (option photo_t))
+        (what ^ ": the row is now app_only, updated_at = at")
+        (Some
+           {
+             p with
+             original_target = Photo.Original_target.App_only;
+             updated_at = t2;
+           })
+        (find db (Photos.get p.id));
+      Alcotest.(check Cli.yojson)
+        (what ^ ": the payload's original_target is app_only")
+        (`String "app_only")
+        (payload_field "original_target" (last_payload db)))
+    [("a drive/pending photo", pending); ("a drive/failed photo", failed)];
+  List.iter
+    (fun (what, id) ->
+      let before = Cli.outbox_count db in
+      check_edit
+        (what ^ ": set_app_only appends nothing")
+        0 db
+        [Photos.set_app_only id ~at:t3];
+      Alcotest.(check int)
+        (what ^ ": outbox count unchanged")
+        before (Cli.outbox_count db))
+    [
+      ("a drive/uploaded photo", uploaded.id);
+      ("a drive/original_missing photo", original_missing.id);
+      ("an already app_only/pending photo", app_only_pending.id);
+      ("a deleted photo", deleted.id);
+      ("an absent photo", photo_id 0xb9);
+    ]
+
 (* ---------- Settings ---------- *)
 
 let settings_names () =
@@ -1388,6 +1535,92 @@ let settings_bad_value () =
     (Result.map
        (Option.map Photo.Original_target.to_string)
        (Cli.find_result db (Settings.get Settings.Storage_target)))
+
+let timestamp_keys =
+  [
+    ("drive_health_checked_at", Settings.Drive_health_checked_at);
+    ("last_upload_at", Settings.Last_upload_at);
+  ]
+
+let settings_timestamp_names () =
+  List.iter
+    (fun (name, key) ->
+      Alcotest.(check string) (name ^ ": name") name (Settings.name key))
+    timestamp_keys
+
+let settings_timestamp_round_trip () =
+  List.iter
+    (fun (name, key) ->
+      let db = Cli.migrated_db () in
+      Alcotest.(check (option Cli.ptime))
+        (name ^ ": never set is None")
+        None
+        (find db (Settings.get key));
+      let t = time "2026-11-12T10:00:00.123456Z" in
+      check_changes (name ^ ": set changes 1 row") 1 db (Settings.set key t);
+      Alcotest.(check (option Cli.ptime))
+        (name ^ ": get round-trips a Ptime.t with microseconds")
+        (Some t)
+        (find db (Settings.get key));
+      Alcotest.(check (option string))
+        (name ^ ": stored as Codec.timestamp")
+        (stamp t) (stored_value db name))
+    timestamp_keys
+
+let settings_timestamp_bad_value () =
+  List.iter
+    (fun (name, key) ->
+      let db = Cli.migrated_db () in
+      Cli.exec_ok
+        (name ^ ": bad settings row")
+        db
+        (Printf.sprintf
+           "insert into settings (key, value) values ('%s', 'yesterday');\n"
+           name);
+      Alcotest.(check (result (option Cli.ptime) Cli.codec_error))
+        (name ^ " holding \"yesterday\" is Row WrongType")
+        (Error (Row `WrongType))
+        (Cli.find_result db (Settings.get key)))
+    timestamp_keys
+
+let photo_id_t = Alcotest.testable Ids.Photo_id.pp Ids.Photo_id.equal
+
+let settings_cursor () =
+  let db = Cli.migrated_db () in
+  let key = Settings.Drive_health_cursor in
+  Alcotest.(check string)
+    "named drive_health_cursor" "drive_health_cursor" (Settings.name key);
+  Alcotest.(check (option photo_id_t))
+    "never set is None" None
+    (find db (Settings.get key));
+  let id = photo_id 0x42 in
+  check_changes "set changes 1 row" 1 db (Settings.set key id);
+  Alcotest.(check (option photo_id_t))
+    "get gives the id back" (Some id)
+    (find db (Settings.get key));
+  Alcotest.(check (option string))
+    "stored as the id's text"
+    (Some (Ids.Photo_id.to_string id))
+    (stored_value db "drive_health_cursor");
+  check_changes "unset changes 1 row" 1 db (Settings.unset key);
+  Alcotest.(check (option photo_id_t))
+    "unset: None again" None
+    (find db (Settings.get key));
+  check_changes "unset again changes nothing" 0 db (Settings.unset key);
+  Cli.exec_ok "bad cursor row" db
+    "insert into settings (key, value) values ('drive_health_cursor', 'nope');\n";
+  Alcotest.(check (result (option photo_id_t) Cli.codec_error))
+    "a non-uuid value is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get key))
+
+let settings_unset_keeps_others () =
+  let db = Cli.migrated_db () in
+  check_changes "set Wifi_only" 1 db (Settings.set Settings.Wifi_only true);
+  check_changes "unset an unset key changes nothing" 0 db
+    (Settings.unset Settings.Drive_health_cursor);
+  Alcotest.(check (option bool))
+    "Wifi_only kept" (Some true)
+    (find db (Settings.get Settings.Wifi_only))
 
 (* ---------- Search.match_expression ---------- *)
 
@@ -2109,6 +2342,16 @@ let () =
           case "soft_delete gives 1 then 0" photos_soft_delete;
           case "upsert over an existing id rewrites every column"
             photos_upsert_overwrites;
+          case
+            "in_drive: exactly the live \
+             drive/(uploaded|original_missing)/non-null-file-id rows, over \
+             every combination"
+            photos_in_drive;
+          case
+            "set_app_only: a drive/pending or drive/failed photo becomes \
+             app_only with one outbox entry; uploaded, original_missing, \
+             already app_only, deleted and absent photos are no-ops"
+            photos_set_app_only;
         ] );
       ( "Settings",
         [
@@ -2127,6 +2370,21 @@ let () =
             settings_place_source_round_trip;
           case "each place-source / notice key holding \"yes\" is Row WrongType"
             settings_place_source_bad_value;
+          case
+            "the Drive health check and last upload keys are named \
+             drive_health_checked_at and last_upload_at"
+            settings_timestamp_names;
+          case
+            "each timestamp key round-trips a Ptime.t with microseconds, \
+             stored as Codec.timestamp"
+            settings_timestamp_round_trip;
+          case "each timestamp key holding \"yesterday\" is Row WrongType"
+            settings_timestamp_bad_value;
+          case
+            "the health cursor round-trips a photo id, unset deletes it, a bad \
+             value is Row WrongType"
+            settings_cursor;
+          case "unset touches only its own key" settings_unset_keeps_others;
         ] );
       ( "Search.match_expression",
         [

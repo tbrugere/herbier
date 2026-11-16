@@ -167,6 +167,39 @@ let queue_part app =
         Kit.append log "pass: done";
         refresh ())
   in
+  (* « Envoyer maintenant » needs a failed photo, which the emulator cannot
+     produce without Drive. *)
+  let mark_failed () =
+    let open Fut.Syntax in
+    Fut.await
+      (let* rows = Db.all (App.db app) Herbier_store.Uploads.all in
+       match rows with
+       | Error e -> Fut.return (Error (Db.error_to_string e))
+       | Ok [] -> Fut.return (Error "no row")
+       | Ok (row :: _) -> (
+           let* written =
+             Db.write (App.db app)
+               (Herbier_store.Uploads.put
+                  {row with attempts = 3; last_error = Some "dev"})
+           in
+           match written with
+           | Error e -> Fut.return (Error (Db.error_to_string e))
+           | Ok (_ : int) ->
+               Fut.map
+                 (function
+                   | Ok (_ : int) ->
+                       Ok (Herbier_domain.Ids.Photo_id.to_string row.photo_id)
+                   | Error e -> Error (Db.error_to_string e))
+                 (App.save app
+                    [
+                      Herbier_store.Photos.set_upload row.photo_id ~state:Failed
+                        ~drive_file_id:None ~at:(Ptime_clock.now ());
+                    ])))
+      (fun r ->
+        Kit.append log
+          (match r with Ok id -> "failed: " ^ id | Error e -> "failed: " ^ e);
+        refresh ())
+  in
   refresh ();
   El.div
     [
@@ -176,6 +209,7 @@ let queue_part app =
           Kit.action "Passe silencieuse" (pass ~interactive:false);
           Kit.action "Passe interactive" (pass ~interactive:true);
           Kit.action "Rafraîchir la file" refresh;
+          Kit.action "Marquer en échec" mark_failed;
         ];
       rows;
       log;

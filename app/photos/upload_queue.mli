@@ -86,6 +86,11 @@ val next :
     [Retry]'s [attempts] only once the new job is enqueued: until then each pass
     counts that failure again from the same saved value. *)
 
+val retryable : Photo.t option -> bool
+(** « Envoyer maintenant » may start this photo again: [Some p] with
+    [p.original_target = Drive] and [p.upload_state = Failed]. [None] (absent or
+    deleted), [App_only], or another state → [false]. *)
+
 type count = {attempts : int; error : string}
 
 val missing_file : pending -> count
@@ -106,16 +111,3 @@ val on_network_change : now:Ptime.t -> pending -> job option -> session option
     [Waiting] and [s] the pending's usable session (the job is enqueued again
     under the new constraint); [None] otherwise (a running job finishes on its
     network, a finished one is the pass's to handle). *)
-
-(** Whose problem a failed session start is. *)
-type scope =
-  | Account  (** the same for every photo: stop starting sessions this pass *)
-  | This_photo  (** counts as one of this photo's attempts *)
-
-val equal_scope : scope -> scope -> bool
-
-val start_error_scope : Drive.error -> scope
-(** [Unauthorized], [Api_disabled], [Scope_missing], [Quota_full],
-    [Rate_limited], [Server _], [Network _] → [Account]; [Not_found], [Http _],
-    [Malformed _] → [This_photo], which the caller counts with {!count_failure}
-    ({!Drive.error_to_string}) and the session dropped. *)

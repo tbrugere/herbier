@@ -599,6 +599,36 @@ let error_to_string_tests =
     case "malformed answer: id" (Drive.Malformed "id");
   ]
 
+(* ---------- error_scope ---------- *)
+
+let pp_scope ppf = function
+  | Drive.Account -> Format.pp_print_string ppf "Account"
+  | Drive.This_file -> Format.pp_print_string ppf "This_file"
+
+let scope_t = Alcotest.testable pp_scope Drive.equal_scope
+
+let error_scope_tests =
+  let case name e expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check scope_t "error_scope" expected (Drive.error_scope e) )
+  in
+  [
+    case "Unauthorized: Account" Drive.Unauthorized Drive.Account;
+    case "Api_disabled: Account" Drive.Api_disabled Drive.Account;
+    case "Scope_missing: Account" Drive.Scope_missing Drive.Account;
+    case "Quota_full: Account" Drive.Quota_full Drive.Account;
+    case "Rate_limited: Account" Drive.Rate_limited Drive.Account;
+    case "Server _: Account" (Drive.Server 503) Drive.Account;
+    case "Network _: Account" (Drive.Network "timeout") Drive.Account;
+    case "Not_found: This_file" Drive.Not_found Drive.This_file;
+    case "Http _: This_file"
+      (Drive.Http {status = 418; reason = None; message = None})
+      Drive.This_file;
+    case "Malformed _: This_file" (Drive.Malformed "x") Drive.This_file;
+  ]
+
 (* ---------- decoders ---------- *)
 
 let decode_files_tests =
@@ -1171,4 +1201,46 @@ let start_session_tests =
         Alcotest.check start_result "start_session"
           (Error (Drive.Network "timeout"))
           (Drive.run (seq_net [Drive.Unreachable "timeout"]) prog) );
+  ]
+
+(* ---------- view_url ---------- *)
+
+let view_url_tests =
+  [
+    ( "the exact Drive view URL, from drive_file_id",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "view_url" "https://drive.google.com/file/d/1AbC_d-9/view"
+          (Drive.view_url ~file_id:"1AbC_d-9") );
+    ( "a file id with a slash and a space is percent-encoded",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "view_url" "https://drive.google.com/file/d/a%2Fb%20c/view"
+          (Drive.view_url ~file_id:"a/b c") );
+    ( "when the recorded files.create answer of an original exists \
+       (HERBIER_DRIVE_TOKEN), it has a webViewLink and view_url of its id is a \
+       prefix of it",
+      `Quick,
+      fun () ->
+        let file = "drive_files_create_original_200.json" in
+        match Fixture.exists file with
+        | false -> print_endline ("not recorded yet, skipped: " ^ file)
+        | true -> (
+            match Yojson.Safe.from_string (Fixture.read file) with
+            | `Assoc fields -> (
+                match
+                  ( List.assoc_opt "id" fields,
+                    List.assoc_opt "webViewLink" fields )
+                with
+                | Some (`String id), Some (`String link) ->
+                    Alcotest.(check bool)
+                      "view_url is a prefix of webViewLink" true
+                      (String.starts_with
+                         ~prefix:(Drive.view_url ~file_id:id)
+                         link)
+                | Some (`String _), _ -> Alcotest.fail "no webViewLink"
+                | _, _ -> Alcotest.fail "no id")
+            | _ -> Alcotest.failf "%s: not a JSON object" file) );
   ]

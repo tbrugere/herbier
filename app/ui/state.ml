@@ -10,7 +10,7 @@ type filters = {
 
 let no_filters = {tags = []; year = None; to_identify_only = false}
 
-type network = {online : bool; pending_uploads : int} [@@deriving eq]
+type network = {online : bool} [@@deriving eq]
 
 type account = {
   auth : Herbier_sync.Auth.status;

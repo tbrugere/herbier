@@ -1,4 +1,5 @@
 module Pack_text = Herbier_ui_model.Pack_text
+module Drive_text = Herbier_ui_model.Drive_text
 open Brr
 module Db = Herbier_store_io.Db
 module Settings = Herbier_store.Settings
@@ -72,7 +73,7 @@ type card = {
 
 (* « Changer » signs in again (the account chooser); the current session
    stays until the new one is made. *)
-let card ~running : Auth.status -> card = function
+let card ~running ~storage ~access : Auth.status -> card = function
   | Unconfigured ->
       {
         avatar = "G";
@@ -97,7 +98,7 @@ let card ~running : Auth.status -> card = function
       {
         avatar = Option.value (Option.bind email initial) ~default:"G";
         title = "Compte Google connecté";
-        meta = Option.value email ~default:"Adresse inconnue";
+        meta = Drive_text.account_meta ~email ~storage access;
         action =
           Some (match running with true -> "Connexion…" | false -> "Changer");
       }
@@ -107,9 +108,30 @@ let account_card app =
   let running, set_running = React.S.create ~eq:Bool.equal false in
   let error, set_error = React.S.create ~eq:(Option.equal String.equal) None in
   let card =
-    React.S.l2 ~eq:equal_card
-      (fun (a : State.account) running -> card ~running a.auth)
-      (State.account state) running
+    React.S.l3 ~eq:equal_card
+      (fun (a : State.account) running access ->
+        card ~running ~storage:a.storage ~access a.auth)
+      (State.account state) running (App.drive_access app)
+  in
+  let prompt =
+    React.S.l3
+      ~eq:(Option.equal Drive_text.equal_prompt)
+      (fun (a : State.account) access q ->
+        Drive_text.drive_prompt ~storage:a.storage
+          ~pending:(Drive_text.pending_count q)
+          access)
+      (State.account state) (App.drive_access app) (App.upload_queue app)
+  in
+  let prompt_text = El.span ~at:[cls "t-meta"; cls "settings__text"] [] in
+  let authorize = W.Button.text "" in
+  let prompt_el =
+    El.div ~at:[cls "settings__prompt"] [prompt_text; authorize.el]
+  in
+  let prompt_action =
+    React.S.map
+      ~eq:(Option.equal String.equal)
+      (fun p -> Option.bind p (fun (p : Drive_text.prompt) -> p.action))
+      prompt
   in
   let avatar = El.span ~at:[cls "settings__avatar"] [] in
   let title = El.span ~at:[cls "settings__title"] [] in
@@ -165,6 +187,7 @@ let account_card app =
                 El.span ~at:[cls "settings__text"] [title; meta];
                 button.el;
               ];
+            prompt_el;
           ];
         error_el;
       ]
@@ -181,7 +204,17 @@ let account_card app =
     :: Rb.text error_el (React.S.map (Option.value ~default:"") error)
     :: Rb.class_ error_el "is-hidden" (React.S.map Option.is_none error)
     :: Rb.act button.click sign_in
-    :: button.bindings )
+    :: Rb.text prompt_text
+         (React.S.map
+            (function Some (p : Drive_text.prompt) -> p.text | None -> "")
+            prompt)
+    :: Rb.class_ prompt_el "is-hidden" (React.S.map Option.is_none prompt)
+    :: Rb.text authorize.el
+         (React.S.map (Option.value ~default:"") prompt_action)
+    :: Rb.class_ authorize.el "is-hidden"
+         (React.S.map Option.is_none prompt_action)
+    :: Rb.act authorize.click (fun () -> App.authorize_drive app)
+    :: (button.bindings @ authorize.bindings) )
 
 (* « IGN hors-ligne »: the downloaded packs and the département picker. *)
 
@@ -445,8 +478,107 @@ let ign_offline_block app =
   in
   (els, bindings)
 
+type stop_choice = Send_anyway | Dont_send | Keep_drive
+
+(* 4m « File d'envoi »: the queue's title, why it waits, the last upload, and
+   « Envoyer maintenant ». *)
+let queue_block app =
+  let state = App.state app in
+  let queue = App.upload_queue app in
+  let send = W.Button.text "Envoyer maintenant" in
+  let title = El.span ~at:[cls "settings__title"] [] in
+  let status =
+    El.span
+      ~at:
+        [
+          cls "t-meta";
+          cls "settings__status";
+          At.v (Jstr.v "role") (Jstr.v "status");
+        ]
+      []
+  in
+  let last = El.span ~at:[cls "t-meta"] [] in
+  let status_text =
+    React.S.l4
+      ~eq:(Option.equal String.equal)
+      (fun access (n : State.network) (a : State.account) q ->
+        Drive_text.queue_status access ~online:n.online ~wifi_only:a.wifi_only q)
+      (App.drive_access app) (State.network state) (State.account state) queue
+  in
+  (* [now] is read when the queue changes, in a DOM-side callback: a signal
+     function must stay pure. *)
+  let show_last (q : Drive_text.queue) =
+    let now = Ptime_clock.now () in
+    El.set_children last
+      [
+        El.txt'
+          (Drive_text.last_sent ~now ~tz_offset_s:(Zone.offset_s now)
+             q.last_upload);
+      ]
+  in
+  show_last (React.S.value queue);
+  let enabled = React.S.map ~eq:Bool.equal Drive_text.send_enabled queue in
+  let el =
+    El.div
+      ~at:[cls "settings__row"]
+      [El.span ~at:[cls "settings__text"] [title; status; last]; send.el]
+  in
+  ( el,
+    [
+      Rb.text title (React.S.map Drive_text.queue_title queue);
+      Rb.text status (React.S.map (Option.value ~default:"") status_text);
+      Rb.class_ status "is-hidden" (React.S.map Option.is_none status_text);
+      Rb.act (React.S.changes queue) show_last;
+      Rb.attr send.el "aria-disabled"
+        (React.S.map (function true -> None | false -> Some "true") enabled);
+      Rb.act send.click (fun () ->
+          match React.S.value enabled with
+          | true -> App.send_now app
+          | false -> ());
+    ]
+    @ send.bindings )
+
+(* The dialog when « Dans Herbier seulement » is chosen while originals wait
+   on this phone, built at the tap for the count then: an upload that ends
+   while it is open neither replaces nor closes it. [send_anyway] and
+   [dont_send] run the choice. *)
+let stop_dialog ~send_anyway ~dont_send =
+  let host = El.div [] in
+  (* style: the open dialog's bindings, replaced at each tap and released with
+     the screen: a DOM-side cache. *)
+  let current = ref [] in
+  let open_ n =
+    Rb.release !current;
+    let {Drive_text.title; text} = Drive_text.stop_dialog n in
+    let d =
+      W.Dialog.v ~title ~text
+        [
+          (W.Button.Primary, "Les envoyer quand même", Send_anyway);
+          (W.Button.Danger, "Ne pas les envoyer", Dont_send);
+          (W.Button.Secondary, "Annuler", Keep_drive);
+        ]
+    in
+    El.set_children host [d.el];
+    current :=
+      Rb.act d.choice (function
+        | Send_anyway -> send_anyway ()
+        | Dont_send -> dont_send ()
+        | Keep_drive -> ())
+      :: d.bindings;
+    d.show ()
+  in
+  (host, open_, Rb.on_release (fun () -> Rb.release !current))
+
+let storage_not_saved = "Le réglage n’a pas pu être enregistré."
+
+let stop_failed =
+  "Les photos en attente n’ont pas pu être retirées : rien n’a changé."
+
 let v app =
-  let db = App.db app and state = App.state app in
+  let state = App.state app in
+  (* « · Drive » and « Autoriser » say what Play Services says now, without
+     waiting for an upload; the answer comes in a future's callback. *)
+  App.check_drive_access app;
   let parked, parked_b = Pending.v app in
   let storage =
     React.S.map ~eq:( = )
@@ -461,13 +593,7 @@ let v app =
   let set_account f =
     State.set_account state (f (React.S.value (State.account state)))
   in
-  let set_storage target =
-    Fut.await
-      (Db.write db (Settings.set Settings.Storage_target target))
-      (function
-        | Error e -> log_error "storage" e
-        | Ok _ -> set_account (fun a -> {a with storage = target}))
-  in
+  let db = App.db app in
   (* Shown before the write, so a second tap while it runs flips it back. *)
   let toggle_wifi () =
     let next = not (React.S.value wifi) in
@@ -531,11 +657,44 @@ let v app =
       []
   in
   let free = W.Button.text "Libérer" in
-  let send = W.Button.text "Envoyer maintenant" in
   El.set_at (Jstr.v "aria-disabled") (Some (Jstr.v "true")) free.el;
-  El.set_at (Jstr.v "aria-disabled") (Some (Jstr.v "true")) send.el;
-  let pending = El.span ~at:[cls "settings__title"] [] in
-  let row children = El.div ~at:[cls "settings__row"] children in
+  let queue_el, queue_b = queue_block app in
+  let storage_error, set_storage_error =
+    React.S.create ~eq:(Option.equal String.equal) None
+  in
+  let apply_storage target =
+    Fut.await (App.set_storage app target) (function
+      | Ok () -> set_storage_error None
+      | Error (_ : Db.error) -> set_storage_error (Some storage_not_saved))
+  in
+  (* The waiting photos first: when that fails nothing has changed, and when
+     the setting then fails the radio still says Drive, which is true for the
+     photos to come. *)
+  let dont_send () =
+    Fut.await (App.stop_drive_uploads app) (function
+      | Ok () -> apply_storage Original_target.App_only
+      | Error (_ : Db.error) -> set_storage_error (Some stop_failed))
+  in
+  let stop_el, open_stop, stop_b =
+    stop_dialog
+      ~send_anyway:(fun () -> apply_storage Original_target.App_only)
+      ~dont_send
+  in
+  let choose_app_only () =
+    match Drive_text.pending_count (React.S.value (App.upload_queue app)) with
+    | 0 -> apply_storage Original_target.App_only
+    | n -> open_stop n
+  in
+  let storage_error_el =
+    El.p
+      ~at:
+        [
+          cls "t-meta";
+          cls "settings__error";
+          At.v (Jstr.v "role") (Jstr.v "alert");
+        ]
+      []
+  in
   let el =
     El.div
       ~at:[cls "screen"; cls "settings"]
@@ -551,6 +710,7 @@ let v app =
                   At.v (Jstr.v "role") (Jstr.v "radiogroup");
                 ]
               [drive_el; local_el];
+            storage_error_el;
           ];
         section "Sur le téléphone"
           [
@@ -584,25 +744,8 @@ let v app =
               @ [source_error]);
           ];
         section "File d'envoi"
-          [
-            El.div
-              ~at:[cls "settings__card"]
-              [
-                row
-                  [
-                    El.span
-                      ~at:[cls "settings__text"]
-                      [
-                        pending;
-                        El.span
-                          ~at:[cls "t-meta"]
-                          [El.txt' "Aucun envoi pour l'instant."];
-                      ];
-                    send.el;
-                  ];
-              ];
-            parked;
-          ];
+          [El.div ~at:[cls "settings__card"] [queue_el]; parked];
+        stop_el;
       ]
   in
   {
@@ -613,11 +756,20 @@ let v app =
         [
           account_b;
           parked_b;
+          queue_b;
+          [stop_b];
           drive_b;
           local_b;
           [
-            Rb.act drive_click (fun () -> set_storage Original_target.Drive);
-            Rb.act local_click (fun () -> set_storage Original_target.App_only);
+            Rb.act drive_click (fun () -> apply_storage Original_target.Drive);
+            Rb.text storage_error_el
+              (React.S.map (Option.value ~default:"") storage_error);
+            Rb.class_ storage_error_el "is-hidden"
+              (React.S.map Option.is_none storage_error);
+            Rb.act local_click (fun () ->
+                match React.S.value storage with
+                | Original_target.App_only -> ()
+                | Drive -> choose_app_only ());
             Rb.act wifi_switch.toggle toggle_wifi;
             Rb.text source_error
               (React.S.map (Option.value ~default:"") (App.place_error app));
@@ -625,14 +777,6 @@ let v app =
               (React.S.map
                  (function None -> Some "" | Some (_ : string) -> None)
                  (App.place_error app));
-            Rb.text pending
-              (React.S.map
-                 (fun (n : State.network) ->
-                   match n.pending_uploads with
-                   | 0 -> "Aucune photo en attente"
-                   | 1 -> "1 photo en attente"
-                   | n -> Printf.sprintf "%d photos en attente" n)
-                 (State.network state));
           ];
           compressed.bindings;
           wifi_switch.bindings;
@@ -641,6 +785,5 @@ let v app =
             source_switches;
           offline_bindings;
           free.bindings;
-          send.bindings;
         ];
   }

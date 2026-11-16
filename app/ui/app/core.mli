@@ -10,6 +10,7 @@ module Place_name := Herbier_geo.Place_name
 module Communes := Herbier_geo.Communes
 module Pack_rows := Herbier_store.Commune_packs
 module Code := Communes.Code
+module Drive_text := Herbier_ui_model.Drive_text
 
 type geocode_run =
   | Idle
@@ -82,6 +83,15 @@ type t = {
       (* style: mutable because {!start_uploads} sets it once, after
          {!create}: the binding on « Envoyer seulement en Wi-Fi », held here so
          that it stays reachable (primer §5) for the app's lifetime. *)
+  drive_last : Drive_text.access React.signal;
+      (* the last Drive token outcome since the last sign-in *)
+  set_drive_last : ?step:React.step -> Drive_text.access -> unit;
+  drive_access : Drive_text.access React.signal;
+      (* derived from {!State.account} and [drive_last]; held here so that it
+         stays reachable for the app's lifetime *)
+  upload_queue : Drive_text.queue React.signal;
+  set_upload_queue : ?step:React.step -> Drive_text.queue -> unit;
+  health : Herbier_photos_io.Health.t;
 }
 
 val log_error : string list -> unit
@@ -115,6 +125,18 @@ val start_keepalive : t -> unit
 val start_uploads : t -> unit
 val upload_pending : t -> unit
 val uploads : t -> Herbier_photos_io.Upload_queue.t
+val drive_access : t -> Drive_text.access React.signal
+val check_drive_access : t -> unit
+val authorize_drive : t -> unit
+val upload_queue : t -> Drive_text.queue React.signal
+val send_now : t -> unit
+val stop_drive_uploads : t -> (unit, Db.error) result Fut.t
+
+val set_storage :
+  t -> Herbier_domain.Photo.Original_target.t -> (unit, Db.error) result Fut.t
+
+val health : t -> Herbier_photos_io.Health.t
+val check_originals : t -> unit
 
 val commit : t -> Herbier_store.Outbox.edit list -> (int, Db.error) result Fut.t
 (** {!Db.edit}, then {!changed} once a commit appended an entry; no geocoding

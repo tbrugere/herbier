@@ -446,6 +446,7 @@ let () =
       ( "drive error_of_answer (hand-written)",
         Test_drive.error_of_answer_handwritten_tests );
       ("drive error_to_string", Test_drive.error_to_string_tests);
+      ("drive error_scope", Test_drive.error_scope_tests);
       ("drive decode_files", Test_drive.decode_files_tests);
       ("drive decode_file", Test_drive.decode_file_tests);
       ("drive folder program", Test_drive.folder_tests);
@@ -454,12 +455,19 @@ let () =
       ("drive create_session", Test_drive.create_session_tests);
       ("drive decode_session", Test_drive.decode_session_tests);
       ("drive start_session program", Test_drive.start_session_tests);
+      ("drive view_url", Test_drive.view_url_tests);
       ("upload_queue constants", Test_upload_queue.constants_tests);
       ("upload_queue session_usable", Test_upload_queue.session_usable_tests);
       ("upload_queue next", Test_upload_queue.next_tests);
-      ( "upload_queue start_error_scope",
-        Test_upload_queue.start_error_scope_tests );
       ("upload_queue count_failure", Test_upload_queue.count_failure_tests);
       ( "upload_queue on_network_change",
         Test_upload_queue.on_network_change_tests );
+      ("upload_queue retryable", Test_upload_queue.retryable_tests);
+      ("health interval", Test_health.interval_tests);
+      ("health due", Test_health.due_tests);
+      ("health items", Test_health.items_tests);
+      ("health verdict", Test_health.verdict_tests);
+      ("health program", Test_health.program_tests);
+      ("health resume", Test_health.resume_tests);
+      ("health summary", Test_health.summary_tests);
     ]

@@ -63,6 +63,18 @@ val error_to_string : error -> string
 (** One line: ["unauthorized"], ["Drive API disabled"],
     ["HTTP 418 <reason>: <message>"], …; never a token. *)
 
+(** Whose problem a failed request is; each caller says what it does with it. *)
+type scope =
+  | Account  (** the same for every file: token, API, quota, rate, network *)
+  | This_file  (** this file or this request only *)
+
+val equal_scope : scope -> scope -> bool
+
+val error_scope : error -> scope
+(** [Unauthorized], [Api_disabled], [Scope_missing], [Quota_full],
+    [Rate_limited], [Server _], [Network _] → [Account]; [Not_found], [Http _],
+    [Malformed _] → [This_file]. *)
+
 val error_of_answer : status:int -> body:string -> error
 (** A non-2xx answer classified. The body is Google's
     [{"error": {"code", "message", "errors": [{"reason"}], "status", "details":
@@ -180,6 +192,12 @@ val decode_session : (string * string) list -> (string, error) result
 
 val get_trashed : file_id:string -> request
 (** GET {!api}[/<file_id, Url.encode>?fields=id,trashed]. *)
+
+val view_url : file_id:string -> string
+(** ["https://drive.google.com/file/d/<file_id, Url.encode>/view"]: the page 5e
+    « Ouvrir dans Google Drive ↗ » opens (the form of a file's [webViewLink],
+    which Herbier does not store; Android hands it to the Drive app when
+    installed). *)
 
 (** {1 Decoders}
 

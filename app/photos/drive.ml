@@ -54,6 +54,14 @@ let error_to_string = function
 
 let pp_error ppf e = Format.pp_print_string ppf (error_to_string e)
 
+type scope = Account | This_file [@@deriving eq]
+
+let error_scope = function
+  | Unauthorized | Api_disabled | Scope_missing | Quota_full | Rate_limited
+  | Server _ | Network _ ->
+      Account
+  | Not_found | Http _ | Malformed _ -> This_file
+
 let list_member name json =
   match Json.member name json with Some (`List l) -> l | _ -> []
 
@@ -296,6 +304,9 @@ let get_trashed ~file_id =
     url = api ^ "/" ^ Url.encode file_id ^ "?fields=id,trashed";
     body = Empty;
   }
+
+let view_url ~file_id =
+  "https://drive.google.com/file/d/" ^ Url.encode file_id ^ "/view"
 
 (* Decoders *)
 

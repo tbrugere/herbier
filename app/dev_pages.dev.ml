@@ -13,6 +13,7 @@ let () = Herbier_ui.Dev.Hooks.install ()
 
 let find db app =
   let module D = Herbier_ui.Dev in
+  Result.iter D.Hooks.install_app app;
   function
   | "storage" -> Some (page D.Storage_check.el)
   | "store" -> Some (page D.Store_check.el)

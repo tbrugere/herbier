@@ -256,6 +256,8 @@ app/
                           programs put_original, start_session and presence over a fake-able transport
     upload_queue.ml       the originals' queue's decisions, without IO: from a photo row, its uploads row and
                           its job, what to do next (start a session, enqueue, finish, retry, give up, discard)
+    health.ml             the weekly Drive check without IO: which photos to ask about, what presence
+                          means for each (original_missing, or back to uploaded), the check as one program
   photos_io/              §5 of architecture, Brr part
     capture.ml            getUserMedia / pick
     preview.ml            canvas resize + JPEG encode, sha256 of the original; save: previews/<id>.jpg
@@ -265,7 +267,9 @@ app/
     upload_queue.ml       the originals' queue on the device: originals/<id> and its uploads row at save, the
                           single-flight pass (jobs, rows, photo rows, Upload_queue.next), session starts one at
                           a time over drive.ml, jobs through bindings/cap_uploader.ml, outcomes committed
-    health.ml
+    health.ml             the weekly Drive check on the device: due by the drive_health_checked_at
+                          setting, photos in Drive, health program over drive.ml, state changes committed,
+                          a stopped round's place kept in drive_health_cursor and resumed after it
   refs/                   §6–7 of architecture, pure part: domain + yojson + ptime, no Brr
     request.ml            Request.t: source + URL of one GET; percent-encoding, URL assembly
     decode.ml             decode error variant, JSON parsing, field helpers shared by sources/
@@ -341,6 +345,8 @@ app/
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
+    drive_text.ml         the Drive texts of 4e, 4m and 5e: access, queue title and status, last upload,
+                          account meta and prompt, the stop dialog, 4e's card, 5e's badge and Drive link
     parked_entry.ml       4m's parked outbox entry: its title and French reason, from Last_error
   ui/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
@@ -378,7 +384,10 @@ app/
                           after-save → sync engine (local write) + reference fetch; a pull that wrote rows fires
                           `saved`, every cycle `synced`
       core.ml             the app's state, its creation, the services' start, commit, the photos' save and
-                          their originals' queue (its triggers: start, resume, sign-in, online, job changes)
+                          their originals' queue (its triggers: start, resume, sign-in, online, job changes);
+                          Drive: the access (last token outcome since the sign-in, as 4m/4e show it), the
+                          queue as 4m/4e show it, « Envoyer maintenant », « Ne pas les envoyer », the storage
+                          radio, and the weekly health check (start, resume, sign-in, online; signed in only)
       geocoding.ml        place names: the background geocoding and the 4m source switches; save
       reference_fetch.ml  a plant's reference fetch, its organ thumbnails, the GBIF link
       packs.ml            the « IGN hors-ligne » packs' download and delete
@@ -400,10 +409,12 @@ app/
                           sign in, refresh now, expire, sign out;
                           drive_check.ml (#dev/drive): the Drive token (interactive, silent, the plugin
                           alone), a generated test JPEG put into Herbier/<species>/ and put again, its
-                          presence, and an invalid token's two 401s;
+                          presence, an invalid token's two 401s, « Vérifier les originaux » (the health
+                          check, forced) and the fake « Original envoyé (factice) » / « Original
+                          introuvable » marks (synced: local stack only);
                           uploader_check.ml (#dev/uploader): the upload job against scripts/upload-sink.mjs (a
                           random file, Wi-Fi only or any network, cancel, the live job list) and the app's
-                          originals' queue (its rows, a silent or interactive pass);
+                          originals' queue (its rows, a silent or interactive pass, « Marquer en échec »);
                           rest_check.ml (#dev/rest): a tags upsert, a tags pull (since none / one minute) and
                           an invalid-token upsert over sync/net/transport.ml, with the session's or a pasted token;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
@@ -429,8 +440,10 @@ app/
                           pack 90) with their place_derived and the requests since;
                           kit.ml: what the dev pages share (a log line, a heading, a button and its click,
                           disabled, a reported step); fixture.ml: the dev pages'
-                          State; hooks.ml: herbierDev.live(), the leak count, and
-                          herbierDev.geocodeRequests(); linked only outside the release profile
+                          State; hooks.ml: herbierDev.live(), the leak count,
+                          herbierDev.geocodeRequests(), and, once the app exists (Hooks.install_app),
+                          herbierDev.markOriginal(state) through Dev_hook.export_action; linked only
+                          outside the release profile
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, icon_button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
@@ -692,7 +705,8 @@ test/
                 exifr output in fixtures/exifr_*.json; preview_size; jpeg; drive: requests, names,
                 decoders and programs (put_original, the resumable start_session) over a fake transport,
                 errors over fixtures/drive_*.json and the session PUT's over fixtures/drive_*.txt;
-                upload_queue: the queue's decisions)
+                upload_queue: the queue's decisions; health: the weekly check's decisions and
+                program over a fake transport)
   geo/          native, alcotest: herbier_geo (features, style over the
                 recorded web/map/positron.json; geocode, place_name and communes over
                 fixtures/{photon,geoplateforme}_*.json, the WFS ones geoplateforme_wfs_*.json)

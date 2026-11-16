@@ -1,5 +1,7 @@
 ; Pure photos: EXIF reading (exif), the preview size (preview_size), JPEG
-; segments (jpeg) and Google Drive's requests and programs (drive). No Brr, no
+; segments (jpeg), Google Drive's requests and programs (drive), the
+; originals' queue decisions (upload_queue) and the weekly Drive health check
+; (health). No Brr, no
 ; store: the libraries below enforce it, and test/photos links this library
 ; natively. The Brr side is app/photos_io/.
 (library

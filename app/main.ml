@@ -84,7 +84,7 @@ let create_app db {storage; wifi_only; place_sources} =
   let auth = Herbier_sync.Auth.create () in
   let state =
     Herbier_ui.State.create
-      ~network:{online = Navigator.online G.navigator; pending_uploads = 0}
+      ~network:{online = Navigator.online G.navigator}
       ~account:{auth = Herbier_sync.Auth.status auth; storage; wifi_only}
       ~place_sources
   in
@@ -92,17 +92,18 @@ let create_app db {storage; wifi_only; place_sources} =
 
 (* The window's online and offline events update [State.network]; coming
    back online asks the enabled place-name sources for what was saved
-   meanwhile (architecture §8) and runs the originals' queue. The window holds
+   meanwhile (architecture §8), runs the originals' queue and the Drive health
+   check when it is due (architecture §5). The window holds
    the listeners for the app's lifetime. *)
 let watch_network app =
   let state = Herbier_ui.App.state app in
   let set online (_ : Ev.Type.void Ev.t) =
-    let network = React.S.value (Herbier_ui.State.network state) in
-    Herbier_ui.State.set_network state {network with online};
+    Herbier_ui.State.set_network state {online};
     match online with
     | true ->
         Herbier_ui.App.geocode_pending app;
-        Herbier_ui.App.upload_pending app
+        Herbier_ui.App.upload_pending app;
+        Herbier_ui.App.check_originals app
     | false -> ()
   in
   let listen name online =

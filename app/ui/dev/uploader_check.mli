@@ -12,7 +12,11 @@
 
     « File »: the app's queue ({!App.uploads}): each row's photo id, photo
     state, job state, attempts, last error and whether it holds a session (never
-    its URL); « Passe silencieuse » / « Passe interactive » run a pass. *)
+    its URL); « Passe silencieuse » / « Passe interactive » run a pass; «
+    Marquer en échec » writes the oldest row with [attempts = 3] and
+    [last_error = "dev"] and commits its photo [Failed] ({!App.save}, so it
+    syncs: use it against the local Supabase stack only), to reach 4m « Envoyer
+    maintenant » without Drive. *)
 
 val el : (App.t, string) result -> Brr.El.t
 (** Without an app (a desktop browser), the plugin part alone (its calls log

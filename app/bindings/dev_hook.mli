@@ -11,6 +11,11 @@ val export_strings : string -> (unit -> string list) -> unit
 (** [export_strings name f] sets [globalThis.herbierDev[name]] to a JS function
     returning [f ()] as an array of strings. *)
 
+val export_action : string -> (string -> unit) -> unit
+(** [export_action name f] sets [globalThis.herbierDev[name]] to a JS function
+    of one argument calling [f] with it as a string ([""] when absent or
+    [null]); it returns [undefined]. *)
+
 val heap_used : unit -> float option
 (** [performance.memory.usedJSHeapSize] in bytes, where the browser has it
     (Chromium and the Android WebView); [None] elsewhere. Precise only in a

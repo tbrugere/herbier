@@ -1,6 +1,5 @@
 let state () =
-  State.create
-    ~network:{online = true; pending_uploads = 0}
+  State.create ~network:{online = true}
     ~account:
       {
         auth = Herbier_sync.Auth.Signed_out;

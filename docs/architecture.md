@@ -119,10 +119,13 @@ the mean of the positions. Details in `app/domain/places.mli`.
   - `outbox(seq, table_name, row_id, op, payload_json, created_at, attempts,
     last_error)` — the sync queue.
   - `sync_state(table_name, last_pulled_at)`.
-  - `settings(key, value)` — storage target, Wi-Fi-only, filters. Keys are
-    typed (`store/settings.ml`, a GADT): `storage_target` (the
-    `photo_original_target` label) and `wifi_only` (`true` / `false`) so
-    far; a value that does not parse is a decode error, not a silent
+  - `settings(key, value)` — local, never synced. Keys are typed
+    (`store/settings.ml`, a GADT; `store/settings.mli` is the full list):
+    choices (`storage_target`, the `photo_original_target` label; the
+    `wifi_only`, place-source and notice flags, `true` / `false`), and the
+    Drive queue and health check's bookkeeping (`last_upload_at` and
+    `drive_health_checked_at`, `Codec.timestamp` text; `drive_health_cursor`,
+    a photo id). A value that does not parse is a decode error, not a silent
     default.
 - Local column types (`store/schema.ml`, migration 1): ids, lookup values
   and text are `text`; timestamps are `text` in one fixed-width UTC format with
@@ -603,10 +606,33 @@ capture / pick
   close that window and are not used yet.
   `put_original` (the multipart frame) stays for #dev/drive and for a
   foreground fallback.
-- Displaying an original (viewer, "Ouvrir dans Google Drive ↗"): open the
-  `webViewLink`; the app itself only ever renders the local preview.
-- Health check (weekly, when online): `files.get?fields=trashed` on a
-  batch of `drive_file_id`s; `trashed` or 404 → `original_missing`.
+- Displaying an original (viewer, "Ouvrir dans Google Drive ↗"): open
+  `https://drive.google.com/file/d/<drive_file_id>/view` (the form of the
+  file's `webViewLink`, which is not stored: only `drive_file_id` is synced),
+  as an external link Android hands to the Drive app; the app itself only
+  ever renders the local preview.
+- Health check (weekly, when online; `photos/health.ml` pure,
+  `photos_io/health.ml` on the device): one `files.get?fields=id,trashed`
+  per live `uploaded`/`original_missing` photo with a `drive_file_id`, one
+  after the other with a silent token; `trashed` or 404 → `original_missing`,
+  and back to `uploaded` when the file is present again (restored from the
+  bin). An account-wide error (token, 401, API off, 5xx, network) stops the
+  run and leaves it due; a file-only error skips that file. The changes found
+  before a stop are committed, and the next run resumes after the last photo
+  reached (the local setting `drive_health_cursor`, photos in id order), so a
+  long list is covered over several runs. The date of the last complete round
+  is the local setting `drive_health_checked_at`; the cursor is cleared then.
+  Photos of a soft-deleted observation are checked too: their original is
+  still the user's. Triggers (signed in only): start, resume, sign-in, back
+  online.
+- 4m « Dernier envoi » is the local setting `last_upload_at`, written by the
+  queue when an original reaches Drive on this install.
+- Switching the storage to app-only while originals wait on this phone asks
+  first; « Ne pas les envoyer » makes those photos app-only (a synced edit)
+  and the queue discards their row, file and job; the setting is written only
+  once that worked. « Les envoyer quand même » keeps them queued, and the
+  Drive access prompt stays while they wait. Originals already in Drive stay
+  there.
 - App-only storage target (no Google): originals are simply not kept, only
   the preview, on the device alone (no Storage mirror).
 - Google Photos: not implemented; the settings radio offers Drive and

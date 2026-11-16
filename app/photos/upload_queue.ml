@@ -101,13 +101,17 @@ let next ~now ~(photo : Photo.t option) pending job =
   | Some {upload_state = Pending; original_target = Drive; _} ->
       pending_next ~now pending job
 
-type scope = Account | This_photo [@@deriving eq]
-
-let start_error_scope : Drive.error -> scope = function
-  | Unauthorized | Api_disabled | Scope_missing | Quota_full | Rate_limited
-  | Server _ | Network _ ->
-      Account
-  | Not_found | Http _ | Malformed _ -> This_photo
+let retryable : Photo.t option -> bool = function
+  | Some {original_target = Drive; upload_state = Failed; _} -> true
+  | Some
+      {
+        original_target = Drive;
+        upload_state = Pending | Uploaded | Original_missing;
+        _;
+      }
+  | Some {original_target = App_only; _}
+  | None ->
+      false
 
 let on_network_change ~now (p : pending) = function
   | Some Waiting -> usable ~now p.session

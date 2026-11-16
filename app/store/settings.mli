@@ -14,11 +14,22 @@ type _ key =
       (** 4m « Photon en ligne »; unset = off. *)
   | Location_notice_seen : bool key
       (** The first-opening dialog was answered; unset = show it. *)
+  | Drive_health_checked_at : Ptime.t key
+      (** The last complete Drive health check ([Herbier_photos.Health]); stored
+          as {!Codec.timestamp}; unset = never. *)
+  | Last_upload_at : Ptime.t key
+      (** 4m « Dernier envoi »: the last original this install put into Drive;
+          {!Codec.timestamp}; unset = none yet. *)
+  | Drive_health_cursor : Herbier_domain.Ids.Photo_id.t key
+      (** The last photo the stopped Drive health round reached (answered or
+          skipped, Health.report.reached); stored as the id's text; unset = the
+          next round starts from the first photo. *)
 
 val name : _ key -> string
 (** The stored key: ["storage_target"], ["wifi_only"],
     ["place_source_ign_offline"], ["place_source_ign_online"],
-    ["place_source_photon_online"], ["location_notice_seen"]. *)
+    ["place_source_photon_online"], ["location_notice_seen"],
+    ["drive_health_checked_at"], ["last_upload_at"], ["drive_health_cursor"]. *)
 
 val get : 'a key -> 'a Stmt.query
 (** 0 or 1 row: run it with [Db.find]. [None] means the key was never set, and
@@ -31,3 +42,6 @@ val get : 'a key -> 'a Stmt.query
 val set : 'a key -> 'a -> Stmt.t
 (** Inserts or replaces the value of the key ([on conflict (key) do update]); 1
     change. *)
+
+val unset : _ key -> Stmt.t
+(** Deletes the key's row: 1 change when it was set, 0 otherwise. *)

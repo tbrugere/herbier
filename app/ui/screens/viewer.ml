@@ -1,6 +1,7 @@
 module Cover = Herbier_ui_model.Cover
 module Fr_date = Herbier_ui_model.Fr_date
 module Journal_day = Herbier_ui_model.Journal_day
+module Drive_text = Herbier_ui_model.Drive_text
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -100,6 +101,23 @@ let render app focus (d : data) =
       [El.txt' "Couverture"]
   in
   let when_el = El.p ~at:[cls "viewer__when"] [] in
+  let missing =
+    El.p
+      ~at:[cls "t-meta"; cls "viewer__missing"]
+      [El.txt' "original introuvable"]
+  in
+  (* An external link: Capacitor hands it to Android, which offers the Drive
+     app when installed. *)
+  let drive =
+    El.a
+      ~at:
+        [
+          cls "viewer__chip";
+          At.v (Jstr.v "target") (Jstr.v "_blank");
+          At.v (Jstr.v "rel") (Jstr.v "noopener noreferrer");
+        ]
+      [El.txt' "Ouvrir dans Google Drive ↗"]
+  in
   let name =
     El.h2
       ~at:[cls "viewer__name"]
@@ -125,14 +143,19 @@ let render app focus (d : data) =
     let ph = photos.(i) in
     focus := ph.id;
     El.set_children counter [El.txt' (Printf.sprintf "%d / %d" (i + 1) n)];
-    El.set_children badge
-      [
-        El.txt'
-          (match (ph.original_target, ph.upload_state) with
-          | Drive, Uploaded -> "Google Drive"
-          | Drive, (Pending | Failed) -> "↑ en attente"
-          | Drive, Original_missing | App_only, _ -> "local");
-      ];
+    El.set_children badge [El.txt' (Drive_text.viewer_badge ph)];
+    let show_drive href ~missing:is_missing =
+      El.set_at At.Name.href (Option.map Jstr.v href) drive;
+      El.set_class (Jstr.v "is-hidden") (Option.is_none href) drive;
+      El.set_class (Jstr.v "is-hidden") (not is_missing) missing
+    in
+    (match Drive_text.viewer_drive ph with
+    | Open file_id ->
+        show_drive
+          (Some (Herbier_photos.Drive.view_url ~file_id))
+          ~missing:false
+    | Missing -> show_drive None ~missing:true
+    | Hidden -> show_drive None ~missing:false);
     El.set_class (Jstr.v "is-hidden") (not (is_cover ph)) cover_badge;
     El.set_children when_el
       [El.txt' (match obs_of d ph with Some o -> when_where o | None -> "")];
@@ -273,7 +296,8 @@ let render app focus (d : data) =
             El.div ~at:[cls "viewer__badges"] [badge; cover_badge];
             name;
             when_el;
-            El.div ~at:[cls "viewer__chips"] [see; remove];
+            missing;
+            El.div ~at:[cls "viewer__chips"] [see; drive; remove];
           ];
         confirm.el;
         menu.el;

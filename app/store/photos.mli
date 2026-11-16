@@ -45,3 +45,18 @@ val set_upload :
 (** [update photos set upload_state = ?, drive_file_id = ?, updated_at = ? where
      id = ? and deleted_at is null], read back by [id]. One entry when the photo
     is live; nothing changed (no entry) when it is absent or deleted. *)
+
+val in_drive : Photo.t Stmt.query
+(** Live photos with [original_target = Drive], [drive_file_id is not null] and
+    [upload_state] [Uploaded] or [Original_missing] (each bound through its
+    codec), ordered by [id]. A prefilter only: [Herbier_photos.Health.items]
+    decides which photos the Drive health check asks about. A photo of a
+    soft-deleted observation is included: its original is still the user's. *)
+
+val set_app_only : Photo_id.t -> at:Ptime.t -> Outbox.edit
+(** [update photos set original_target = ?, updated_at = ? where id = ? and
+     deleted_at is null and original_target = ? and upload_state in (?, ?)] with
+    [App_only], then [Drive], [Pending] and [Failed] bound through their codecs,
+    read back by [id]. One entry when it changed the row; none for a photo
+    absent, deleted, app-only already, [Uploaded] or [Original_missing] (an
+    original already in Drive stays there). *)

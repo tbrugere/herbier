@@ -57,10 +57,11 @@ val run : t -> interactive:bool -> unit Fut.t
       [Files.delete] (a missing file is not an error);
     - [Finish f]: commits
       [Photos.set_upload ~state:Uploaded ~drive_file_id:(Some f.id)]; once
-      committed, [Uploads.remove] and [Files.delete]; a failed commit leaves all
-      as is (the next pass: the same action, or, the job pruned, [Enqueue s]
-      while the row's session is usable — the job's status query finds the
-      upload complete — else [Start] → the lookup → [Already_there]);
+      committed, [Settings.set Last_upload_at now] (its error a console line),
+      [Uploads.remove] and [Files.delete]; a failed commit leaves all as is (the
+      next pass: the same action, or, the job pruned, [Enqueue s] while the
+      row's session is usable — the job's status query finds the upload complete
+      — else [Start] → the lookup → [Already_there]);
     - [Give_up]: row updated ([attempts], [last_error]), then commits
       [Photos.set_upload ~state:Failed ~drive_file_id:None]; file kept;
     - [Retry]: row updated ([last_error], the session dropped for [Restart]),
@@ -79,11 +80,11 @@ val run : t -> interactive:bool -> unit Fut.t
       offset at [taken_at], runs [Photos_io.Drive.start_session]:
       [Already_there f] → as [Finish f]; [Session url] → row's [session], then
       enqueued; [Token e] → console line, no row change, no more [Start] this
-      pass; [Drive e] → [Account] scope: the row's [last_error] only, no more
-      [Start]; [This_photo]: {!Herbier_photos.Upload_queue.count_failure} from
-      the saved row, the session dropped (the row only: the next pass starts
-      again, not this one, so a lasting error does not use every attempt at
-      once).
+      pass; [Drive e] → {!Herbier_photos.Drive.error_scope} [Account]: the row's
+      [last_error] only, no more [Start]; [This_file]:
+      {!Herbier_photos.Upload_queue.count_failure} from the saved row, the
+      session dropped (the row only: the next pass starts again, not this one,
+      so a lasting error does not use every attempt at once).
 
     Starts run one after the other and passes never overlap, so sessions are
     started one at a time (architecture §5). Every action but [Nothing] logs a
@@ -98,6 +99,33 @@ val wifi_changed : t -> unit Fut.t
     has a usable session ({!Herbier_photos.Upload_queue.on_network_change}) and
     whose action is otherwise [Nothing]. A running job finishes on its network.
     Within {!run}: never alongside a pass. *)
+
+val send_now : t -> unit Fut.t
+(** 4m « Envoyer maintenant »: asks for an interactive {!run} whose pass (this
+    one, or the one after a pass already running) first resets every row whose
+    photo is {!Herbier_photos.Upload_queue.retryable}: [Cap_uploader.cancel] of
+    its job (error logged), the row written with
+    [attempts = 0; last_error = None] (its session kept: a usable one is
+    enqueued again, else a new one is started), then all those photos back to
+    [Pending] in one [commit] of
+    [Photos.set_upload ~state:Pending ~drive_file_id:None]; a commit error is a
+    console line and leaves them [Failed] (the rows' reset stays). The reset
+    rows' old jobs are ignored from then on until a new job is enqueued for the
+    row, or the row is finished, discarded or given up (WorkManager keeps
+    listing a finished job as failed after a cancel: it is not counted again,
+    even by a later pass when this one could not start a new job). Then the pass
+    as usual (rows that were only waiting are started or enqueued as {!run}
+    does). Resolves with that pass. Never alongside a pass. *)
+
+val stop_drive : t -> (unit, Db.error) result Fut.t
+(** 4m storage radio → « Dans Herbier seulement » with « Ne pas les envoyer »:
+    asks for a silent {!run} whose pass first commits, in one [commit],
+    [Photos.set_app_only id ~at:now] for every row whose photo is
+    [Photo.awaiting_drive]; the pass then [Discard]s them (job cancelled, row
+    and [originals/<id>] deleted: their originals are gone, only the previews
+    remain). Resolves, once that pass is over, with that commit's outcome: a
+    read or commit error (also a console line) leaves every photo as it was, and
+    they upload as before; [Error (Raised _)] when the pass raised before it. *)
 
 type entry = {
   row : Herbier_store.Uploads.t;

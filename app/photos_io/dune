@@ -1,5 +1,7 @@
-; Photos over Brr: capture (camera and gallery) and the preview pipeline
-; (preview: decode, resize, encode, hash, store).
+; Photos over Brr: capture (camera and gallery), the preview pipeline
+; (preview: decode, resize, encode, hash, store), Drive programs run over
+; fetch (drive), the originals' queue (upload_queue) and the weekly Drive
+; health check (health).
 (library
  (name herbier_photos_io)
  (public_name herbier.photos_io)

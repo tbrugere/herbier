@@ -57,6 +57,19 @@ val presence :
   (Api.presence, 'e error) result Fut.t
 (** Runs {!Api.presence} the same way as {!put_original} (one request). *)
 
+val health :
+  token:(unit -> (string, 'e) result Fut.t) ->
+  drop_token:(string -> unit Fut.t) ->
+  Herbier_photos.Health.item list ->
+  (Herbier_photos.Health.report, 'e error) result Fut.t
+(** Runs {!Herbier_photos.Health.program} as {!presence} runs its program: the
+    token asked once (and not at all for [[]]: [Ok empty_report]), [Error e] →
+    [Error (Token e)]; one renewal on a 401, a second 401 answered to the
+    program (→ [stopped = Some Unauthorized], [Ok report]); the same console
+    line per request (no query, no token). Drive errors are in the report, never
+    [Error (Drive _)]. A renewal that fails midway is [Error (Token e)] too: the
+    report so far is dropped. Never raises. *)
+
 val boundary : unit -> (string, string) result
 (** {!Api.boundary} over 16 bytes of [Web_crypto.random_bytes]; WebCrypto's
     error message otherwise (the binding's own error is a string). *)

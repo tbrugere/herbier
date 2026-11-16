@@ -8,6 +8,9 @@ type _ key =
   | Place_source_ign_online : bool key
   | Place_source_photon_online : bool key
   | Location_notice_seen : bool key
+  | Drive_health_checked_at : Ptime.t key
+  | Last_upload_at : Ptime.t key
+  | Drive_health_cursor : Herbier_domain.Ids.Photo_id.t key
 
 let name : type a. a key -> string = function
   | Storage_target -> "storage_target"
@@ -16,6 +19,9 @@ let name : type a. a key -> string = function
   | Place_source_ign_online -> "place_source_ign_online"
   | Place_source_photon_online -> "place_source_photon_online"
   | Location_notice_seen -> "location_notice_seen"
+  | Drive_health_checked_at -> "drive_health_checked_at"
+  | Last_upload_at -> "last_upload_at"
+  | Drive_health_cursor -> "drive_health_cursor"
 
 (* A local-only table: its columns live next to its queries (layout §2), not
    in Tables. *)
@@ -32,6 +38,16 @@ let bool_text : bool Col.custom =
     | "false" -> Some false
     | _ -> None)
 
+let timestamp_text : Ptime.t Col.custom =
+  Codec.text ~name:"timestamp" ~to_string:Codec.timestamp ~of_string:(fun s ->
+      match Ptime.of_rfc3339 s with
+      | Ok (t, (_ : int option), (_ : int)) -> Some t
+      | Error _ -> None)
+
+let photo_id_text : Herbier_domain.Ids.Photo_id.t Col.custom =
+  Codec.text ~name:"photo_id" ~to_string:Herbier_domain.Ids.Photo_id.to_string
+    ~of_string:Herbier_domain.Ids.Photo_id.of_string
+
 let codec : type a. a key -> a Col.custom = function
   | Storage_target -> Tables.photo_original_target
   | Wifi_only -> bool_text
@@ -39,6 +55,9 @@ let codec : type a. a key -> a Col.custom = function
   | Place_source_ign_online -> bool_text
   | Place_source_photon_online -> bool_text
   | Location_notice_seen -> bool_text
+  | Drive_health_checked_at -> timestamp_text
+  | Last_upload_at -> timestamp_text
+  | Drive_health_cursor -> photo_id_text
 
 let value_column key : (settings, _, [`Mandatory]) Col.t =
   {ty = Not_Null (Custom (codec key)); name = "value"}
@@ -59,3 +78,9 @@ let set key v =
             Mandatory (value_column key, Value v);
           ];
       }
+
+let unset key =
+  {
+    Stmt.sql = "delete from settings where key = ?";
+    params = [Codec.param key_column (name key)];
+  }

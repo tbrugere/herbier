@@ -17,7 +17,8 @@ type filters = {
 val no_filters : filters
 val equal_filters : filters -> filters -> bool
 
-type network = {online : bool; pending_uploads : int}
+type network = {online : bool}
+(** The waiting photos' count is [App.upload_queue]'s, not stored here. *)
 
 type account = {
   auth : Herbier_sync.Auth.status;  (** the Google account 4m shows *)

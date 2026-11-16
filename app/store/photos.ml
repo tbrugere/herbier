@@ -64,6 +64,16 @@ let live =
      order by ph.taken_at desc, ph.id desc"
     []
 
+let in_drive =
+  query
+    "select * from photos where deleted_at is null and original_target = ? and \
+     drive_file_id is not null and upload_state in (?, ?) order by id"
+    [
+      Codec.param Ph.original_target Photo.Original_target.Drive;
+      Codec.param Ph.upload_state Photo.Upload_state.Uploaded;
+      Codec.param Ph.upload_state Photo.Upload_state.Original_missing;
+    ]
+
 let input (p : Photo.t) : (Ph.t, [`Full]) Postgrest.Input.t =
   Postgrest.Input.
     {
@@ -114,5 +124,23 @@ let set_upload id ~state ~drive_file_id ~at =
           Codec.param Ph.drive_file_id drive_file_id;
           Codec.param Ph.updated_at at;
           Codec.param Ph.id id;
+        ];
+    }
+
+let set_app_only id ~at =
+  Writes.edit id
+    {
+      Stmt.sql =
+        "update photos set original_target = ?, updated_at = ? where id = ? \
+         and deleted_at is null and original_target = ? and upload_state in \
+         (?, ?)";
+      params =
+        [
+          Codec.param Ph.original_target Photo.Original_target.App_only;
+          Codec.param Ph.updated_at at;
+          Codec.param Ph.id id;
+          Codec.param Ph.original_target Photo.Original_target.Drive;
+          Codec.param Ph.upload_state Photo.Upload_state.Pending;
+          Codec.param Ph.upload_state Photo.Upload_state.Failed;
         ];
     }

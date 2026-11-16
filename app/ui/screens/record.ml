@@ -424,11 +424,11 @@ let v app =
                gps);
           Rb.text offline
             (React.S.map
-               (fun (n : State.network) ->
-                 match n.pending_uploads with
+               (fun q ->
+                 match Herbier_ui_model.Drive_text.pending_count q with
                  | 0 -> "hors-ligne"
                  | k -> Printf.sprintf "hors-ligne · %d en attente" k)
-               (State.network state));
+               (App.upload_queue app));
           Rb.class_ offline "is-hidden"
             (React.S.map
                (fun (n : State.network) -> n.online)
