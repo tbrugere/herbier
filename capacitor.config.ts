@@ -6,6 +6,10 @@ const config: CapacitorConfig = {
   appId: 're.bruge.herbier',
   appName: 'Herbier',
   webDir: '_build/default/web/dist',
+  // The WebView's colour before the first paint: _tokens.sass's paper, as
+  // the splash (android/app/src/main/res/values/colors.xml), so no white
+  // frame between them.
+  backgroundColor: '#f6f1e7',
   android: {
     allowMixedContent: false,
   },

@@ -206,13 +206,16 @@ cmd_install() {
     cd "$root"
     if command -v opam >/dev/null; then eval "$(opam env 2>/dev/null)" || true; fi
     dune build @web
-    npx cap sync android
+    npx --no-install cap sync android
     cd android && ./gradlew -q assembleDebug
   )
   s="$(serial)"
   id="$(app_id)"
-  adb -s "$s" install -r "$root/android/app/build/outputs/apk/debug/app-debug.apk"
-  # A reinstall keeps the version code, so Capacitor would keep serving a
+  # -d: the versionCode follows main's commit count, so a build of a branch
+  # based on an older main is lower than what another worktree installed;
+  # every emulator build is debuggable, so the downgrade is allowed.
+  adb -s "$s" install -r -d "$root/android/app/build/outputs/apk/debug/app-debug.apk"
+  # A reinstall can keep the version code, so Capacitor would keep serving a
   # bundle pushed by install-web: remove it, the APK's own assets win again.
   adb -s "$s" shell run-as "$id" rm -rf "$WEB_DEV_DIR"
   adb -s "$s" shell "mkdir -p $(device_tmp) && echo '$(install_stamp)' > $(device_tmp).stamp"

@@ -1,5 +1,40 @@
 apply plugin: 'com.android.application'
 
+// Release key from the four HERBIER_RELEASE_* variables, all or none
+// (scripts/lib/release-env.sh checks the same four); when set it signs debug
+// too (architecture §4). Values are never printed.
+def signingVars = [
+    'HERBIER_RELEASE_KEYSTORE',
+    'HERBIER_RELEASE_KEYSTORE_PASSWORD',
+    'HERBIER_RELEASE_KEY_ALIAS',
+    'HERBIER_RELEASE_KEY_PASSWORD',
+]
+def missingSigningVars = signingVars.findAll { !System.getenv(it) }
+if (!missingSigningVars.isEmpty() && missingSigningVars.size() != signingVars.size()) {
+    throw new GradleException(
+        "Release signing needs all of ${signingVars.join(', ')}; missing: ${missingSigningVars.join(', ')}")
+}
+def releaseKeySet = missingSigningVars.isEmpty()
+
+// versionCode = main's commit count at merge-base(HEAD, origin/main);
+// versionName = git describe, as app/version/dune (architecture §4).
+def git = { List<String> args ->
+    try {
+        return providers.exec {
+            commandLine(['git'] + args)
+            workingDir rootDir
+        }.standardOutput.asText.get().trim()
+    } catch (Exception e) {
+        throw new GradleException(
+            "git ${args.join(' ')} failed: the version needs the git history and origin/main (fetch-depth: 0 in CI)", e)
+    }
+}
+if (git(['rev-parse', '--is-shallow-repository']) == 'true') {
+    throw new GradleException("shallow clone: the version needs the git history (fetch-depth: 0 in CI)")
+}
+def gitCommitCount = git(['rev-list', '--count', git(['merge-base', 'HEAD', 'origin/main'])]).toInteger()
+def gitDescribe = git(['describe', '--always', '--dirty', '--tags'])
+
 android {
     namespace = "re.bruge.herbier"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +42,8 @@ android {
         applicationId "re.bruge.herbier"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode gitCommitCount
+        versionName gitDescribe
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +51,31 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseKeySet) {
+            release {
+                // A relative path is under android/app/; release.sh passes
+                // an absolute one.
+                storeFile file(System.getenv('HERBIER_RELEASE_KEYSTORE'))
+                storePassword System.getenv('HERBIER_RELEASE_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('HERBIER_RELEASE_KEY_ALIAS')
+                keyPassword System.getenv('HERBIER_RELEASE_KEY_PASSWORD')
+                enableV1Signing false
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (releaseKeySet) {
+                signingConfig signingConfigs.release
+            }
+        }
         release {
+            if (releaseKeySet) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

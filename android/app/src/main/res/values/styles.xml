@@ -16,7 +16,11 @@
     </style>
 
 
+    <!-- Launch theme: the SplashScreen API (MainActivity installs it), the
+         launcher icon on paper, then the app's theme at the first frame. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/herbier_paper</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

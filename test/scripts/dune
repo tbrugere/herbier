@@ -1,0 +1,14 @@
+; Cram tests of scripts/release.sh and scripts/lib/release-env.sh: a cram
+; dep must sit next to the test, so the files are copied here.
+
+(copy_files
+ (files %{project_root}/scripts/lib/release-env.sh))
+
+(copy_files
+ (files %{project_root}/scripts/release.sh))
+
+(rule
+ (copy %{project_root}/.env.prod.example env.prod.example))
+
+(cram
+ (deps release-env.sh release.sh env.prod.example))

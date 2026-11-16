@@ -516,8 +516,38 @@ the keep-alive, described and decoded sans IO in `sync_core/auth/gotrue.ml`.
   variables (keep production values out of `.envrc`). Production builds go
   through `scripts/release.sh` (`--debug` for a debug APK of the same
   bundle), which loads the git-ignored `.env.prod` (from the committed
-  `.env.prod.example`) for its own process only and refuses to build
-  without it or without all three values.
+  `.env.prod.example`) for its own process only, or else takes the
+  environment (CI), and refuses to build without all three values.
+  A release is signed by the user's release key, kept outside the repo:
+  `HERBIER_RELEASE_KEYSTORE`, `HERBIER_RELEASE_KEYSTORE_PASSWORD`,
+  `HERBIER_RELEASE_KEY_ALIAS`, `HERBIER_RELEASE_KEY_PASSWORD`, which
+  Gradle reads from the environment (all or none). Android updates an app
+  in place, keeping its database and `files/`, only with the same
+  application id, a versionCode not lower, and the installed certificate
+  (or its successor in a rotation lineage); an uninstall deletes both. So:
+  one application id for every build type; versionCode = the commit count of
+  `main` at the merge base of HEAD and `origin/main`, versionName = `git
+  describe`, for every build (a branch build carries the code of the `main`
+  it starts from, never more than the next `main` build after the squash
+  merge, so a release from `main` is never a downgrade; the emulator, where
+  worktrees on older bases take turns, installs with `adb install -d`); and
+  when the release key is set it signs the `--debug` build too, so the two
+  replace each other in place (plain dev builds keep the default debug key).
+  That `--debug` build is debuggable, so `adb shell run-as` reads its
+  database and session: it stays on the user's machine and phone. An install
+  signed with the previous key (this Mac's debug key, the phone's builds
+  before M8.56) switches once by APK key rotation (Android 9+): a lineage
+  previous key → release key, made once with `apksigner rotate`, given to
+  `release.sh` by five optional variables (`HERBIER_SIGNING_LINEAGE`,
+  `HERBIER_PREVIOUS_*`), which then re-signs the release with it; no
+  rollback capability, so a debug-key APK can no longer replace it. The
+  lineage is needed for that first release only: on the emulator (API 35),
+  an APK signed by the new key alone updated the rotated install in place
+  (same first install time), so later releases, CI's included, are signed
+  by the release key alone and the five variables are unset again. `release.sh` always runs `apksigner verify` and
+  prints the APK's versionCode, versionName and certificate digest, and
+  fails when that versionName is not the bundle's (`app/version`): both run
+  `git describe`.
 
 ## 5. Photo pipeline
 

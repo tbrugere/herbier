@@ -20,7 +20,8 @@ herbier/
   dune-workspace          the opam-repository commit `dune pkg lock` solves against
   dune.lock/              `dune pkg lock` output, committed
   .ocamlformat            version = 0.29.0, profile = default, margin = 80
-  .env.prod.example       production build settings for scripts/release.sh; the filled-in .env.prod is
+  .env.prod.example       production build settings for scripts/release.sh (backend values, the
+                          release key, the optional key rotation); the filled-in .env.prod is
                           git-ignored
   package.json            Capacitor CLI + plugins, maplibre-gl, pmtiles, exifr, esbuild, sass
   package-lock.json
@@ -30,7 +31,7 @@ herbier/
   web/                    shell sources: index.html, sass/, fonts/, js/, map/, runner/ (§3)
   android/                Capacitor Android project, generated then committed (§4)
   supabase/               config.toml, migrations/, schema/, scripts/, tests/ (§5)
-  test/                   OCaml tests, native (§6)
+  test/                   tests: native OCaml, jsoo, node (runner/), cram (scripts/) (§6)
   scripts/                dev loop, emulator, icon subset, PMTiles extract, release (§7)
   docs/                   stack, architecture, this file, handoff, research, notes
   .github/workflows/      ci.yml, android.yml (§7)
@@ -606,7 +607,11 @@ web/
   tried first: Capacitor's copy step reproduces a symlink as a symlink, which
   dangles under `android/`. After `dune clean`, run `dune build @web` before
   `cap sync`. The
-  4n illustration and app icons go under `web/img/`.
+  4n illustration goes under `web/img/`; the launcher icon is a vector
+  drawable under `android/app/src/main/res/drawable/` (the web shell never
+  shows it). Paper and moss are copied as hex into
+  `android/app/src/main/res/values/colors.xml` and `capacitor.config.ts`
+  (splash, WebView background), listed in `_tokens.sass`'s header.
 
 ## 4. `android/` — Capacitor project and Java
 
@@ -625,9 +630,10 @@ edits, all under `android/app/src/main/`:
   (Play Services' `AuthorizationClient`: `authorize`, `clearToken`), in Java
   like `MainActivity` (the app module has no Kotlin toolchain).
 - `java/re/bruge/herbier/MainActivity.java`: generated; touched only to
-  register a plugin by hand and to drop a launch intent that was already
+  register a plugin by hand, to drop a launch intent that was already
   handled (no 4j replay after process death or from recents, architecture
-  §7).
+  §7) and to install the splash screen (`SplashScreen.installSplashScreen`,
+  `androidx.core:core-splashscreen`).
 - `java/re/bruge/herbier/UploaderPlugin.java` and `UploadWorker.java`: the
   originals' uploads (architecture §5): one unique WorkManager work per
   photo under a network constraint, PUTting the file to a Drive resumable
@@ -637,7 +643,12 @@ edits, all under `android/app/src/main/`:
 - `java/re/bruge/herbier/`: any further Java as small Capacitor plugin
   classes inline here, bound from `app/bindings/`, until the native side
   grows a package of its own.
-- `res/`: launcher icons, splash, `strings.xml`; `res/xml/backup_rules.xml`
+- `res/`: the launcher icon as vectors, no raster (`drawable/ic_launcher_foreground.xml`,
+  the 4n sprig in moss, also the splash icon; `drawable/ic_launcher_monochrome.xml`,
+  the themed icon; `mipmap-anydpi-v26/` adaptive icons on paper;
+  `mipmap-anydpi/` layer-lists for Android 7), `values/colors.xml`, the
+  launch theme in `values/styles.xml` (the SplashScreen API: paper and the
+  icon), `strings.xml`; `res/xml/backup_rules.xml`
   and `res/xml/data_extraction_rules.xml`, which keep `CapacitorStorage.xml`
   (the session) and `re.bruge.herbier.keepalive.xml` (the keep-alive job's
   KV, its own session) out of backups.
@@ -653,6 +664,12 @@ file depends on `com.google.android.gms:play-services-auth` for
 keep it), and on `androidx.work:work-runtime` for `UploaderPlugin` at
 `workManagerVersion`, also from `variables.gradle`, which
 `@capacitor/background-runner` reads too (one WorkManager in the APK).
+It also sets the version (versionCode = the commit count at `git
+merge-base HEAD origin/main`, versionName = `git describe --always --dirty --tags`, for every build
+type; the build needs the full history and an `origin/main` ref, and a
+stale one only lowers the code: fetch before a release) and the release signing config, from the four `HERBIER_RELEASE_*`
+environment variables (all or none; when set they sign the debug build
+type too; architecture §4).
 
 One edit under `android/app/src/debug/`, debug builds only:
 `AndroidManifest.xml` sets `android:networkSecurityConfig` to
@@ -748,6 +765,8 @@ test/
     jsoo/       js_of_ocaml build of herbier_bindings' pure-JS helpers run under node:
                 Fut_result.traverse against the sequential folds it replaced; Cap_uploader over
                 uploader_stub.js (enqueue's wire shape, jobs' decoding, the plugin absent)
+  scripts/      cram: release_env.t, scripts/lib/release-env.sh's loading and checks of the
+                production values (missing, placeholder, paths, no password ever printed)
   version/      native, alcotest: the git describe stamp (herbier_version), apart so that a commit
                 relinks only this test
   net/          native, alcotest: herbier_net against the copies it replaced (copied into test_net.ml)
@@ -779,8 +798,11 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
 - `scripts/`: `dev.sh` (`dune build @web --watch` + `cap run android -l`),
   `subset-icons.sh` (Material Symbols subset from `icons.txt`),
   `pmtiles-extract.sh` (region extract, v2), `release.sh` (production build:
-  loads `.env.prod`, then `dune build --profile release @web`, `cap sync`,
-  `gradle assembleRelease`, or `assembleDebug` with `--debug`; architecture §4),
+  loads `.env.prod` or else the environment and checks it through
+  `lib/release-env.sh`, then `dune build --profile release @web`, `cap sync`,
+  `gradle assembleRelease`, or `assembleDebug` with `--debug`, the optional
+  key-rotation re-sign, `apksigner verify`, and prints the APK's versions
+  and certificate digest; architecture §4),
   `catalog-dump.sh` (`supabase/schema/catalog.json` from the local database,
   §5), `emulator.sh` (one shared headless Android emulator: create the AVD,
   boot, a lock so device checks take turns, debug install, open a dev page;
@@ -815,15 +837,20 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   absent: a token for `#dev/rest` without a Google account).
   `record-gotrue-fixtures.sh`, `record-sync-fixtures.sh` and `local-session.sh`
   source `lib/local-stack.sh` (the tool check, and the stack's URL and keys from
-  `supabase status`).
+  `supabase status`); `release.sh` sources `lib/release-env.sh` (the
+  `.env.prod`/environment loading and checks, tested by
+  `test/scripts/release_env.t`).
 - `ci.yml`: `dune build`, `dune test`, the formatting check (`dune build @fmt`,
   ocamlformat installed from opam on the runner), `dune build @web` and checks on
   its output. From M1.9: `dune test` also checks `app/store/tables.ml` against the catalog. A
   `supabase` job runs `schema-dump.py --check`, `scripts/catalog-dump.sh --check` and
   `supabase test db` (the pgTAP files of `supabase/tests/`) on a local Supabase stack.
-  `android.yml`: debug APK on tag, manual run, or a pull request touching the
-  Android project, uploaded as an artifact for
-  sideloading; the only device build until the polish milestone.
+  `android.yml`: on a `v*` tag, `scripts/release.sh` from the repository
+  secrets (backend values and the release key, the keystore decoded into
+  the runner's temp dir), the signed APK uploaded as an artifact and
+  attached to a GitHub release; a manual run builds the same artifact
+  without a release. Debug builds are local (`release.sh --debug`,
+  `emulator.sh`).
 
 ## 8. Naming conventions
 

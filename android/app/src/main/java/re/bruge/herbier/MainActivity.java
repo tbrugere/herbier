@@ -2,12 +2,16 @@ package re.bruge.herbier;
 
 import android.content.Intent;
 import android.os.Bundle;
+import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // The launch theme's splash (styles.xml), dismissed at the first
+        // frame; it also switches to postSplashScreenTheme.
+        SplashScreen.installSplashScreen(this);
         // BridgeActivity.onCreate hands getIntent() to the plugins, which
         // deliver a VIEW or SEND as a new link or share (4j). An activity
         // recreated after process death, or relaunched from recents, still

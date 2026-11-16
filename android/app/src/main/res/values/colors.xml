@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Copies of web/sass/_tokens.sass's paper and moss: change them with it. -->
+    <color name="herbier_paper">#F6F1E7</color>
+    <color name="herbier_moss">#4F6B3A</color>
+</resources>

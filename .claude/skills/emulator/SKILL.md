@@ -97,12 +97,16 @@ booting or the map goes blank after an emulator update,
    Use `install-web` by default, including after switching branches. It
    runs `dune build @web` and serves the new bundle from the installed debug
    APK, without Gradle; it falls back to the full `install` (dune build @web,
-   cap sync, assembleDebug, adb install -r) when the app is missing or the
+   cap sync, assembleDebug, adb install -r -d) when the app is missing or the
    APK on the device was not built by `install` from the current native
    inputs: `android/`, `package.json`, `package-lock.json`,
    `capacitor.config.ts` (content hash of the checkout, uncommitted edits
    included). So the caller needs no decision; run `install` directly only
    to force an APK rebuild. See "Web-only reinstall" below.
+   An emulator holding an APK signed with another key (a release, or a
+   debug build made with the `HERBIER_RELEASE_*` variables exported) refuses
+   `install` with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: `adb uninstall
+   re.bruge.herbier` first (it deletes the app's data).
 4. Lifecycle checks, with `eval "$(scripts/emulator.sh env)"` for adb on PATH:
    - reload: `open <fragment>` again (it reloads the page);
    - kill and relaunch: `scripts/emulator.sh kill-app`, then `open <fragment>`;
