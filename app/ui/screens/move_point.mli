@@ -20,7 +20,7 @@
     « Activez « Photon en ligne » dans Réglages pour chercher un lieu. » without
     a request (checked before the network, and again as [~allow] when the
     request leaves the geocoder's queue: a refused one shows the same line);
-    offline ({!State.network}) « Hors ligne : la recherche attend le réseau. »
+    offline ({!State.network}) « Hors-ligne : la recherche attend le réseau. »
     without a request; a {!Herbier_geo_io.Geocoder.transient} error « Réseau
     indisponible, réessayez. », any other « Recherche impossible » (both
     logged); no result « Aucun lieu trouvé »; each result is a row (name, then

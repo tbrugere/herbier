@@ -17,19 +17,6 @@ type t = {
 let cls = Html.cls
 let same (a : Candidate.t) (b : Candidate.t) = Int.equal a.taxon.key b.taxon.key
 
-(* Offline, the rows found stay but their « + » waits (handoff: disabled
-   « avec texte explicite »). *)
-let status_text ~online = function
-  | Ref_search.Blank -> ""
-  | Ref_search.Found (_ :: _) -> (
-      match online with
-      | true -> ""
-      | false -> "Hors-ligne : « + » reviendra avec le réseau.")
-  | Ref_search.Pending -> "Recherche…"
-  | Ref_search.Found [] -> "Aucune espèce trouvée dans GBIF."
-  | Ref_search.Offline -> "Recherche indisponible hors-ligne."
-  | Ref_search.Failed _ -> "La recherche n'a pas abouti."
-
 let failed = function
   | Ref_search.Failed _ -> true
   | Ref_search.(Blank | Pending | Found _ | Offline) -> false
@@ -226,7 +213,8 @@ let v app ~mode ~current ~plants ~query ~pick =
                 step (Ref_search.retry ~online:(online ())));
             Rb.text line
               (React.S.l2 ~eq:String.equal
-                 (fun status online -> status_text ~online status)
+                 (fun status online ->
+                   Herbier_ui_model.Network_text.search_status ~online status)
                  status online_s);
             Rb.class_ retry.el "is-hidden"
               (React.S.map (fun s -> not (failed s)) status);

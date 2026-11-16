@@ -1,0 +1,4 @@
+{
+  "code": "OS-PLUG-FILE-0008",
+  "message": "'readdir' failed because file at '/data/user/0/re.bruge.herbier/files/nope/' does not exist."
+}

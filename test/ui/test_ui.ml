@@ -27,4 +27,7 @@ let () =
       ("parked_entry", Parked_entry_tests.parked_entry);
       ("motion", Motion_tests.motion);
       ("drive_text", Drive_text_tests.drive_text);
+      ("network_text", Network_text_tests.network_text);
+      ("server_text", Server_text_tests.server_text);
+      ("offline_data", Offline_data_tests.offline_data);
     ]

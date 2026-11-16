@@ -21,8 +21,14 @@
   gap: 14px
   padding-top: 12px
 
+// The SVG (web/img/herbarium-sheet.svg) over the striped placeholder, which
+// shows until it loads.
 .collection__illustration
+  display: block
+  width: 100%
+  height: auto
   aspect-ratio: 4 / 3
+  object-fit: cover
   border-radius: 20px
   +widgets.striped
 

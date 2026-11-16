@@ -51,3 +51,8 @@ val string_field : Jv.t -> string -> (string, Cap_error.t) result
 val int_field : Jv.t -> string -> (int, Cap_error.t) result
 val float_field : Jv.t -> string -> (float, Cap_error.t) result
 val bool_field : Jv.t -> string -> (bool, Cap_error.t) result
+
+val traverse : ('a -> ('b, 'e) result) -> 'a list -> ('b list, 'e) result
+(** [traverse f xs] decodes each item in order and stops at the first [Error]
+    (the later items are not decoded); [Ok] keeps the order of [xs]. The
+    synchronous {!Fut_result.traverse}, for a plugin's array of results. *)

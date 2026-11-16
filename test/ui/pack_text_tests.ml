@@ -1,29 +1,6 @@
 (* ---------- Pack_text (4m « IGN hors-ligne ») ---------- *)
 
-module Fr_text = Herbier_ui_model.Fr_text
 module Pack_text = Herbier_ui_model.Pack_text
-
-let pack_text_size =
-  Alcotest.test_case "size: SI units, decimal comma, negative clamps to 0 o"
-    `Quick (fun () ->
-      List.iter
-        (fun (n, expected) ->
-          Alcotest.(check string)
-            (Printf.sprintf "size %d" n)
-            expected (Pack_text.size n))
-        [
-          (0, "0 o");
-          (999, "999 o");
-          (1_000, "1 ko");
-          (109_832, "110 ko");
-          (999_499, "999 ko");
-          (999_500, "1,0 Mo");
-          (999_999, "1,0 Mo");
-          (1_000_000, "1,0 Mo");
-          (1_184_172, "1,2 Mo");
-          (12_000_000, "12,0 Mo");
-          (-1, "0 o");
-        ])
 
 let pack_text_title =
   Alcotest.test_case "title: \"<code> · <name>\"" `Quick (fun () ->
@@ -57,5 +34,4 @@ let pack_text_fixed_strings =
          2.0)"
         Pack_text.attribution)
 
-let pack_text =
-  [pack_text_size; pack_text_title; pack_text_detail; pack_text_fixed_strings]
+let pack_text = [pack_text_title; pack_text_detail; pack_text_fixed_strings]

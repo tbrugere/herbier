@@ -66,10 +66,13 @@ let thumbs_line label report =
          report)
 
 (* One sync per plant at a time; one asked for while it runs (a fetch that
-   ended meanwhile may have changed the wanted images) runs once it ends. *)
+   ended meanwhile may have changed the wanted images) runs once it ends.
+   None starts during « Libérer »: its files would go with the directory
+   (the next fiche entry asks again). *)
 let rec sync_thumbs (t : Core.t) id =
   match
-    (Core.online t, List.exists (fun (p, _) -> Plant_id.equal p id) !(t.thumbs))
+    ( Core.online t && not !(t.freeing),
+      List.exists (fun (p, _) -> Plant_id.equal p id) !(t.thumbs) )
   with
   | false, _ -> ()
   | true, true -> t.thumbs := (id, Rerun_requested) :: without id !(t.thumbs)
@@ -271,3 +274,61 @@ let create_linked (t : Core.t) ?(extra = []) (plant : Herbier_domain.Plant.t)
   | Ok (_ : int) ->
       fetch_if_online t plant.id taxon.key;
       Ok ()
+
+module Offline_data = Herbier_ui_model.Offline_data
+module Files = Herbier_store_io.Files
+
+type free_error =
+  | Busy
+  | Store of Db.error
+  | Files of Herbier_bindings.Cap_error.t
+
+let offline_usage () =
+  let open Fut.Result_syntax in
+  let* previews = Files.usage ~dir:Files.previews_dir in
+  let+ reference_photos = Files.usage ~dir:Files.refthumbs_dir in
+  {Offline_data.previews; reference_photos}
+
+(* Rows first, then files: a row never points to a deleted file. A failed
+   rmdir leaves orphans that the next downloads overwrite. *)
+let clear_and_delete (t : Core.t) =
+  let open Fut.Syntax in
+  let* cleared = Db.write t.db Herbier_store.Ref_images.clear_thumbs in
+  match cleared with
+  | Error e -> Fut.return (Error (`Store e))
+  | Ok (_ : int) ->
+      Herbier_bindings.Fut_result.map_error
+        (fun e -> `Files e)
+        (Files.delete_dir ~dir:Files.refthumbs_dir)
+
+let free_reference_photos (t : Core.t) =
+  match (!(t.freeing), !(t.thumbs)) with
+  | true, _ | false, _ :: _ -> Fut.return (Error Busy)
+  | false, [] ->
+      t.freeing := true;
+      let freed =
+        Fut.map
+          (fun result ->
+            t.freeing := false;
+            (match result with
+            | Ok () -> Core.log ["offline: freed reference photos"]
+            | Error (`Store e) ->
+                Core.log_error
+                  ["offline: free reference photos"; Db.error_to_string e]
+            | Error (`Files e) ->
+                Core.log_error
+                  [
+                    "offline: free reference photos";
+                    Herbier_bindings.Cap_error.to_string e;
+                  ]);
+            result)
+          (clear_and_delete t)
+      in
+      (* From its own reaction, so a subscriber that raises cannot keep the
+         caller's future from being determined. *)
+      Fut.await freed (function
+        | Ok () -> t.send_saved ()
+        | Error (`Store _ | `Files _) -> ());
+      Fut.map
+        (Result.map_error (function `Store e -> Store e | `Files e -> Files e))
+        freed

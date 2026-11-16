@@ -2,6 +2,7 @@ module Parked_entry = Herbier_ui_model.Parked_entry
 open Brr
 module Outbox = Herbier_store.Outbox
 module Outcome = Herbier_sync_core.Cycle.Outcome
+module Server_text = Herbier_ui_model.Server_text
 
 let cls = Html.cls
 
@@ -27,14 +28,39 @@ let parked_rows = function
         ]
       :: List.map entry entries
 
-let card (blocked, entries) =
+(* Architecture §4: a 540 shows here, with the hosted project's dashboard
+   (where it is restored); the local stack has none. *)
+let paused_rows = function
+  | false -> []
+  | true ->
+      let link =
+        Option.map
+          (fun url ->
+            El.a
+              ~at:
+                [
+                  cls "settings__link";
+                  At.href (Jstr.v url);
+                  At.v (Jstr.v "target") (Jstr.v "_blank");
+                  At.v (Jstr.v "rel") (Jstr.v "noopener noreferrer");
+                ]
+              [El.txt' Server_text.dashboard_label])
+          (Server_text.dashboard_url
+             ~supabase_url:Herbier_sync.Backend.supabase_url)
+      in
+      [
+        Row.v ?below:link ~title:Server_text.paused_title
+          ~detail:Server_text.paused_detail ();
+      ]
+
+let card (paused, blocked, entries) =
   let blocked_row =
     match blocked with
     | Some stop ->
         [Row.v ~title:"Réception bloquée" ~detail:(Outcome.to_string stop) ()]
     | None -> []
   in
-  match blocked_row @ parked_rows entries with
+  match paused_rows paused @ blocked_row @ parked_rows entries with
   | [] -> (El.div ~at:[cls "is-hidden"] [], [])
   | rows -> (El.div ~at:[cls "settings__card"] rows, [])
 
@@ -59,7 +85,11 @@ let v app =
       ~what:"réglages: file d'envoi" el
       (fun () ->
         Fut.map
-          (Result.map (fun entries -> (pull_blocked (App.engine app), entries)))
+          (Result.map (fun entries ->
+               let engine = App.engine app in
+               ( Server_text.paused (Herbier_sync.Engine.last engine),
+                 pull_blocked engine,
+                 entries )))
           (Herbier_store_io.Db.all (App.db app) Outbox.parked))
       card
   in

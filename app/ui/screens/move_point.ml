@@ -57,7 +57,7 @@ let search_view pick = function
   | Search_disabled ->
       search_line
         "Activez « Photon en ligne » dans Réglages pour chercher un lieu."
-  | Offline -> search_line "Hors ligne : la recherche attend le réseau."
+  | Offline -> search_line "Hors-ligne : la recherche attend le réseau."
   | Search_failed -> search_line "Recherche impossible"
   | Network_failed -> search_line "Réseau indisponible, réessayez."
   | Nothing_found -> search_line "Aucun lieu trouvé"

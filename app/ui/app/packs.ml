@@ -14,7 +14,7 @@ let pack_error_to_string = function
   | Busy -> "Un téléchargement est déjà en cours."
   | Offline
   | Pack (Commune_packs.Fetch Herbier_geo_io.Geocoder.(Network _ | Timeout)) ->
-      "Hors ligne : réessayez une fois connecté."
+      "Hors-ligne : réessayez une fois connecté."
   | Pack (Commune_packs.Fetch (Herbier_geo_io.Geocoder.Refused _)) ->
       "Téléchargement non envoyé. Réessayez."
   | Pack (Commune_packs.Fetch (Herbier_geo_io.Geocoder.Status _ as e))

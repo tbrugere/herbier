@@ -12,13 +12,15 @@ val start :
   tab:(Widgets.Tab_bar.tab -> Screen.t) ->
   modal:(Route.modal -> Screen.t) ->
   dev:(string -> (unit -> Screen.t) option) ->
-  unit
+  Route.t React.signal
 (** Shows the route of the current fragment in [root] and follows [hashchange]
-    from then on. A [Dev] route that [dev] does not know shows Collection, and
-    the URL is rewritten in place to the fragment of what is shown
-    ([#collection] for [""] and unknown fragments). [tab] and [modal] build a
-    screen each time it is entered; staying on the same route builds nothing. A
-    screen that raises is shown as an error message, logged to the console.
+    from then on. The signal returned is the route of what is shown (a [Dev]
+    route only for a page [dev] knows), changing when a transition commits. A
+    [Dev] route that [dev] does not know shows Collection, and the URL is
+    rewritten in place to the fragment of what is shown ([#collection] for [""]
+    and unknown fragments). [tab] and [modal] build a screen each time it is
+    entered; staying on the same route builds nothing. A screen that raises is
+    shown as an error message, logged to the console.
 
     A tab press replaces the current history entry, so Android back leaves the
     app from any tab instead of walking the tabs visited. [start] registers the

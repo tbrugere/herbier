@@ -164,4 +164,7 @@ let start ~root ~tab ~modal ~dev =
             screen_of (React.S.value shown))
   in
   ignore (Ev.listen Ev.hashchange follow (Window.as_target G.window));
-  listen_back_button ()
+  listen_back_button ();
+  React.S.map
+    ~eq:(fun a b -> String.equal (Route.to_fragment a) (Route.to_fragment b))
+    route_of target

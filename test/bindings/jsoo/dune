@@ -33,3 +33,36 @@
    NODE_OPTIONS
    ""
    (run node -r %{dep:uploader_stub.js} %{dep:cap_uploader_smoke.bc.js}))))
+
+; Herbier_bindings.Cap_filesystem's readdir/rmdir, and Files.usage /
+; delete_dir over them, against a stub globalThis.herbier.filesystem
+; (filesystem_stub.js, preloaded with node -r): the fixtures (previews,
+; refthumbs, a missing directory), the local path check, decode errors,
+; rmdir's wire shape, the recursive sum and the missing-directory mappings.
+; The three env vars point the stub and the test at the same files.
+
+(executable
+ (name cap_filesystem_smoke)
+ (modes js)
+ (libraries herbier_bindings herbier_store_io brr yojson))
+
+(rule
+ (alias runtest)
+ (deps
+  %{project_root}/test/fixtures/capacitor_filesystem_readdir_previews.json
+  %{project_root}/test/fixtures/capacitor_filesystem_readdir_refthumbs.json
+  %{project_root}/test/fixtures/capacitor_filesystem_readdir_missing.json)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (setenv
+    HERBIER_FIXTURE_READDIR_PREVIEWS
+    %{project_root}/test/fixtures/capacitor_filesystem_readdir_previews.json
+    (setenv
+     HERBIER_FIXTURE_READDIR_REFTHUMBS
+     %{project_root}/test/fixtures/capacitor_filesystem_readdir_refthumbs.json
+     (setenv
+      HERBIER_FIXTURE_READDIR_MISSING
+      %{project_root}/test/fixtures/capacitor_filesystem_readdir_missing.json
+      (run node -r %{dep:filesystem_stub.js} %{dep:cap_filesystem_smoke.bc.js})))))))

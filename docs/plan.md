@@ -106,6 +106,7 @@ Possible upgrade, not a decision: sqlgg (SQL-guided generator) could give typed 
 
 54. View Transitions (modal from bottom 300 ms, shared hero 4a → 4f 350 ms, fade fallback), pressed states, `sass/screens/` pass per handoff id. Done: side-by-side check against `Herbier v2.dc.html` for every screen.
 55. Empty and error states: 4n illustration in `web/img/`, offline texts on 4g/4i, offline banner and "N en attente" from `state.ml` (moved from the dropped M6.49), "serveur en pause" in 4m, "Libérer" (refthumbs eviction, size counters). Done: each state reachable by toggling network or data.
+    Built 2026-11-16: the texts are pure (`ui_model/network_text.ml`, `server_text.ml`, `offline_data.ml`, tested natively); the strip is `ui/offline_banner.ml`, mounted on body by main after the router, whose shown route hides it on 4d and dev pages (`--offline-inset` keeps every screen's first line clear), its N from `Drive_text.pending_count` of `App.upload_queue`, as 4d's pill; « Serveur en pause » comes from the engine's last report, shown on the emulator through `scripts/pause-proxy.mjs`; « Libérer » frees the reference photos only (rows cleared, then `refthumbs/` removed, refused while a thumbnail sync runs), the sizes read with the filesystem plugin's `readdir`; the 4n illustration is `web/img/herbarium-sheet.svg`. Device checks: see the PR.
 56. `scripts/release.sh`, signing config, `android.yml` release on tag; launcher icons, splash, `strings.xml`. Done: the release APK installed over the debug one keeps the database.
 
 ## Screen → milestone

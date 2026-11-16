@@ -174,10 +174,14 @@ let () =
           | Dev _ -> ()
           | Tab _ | Modal _ -> Herbier_ui.Location_notice.show_once app)
       | Error reason -> Console.(error [str "herbier: startup"; str reason]));
-      Herbier_ui.Router.start ~root ~tab:(or_unavailable tab app)
-        ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db app);
+      let route =
+        Herbier_ui.Router.start ~root ~tab:(or_unavailable tab app)
+          ~modal:(or_unavailable modal app) ~dev:(Dev_pages.find db app)
+      in
       (* After the router: a link that started the app opens 4j above the
          collection, and the plugins keep it until this listener exists. *)
       match app with
-      | Ok app -> Herbier_ui.Intake.start app
+      | Ok app ->
+          Herbier_ui.Offline_banner.mount app ~route;
+          Herbier_ui.Intake.start app
       | Error _ -> ())

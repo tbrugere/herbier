@@ -1,5 +1,6 @@
 // The app shell (app/ui/router.ml): the current tab's screen scrolls above the
 // tab bar, which stays at the bottom. Dev pages are shown alone.
+@use 'base'
 
 .shell
   display: flex
@@ -15,10 +16,37 @@
 // A screen's own padding: the side margin of the handoff, and the status bar
 // inset at the top.
 .screen
-  padding: calc(16px + env(safe-area-inset-top)) var(--space-screen) var(--space-screen)
+  padding: calc(16px + env(safe-area-inset-top) + var(--offline-inset)) var(--space-screen) var(--space-screen)
   display: flex
   flex-direction: column
   gap: 16px
 
 .dev-page
   padding: var(--space-screen)
+
+// The offline strip (app/ui/offline_banner.ml), in the status bar's band:
+// below the system inset, above the screens and sheets, under the dialogs'
+// veil. While it shows, html[data-offline] sets --offline-inset (tokens), which
+// every top inset adds, so no screen's first line is covered.
+
+.offline-banner
+  position: fixed
+  top: 0
+  left: 0
+  right: 0
+  z-index: 15
+  padding-top: env(safe-area-inset-top)
+  height: calc(var(--offline-banner-height) + env(safe-area-inset-top))
+  display: flex
+  align-items: center
+  justify-content: center
+  background: var(--ink)
+  color: var(--paper)
+  +base.ui(12px, 700)
+  letter-spacing: .02em
+  pointer-events: none
+  &[hidden]
+    display: none
+
+html[data-offline]
+  --offline-inset: var(--offline-banner-height)

@@ -75,3 +75,11 @@ let finite x =
 
 let float_field = typed_field "number" finite
 let bool_field = typed_field "boolean" (fun x -> Some (Jv.to_bool x))
+
+let traverse f items =
+  let rec go acc = function
+    | [] -> Ok (List.rev acc)
+    | x :: rest -> (
+        match f x with Ok y -> go (y :: acc) rest | Error e -> Error e)
+  in
+  go [] items

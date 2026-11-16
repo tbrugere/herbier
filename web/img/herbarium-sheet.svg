@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <!-- 4n: an empty herbarium sheet. Colours are the design tokens (sand,
+       sand-deep, paper, line, line-soft, muted, moss), written
+       out because an <img> cannot read CSS custom properties. No text. -->
+  <rect width="400" height="300" fill="#ece5d6"/>
+  <rect x="98" y="30" width="210" height="250" rx="3" fill="#e2dbcb"/>
+  <rect x="94" y="24" width="210" height="250" rx="3" fill="#f6f1e7" stroke="#d9d1c0"/>
+  <g fill="none" stroke="#4f6b3a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".35">
+    <path d="M176 232 C 180 196 186 160 198 124 C 206 100 214 82 226 64"/>
+    <path d="M184 196 C 166 190 154 178 148 160 C 166 162 180 174 184 196 Z"/>
+    <path d="M190 166 C 206 156 222 154 238 158 C 226 172 208 174 190 166 Z"/>
+    <path d="M197 128 C 182 120 174 106 172 90 C 188 96 196 110 197 128 Z"/>
+    <path d="M210 98 C 222 88 236 84 248 86 C 240 98 226 102 210 98 Z"/>
+    <circle cx="228" cy="60" r="6"/>
+  </g>
+  <g fill="#cfc6b3" opacity=".75">
+    <rect x="164" y="208" width="30" height="10" rx="1.5" transform="rotate(-8 179 213)"/>
+    <rect x="186" y="134" width="26" height="9" rx="1.5" transform="rotate(12 199 138)"/>
+    <rect x="212" y="70" width="24" height="9" rx="1.5" transform="rotate(-18 224 74)"/>
+  </g>
+  <rect x="222" y="226" width="72" height="40" rx="2" fill="#f6f1e7" stroke="#5a5449" stroke-opacity=".55" stroke-width="1"/>
+  <g stroke="#cfc6b3" stroke-width="1.2">
+    <line x1="230" y1="238" x2="286" y2="238"/>
+    <line x1="230" y1="247" x2="286" y2="247"/>
+    <line x1="230" y1="256" x2="270" y2="256"/>
+  </g>
+</svg>

@@ -166,26 +166,31 @@ the mean of the positions. Details in `app/domain/places.mli`.
 - Files under `Directory.Data`:
   - `previews/<photo_id>.jpg` (≤1600 px, q0.7 or WebP), always present.
   - `refthumbs/<plant_id>/<source>-<organ>.jpg` (shorter side ≤300 px, JPEG
-    q0.8), evictable via "Libérer". A changed image for an organ overwrites
+    q0.8), evictable via "Libérer" (4m « Données hors-ligne »): every
+    `thumb_path` is cleared first, then `refthumbs/` is removed whole, so a row
+    never points to a deleted file; it refuses while a thumbnail sync runs, and
+    syncs asked meanwhile are skipped; the next fiche entry online downloads
+    them again. A changed image for an organ overwrites
     the same file: the row's `thumb_path` is cleared first and set again only
     if the row still holds the downloaded URL (the syncs of one plant never
-    overlap). The thumbnails of a deleted plant stay until "Libérer" sweeps
-    `refthumbs/` against `ref_images`.
+    overlap). The thumbnails of a deleted plant stay until "Libérer" removes
+    `refthumbs/`.
   - `communes/<département>-<ms>.json`, an « IGN hors-ligne » pack
     (`Geo.Communes.to_string`: the communes of one département, rings
     simplified to 20 m, integer coordinates at 1e-5°). A new download writes
     a fresh path, then its row, then deletes the old file, so a row never
     points to a half-written file (a failed write or row deletes the new
-    file; a crash in between leaves an orphan, for a future "Libérer" sweep of
-    `communes/` against `commune_packs`, as for `refthumbs/`); « Supprimer »
+    file; a crash in between leaves an orphan, for a later orphan sweep of
+    `communes/` against `commune_packs`, not done: "Libérer" only removes
+    `refthumbs/` whole); « Supprimer »
     deletes the row, then the file.
   - `originals/<photo_id>` (no extension: the type is in the `uploads`
     row), an original bound for Drive, kept from the save until it is in
     Drive or the photo is gone. Not the cache directory: Android may clear it
     before a Wi-Fi-only upload runs. The file is written before its row (a
     failed write or row deletes it again, and the photo goes `failed`); a
-    crash in between leaves an orphan, for a future "Libérer" sweep of
-    `originals/` against `uploads`, as for `communes/`.
+    crash in between leaves an orphan, for the same later orphan sweep of
+    `originals/` against `uploads`.
   - `tiles/<region>.pmtiles`, downloaded once from Settings.
 - The binding (`Cap_sqlite.query`) returns each row as the JSON text of the
   plugin's row object; `store_io/db.ml` parses it and decodes it with
@@ -373,7 +378,11 @@ sign-in. No online check: a failed fetch is a stop like any other.
 
 Pausing: Supabase answers HTTP 540 to every request for a paused project; the
 outbox then just waits; the user sees "serveur en pause" in Settings with a link
-to the dashboard. Recording is unaffected.
+to the dashboard. Recording is unaffected. 4m's « File d'envoi » card shows it
+while the engine's last cycle stopped on `Paused` (`Engine.last`, re-read after
+each cycle; nothing stored: after a restart the first cycle finds it again),
+with `https://supabase.com/dashboard/project/<ref>` for a hosted
+`<ref>.supabase.co` backend and no link for the local stack.
 
 Keep-alive job (plan M6.50). A Free project is paused after a week without
 « sufficient user database activity »; Supabase's docs say that requests

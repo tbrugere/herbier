@@ -26,14 +26,14 @@
     {!Herbier_ui_model.Drive_text.last_sent} (read again when the queue
     changes), and « Envoyer maintenant » ({!App.send_now}), [aria-disabled]
     unless {!Herbier_ui_model.Drive_text.send_enabled}; below its card,
-    {!Pending} (no retry or discard action). « Données hors-ligne » and its
-    inert « Libérer » are static; « Copie compressée hors-ligne » is always on,
-    the preview being the only local copy. « Noms de lieux »: an intro line (own
-    places first, then the sources below, then « Lieu inconnu »), then one
-    switch per [Place_name.order] source (« IGN hors-ligne », « IGN en ligne »,
-    « Photon en ligne »), each with what it sends to whom, off by default; a tap
-    goes through {!App.set_place_source}, whose {!App.place_error} shows below
-    the switches (hidden when [None]). Under « IGN hors-ligne »: one row per
+    {!Pending} (no retry or discard action). « Données hors-ligne » is
+    {!Offline_row}. « Copie compressée hors-ligne » is always on, the preview
+    being the only local copy. « Noms de lieux »: an intro line (own places
+    first, then the sources below, then « Lieu inconnu »), then one switch per
+    [Place_name.order] source (« IGN hors-ligne », « IGN en ligne », « Photon en
+    ligne »), each with what it sends to whom, off by default; a tap goes
+    through {!App.set_place_source}, whose {!App.place_error} shows below the
+    switches (hidden when [None]). Under « IGN hors-ligne »: one row per
     {!App.packs} (« <code> · <name> », its size and commune count or « Fichier
     illisible », and « Supprimer » through {!App.delete_pack}, inert while that
     delete runs), {!Pack_text.no_pack} when there is none and the switch is on,

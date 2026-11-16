@@ -656,8 +656,7 @@ let v app =
         ]
       []
   in
-  let free = W.Button.text "Libérer" in
-  El.set_at (Jstr.v "aria-disabled") (Some (Jstr.v "true")) free.el;
+  let offline = Offline_row.v app in
   let queue_el, queue_b = queue_block app in
   let storage_error, set_storage_error =
     React.S.create ~eq:(Option.equal String.equal) None
@@ -713,16 +712,10 @@ let v app =
             storage_error_el;
           ];
         section "Sur le téléphone"
-          [
-            El.div
-              ~at:[cls "settings__card"]
-              [
-                compressed.el;
-                wifi_switch.el;
-                Row.v ~trailing:free.el ~title:"Données hors-ligne"
-                  ~detail:"Aperçus photos · Fiches de référence" ();
-              ];
-          ];
+          (El.div
+             ~at:[cls "settings__card"]
+             [compressed.el; wifi_switch.el; offline.row]
+          :: offline.after);
         section "Noms de lieux"
           [
             El.div
@@ -784,6 +777,6 @@ let v app =
             (fun (_, (s : W.Switch.t), act) -> act :: s.bindings)
             source_switches;
           offline_bindings;
-          free.bindings;
+          offline.bindings;
         ];
   }

@@ -179,7 +179,8 @@ app/
                           outbox entry in one explicit transaction); `bare_transaction` + `Tx` = the pull's and
                           the dev seed's (Outbox.bare writes, foreign keys deferred to the commit, no entry)
     files.ml              paths under Directory.Data (previews/, refthumbs/, communes/, tiles/); blob and text
-                          write, read, delete over cap_filesystem; base64 → blob
+                          write, read, delete over cap_filesystem; base64 → blob; a directory's usage in bytes
+                          (readdir, recursive) and its removal (4m « Données hors-ligne »)
   sync_core/              Supabase (§4 of architecture), sans IO: no Brr, no bindings, tested in test/sync/;
                           (include_subdirs qualified), no main modules (Auth.Session, Net.Rest, Cycle.Push, …)
     auth/                 Auth.Session, Auth.Gotrue, Auth.Grant, Auth.Lifecycle, Auth.Drive_consent
@@ -347,6 +348,10 @@ app/
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
     drive_text.ml         the Drive texts of 4e, 4m and 5e: access, queue title and status, last upload,
                           account meta and prompt, the stop dialog, 4e's card, 5e's badge and Drive link
+    network_text.ml       the offline texts: the global strip and 4d's pill (« hors-ligne · N en attente »),
+                          4g's unlinked line, 4i's search status
+    server_text.ml        4m's « Serveur en pause » (from the engine's last cycle) and the dashboard link
+    offline_data.ml       4m's « Données hors-ligne »: the sizes line and the texts of « Libérer »
     parked_entry.ml       4m's parked outbox entry: its title and French reason, from Last_error
   ui/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
@@ -358,6 +363,9 @@ app/
                           a one-shot framing asked by 4c/4h (handoff « État »), the place-name sources
     location_notice.ml    the one-time dialog of first opening on location use (M5.57), mounted on
                           body by main.ml
+    offline_banner.ml     the global « hors-ligne · N en attente » strip, mounted on body by main.ml;
+                          hidden on 4d (its own pill) and dev pages, following the router's shown route;
+                          <html data-offline> while it shows
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch,
                           through Transition.run; the shell holds the tab bar
     screen.ml             a screen's root element + its bindings + when its first content shows (ready),
@@ -456,8 +464,9 @@ app/
                   one screen, one entry mode each; 4j is M4.39's sheet mode, its « Chercher » enters 4i)
       tags.ml (4l)        manage_tags.ml (5d)
       settings/ (4m)      settings.ml (the screen; its main module), pending.ml (the card under « File
-                          d'envoi »: « Réception bloquée », the parked entries), row.ml (a title-and-meta
-                          row)
+                          d'envoi »: « Serveur en pause », « Réception bloquée », the parked entries),
+                          offline_row.ml (« Données hors-ligne »: sizes, « Libérer » and its dialog), row.ml
+                          (a title-and-meta row)
       edit_plant.ml (5a)  move_point.ml (5b)  viewer.ml (5e)
 ```
 
@@ -555,7 +564,8 @@ web/
                           sun-readability rules (5f)
     _widgets.sass         chips, cards, tab bar, sheets, dialogs, fields, and the widget mixins, among
                           them the pressed-state mixins every :active rule goes through
-    _shell.sass           the router's shell: scrolling screen above the tab bar, screen margins
+    _shell.sass           the router's shell: scrolling screen above the tab bar, screen margins, the
+                          offline strip and the top inset it adds (--offline-inset)
     _motion.sass          route transitions: keyframes, ::view-transition-* rules per <html data-motion>,
                           the .motion-fade-in fallback, reduced motion
     screens/              one file per screens/*.ml module, its handoff ids in a header comment:
@@ -793,7 +803,9 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   `drive.file` token in `HERBIER_DRIVE_TOKEN`, in a throwaway folder trashed at
   the end), `upload-sink.mjs` (a stand-in for a Drive resumable session on
   127.0.0.1, with injected 503s and expired sessions: the device checks of the
-  originals' uploads, reached through `adb reverse`) and
+  originals' uploads, reached through `adb reverse`), `pause-proxy.mjs` (a
+  proxy to the local stack that answers 540 to `/rest/v1/*` on demand: 4m's
+  « Serveur en pause » on the emulator, through `adb reverse`) and
   `local-session.sh <email>` (a local-stack session as JSON, the user created if
   absent: a token for `#dev/rest` without a Google account).
   `record-gotrue-fixtures.sh`, `record-sync-fixtures.sh` and `local-session.sh`

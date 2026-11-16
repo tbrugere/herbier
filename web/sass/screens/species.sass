@@ -18,7 +18,7 @@
   display: flex
   flex-direction: column
   justify-content: space-between
-  padding: calc(14px + env(safe-area-inset-top)) 20px 22px
+  padding: calc(14px + env(safe-area-inset-top) + var(--offline-inset)) 20px 22px
   +widgets.striped
 
   // The hero type is cream for photos (5f); on the stripes it is ink.
@@ -313,4 +313,4 @@
     opacity: .5
 
 .species__gone
-  padding: calc(16px + env(safe-area-inset-top)) 20px 20px
+  padding: calc(16px + env(safe-area-inset-top) + var(--offline-inset)) 20px 20px

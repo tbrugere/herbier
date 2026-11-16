@@ -68,6 +68,9 @@ type t = {
   thumbs : (Plant_id.t * thumb_sync) list ref;
       (* style: mutable for the same reason: a thumbnail sync settles in a
          future's callback. The plants with a sync running. *)
+  freeing : bool ref;
+      (* style: mutable for the same reason: « Libérer » settles in a
+         future's callback; thumbnail syncs asked meanwhile are skipped. *)
   communes : Communes.t ref;
       (* style: mutable because the packs load and download in futures'
          callbacks; a geocode run reads it at each observation. *)

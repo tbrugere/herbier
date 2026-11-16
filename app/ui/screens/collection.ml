@@ -191,7 +191,17 @@ let v app =
     El.div
       ~at:[At.class' (Jstr.v "collection__empty")]
       [
-        El.div ~at:[At.class' (Jstr.v "collection__illustration")] [];
+        (* Decorative: the title says it all. *)
+        El.img
+          ~at:
+            [
+              At.class' (Jstr.v "collection__illustration");
+              At.src (Jstr.v "img/herbarium-sheet.svg");
+              At.v (Jstr.v "alt") Jstr.empty;
+              At.width 400;
+              At.height 300;
+            ]
+          ();
         El.h2
           ~at:[At.class' (Jstr.v "collection__empty-title")]
           [El.txt' "La première plante s'ajoute dehors ou depuis un lien."];
@@ -206,7 +216,11 @@ let v app =
         paste.el;
         El.p
           ~at:[At.class' (Jstr.v "t-meta")]
-          [El.txt' "Google Photos se connecte plus tard, à la première photo."];
+          [
+            El.txt'
+              "Les photos restent sur le téléphone ; Google Drive se choisit \
+               dans Réglages.";
+          ];
       ]
   in
   let filled =

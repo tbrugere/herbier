@@ -3,7 +3,8 @@
 // gradients. Sass variables exist only so the derived tokens below (alpha
 // variants) are computed from the same value; everything else reads the
 // custom properties, and OCaml reads a few of them at startup
-// (app/ui/theme.ml).
+// (app/ui/theme.ml). web/img/herbarium-sheet.svg copies sand, sand-deep,
+// paper, line, line-soft, muted and moss as hex: change it with them.
 @use 'sass:color'
 
 $paper: #f6f1e7
@@ -66,6 +67,10 @@ $dark: #1d1a14
 
   // Spacing and sizes ("Espacements & rayons").
   --space-screen: 20px
+  // The offline strip (app/ui/offline_banner.ml) and what it adds to the top
+  // insets while it shows (0 otherwise, see _shell.sass).
+  --offline-banner-height: 24px
+  --offline-inset: 0px
   --grid-gap: 10px
   --touch-min: 44px
   --button-primary-height: 60px

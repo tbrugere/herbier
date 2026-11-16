@@ -1,13 +1,18 @@
 module Cap_error = Herbier_bindings.Cap_error
 module Cap_filesystem = Herbier_bindings.Cap_filesystem
 
-let preview id = "previews/" ^ Herbier_domain.Ids.Photo_id.to_string id ^ ".jpg"
+let previews_dir = "previews"
+let refthumbs_dir = "refthumbs"
+
+let preview id =
+  previews_dir ^ "/" ^ Herbier_domain.Ids.Photo_id.to_string id ^ ".jpg"
+
 let original_of_name name = "originals/" ^ name
 let original id = original_of_name (Herbier_domain.Ids.Photo_id.to_string id)
 
 let refthumb ~plant ~source ~organ =
   let module Reference = Herbier_domain.Reference in
-  Printf.sprintf "refthumbs/%s/%s-%s.jpg"
+  Printf.sprintf "%s/%s/%s-%s.jpg" refthumbs_dir
     (Herbier_domain.Ids.Plant_id.to_string plant)
     (Reference.Source.to_string source)
     (Reference.Organ.to_string organ)
@@ -59,3 +64,30 @@ let read_blob ~path ~type' =
     (Cap_filesystem.read_base64 ~path)
 
 let delete ~path = Cap_filesystem.delete_file ~path
+
+let rec usage ~dir =
+  let open Fut.Result_syntax in
+  let* entries =
+    Fut.map
+      (function
+        | Error e when Cap_filesystem.is_missing e -> Ok [] | read -> read)
+      (Cap_filesystem.readdir ~path:dir)
+  in
+  let files, dirs =
+    List.partition_map
+      (fun ({name; kind; size} : Cap_filesystem.entry) ->
+        match kind with
+        | File -> Left (Float.of_int size)
+        | Directory -> Right (dir ^ "/" ^ name))
+      entries
+  in
+  let+ nested =
+    Herbier_bindings.Fut_result.traverse (fun dir -> usage ~dir) dirs
+  in
+  List.fold_left ( +. ) 0. files +. List.fold_left ( +. ) 0. nested
+
+let delete_dir ~dir =
+  Fut.map
+    (function
+      | Error e when Cap_filesystem.is_missing e -> Ok () | removed -> removed)
+    (Cap_filesystem.rmdir ~path:dir ~recursive:true)

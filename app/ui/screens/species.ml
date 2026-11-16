@@ -284,10 +284,7 @@ let unlinked state id () =
       ],
     Rb.text offline_text
       (React.S.map
-         (function
-           | true -> ""
-           | false ->
-               " Hors-ligne : la recherche de noms reviendra avec le réseau.")
+         (fun online -> Herbier_ui_model.Network_text.unlinked_offline ~online)
          online)
     :: Rb.class_ link.el "is-offline" (React.S.map not online)
     :: Rb.disabled link.el (React.S.map not online)

@@ -164,3 +164,21 @@
 // hidden card of an empty outbox leaves no gap in the section.
 .settings__parked
   display: contents
+
+// « Libérer »'s outcome under « Sur le téléphone ».
+.settings__message
+  margin: 8px 0 0
+  padding: 0 4px
+  &[hidden]
+    display: none
+
+// « Serveur en pause »'s dashboard link, on its own line under the detail so
+// the text keeps the row's width; the tap target is --touch-min high.
+.settings__link
+  +base.ui(14px, 700)
+  display: inline-flex
+  align-items: center
+  align-self: flex-start
+  min-height: var(--touch-min)
+  color: var(--moss)
+  text-decoration: none

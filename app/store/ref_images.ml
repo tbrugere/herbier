@@ -103,3 +103,10 @@ let remove ~plant ~source:s ~organ:o =
     params =
       [Codec.param plant_id plant; Codec.param source s; Codec.param organ o];
   }
+
+let clear_thumbs =
+  {
+    Stmt.sql =
+      "update ref_images set thumb_path = null where thumb_path is not null";
+    params = [];
+  }

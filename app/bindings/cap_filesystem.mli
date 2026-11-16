@@ -34,3 +34,21 @@ val is_missing : Cap_error.t -> bool
 val mkdir : path:string -> recursive:bool -> (unit, Cap_error.t) result Fut.t
 (** Creates a directory; [~recursive:true] creates missing parents. An existing
     directory is [Error (Rejected _)] (the plugin's behaviour, not hidden). *)
+
+type kind = File | Directory
+
+type entry = {name : string; kind : kind; size : int}
+(** One item of a directory listing: [name] without its directory, [size] in
+    bytes (the plugin's [size]; for a directory, whatever the plugin says:
+    callers do not use it). *)
+
+val readdir : path:string -> (entry list, Cap_error.t) result Fut.t
+(** Lists a directory, in the plugin's order. A missing directory is
+    [Error (Rejected _)] ({!is_missing}). [Error (Unexpected "files")] when
+    [files] is not an array; [Error (Unexpected "files[<i>].name")] (or [.type],
+    [.size]) when item [i] lacks that field, has a [type] other than ["file"] /
+    ["directory"], or a [size] that is not an integer. *)
+
+val rmdir : path:string -> recursive:bool -> (unit, Cap_error.t) result Fut.t
+(** Removes a directory; [~recursive:true] removes its content too. A missing
+    directory is [Error (Rejected _)] ({!is_missing}). *)

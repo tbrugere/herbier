@@ -65,6 +65,9 @@ type t = {
   thumbs : (Plant_id.t * thumb_sync) list ref;
       (* style: mutable for the same reason: a thumbnail sync settles in a
          future's callback. The plants with a sync running. *)
+  freeing : bool ref;
+      (* style: mutable for the same reason: « Libérer » settles in a
+         future's callback; thumbnail syncs asked meanwhile are skipped. *)
   communes : Communes.t ref;
       (* style: mutable because the packs load and download in futures'
          callbacks; a geocode run reads it at each observation. *)
@@ -230,6 +233,7 @@ let create ~db ~state ~theme ~auth =
     set_place_error = (fun e -> set_place_error e);
     place_error_source = ref None;
     thumbs = ref [];
+    freeing = ref false;
     communes;
     communes_loaded = load_packs db ~communes ~set_packs:(fun p -> set_packs p);
     packs;

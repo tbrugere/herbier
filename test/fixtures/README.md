@@ -163,6 +163,31 @@ and are recorded by `scripts/record-drive-fixtures.sh` with
 No personal data in any of them: a throwaway `abc` file id and a token that
 was never valid.
 
+`capacitor_filesystem_readdir_{previews,refthumbs,missing}.json`: the
+Capacitor Filesystem plugin's answers to `readdir` (« Libérer »), read
+by `test/bindings/jsoo/cap_filesystem_smoke.ml` (and by its stub,
+`filesystem_stub.js`, which resolves/rejects with them). Recorded on the
+emulator (debug build, `@capacitor/filesystem` 8.1.5 over
+`io.ionic.libs:ionfilesystem-android` 1.1.1) with `scripts/webview.mjs eval`
+(not curl: no HTTP API is involved), then `python3 -m json.tool --indent 2`.
+Every entry carries `name`, `type`, an integer `size` (a directory's too:
+`File.length()`, 4096 on the emulator; the code ignores it), `mtime`, `ctime`
+and `uri`. `readdir` and `rmdir` on a missing path both reject with code
+`OS-PLUG-FILE-0008` (checked on the emulator for both calls) and a message of
+the form `'readdir' failed because file at '<path>/' does not exist.` (the
+code ignores the message). `refthumbs/` held two plant directories written
+for the recording with `writeFile` (the plugin's answer is what is recorded,
+not the files' origin), removed afterwards. Re-record (overwrite, same names)
+with:
+
+- `capacitor_filesystem_readdir_previews.json`:
+  `Capacitor.Plugins.Filesystem.readdir({path:'previews',directory:'DATA'}).then(r => JSON.stringify(r))`.
+- `capacitor_filesystem_readdir_refthumbs.json`:
+  `Capacitor.Plugins.Filesystem.readdir({path:'refthumbs',directory:'DATA'}).then(r => JSON.stringify(r))` (one
+  sub-directory per plant).
+- `capacitor_filesystem_readdir_missing.json`:
+  `Capacitor.Plugins.Filesystem.readdir({path:'nope',directory:'DATA'}).catch(e => JSON.stringify({code: e.code, message: e.message}))`.
+
 `web/map/positron.json` (not in this directory: it is also the style the app
 ships) is a recorded payload, read by `test/geo` as the fixture of its
 `Style.with_overlays` tests; never hand-edited. It is re-recorded on demand

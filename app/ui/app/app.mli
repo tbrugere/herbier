@@ -228,6 +228,34 @@ val fetching : t -> Herbier_domain.Ids.Plant_id.t list React.signal
     outside any update step when a fetch starts and ends. A primitive signal:
     releasing a screen's bindings on it never stops it. *)
 
+(** {1 Données hors-ligne} *)
+
+val offline_usage :
+  unit ->
+  (Herbier_ui_model.Offline_data.usage, Herbier_bindings.Cap_error.t) result
+  Fut.t
+(** 4m's sizes: [Files.usage] of the previews' directory, then of the reference
+    thumbnails' one; the first error. Not cached: 4m reads it when it opens and
+    after « Libérer ». *)
+
+type free_error =
+  | Busy  (** a thumbnail sync or another « Libérer » is running *)
+  | Store of Herbier_store_io.Db.error
+      (** clearing the rows failed; files untouched *)
+  | Files of Herbier_bindings.Cap_error.t
+      (** rows cleared, removing the files failed *)
+
+val free_reference_photos : t -> (unit, free_error) result Fut.t
+(** « Libérer »: [Error Busy], nothing done, while a thumbnail sync (see
+    {!refresh}) or another « Libérer » runs. Otherwise, while it runs, the
+    thumbnail syncs asked for are skipped (not queued: the next fiche entry asks
+    again); it clears every [thumb_path] ([Ref_images.clear_thumbs]; an error is
+    [Error (Store _)], files untouched), then removes the thumbnails' directory
+    (an error is [Error (Files _)]: the rows are already cleared, the files left
+    are overwritten by the next downloads). On [Ok], {!saved} fires (an open 4f
+    drops its organ tiles). One console line, [offline: freed reference photos]
+    or the error. Never raises. *)
+
 (** {1 Place names} *)
 
 val geocode_pending : t -> unit
@@ -315,13 +343,13 @@ type pack_error =
   | Pack of Herbier_geo_io.Commune_packs.error
 
 val pack_error_to_string : pack_error -> string
-(** French, for 4m: « Un téléchargement est déjà en cours. » ([Busy]), « Hors
-    ligne : réessayez une fois connecté. » ([Offline], [Network], [Timeout]), «
-    Service de l’IGN indisponible : réessayez plus tard. » (a [Status] that is
-    [Geocoder.transient]: 429, 5xx), « Réponse de l’IGN inattendue. »
-    ([Payload], any other [Status]), « Enregistrement impossible. » ([File],
-    [Store]), « Téléchargement non envoyé. Réessayez. » ([Refused], which no
-    download asks for). *)
+(** French, for 4m: « Un téléchargement est déjà en cours. » ([Busy]), «
+    Hors-ligne : réessayez une fois connecté. » ([Offline], [Network],
+    [Timeout]), « Service de l’IGN indisponible : réessayez plus tard. » (a
+    [Status] that is [Geocoder.transient]: 429, 5xx), « Réponse de l’IGN
+    inattendue. » ([Payload], any other [Status]), « Enregistrement impossible.
+    » ([File], [Store]), « Téléchargement non envoyé. Réessayez. » ([Refused],
+    which no download asks for). *)
 
 val departements :
   t -> (Herbier_geo.Communes.departement list, pack_error) result Fut.t

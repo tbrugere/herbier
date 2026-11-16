@@ -35,3 +35,8 @@ val remove :
   organ:Herbier_domain.Reference.Organ.t ->
   Stmt.t
 (** Deletes the row (a hard delete: the table is not synced): 1 or 0 changes. *)
+
+val clear_thumbs : Stmt.t
+(** [thumb_path = null] on every row that has one: one change per such row.
+    Rows, URLs, licences and attributions are kept, so the next thumbnails sync
+    of each plant downloads them again (« Libérer » of 4m). *)

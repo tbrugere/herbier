@@ -20,3 +20,15 @@ val create_linked :
   Herbier_domain.Plant.t ->
   Herbier_refs.Sources.Gbif.Taxon.t ->
   (unit, Herbier_store_io.Db.error) result Fut.t
+
+type free_error =
+  | Busy
+  | Store of Herbier_store_io.Db.error
+  | Files of Herbier_bindings.Cap_error.t
+
+val offline_usage :
+  unit ->
+  (Herbier_ui_model.Offline_data.usage, Herbier_bindings.Cap_error.t) result
+  Fut.t
+
+val free_reference_photos : Core.t -> (unit, free_error) result Fut.t

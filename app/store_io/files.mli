@@ -1,6 +1,12 @@
 (** The app's files under [Directory.Data] (architecture §3): their paths, and
     blobs written and read through {!Herbier_bindings.Cap_filesystem}. *)
 
+val previews_dir : string
+(** ["previews"]: the photo previews, flat. *)
+
+val refthumbs_dir : string
+(** ["refthumbs"]: the reference thumbnails, one directory per plant. *)
+
 val preview : Herbier_domain.Ids.Photo_id.t -> string
 (** ["previews/<photo id>.jpg"]. *)
 
@@ -54,3 +60,12 @@ val read_blob :
 
 val delete : path:string -> (unit, Herbier_bindings.Cap_error.t) result Fut.t
 (** Deletes the file; a missing file is [Error (Rejected _)]. *)
+
+val usage : dir:string -> (float, Herbier_bindings.Cap_error.t) result Fut.t
+(** Total bytes of the files under [dir], recursively (the directories' own
+    sizes not counted), summed as a float: under js_of_ocaml an [int] wraps at
+    2{^ 31}. A missing [dir], or a sub-directory gone meanwhile, counts 0. Other
+    errors: the first one; sub-directories are read one after the other. *)
+
+val delete_dir : dir:string -> (unit, Herbier_bindings.Cap_error.t) result Fut.t
+(** Removes [dir] and everything under it; a missing [dir] is [Ok ()]. *)

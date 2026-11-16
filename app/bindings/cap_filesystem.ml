@@ -73,3 +73,48 @@ let mkdir ~path ~recursive =
 let is_missing : Cap_error.t -> bool = function
   | Rejected {code = Some "OS-PLUG-FILE-0008"; _} -> true
   | Rejected _ | Unavailable _ | Unexpected _ | Invalid_path _ -> false
+
+type kind = File | Directory
+type entry = {name : string; kind : kind; size : int}
+
+let kind_of item path =
+  match Cap_call.string_field item "type" with
+  | Ok "file" -> Ok File
+  | Ok "directory" -> Ok Directory
+  | Ok _ | Error _ -> Error (Cap_error.Unexpected path)
+
+let entry i item =
+  let open Result.Syntax in
+  let at field = Printf.sprintf "files[%d].%s" i field in
+  let* name =
+    Cap_call.string_field item "name"
+    |> Result.map_error (fun (_ : Cap_error.t) ->
+        Cap_error.Unexpected (at "name"))
+  in
+  let* kind = kind_of item (at "type") in
+  let+ size =
+    Cap_call.int_field item "size"
+    |> Result.map_error (fun (_ : Cap_error.t) ->
+        Cap_error.Unexpected (at "size"))
+  in
+  {name; kind; size}
+
+let entries_of r =
+  match Cap_call.field r "files" with
+  | Ok files when Jv.is_array files ->
+      List.mapi (fun i item -> (i, item)) (Jv.to_list Fun.id files)
+      |> Cap_call.traverse (fun (i, item) -> entry i item)
+  | Ok _ | Error _ -> Error (Cap_error.Unexpected "files")
+
+let readdir ~path =
+  checked path (fun jpath ->
+      Cap_call.call plugin "readdir"
+        (options [("path", jpath); data_dir])
+        ~ok:entries_of)
+
+let rmdir ~path ~recursive =
+  checked path (fun jpath ->
+      Cap_call.call plugin "rmdir"
+        (options
+           [("path", jpath); data_dir; ("recursive", Jv.of_bool recursive)])
+        ~ok:unit_ok)

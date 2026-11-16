@@ -373,6 +373,67 @@ let never_writes_outbox () =
   in
   Alcotest.(check int) "outbox count unchanged" before (Cli.outbox_count db)
 
+(* ---------- clear_thumbs (« Libérer ») ---------- *)
+
+let clear_thumbs_clears_every_thumb_path_only () =
+  let db = Cli.migrated_db () in
+  seed_plant db (plant 0x1 "Digitale");
+  seed_plant db (plant 0x2 "Arnica");
+  let with_thumb_a =
+    image ~plant_id:(plant_id 0x1) ~organ:Organ.Flower
+      ~remote_url:"https://bs.plantnet.org/image/o/a" ~licence:"cc-by-sa"
+      ~attribution:"Someone" ~thumb_path:(Some "refthumbs/p1/flower.jpg") ()
+  in
+  let with_thumb_b =
+    image ~plant_id:(plant_id 0x1) ~organ:Organ.Leaf
+      ~remote_url:"https://bs.plantnet.org/image/o/b" ~licence:"cc-by"
+      ~attribution:"Someone Else" ~thumb_path:(Some "refthumbs/p1/leaf.jpg") ()
+  in
+  let no_thumb =
+    image ~plant_id:(plant_id 0x2) ~organ:Organ.Habit
+      ~remote_url:"https://bs.plantnet.org/image/o/c" ~thumb_path:None ()
+  in
+  List.iter
+    (fun r -> ignore (Cli.write_ok "seed" db (Ref_images.put r) : int))
+    [with_thumb_a; with_thumb_b; no_thumb];
+  Alcotest.(check int)
+    "one change per row that had a thumbnail" 2
+    (Cli.write_ok "clear_thumbs" db Ref_images.clear_thumbs);
+  let cleared_a = {with_thumb_a with thumb_path = None}
+  and cleared_b = {with_thumb_b with thumb_path = None} in
+  check_images "plant 1: both thumb_path cleared, everything else kept"
+    [cleared_a; cleared_b]
+    (Cli.all db (Ref_images.of_plant (plant_id 0x1)));
+  check_images "plant 2: already None, untouched" [no_thumb]
+    (Cli.all db (Ref_images.of_plant (plant_id 0x2)));
+  Alcotest.(check int)
+    "a second clear_thumbs: 0 changes" 0
+    (Cli.write_ok "clear_thumbs again" db Ref_images.clear_thumbs)
+
+let clear_thumbs_leaves_the_rows_downloadable () =
+  let module Organ_photos = Herbier_refs.Organ_photos in
+  let db = Cli.migrated_db () in
+  seed_plant db (plant 0x1 "Digitale");
+  let flower =
+    image ~organ:Organ.Flower ~remote_url:"https://bs.plantnet.org/image/o/a"
+      ~thumb_path:(Some "refthumbs/p1/flower.jpg") ()
+  in
+  let leaf =
+    image ~organ:Organ.Leaf ~remote_url:"https://bs.plantnet.org/image/o/b"
+      ~thumb_path:(Some "refthumbs/p1/leaf.jpg") ()
+  in
+  List.iter
+    (fun r -> ignore (Cli.write_ok "seed" db (Ref_images.put r) : int))
+    [flower; leaf];
+  let (_ : int) = Cli.write_ok "clear_thumbs" db Ref_images.clear_thumbs in
+  let stored = Cli.all db (Ref_images.of_plant (plant_id 0x1)) in
+  check_images "every thumb_path is now None"
+    [{flower with thumb_path = None}; {leaf with thumb_path = None}]
+    stored;
+  Alcotest.(check int)
+    "to_download lists every row of the plant" 2
+    (List.length (Organ_photos.to_download stored))
+
 (* ---------- cascade ---------- *)
 
 let plant_delete_cascades () =
@@ -433,6 +494,15 @@ let () =
         [
           case "put, set_thumb and remove never write to the outbox"
             never_writes_outbox;
+        ] );
+      ( "clear_thumbs",
+        [
+          case
+            "one change per row that had a thumbnail; other columns kept; a \
+             second call is a no-op"
+            clear_thumbs_clears_every_thumb_path_only;
+          case "cleared rows are picked up by Organ_photos.to_download"
+            clear_thumbs_leaves_the_rows_downloadable;
         ] );
       ( "cascade",
         [
