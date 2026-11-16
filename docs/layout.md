@@ -252,9 +252,11 @@ app/
     preview_size.ml       the preview's size rule and JPEG quality
     jpeg.ml               JPEG segment reading (is there an EXIF APP1)
     drive.ml              Google Drive v3 without IO: requests (folders find-or-create, the lookup by
-                          appProperties, multipart files.create, files.get?fields=trashed), the multipart
-                          frame, the resumable session, decoders, error classes, folder and file names, and the
-                          programs put_original, start_session and presence over a fake-able transport
+                          appProperties, multipart files.create, files.get?fields=id,trashed), the multipart
+                          frame, the resumable session, decoders, error classes, folder and file names, the
+                          root folder by its stored id (resolve_root, the root change a program reports),
+                          and the programs put_original, start_session and presence over a fake-able
+                          transport
     upload_queue.ml       the originals' queue's decisions, without IO: from a photo row, its uploads row and
                           its job, what to do next (start a session, enqueue, finish, retry, give up, discard)
     health.ml             the weekly Drive check without IO: which photos to ask about, what presence
@@ -265,6 +267,8 @@ app/
                           then the pending photo row through Db.edit
     drive.ml              runs photos/drive.ml's programs over bindings/timed_fetch.ml with a Bearer token
                           from the caller (Auth.drive_token, wired in ui/), one renewal on a 401
+    drive_root.ml         the Drive root folder's id in the drive_root_folder setting: read before a
+                          session start, updated from the program's root change (run), forgotten
     upload_queue.ml       the originals' queue on the device: originals/<id> and its uploads row at save, the
                           single-flight pass (jobs, rows, photo rows, Upload_queue.next), session starts one at
                           a time over drive.ml, jobs through bindings/cap_uploader.ml, outcomes committed
@@ -416,8 +420,9 @@ app/
                           auth_check.ml (#dev/auth): the build's backend, the account's status and expiry,
                           sign in, refresh now, expire, sign out;
                           drive_check.ml (#dev/drive): the Drive token (interactive, silent, the plugin
-                          alone), a generated test JPEG put into Herbier/<species>/ and put again, its
-                          presence, an invalid token's two 401s, « Vérifier les originaux » (the health
+                          alone), a generated test JPEG put into the stored root's <species>/ (Herbier/
+                          by default) and put again, its presence, an invalid token's two 401s, the
+                          stored root folder (shown, forgotten), « Vérifier les originaux » (the health
                           check, forced) and the fake « Original envoyé (factice) » / « Original
                           introuvable » marks (synced: local stack only);
                           uploader_check.ml (#dev/uploader): the upload job against scripts/upload-sink.mjs (a

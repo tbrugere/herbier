@@ -12,6 +12,8 @@ module Photo = Herbier_domain.Photo
 module Photos = Herbier_store.Photos
 module Db = Herbier_store_io.Db
 module Health = Herbier_photos_io.Health
+module Drive_root = Herbier_photos_io.Drive_root
+module Settings = Herbier_store.Settings
 
 type mark = Uploaded | Missing
 
@@ -62,6 +64,12 @@ let file_line label ({id; web_view_link} : Api.file) =
 let put_detail = function
   | Api.Created f -> file_line "Created" f
   | Api.Already_there f -> file_line "Already_there" f
+
+(* Without the id: the « Dossier racine » line shows it. *)
+let root_detail = function
+  | Api.Keep -> "keep"
+  | Api.Store (_ : string) -> "store"
+  | Api.Forget -> "forget"
 
 let presence_detail = function
   | Api.Present -> "Present"
@@ -141,9 +149,19 @@ let page app =
   let auth = App.auth app in
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
   let status = El.p [] in
+  let root_line = El.p [] in
+  let db = App.db app in
   let render () =
     El.set_children status
-      [El.txt' ("status: " ^ Auth_check.status_to_string (Auth.status auth))]
+      [El.txt' ("status: " ^ Auth_check.status_to_string (Auth.status auth))];
+    Fut.await (Drive_root.stored db) (fun stored ->
+        let shown =
+          match stored with
+          | Ok (Some id) -> id
+          | Ok None -> "aucun"
+          | Error e -> "illisible : " ^ Db.error_to_string e
+        in
+        El.set_children root_line [El.txt' ("Dossier racine : " ^ shown)])
   in
   render ();
   let species =
@@ -171,13 +189,20 @@ let page app =
   let put label (original, blob) =
     last.original <- Some (original, blob);
     let upload =
-      Drive.put_original ~token:(token ~interactive:true) ~drop_token original
-        blob
+      Fut.map
+        (function
+          | Ok ({result; root = change} : _ Api.rooted) ->
+              Kit.append log ("root: " ^ root_detail change);
+              Result.map_error drive_error result
+          | Error e -> Error ("root folder: " ^ Db.error_to_string e))
+        (Drive_root.run db
+           (Drive.put_original ~token:(token ~interactive:true) ~drop_token
+              original blob))
     in
     Fut.await upload (function
       | Ok (Api.Created f | Api.Already_there f) -> last.file_id <- Some f.id
       | Error _ -> ());
-    step label ~detail:(fun p -> Some (put_detail p)) ~error:drive_error upload
+    step label ~detail:(fun p -> Some (put_detail p)) ~error:Fun.id upload
   in
   let fresh label k =
     Fut.await
@@ -214,12 +239,14 @@ let page app =
             (* style: a local counter, read once the run has ended. *)
             let drops = ref 0 in
             let upload =
-              Drive.put_original
-                ~token:(fun () -> Fut.return (Ok "ya29.invalid"))
-                ~drop_token:(fun (_ : string) ->
-                  incr drops;
-                  Fut.return ())
-                original blob
+              Fut.map
+                (fun ({result; _} : _ Api.rooted) -> result)
+                (Drive.put_original
+                   ~token:(fun () -> Fut.return (Ok "ya29.invalid"))
+                   ~drop_token:(fun (_ : string) ->
+                     incr drops;
+                     Fut.return ())
+                   ~root:None original blob)
             in
             step "invalid"
               ~detail:(fun p -> Some (put_detail p))
@@ -229,14 +256,19 @@ let page app =
                   !drops)
               upload))
   in
+  let forget =
+    Kit.action "Oublier le dossier" (fun () ->
+        step "forget root"
+          ~detail:(fun (_ : int) -> None)
+          ~error:Db.error_to_string (Drive_root.forget db))
+  in
   let originals =
     Kit.action "Vérifier les originaux" (fun () ->
         let open Fut.Syntax in
         Fut.await
           (let* outcome = Health.run (App.health app) ~force:true in
            Kit.append log ("health: " ^ Health.outcome_to_string outcome);
-           Db.find (App.db app)
-             (Herbier_store.Settings.get Drive_health_checked_at))
+           Db.find db (Settings.get Drive_health_checked_at))
           (function
             | Ok (Some at) ->
                 Kit.append log ("checked at: " ^ Ptime.to_rfc3339 at)
@@ -254,6 +286,8 @@ let page app =
       El.p [El.txt' ("scope: " ^ Drive_consent.scope)];
       El.div [authorize; silent; plugin];
       El.div [species; upload; again; check; invalid];
+      root_line;
+      El.div [forget];
       El.div
         [
           originals;

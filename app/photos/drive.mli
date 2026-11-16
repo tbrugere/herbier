@@ -1,6 +1,7 @@
 (** Google Drive v3 for the originals (architecture §5), without IO: the
-    requests, the multipart frame, the answers decoded, and the two programs the
-    app runs — put an original into [Herbier/<species>/], and check one is still
+    requests, the multipart frame, the answers decoded, and the programs the app
+    runs — put an original into [<root>/<species>/] (the root folder by its
+    stored id, else « Herbier » at My Drive's root), and check one is still
     there. Run on the device by [Herbier_photos_io.Drive], in tests by {!run}
     over a function standing for the network. Requests carry no Authorization
     header: the runner adds the token. Nothing here raises. *)
@@ -53,6 +54,9 @@ type error =
       (** a 2xx whose body does not decode as the request's answer; names what
           is missing *)
   | Network of string  (** {!response}'s [Unreachable]: its message *)
+  | Root_folder of error
+      (** {!resolve_root}'s [This_file] error (an [Http _], [Malformed _] or
+          [Not_found] on the root folder itself): the same for every file *)
 
 val equal_error : error -> error -> bool
 
@@ -72,8 +76,8 @@ val equal_scope : scope -> scope -> bool
 
 val error_scope : error -> scope
 (** [Unauthorized], [Api_disabled], [Scope_missing], [Quota_full],
-    [Rate_limited], [Server _], [Network _] → [Account]; [Not_found], [Http _],
-    [Malformed _] → [This_file]. *)
+    [Rate_limited], [Server _], [Network _], [Root_folder _] → [Account];
+    [Not_found], [Http _], [Malformed _] → [This_file]. *)
 
 val error_of_answer : status:int -> body:string -> error
 (** A non-2xx answer classified. The body is Google's
@@ -88,7 +92,8 @@ val error_of_answer : status:int -> body:string -> error
 (** {1 Names} *)
 
 val root_folder : string
-(** ["Herbier"], in My Drive's root. *)
+(** ["Herbier"]: the name of the folder the app looks up, else creates, in My
+    Drive's root when it has no usable stored root folder ({!resolve_root}). *)
 
 val unidentified_folder : string
 (** ["À identifier"]: the folder of an observation without a plant. *)
@@ -236,6 +241,46 @@ val folder : name:string -> parent:parent -> (string, error) result t
 (** {!find_folder}; the first (oldest) entry's id; none → {!create_folder}, its
     id. A non-2xx or [Unreachable] ends the program with its error. *)
 
+(** What the caller does with its stored root folder id after a program. *)
+type root_change =
+  | Keep  (** nothing to write: the stored id was used, or nothing was learnt *)
+  | Store of string  (** store this id (found or created at My Drive's root) *)
+  | Forget
+      (** unset the stored id: it is trashed or gone (404), and no new root
+          could be had in this run *)
+
+val equal_root_change : root_change -> root_change -> bool
+
+val pp_root_change : Format.formatter -> root_change -> unit
+(** ["keep"], ["store <id>"], ["forget"] (tests' printer). *)
+
+type 'a rooted = {result : 'a; root : root_change}
+(** A program's answer and what it learnt about the root folder. Carried even
+    when [result] is an error: a root created before a later failure is still
+    stored. *)
+
+val equal_rooted : ('a -> 'a -> bool) -> 'a rooted -> 'a rooted -> bool
+
+val resolve_root : stored:string option -> (string, error) result rooted t
+(** The root folder's id, by id first:
+    - [stored = Some id]: {!presence} [~file_id:id] (one {!get_trashed}):
+      [Ok Present] → [{result = Ok id; root = Keep}], wherever the folder now is
+      and whatever its name; [Ok (Trashed | Missing)] → the folder is forgotten
+      and the [None] case runs: its [Ok id'] →
+      [{result = Ok id'; root = Store id'}], its [Error e] →
+      [{result = Error e; root = Forget}]; a 403 [appNotAuthorizedToFile] (the
+      app is not on the folder's ACL, a lasting state) → as [Missing]; any other
+      [Error e] (401, 5xx, network, malformed, …) →
+      [{result = Error e; root = Keep}], nothing else sent.
+    - [stored = None]: {!folder} [~name:root_folder ~parent:Root] (oldest found
+      at My Drive's root, else created): [Ok id] →
+      [{result = Ok id; root = Store id}]; [Error e] →
+      [{result = Error e; root = Keep}].
+
+    Every [Error e] whose {!error_scope} is [This_file] comes out as
+    [Root_folder e] ([Account]): a root folder that fails fails every file. The
+    caller passes a non-blank id (the settings codec refuses blanks). *)
+
 type target = {
   species : string;  (** folder name, from {!species_folder} *)
   name : string;  (** from {!file_name} *)
@@ -256,16 +301,20 @@ type put =
 
 val equal_put : put -> put -> bool
 
-val put_original : original -> (put, error) result t
-(** {!find_original}: an entry → [Already_there] (the oldest). None →
-    [folder ~name:root_folder ~parent:Root], then
-    [folder ~name:o.target.species ~parent:(Folder <root id>)], then
-    {!create_original} into it → [Created]. Stops at the first error. These
-    requests in this order, nothing else. Two runs for one account must not
-    overlap (two first uploads of one species would create two folders). A
-    create whose answer was lost (a timeout) is found by the next run's search;
-    should Drive's search lag behind the create, that run uploads a second copy.
-*)
+val put_original :
+  root:string option -> original -> (put, error) result rooted t
+(** {!find_original}: an entry →
+    [{result = Ok (Already_there oldest); root = Keep}], nothing else sent. None
+    → {!resolve_root} [~stored:root] (its [Error] ends the program with its
+    [root]), then [folder ~name:o.target.species ~parent:(Folder <root id>)],
+    then {!create_original} into the species folder → [Created]. Stops at the
+    first error; an error after {!resolve_root} keeps the [root] it gave
+    ([Store id] stays [Store id]). These requests in this order, nothing else:
+    never [find_folder ~name:root_folder] when the stored root is present. Two
+    runs for one account must not overlap (two first uploads of one species
+    would create two folders). A create whose answer was lost (a timeout) is
+    found by the next run's search; should Drive's search lag behind the create,
+    that run uploads a second copy. *)
 
 type start =
   | Already_there of file
@@ -274,15 +323,12 @@ type start =
 
 val equal_start : start -> start -> bool
 
-val start_session : target -> (start, error) result t
-(** {!find_original}: an entry → [Already_there] (the oldest). None →
-    [folder ~name:root_folder ~parent:Root], then
-    [folder ~name:t.species ~parent:(Folder <root id>)], then {!create_session}
-    with [folder_id] the species folder → 2xx → {!decode_session} of its headers
-    → [Session url]. Stops at the first error (a non-2xx → {!error_of_answer};
-    [Unreachable m] → [Network m]). These requests in this order, nothing else.
-    Same overlap rule as {!put_original}: two runs for one account must not
-    overlap. *)
+val start_session :
+  root:string option -> target -> (start, error) result rooted t
+(** As {!put_original}, ending with {!create_session} ([folder_id] the species
+    folder) → 2xx → {!decode_session} of its headers → [Session url] (a non-2xx
+    → {!error_of_answer}; [Unreachable m] → [Network m]). Same overlap rule: two
+    runs for one account must not overlap. *)
 
 val presence : file_id:string -> (presence, error) result t
 (** {!get_trashed}: 2xx [trashed = false] → [Present], [true] → [Trashed]

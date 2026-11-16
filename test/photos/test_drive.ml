@@ -607,6 +607,10 @@ let pp_scope ppf = function
 
 let scope_t = Alcotest.testable pp_scope Drive.equal_scope
 
+(* see test_drive_root.ml for resolve_root *)
+let root_change_t =
+  Alcotest.testable Drive.pp_root_change Drive.equal_root_change
+
 let error_scope_tests =
   let case name e expected =
     ( name,
@@ -627,6 +631,8 @@ let error_scope_tests =
       (Drive.Http {status = 418; reason = None; message = None})
       Drive.This_file;
     case "Malformed _: This_file" (Drive.Malformed "x") Drive.This_file;
+    case "Root_folder _: Account" (Drive.Root_folder (Drive.Malformed "x"))
+      Drive.Account;
   ]
 
 (* ---------- decoders ---------- *)
@@ -788,7 +794,7 @@ let put_original_tests =
        create_original; parents is the species folder",
       `Quick,
       fun () ->
-        let prog = Drive.put_original original in
+        let prog = Drive.put_original ~root:None original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -811,14 +817,17 @@ let put_original_tests =
             upload_into "SPEC1";
           ]
           (Drive.requests (seq_net responses) prog);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check put_result "put_original"
           (Ok (created "FILE1" "https://drive.test/FILE1"))
-          (Drive.run (seq_net responses) prog) );
+          r.result;
+        Alcotest.check root_change_t "put_original root" (Drive.Store "ROOT1")
+          r.root );
     ( "root and species already exist: find_original, find root, find species, \
        create_original",
       `Quick,
       fun () ->
-        let prog = Drive.put_original original in
+        let prog = Drive.put_original ~root:None original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -836,13 +845,16 @@ let put_original_tests =
             upload_into "SPEC1";
           ]
           (Drive.requests (seq_net responses) prog);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check put_result "put_original"
           (Ok (created "FILE2" "https://drive.test/FILE2"))
-          (Drive.run (seq_net responses) prog) );
+          r.result;
+        Alcotest.check root_change_t "put_original root" (Drive.Store "ROOT1")
+          r.root );
     ( "already there: a single find_original, the oldest entry, nothing uploaded",
       `Quick,
       fun () ->
-        let prog = Drive.put_original original in
+        let prog = Drive.put_original ~root:None original in
         let responses =
           [
             answer
@@ -851,15 +863,17 @@ let put_original_tests =
         in
         let reqs = Drive.requests (seq_net responses) prog in
         Alcotest.(check int) "one request" 1 (List.length reqs);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check put_result "put_original"
           (Ok
              (Drive.Already_there
                 {id = "FILE0"; web_view_link = Some "https://drive.test/FILE0"}))
-          (Drive.run (seq_net responses) prog) );
+          r.result;
+        Alcotest.check root_change_t "put_original root" Drive.Keep r.root );
     ( "a 401 finding root stops the program at once",
       `Quick,
       fun () ->
-        let prog = Drive.put_original original in
+        let prog = Drive.put_original ~root:None original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -868,12 +882,14 @@ let put_original_tests =
         in
         let reqs = Drive.requests (seq_net responses) prog in
         Alcotest.(check int) "stops after two requests" 2 (List.length reqs);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check put_result "put_original" (Error Drive.Unauthorized)
-          (Drive.run (seq_net responses) prog) );
+          r.result;
+        Alcotest.check root_change_t "put_original root" Drive.Keep r.root );
     ( "an unreachable create_original surfaces as Network",
       `Quick,
       fun () ->
-        let prog = Drive.put_original original in
+        let prog = Drive.put_original ~root:None original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -886,20 +902,26 @@ let put_original_tests =
         in
         let reqs = Drive.requests (seq_net responses) prog in
         Alcotest.(check int) "six requests" 6 (List.length reqs);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check put_result "put_original"
-          (Error (Drive.Network "timeout"))
-          (Drive.run (seq_net responses) prog) );
+          (Error (Drive.Network "timeout")) r.result;
+        Alcotest.check root_change_t
+          "put_original root: the root created before the failure is still \
+           stored"
+          (Drive.Store "ROOT1") r.root );
     ( "a malformed create_folder answer stops before the upload",
       `Quick,
       fun () ->
-        let prog = Drive.put_original original in
+        let prog = Drive.put_original ~root:None original in
         let responses =
           [answer {|{"files":[]}|}; answer {|{"files":[]}|}; answer "{}"]
         in
         let reqs = Drive.requests (seq_net responses) prog in
         Alcotest.(check int) "stops after three requests" 3 (List.length reqs);
-        Alcotest.check put_result "put_original" (Error (Drive.Malformed "id"))
-          (Drive.run (seq_net responses) prog) );
+        let r = Drive.run (seq_net responses) prog in
+        Alcotest.check put_result "put_original"
+          (Error (Drive.Root_folder (Drive.Malformed "id"))) r.result;
+        Alcotest.check root_change_t "put_original root" Drive.Keep r.root );
   ]
 
 let presence_tests =
@@ -1048,7 +1070,7 @@ let start_session_tests =
     ( "a file already there: Already_there (the oldest), exactly 1 request",
       `Quick,
       fun () ->
-        let prog = Drive.start_session target in
+        let prog = Drive.start_session ~root:None target in
         let resp =
           answer
             {|{"files":[{"id":"FILE0","webViewLink":"https://drive.test/FILE0"},{"id":"FILE9","webViewLink":"https://drive.test/FILE9"}]}|}
@@ -1057,16 +1079,18 @@ let start_session_tests =
         check_requests "find_original alone"
           [Drive.find_original ~id:target.photo_id]
           reqs;
+        let r = Drive.run (seq_net [resp]) prog in
         Alcotest.check start_result "start_session"
           (Ok
              (Drive.Already_there
                 {id = "FILE0"; web_view_link = Some "https://drive.test/FILE0"}))
-          (Drive.run (seq_net [resp]) prog) );
+          r.result;
+        Alcotest.check root_change_t "start_session root" Drive.Keep r.root );
     ( "nothing there, root found, species absent: the five requests in order, \
        Session url",
       `Quick,
       fun () ->
-        let prog = Drive.start_session target in
+        let prog = Drive.start_session ~root:None target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1094,14 +1118,16 @@ let start_session_tests =
               };
           ]
           (Drive.requests (seq_net responses) prog);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check start_result "start_session"
-          (Ok (Drive.Session session_url))
-          (Drive.run (seq_net responses) prog) );
+          (Ok (Drive.Session session_url)) r.result;
+        Alcotest.check root_change_t "start_session root" (Drive.Store "ROOT1")
+          r.root );
     ( "nothing there, root and species absent: the six requests in order, \
        Session url",
       `Quick,
       fun () ->
-        let prog = Drive.start_session target in
+        let prog = Drive.start_session ~root:None target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1131,13 +1157,15 @@ let start_session_tests =
               };
           ]
           (Drive.requests (seq_net responses) prog);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check start_result "start_session"
-          (Ok (Drive.Session session_url))
-          (Drive.run (seq_net responses) prog) );
+          (Ok (Drive.Session session_url)) r.result;
+        Alcotest.check root_change_t "start_session root" (Drive.Store "ROOT1")
+          r.root );
     ( "a 503 on the species lookup is Server 503, the requests end there",
       `Quick,
       fun () ->
-        let prog = Drive.start_session target in
+        let prog = Drive.start_session ~root:None target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1153,12 +1181,16 @@ let start_session_tests =
               ~parent:(Drive.Folder "ROOT1");
           ]
           (Drive.requests (seq_net responses) prog);
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check start_result "start_session" (Error (Drive.Server 503))
-          (Drive.run (seq_net responses) prog) );
+          r.result;
+        Alcotest.check root_change_t
+          "start_session root: resolved before the failure, still stored"
+          (Drive.Store "ROOT1") r.root );
     ( "a session 200 without a location header is Malformed \"location\"",
       `Quick,
       fun () ->
-        let prog = Drive.start_session target in
+        let prog = Drive.start_session ~root:None target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1167,13 +1199,16 @@ let start_session_tests =
             answer "{}";
           ]
         in
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check start_result "start_session"
-          (Error (Drive.Malformed "location"))
-          (Drive.run (seq_net responses) prog) );
+          (Error (Drive.Malformed "location")) r.result;
+        Alcotest.check root_change_t
+          "start_session root: resolved before the failure, still stored"
+          (Drive.Store "ROOT1") r.root );
     ( "the session's 401 (invalid token), recorded, is Unauthorized",
       `Quick,
       fun () ->
-        let prog = Drive.start_session target in
+        let prog = Drive.start_session ~root:None target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1183,8 +1218,12 @@ let start_session_tests =
               (fixture "files_create_session_invalid_token_401");
           ]
         in
+        let r = Drive.run (seq_net responses) prog in
         Alcotest.check start_result "start_session" (Error Drive.Unauthorized)
-          (Drive.run (seq_net responses) prog);
+          r.result;
+        Alcotest.check root_change_t
+          "start_session root: resolved before the failure, still stored"
+          (Drive.Store "ROOT1") r.root;
         Alcotest.check error_t "error_of_answer on the same fixture"
           Drive.Unauthorized
           (Drive.error_of_answer ~status:401
@@ -1192,15 +1231,16 @@ let start_session_tests =
     ( "an unreachable lookup is Network, exactly 1 request",
       `Quick,
       fun () ->
-        let prog = Drive.start_session target in
+        let prog = Drive.start_session ~root:None target in
         let net = seq_net [Drive.Unreachable "timeout"] in
         let reqs = Drive.requests net prog in
         check_requests "find_original alone"
           [Drive.find_original ~id:target.photo_id]
           reqs;
+        let r = Drive.run (seq_net [Drive.Unreachable "timeout"]) prog in
         Alcotest.check start_result "start_session"
-          (Error (Drive.Network "timeout"))
-          (Drive.run (seq_net [Drive.Unreachable "timeout"]) prog) );
+          (Error (Drive.Network "timeout")) r.result;
+        Alcotest.check root_change_t "start_session root" Drive.Keep r.root );
   ]
 
 (* ---------- view_url ---------- *)

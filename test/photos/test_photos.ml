@@ -456,6 +456,16 @@ let () =
       ("drive decode_session", Test_drive.decode_session_tests);
       ("drive start_session program", Test_drive.start_session_tests);
       ("drive view_url", Test_drive.view_url_tests);
+      ("drive resolve_root program", Test_drive_root.resolve_root_tests);
+      ( "drive already there, with and without a stored root",
+        Test_drive_root.already_there_tests );
+      ("drive start_session ~root", Test_drive_root.start_session_root_tests);
+      ("drive put_original ~root", Test_drive_root.put_original_root_tests);
+      ( "drive root folder: moved, renamed, trashed, deleted",
+        Test_drive_root.move_rename_trash_tests );
+      ( "drive resolve_root (recorded fixtures)",
+        Test_drive_root.fixture_root_tests );
+      ("drive pp_root_change", Test_drive_root.root_change_pp_tests);
       ("upload_queue constants", Test_upload_queue.constants_tests);
       ("upload_queue session_usable", Test_upload_queue.session_usable_tests);
       ("upload_queue next", Test_upload_queue.next_tests);

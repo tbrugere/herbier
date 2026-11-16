@@ -11,6 +11,7 @@ type _ key =
   | Drive_health_checked_at : Ptime.t key
   | Last_upload_at : Ptime.t key
   | Drive_health_cursor : Herbier_domain.Ids.Photo_id.t key
+  | Drive_root_folder : string key
 
 let name : type a. a key -> string = function
   | Storage_target -> "storage_target"
@@ -22,6 +23,7 @@ let name : type a. a key -> string = function
   | Drive_health_checked_at -> "drive_health_checked_at"
   | Last_upload_at -> "last_upload_at"
   | Drive_health_cursor -> "drive_health_cursor"
+  | Drive_root_folder -> "drive_root_folder"
 
 (* A local-only table: its columns live next to its queries (layout §2), not
    in Tables. *)
@@ -48,6 +50,10 @@ let photo_id_text : Herbier_domain.Ids.Photo_id.t Col.custom =
   Codec.text ~name:"photo_id" ~to_string:Herbier_domain.Ids.Photo_id.to_string
     ~of_string:Herbier_domain.Ids.Photo_id.of_string
 
+let drive_id_text : string Col.custom =
+  Codec.text ~name:"drive_id" ~to_string:Fun.id
+    ~of_string:Herbier_domain.Text.non_blank
+
 let codec : type a. a key -> a Col.custom = function
   | Storage_target -> Tables.photo_original_target
   | Wifi_only -> bool_text
@@ -58,6 +64,7 @@ let codec : type a. a key -> a Col.custom = function
   | Drive_health_checked_at -> timestamp_text
   | Last_upload_at -> timestamp_text
   | Drive_health_cursor -> photo_id_text
+  | Drive_root_folder -> drive_id_text
 
 let value_column key : (settings, _, [`Mandatory]) Col.t =
   {ty = Not_Null (Custom (codec key)); name = "value"}

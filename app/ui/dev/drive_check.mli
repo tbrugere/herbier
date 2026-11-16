@@ -10,13 +10,19 @@
     Digitalis purpurea »; the folder name as typed, trimmed, « À identifier »
     when blank), a 64×64 JPEG drawn on a canvas ([Canvas_jpeg]), a fresh
     [Photo_id], its sha256 ([Photos_io.Preview.sha256_hex]),
-    [Photos_io.Drive.put_original] with [Auth.drive_token ~interactive:true] and
-    [Auth.drop_drive_token], then [Created]/[Already_there] with the file id and
-    webViewLink (each request is a « drive: … » console line); « Renvoyer le
-    même » (same photo id and bytes: must log [Already_there]); « Vérifier »
-    ([Photos_io.Drive.presence] of the last file id); « Jeton invalide »:
-    [put_original] with a token source that always answers ["ya29.invalid"] and
-    a counting [drop_token]: two 401s, one drop, then [Drive Unauthorized].
+    [Photos_io.Drive.put_original] with [Auth.drive_token ~interactive:true],
+    [Auth.drop_drive_token], run through [Photos_io.Drive_root.run], then «
+    root: keep | store | forget » (no id; « <label>: root folder: <error> » and
+    nothing sent when the setting read fails), then [Created]/[Already_there]
+    with the file id and webViewLink (each request is a « drive: … » console
+    line); « Renvoyer le même » (same photo id and bytes: must log
+    [Already_there]); « Vérifier » ([Photos_io.Drive.presence] of the last file
+    id); « Jeton invalide »: [put_original ~root:None] with a token source that
+    always answers ["ya29.invalid"] and a counting [drop_token]: two 401s, one
+    drop, then [Drive Unauthorized] (its root change ignored). A line « Dossier
+    racine : <id> » (« aucun » when unset or blank, « illisible : <error> » when
+    the read fails), re-read after each step; « Oublier le dossier » runs
+    [Drive_root.forget] (« forget root: ok »).
 
     The health check and 5e's Drive rows: « Vérifier les originaux »
     ([Photos_io.Health.run ~force:true] on {!App.health}, then the stored

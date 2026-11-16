@@ -77,11 +77,14 @@ val run : t -> interactive:bool -> unit Fut.t
     - [Start] (skipped once a token or an [Account] error happened in this
       pass): reads the observation and its plant (folder
       [Drive.species_folder]), names the file [Drive.file_name] at the device's
-      offset at [taken_at], runs [Photos_io.Drive.start_session]:
-      [Already_there f] → as [Finish f]; [Session url] → row's [session], then
-      enqueued; [Token e] → console line, no row change, no more [Start] this
-      pass; [Drive e] → {!Herbier_photos.Drive.error_scope} [Account]: the row's
-      [last_error] only, no more [Start]; [This_file]:
+      offset at [taken_at], runs [Photos_io.Drive.start_session] through
+      {!Drive_root.run} (the stored root folder read before, what the start
+      learnt about it written before acting on its outcome); the root folder
+      setting read fails (a {!Drive_root.stored} [Error]) → console error, no
+      Drive request, next row; [Already_there f] → as [Finish f]; [Session url]
+      → row's [session], then enqueued; [Token e] → console line, no row change,
+      no more [Start] this pass; [Drive e] → {!Herbier_photos.Drive.error_scope}
+      [Account]: the row's [last_error] only, no more [Start]; [This_file]:
       {!Herbier_photos.Upload_queue.count_failure} from the saved row, the
       session dropped (the row only: the next pass starts again, not this one,
       so a lasting error does not use every attempt at once).

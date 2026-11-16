@@ -35,9 +35,10 @@ type error =
   | Http of {status : int; reason : string option; message : string option}
   | Malformed of string
   | Network of string
+  | Root_folder of error
 [@@deriving eq]
 
-let error_to_string = function
+let rec error_to_string = function
   | Unauthorized -> "unauthorized"
   | Api_disabled -> "Drive API disabled"
   | Scope_missing -> "Drive scope missing"
@@ -51,6 +52,7 @@ let error_to_string = function
         (Option.fold ~none:"" ~some:(fun m -> ": " ^ m) message)
   | Malformed what -> "malformed answer: " ^ what
   | Network m -> "network: " ^ m
+  | Root_folder e -> "root folder: " ^ error_to_string e
 
 let pp_error ppf e = Format.pp_print_string ppf (error_to_string e)
 
@@ -58,9 +60,13 @@ type scope = Account | This_file [@@deriving eq]
 
 let error_scope = function
   | Unauthorized | Api_disabled | Scope_missing | Quota_full | Rate_limited
-  | Server _ | Network _ ->
+  | Server _ | Network _ | Root_folder _ ->
       Account
   | Not_found | Http _ | Malformed _ -> This_file
+
+(* A root folder that cannot be found or created fails every file alike. *)
+let root_error e =
+  match error_scope e with Account -> e | This_file -> Root_folder e
 
 let list_member name json =
   match Json.member name json with Some (`List l) -> l | _ -> []
@@ -390,6 +396,49 @@ let folder ~name ~parent =
       let+ created = send (create_folder ~name ~parent) decode_file in
       created.id
 
+(* see exploratory_research/photo-storage-google.md §3.4 *)
+let presence ~file_id =
+  bind
+    (send (get_trashed ~file_id) decode_trashed)
+    (function Error Not_found -> Done (Ok Missing) | r -> Done r)
+
+type root_change = Keep | Store of string | Forget [@@deriving eq]
+
+let pp_root_change ppf = function
+  | Keep -> Format.pp_print_string ppf "keep"
+  | Store id -> Format.fprintf ppf "store %s" id
+  | Forget -> Format.pp_print_string ppf "forget"
+
+type 'a rooted = {result : 'a; root : root_change} [@@deriving eq]
+
+let with_root root t = bind t (fun result -> Done {result; root})
+
+(* Continues a rooted program with a plain one; the root learnt so far is kept
+   whatever the continuation gives. *)
+let and_then t f =
+  bind t (function
+    | {result = Error e; root} -> Done {result = Error e; root}
+    | {result = Ok x; root} -> with_root root (f x))
+
+(* [on_error]: the root change when the lookup or create fails. *)
+let at_root ~on_error =
+  bind (folder ~name:root_folder ~parent:Root) (function
+    | Ok id -> Done {result = Ok id; root = Store id}
+    | Error e -> Done {result = Error (root_error e); root = on_error})
+
+let resolve_root ~stored =
+  match stored with
+  | None -> at_root ~on_error:Keep
+  | Some id ->
+      bind (presence ~file_id:id) (function
+        | Ok Present -> Done {result = Ok id; root = Keep}
+        | Ok (Trashed | Missing) -> at_root ~on_error:Forget
+        (* the app is off the folder's ACL: lasting *)
+        | Error (Http {status = 403; reason = Some "appNotAuthorizedToFile"; _})
+          ->
+            at_root ~on_error:Forget
+        | Error e -> Done {result = Error (root_error e); root = Keep})
+
 type target = {
   species : string;
   name : string;
@@ -406,48 +455,42 @@ type start = Already_there of file | Session of string [@@deriving eq]
    [herbier_photo_id], then the folders and the new file's metadata. *)
 type located = Found of file | New of metadata
 
-let locate (t : target) =
-  let open Result_syntax in
-  let* found = send (find_original ~id:t.photo_id) decode_files in
-  match found with
-  | first :: _ -> Done (Ok (Found first))
-  | [] ->
-      let* root = folder ~name:root_folder ~parent:Root in
-      let+ species = folder ~name:t.species ~parent:(Folder root) in
-      New
-        {
-          name = t.name;
-          mime = t.mime;
-          folder_id = species;
-          photo_id = t.photo_id;
-          sha256 = t.sha256;
-        }
-
-let put_original (o : original) =
-  let open Result_syntax in
-  let* located = locate o.target in
-  match located with
-  | Found first -> Done (Ok (Already_there first : put))
-  | New metadata ->
-      let+ file =
-        send (create_original metadata ~boundary:o.boundary) decode_file
-      in
-      Created file
-
-let start_session (t : target) =
-  let open Result_syntax in
-  let* located = locate t in
-  match located with
-  | Found first -> Done (Ok (Already_there first : start))
-  | New metadata ->
-      let+ url = send_headers (create_session metadata) decode_session in
-      Session url
-
-(* see exploratory_research/photo-storage-google.md §3.4 *)
-let presence ~file_id =
+let locate ~root (t : target) =
   bind
-    (send (get_trashed ~file_id) decode_trashed)
-    (function Error Not_found -> Done (Ok Missing) | r -> Done r)
+    (send (find_original ~id:t.photo_id) decode_files)
+    (function
+      | Error e -> Done {result = Error e; root = Keep}
+      | Ok (first :: _) -> Done {result = Ok (Found first); root = Keep}
+      | Ok [] ->
+          and_then (resolve_root ~stored:root) (fun root_id ->
+              let open Result_syntax in
+              let+ species = folder ~name:t.species ~parent:(Folder root_id) in
+              New
+                {
+                  name = t.name;
+                  mime = t.mime;
+                  folder_id = species;
+                  photo_id = t.photo_id;
+                  sha256 = t.sha256;
+                }))
+
+let put_original ~root (o : original) =
+  and_then (locate ~root o.target) (function
+    | Found first -> Done (Ok (Already_there first : put))
+    | New metadata ->
+        let open Result_syntax in
+        let+ file =
+          send (create_original metadata ~boundary:o.boundary) decode_file
+        in
+        Created file)
+
+let start_session ~root (t : target) =
+  and_then (locate ~root t) (function
+    | Found first -> Done (Ok (Already_there first : start))
+    | New metadata ->
+        let open Result_syntax in
+        let+ url = send_headers (create_session metadata) decode_session in
+        Session url)
 
 let rec run answer = function
   | Done x -> x

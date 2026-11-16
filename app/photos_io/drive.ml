@@ -108,11 +108,21 @@ let run ~token ~drop_token ?media program =
       | Ok (Ok x) -> Ok x | Ok (Error e) -> Error (Drive e) | Error e -> Error e)
     (exec ~token ~drop_token ?media program)
 
-let put_original ~token ~drop_token original media =
-  run ~token ~drop_token ~media (Api.put_original original)
+(* As [run], for a program that also says what it learnt about the root
+   folder. *)
+let run_rooted ~token ~drop_token ?media program =
+  Fut.map
+    (function
+      | Ok ({result; root} : _ Api.rooted) ->
+          {Api.result = Result.map_error (fun e -> Drive e) result; root}
+      | Error e -> {Api.result = Error e; root = Keep})
+    (exec ~token ~drop_token ?media program)
 
-let start_session ~token ~drop_token target =
-  run ~token ~drop_token (Api.start_session target)
+let put_original ~token ~drop_token ~root original media =
+  run_rooted ~token ~drop_token ~media (Api.put_original ~root original)
+
+let start_session ~token ~drop_token ~root target =
+  run_rooted ~token ~drop_token (Api.start_session ~root target)
 
 let presence ~token ~drop_token ~file_id =
   run ~token ~drop_token (Api.presence ~file_id)

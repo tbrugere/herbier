@@ -299,27 +299,31 @@ let start t ~interactive ~attempts (row : Uploads.t) photo =
       log_error [id_string row; "start:"; Db.error_to_string e];
       Fut.return Open
   | Ok target -> (
-      let* started =
-        Drive.start_session
-          ~token:(fun () -> t.token ~interactive)
-          ~drop_token:t.drop_token target
+      let* run =
+        Drive_root.run t.db
+          (Drive.start_session
+             ~token:(fun () -> t.token ~interactive)
+             ~drop_token:t.drop_token target)
       in
-      match started with
-      | Ok (Already_there file) ->
+      match run with
+      | Error e ->
+          log_error [id_string row; "root folder:"; Db.error_to_string e];
+          Fut.return Open
+      | Ok {result = Ok (Already_there file); _} ->
           log [id_string row; "already there"; file.id];
           let+ () = finish t row file in
           Open
-      | Ok (Session url) ->
+      | Ok {result = Ok (Session url); _} ->
           log [id_string row; "session started"];
           let session = {Uploads.url; created_at = Ptime_clock.now ()} in
           let row = {row with session = Some session} in
           let* () = write_row t row in
           let+ () = enqueue t row ~attempts (to_queue_session session) in
           Open
-      | Error (Token e) ->
+      | Ok {result = Error (Token e); _} ->
           log [id_string row; "no token:"; e];
           Fut.return Closed
-      | Error (Drive e) -> (
+      | Ok {result = Error (Drive e); _} -> (
           let error = Api.error_to_string e in
           log [id_string row; "start:"; error];
           match Api.error_scope e with

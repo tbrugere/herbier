@@ -1613,6 +1613,37 @@ let settings_cursor () =
     "a non-uuid value is Row WrongType" (Error (Row `WrongType))
     (Cli.find_result db (Settings.get key))
 
+let settings_root_folder () =
+  let db = Cli.migrated_db () in
+  let key = Settings.Drive_root_folder in
+  Alcotest.(check string)
+    "named drive_root_folder" "drive_root_folder" (Settings.name key);
+  Alcotest.(check (option string))
+    "never set is None" None
+    (find db (Settings.get key));
+  check_changes "set changes 1 row" 1 db (Settings.set key "1AbC_d-9");
+  Alcotest.(check (option string))
+    "get gives the id back" (Some "1AbC_d-9")
+    (find db (Settings.get key));
+  Alcotest.(check (option string))
+    "stored as the id's text" (Some "1AbC_d-9")
+    (stored_value db "drive_root_folder");
+  check_changes "unset changes 1 row" 1 db (Settings.unset key);
+  Alcotest.(check (option string))
+    "unset: None again" None
+    (find db (Settings.get key));
+  check_changes "unset again changes nothing" 0 db (Settings.unset key);
+  Cli.exec_ok "blank root folder row" db
+    "insert into settings (key, value) values ('drive_root_folder', '   ');\n";
+  Alcotest.(check (result (option string) Cli.codec_error))
+    "a blank value is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get key));
+  Cli.exec_ok "untrimmed root folder row" db
+    "update settings set value = ' F1 ' where key = 'drive_root_folder';\n";
+  Alcotest.(check (option string))
+    "an untrimmed value is trimmed on read" (Some "F1")
+    (find db (Settings.get key))
+
 let settings_unset_keeps_others () =
   let db = Cli.migrated_db () in
   check_changes "set Wifi_only" 1 db (Settings.set Settings.Wifi_only true);
@@ -2385,6 +2416,10 @@ let () =
              value is Row WrongType"
             settings_cursor;
           case "unset touches only its own key" settings_unset_keeps_others;
+          case
+            "the root folder key round-trips the id's text, trimmed, a blank \
+             stored value is Row WrongType"
+            settings_root_folder;
         ] );
       ( "Search.match_expression",
         [

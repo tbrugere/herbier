@@ -24,12 +24,19 @@ type _ key =
       (** The last photo the stopped Drive health round reached (answered or
           skipped, Health.report.reached); stored as the id's text; unset = the
           next round starts from the first photo. *)
+  | Drive_root_folder : string key
+      (** The Drive id of the root folder originals go into (« Herbier », found
+          or created by the app; [Herbier_photos.Drive.resolve_root]); stored as
+          the id's text, trimmed on read, a blank value refused
+          ([Row `WrongType], read as unset); unset = find or create « Herbier »
+          in My Drive's root at the next upload. *)
 
 val name : _ key -> string
 (** The stored key: ["storage_target"], ["wifi_only"],
     ["place_source_ign_offline"], ["place_source_ign_online"],
     ["place_source_photon_online"], ["location_notice_seen"],
-    ["drive_health_checked_at"], ["last_upload_at"], ["drive_health_cursor"]. *)
+    ["drive_health_checked_at"], ["last_upload_at"], ["drive_health_cursor"],
+    ["drive_root_folder"]. *)
 
 val get : 'a key -> 'a Stmt.query
 (** 0 or 1 row: run it with [Db.find]. [None] means the key was never set, and

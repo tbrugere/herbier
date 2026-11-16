@@ -3,7 +3,8 @@
 
 (test
  (name test_photos)
- (modules test_photos test_drive test_upload_queue test_health)
+ (modules test_photos test_drive test_upload_queue test_health fake_drive
+  test_drive_root)
  (libraries
   herbier_photos
   herbier_domain

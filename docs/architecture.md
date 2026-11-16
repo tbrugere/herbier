@@ -123,9 +123,10 @@ the mean of the positions. Details in `app/domain/places.mli`.
     (`store/settings.ml`, a GADT; `store/settings.mli` is the full list):
     choices (`storage_target`, the `photo_original_target` label; the
     `wifi_only`, place-source and notice flags, `true` / `false`), and the
-    Drive queue and health check's bookkeeping (`last_upload_at` and
-    `drive_health_checked_at`, `Codec.timestamp` text; `drive_health_cursor`,
-    a photo id). A value that does not parse is a decode error, not a silent
+    Drive bookkeeping (`last_upload_at` and `drive_health_checked_at`,
+    `Codec.timestamp` text; `drive_health_cursor`, a photo id;
+    `drive_root_folder`, the Drive id of the photo root folder, non-blank
+    text). A value that does not parse is a decode error, not a silent
     default.
 - Local column types (`store/schema.ml`, migration 1): ids, lookup values
   and text are `text`; timestamps are `text` in one fixed-width UTC format with
@@ -596,10 +597,26 @@ capture / pick
   no token is asked. The plugin grants `drive.file` and nothing else. A 401 from
   Drive → `clearToken` of that token (Play Services would hand it back
   otherwise), a new token, the same request once more.
-- Drive layout: folders are found or created on every upload (oldest wins,
-  `trashed = false`, in My Drive's root; no folder ids cached). With
-  `drive.file` the app sees only folders it created, so a user's own
-  "Herbier" folder is never taken for its own. The species folder is the
+- Drive layout: the root folder's id is kept in the local setting
+  `drive_root_folder`. Each session start that has a file to create (the
+  lookup by `appProperties` found none) checks it
+  (`files.get?fields=id,trashed`): present, it is used wherever it was moved
+  and whatever its name; trashed, 404 or 403 `appNotAuthorizedToFile` (the
+  app is off its ACL, a lasting state), it is forgotten, then « Herbier » is
+  found by name in My Drive's root (oldest wins, `trashed = false`) or
+  created, and its id stored. With nothing stored, an app-made « Herbier »
+  already at the root (an earlier install) is adopted rather than
+  duplicated. Any other error on the root folder (an unlisted 403, a
+  malformed answer) is `Root_folder`, an `Account` error: the queue stops the
+  pass and keeps every photo's attempts, the id is kept. A settings read that
+  fails (not a blank value) sends nothing: the start waits for the next pass
+  rather than create a second root. With `drive.file` the app sees only
+  folders it created, so a user's own "Herbier" folder is never taken for its
+  own. A different Google account answers 404 (or 403
+  `appNotAuthorizedToFile`) for the old id, so the root is found again for
+  the new account. Species folders are still found or created by name inside
+  the root (no species ids cached). The health check and « Ouvrir dans Google
+  Drive » go by file id and are unaffected by moves. The species folder is the
   plant's scientific name, else its display name, else « À identifier »;
   files are not moved when the plant changes later. File names are
   `YYYY-MM-DD HH.MM.SS <last 8 hex digits of the photo id>.<ext>` in the

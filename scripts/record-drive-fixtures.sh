@@ -19,7 +19,9 @@
 #   Playground with the …/auth/drive.file scope; never committed, never
 #   printed): the success answers, made in a throwaway root folder
 #   "Herbier-fixtures" with a 1-pixel JPEG whose herbier_photo_id is the nil
-#   UUID; the folder is trashed at the end, also on failure. The resumable
+#   UUID; the folder is trashed at the end, also on failure. Among them, a
+#   root folder's files.get present, after a move and rename, and trashed
+#   (drive_files_get_folder_{present,moved,trashed}_200.json). The resumable
 #   session's headers are recorded too, filtered: the status line,
 #   content-type and location, whose upload_id (a credential while the
 #   session lives) is replaced by a fixed placeholder. Skipped, with a
@@ -181,6 +183,32 @@ folder_id="$(jq -r .id "$tmp/folder_created")"
 keep folder_created drive_files_create_folder_200.json
 call folder_found 200 GET "$find_fixture_folder_url" "${auth[@]}"
 keep folder_found drive_files_list_folder_found_200.json
+
+# 4b. A root folder checked by id (Drive.resolve_root): present, then moved
+# into another folder and renamed, then trashed (the PATCHes are not
+# recorded). The moved answer has the same id,trashed shape as present on
+# purpose: the app asks only for id,trashed, so a move or rename must not
+# change what it sees. Both folders live inside Herbier-fixtures, trashed
+# with it.
+call root_created 200 POST "$api?fields=id" "${auth[@]}" "${json[@]}" \
+  -d "$(jq -cn --arg parent "$folder_id" '{name: "Herbier-fixtures-root",
+    mimeType: "application/vnd.google-apps.folder", parents: [$parent]}')"
+root_id="$(jq -r .id "$tmp/root_created")"
+call other_created 200 POST "$api?fields=id" "${auth[@]}" "${json[@]}" \
+  -d "$(jq -cn --arg parent "$folder_id" '{name: "Herbier-fixtures-other",
+    mimeType: "application/vnd.google-apps.folder", parents: [$parent]}')"
+other_id="$(jq -r .id "$tmp/other_created")"
+call root_present 200 GET "$(get_trashed_url "$root_id")" "${auth[@]}"
+keep root_present drive_files_get_folder_present_200.json
+call root_move 200 PATCH \
+  "$api/$root_id?addParents=$other_id&removeParents=$folder_id&fields=id" \
+  "${auth[@]}" "${json[@]}" -d '{"name":"Herbier-fixtures-renamed"}'
+call root_moved 200 GET "$(get_trashed_url "$root_id")" "${auth[@]}"
+keep root_moved drive_files_get_folder_moved_200.json
+call root_trash 200 PATCH "$api/$root_id?fields=id" "${auth[@]}" "${json[@]}" \
+  -d '{"trashed":true}'
+call root_trashed 200 GET "$(get_trashed_url "$root_id")" "${auth[@]}"
+keep root_trashed drive_files_get_folder_trashed_200.json
 
 # 5. The original, uploaded into it, then found by its appProperties.
 multipart "$folder_id"
