@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>6a · Noter — bouton Identifier</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#4f6b3a}a:hover{color:#3a5029}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; border-radius: 30px; background: #1d1a14; color: #f6f1e7; font-family: Manrope, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(135deg, #2a261f 0 8px, #332e26 8px 16px)">
+    <span style="margin-bottom: 240px; font-family: ui-monospace, monospace; font-size: 10px; color: rgba(246,241,231,.55)">viseur · arnica en fleur</span>
+  </div>
+
+  <div style="position: absolute; top: 40px; left: 16px; right: 16px; display: flex; align-items: center; gap: 8px">
+    <button type="button" aria-label="Fermer" style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-right: auto; padding: 0; border: 0; border-radius: 50%; background: rgba(29,26,20,.6); color: #f6f1e7; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false" style="display: block"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg></button>
+    <sc-if value="{{ horsLigne }}" hint-placeholder-val="{{ false }}"><span style="display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px; background: rgba(29,26,20,.6); font-size: 12px; font-weight: 700; line-height: 1.2">hors-ligne · 2 en attente</span></sc-if>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(29,26,20,.6); font-size: 12px; font-weight: 700; line-height: 1.2"><span style="width: 8px; height: 8px; border-radius: 50%; background: #8fbf6a"></span>Position acquise</span>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 12px; padding: 60px 16px 18px; background: linear-gradient(to top, rgba(29,26,20,.92), transparent)">
+    <div style="display: flex; gap: 8px">
+      <div style="position: relative; flex: none; width: 56px; height: 56px; border-radius: 12px; overflow: hidden; background: repeating-linear-gradient(135deg, #3a342b 0 8px, #443d33 8px 16px); outline: 2px solid #f6f1e7; outline-offset: -2px">
+        <span style="position: absolute; top: 2px; right: 2px; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(29,26,20,.6)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true" focusable="false" style="display: block"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg></span>
+      </div>
+      <button type="button" style="flex: none; width: 56px; height: 56px; padding: 0; border-radius: 12px; border: 1.5px dashed rgba(246,241,231,.5); background: none; color: #f6f1e7; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer">galerie</button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 1px 0 14px; border-radius: 14px; background: rgba(246,241,231,.12); border: 1px solid rgba(246,241,231,.25)">
+      <span style="display: flex; opacity: .75"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false" style="display: block"><circle cx="10.5" cy="10.5" r="6"></circle><path d="M15 15l5 5"></path></svg></span>
+      <span style="flex: 1; min-width: 0; font-size: 15px; color: rgba(246,241,231,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Nom de la plante — facultatif</span>
+      <sc-if value="{{ enLigne }}" hint-placeholder-val="{{ true }}"><a href="Propositions.dc.html" aria-label="Identifier avec Pl@ntNet" style="flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; text-decoration: none"><span style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #f6f1e7; color: #1d1a14"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" style="display: block"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" stroke="currentColor" stroke-width="2"></path><path d="M8 16C8 11.6 11.6 8 16 8C16 12.4 12.4 16 8 16Z" fill="currentColor"></path><path d="M9.7 14.3L13.6 10.4" stroke="#f6f1e7" stroke-width="1.4" stroke-linecap="round"></path></svg></span></a></sc-if>
+      <sc-if value="{{ horsLigne }}" hint-placeholder-val="{{ false }}"><button type="button" disabled aria-label="Identifier avec Pl@ntNet, indisponible hors-ligne" style="flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; background: none; opacity: .5"><span style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #f6f1e7; color: #1d1a14"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" style="display: block"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" stroke="currentColor" stroke-width="2"></path><path d="M8 16C8 11.6 11.6 8 16 8C16 12.4 12.4 16 8 16Z" fill="currentColor"></path><path d="M9.7 14.3L13.6 10.4" stroke="#f6f1e7" stroke-width="1.4" stroke-linecap="round"></path></svg></span></button></sc-if>
+    </div>
+    <sc-if value="{{ horsLigne }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; line-height: 1.4; color: rgba(246,241,231,.85)">Hors-ligne : l'identification reviendra avec le réseau. Sans nom, la plante part dans « À identifier ».</span></sc-if>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      <span style="font-size: 12px; font-weight: 700; opacity: .8">Vues ici ↓</span>
+      <button type="button" style="min-height: 34px; padding: 4px 12px; border: 0; border-radius: 999px; background: rgba(246,241,231,.16); color: #f6f1e7; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Gentiane jaune</button>
+      <button type="button" style="min-height: 34px; padding: 4px 12px; border: 0; border-radius: 999px; background: rgba(246,241,231,.16); color: #f6f1e7; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Myrtille</button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; align-items: center; gap: 12px">
+      <button type="button" aria-label="Retourner la caméra" style="display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; padding: 0; border: 0; border-radius: 50%; background: rgba(246,241,231,.14); color: #f6f1e7; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="display: block"><path d="M19.5 12a7.5 7.5 0 0 1-13.3 4.7"></path><path d="M4.5 12a7.5 7.5 0 0 1 13.3-4.7"></path><path d="M18 3.5v4h-4"></path><path d="M6 20.5v-4h4"></path></svg></button>
+      <button type="button" style="height: 64px; padding: 0; border: 0; border-radius: 999px; background: #f6f1e7; color: #1d1a14; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer">Enregistrer (1 photo)</button>
+      <button type="button" aria-label="Prendre une photo" style="width: 56px; height: 56px; padding: 0; border: 0; border-radius: 50%; background: #4f6b3a; box-shadow: 0 0 0 3px #f6f1e7; cursor: pointer"></button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"horsLigne":{"editor":"boolean","default":false,"tsType":"boolean"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const horsLigne = this.props.horsLigne ?? false;
+    return { horsLigne: horsLigne, enLigne: !horsLigne };
+  }
+}
+</script>
+</body>
+</html>

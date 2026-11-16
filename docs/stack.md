@@ -14,6 +14,7 @@ evidence. Open decisions are listed at the end.
 | Supabase free tier backend | **Kept, as sync target (its copy is the backup)** | Fine for one user, but projects pause after 7 days without user DB activity. The device is the source of truth; Supabase is where data is mirrored. `backend-supabase-offline.md` |
 | Google Photos for originals | **Deferred; Google Drive first** | Every Photos scope requires OAuth verification, URLs expire after 60 min, no delete API, picked items can't be re-fetched. Drive's `drive.file` scope is non-sensitive: no verification, no 7-day token expiry. `photo-storage-google.md` |
 | Google Maps / OSM tiles | **Neither** | OSM's tile server forbids offline/bulk use; Google needs billing, gives 10k loads/month and has WebView quirks. Keyless vector tiles from OpenFreeMap plus an on-device PMTiles extract. `maps-tiles-geocoding.md` |
+| Identification left to the Pl@ntNet app, Herbier catching its links | **Links kept; identification added (2026-11-16)** | The user added identification to the scope with Claude Design's tour 6: Herbier asks Pl@ntNet's identify API itself (plan M9, architecture §12). Link interception is unchanged. `plantnet-identify-api.md` |
 
 ## Chosen stack
 
@@ -150,7 +151,8 @@ image compression, fonts, Supabase/PostgREST over fetch.
 doable: custom viewfinder, MapLibre map and clusters, VIEW deep links
 (user must enable "Open by default" on Android 12+, same as a Kotlin app),
 background upload (network-constraint options unverified), transitions,
-gestures, zoomable viewer.
+gestures, zoomable viewer, identification through Pl@ntNet's API (its CORS
+answers the WebView; an exposed key from `https://localhost` unverified).
 painful: offline tiles (OPFS/filesystem-backed PMTiles in the WebView is
 unverified), Google OAuth (solved only via Credential Manager plugin).
 blocked: nothing.
@@ -262,7 +264,9 @@ blocked: nothing.
 - **Primary key: GBIF backbone `usageKey`.** Every entry path resolves to it:
   a GBIF link directly; a Pl@ntNet link carries "Genus species Author" →
   `species/match`; a Wikipedia link → REST summary → Wikidata P846; free
-  text → `species/suggest` (scientific) + `species/search?qField=VERNACULAR`.
+  text → `species/suggest` (scientific) + `species/search?qField=VERNACULAR`;
+  a Pl@ntNet identification (M9) gives it as each proposal's `gbif.id`, else
+  its Latin name → `species/match`.
 - **Wikidata as the cross-id hub** (`haswbstatement:P846=<key>` then
   `wbgetentities`): POWO/IPNI, TaxRef, Tela Botanica, EPPO, iNaturalist ids and
   sitelinks in fr/en/de/it. TaxRef coverage on Wikidata is only ~31%, so
@@ -276,6 +280,9 @@ blocked: nothing.
   Wikipedia REST summary fr→en (description, toxicity heuristic), Pl@ntNet
   images by organ through **GBIF's Pl@ntNet occurrence dataset** (CC BY-SA)
   rather than Pl@ntNet's own pages (terms forbid copying, pages rate-limit).
+  That is 4f's « Photos par organe »; identification's related images (M9)
+  come from the identify API itself, whose documentation licenses them for
+  reuse with their credits, and are shown, never stored.
 - **Not obtainable**: structured altitude range. **Partial**: native vs
   introduced range (WCVP gaps, POWO's JSON API is Cloudflare-blocked),
   height (parsed from Coste prose), toxicity (heuristic).
@@ -285,6 +292,36 @@ blocked: nothing.
   when that layer has data, so the app stays complete outside France.
 - Wikimedia requires a descriptive User-Agent (200 req/min with one, 10
   without). GBIF wants one too.
+
+### Identification: Pl@ntNet's identify API (M9)
+
+- **Decided by the user on 2026-11-16** (Claude Design tour 6, screens 6a–6k):
+  identification joins the scope, through **Pl@ntNet's identify API**
+  (`POST https://my-api.plantnet.org/v2/identify/{flora}`), the service whose
+  links Herbier already intercepts. Other identification services were not
+  compared. Facts and sources: `exploratory_research/plantnet-identify-api.md`.
+- Why it fits the stack: the WebView calls it with `fetch` (its CORS answers
+  `https://localhost`) and a `FormData` body of up to five previews, so no
+  plugin and no server; each proposal
+  carries a GBIF id, so a choice goes through the existing resolver and
+  reference pipeline like a link; `lang=fr` gives French names; the related
+  images it returns are usually CC BY-SA, each with its credits; Pl@ntNet
+  keeps no photo ("only kept in our server volatile memory during the
+  identification process") and is hosted in Europe (CIRAD, Montpellier).
+- **Free plan**: 500 identifications a day, reset at 00:00 UTC, never billed,
+  commercial use allowed; since 2026-02-13 a request that answers an error
+  costs a credit too. Ample for one person, since no request leaves without a
+  tap (architecture §12).
+- What is sent: the device previews (no EXIF, so no position), never the
+  originals; the flora list is asked without a position.
+- **API key: the user's own, typed in 4m** (decided 2026-11-16, Open
+  decisions 5): kept on the device only (Capacitor Preferences, off Android's
+  backups, never synced, never logged), one key per user; no key in the APK,
+  no Supabase Edge Function, so identification works signed out. The key is
+  exposed in the user's Pl@ntNet account for `https://localhost`, as the
+  documentation asks of browser-side use.
+- **Default flora: `all`, « Automatique »** (decided 2026-11-16, Open
+  decisions 6), any flora of the list still selectable.
 
 ### Maps
 
@@ -308,8 +345,10 @@ blocked: nothing.
 
 ## Cost
 
-Everything above is $0/month at one user's volume. The only paths to a bill
-are Cloudflare R2 beyond 10 GB of originals and Supabase Pro, both optional.
+Everything above is $0/month at one user's volume, Pl@ntNet's free plan
+included (500 identifications a day; it never bills, a 501st request is
+refused until the next day). The only paths to a bill are Cloudflare R2 beyond
+10 GB of originals and Supabase Pro, both optional.
 
 ## Open decisions (for Tristan)
 
@@ -328,3 +367,19 @@ are Cloudflare R2 beyond 10 GB of originals and Supabase Pro, both optional.
    2026-09-16: the row is removed from the settings screen.
 4. **Two devices later?** The outbox design tolerates it (LWW), but conflict
    handling stays naive on purpose.
+5. **Pl@ntNet API key**. Decided 2026-11-16 by Tristan: **option C**, the
+   key typed by the user in 4m, one key per user (« une clé dans les réglages
+   c'est bien pour le moment. 500 c'est largement suffisant pour une app que
+   seul moi utilise. et si on maintient une clé chacun, pas de problème »).
+   Not built into the APK (A) and no Supabase Edge Function (B). Stored on
+   the device only (Capacitor Preferences, off Android's backups like the
+   session), never synced, never logged; identification works signed out;
+   without a key the Identifier buttons are disabled with a line pointing to
+   Réglages. Plan Decisions « Clé API Pl@ntNet », architecture §12.
+6. **Default Pl@ntNet flora**. Decided 2026-11-16 by Tristan: **`all`
+   (« Automatique »)**, Pl@ntNet picking the flora per request (« using
+   'europe de l'ouest' would make it harder to identify non-indigenous
+   plants »). It fits « France-focused, works elsewhere » and needs no
+   position; the design's « Europe de l'Ouest » (a placeholder name) is
+   replaced, and a regional flora (France: `k-southwestern-europe`) stays one
+   tap away. Plan Decisions « Flore par défaut ».

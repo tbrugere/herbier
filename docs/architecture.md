@@ -12,10 +12,10 @@ fit and what the data looks like end to end.
 │  Capacitor shell (Java: manifest intent-filters, plugins)              │
 │  ┌───────────────────────── WebView ─────────────────────────────────┐  │
 │  │  OCaml app (js_of_ocaml + Brr + react/ReactiveData)               │  │
-│  │   ├─ UI (screens 4a–5f)            ├─ Reference pipeline (§6)     │  │
+│  │   ├─ UI (screens 4a–6k)            ├─ Reference pipeline (§6)     │  │
 │  │   ├─ Store (local SQLite, §3)      ├─ Photo pipeline (§5)         │  │
 │  │   ├─ Outbox / sync (§4)            ├─ Link resolver (§7)          │  │
-│  │   └─ Map (MapLibre facade, §8)                                    │  │
+│  │   └─ Map (MapLibre facade, §8)     └─ Identification (§12)        │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 │  App-private files: previews/, originals/, reference thumbs/,           │
 │  region.pmtiles                                                         │
@@ -27,6 +27,8 @@ fit and what the data looks like end to end.
   (Postgres + RLS)         Herbier/<species>/…        INPN odata · Wikipedia
                            originals                  OpenFreeMap tiles
                                                       Photon / Géoplateforme
+                                                      and, POST with a key:
+                                                      Pl@ntNet identify (§12)
         ▲
         │ background job on the phone, every 12 h: light sync (push +
         │ one query) = keep-alive (no dumps; Supabase is the device's only copy)
@@ -36,10 +38,12 @@ Principles:
 
 - **Device is the source of truth.** Every screen renders from local SQLite.
   The network is only used to sync, to fetch reference data, to upload
-  originals and to draw map tiles outside the offline extract.
+  originals, to draw map tiles outside the offline extract and to ask
+  Pl@ntNet to identify photos (§12).
 - **Nothing blocks on the network.** Recording, browsing, editing work
   offline; "Lier", reference search and refresh are disabled offline with a
-  visible reason (handoff 4g/4i).
+  visible reason (handoff 4g/4i), and so is « Identifier » (6a, 6i, 6k); an
+  identification under way never holds Noter back.
 - **One user, one owner id.** Multi-device is tolerated (LWW), not designed
   for.
 
@@ -478,7 +482,8 @@ the keep-alive, described and decoded sans IO in `sync_core/auth/gotrue.ml`.
   is lost, the outbox is local). The key is left out of Android's backups
   (`android/app/src/main/res/xml/backup_rules.xml`,
   `data_extraction_rules.xml`): a refresh token does not go to Google
-  Drive, and a reinstall starts signed out.
+  Drive, and a reinstall starts signed out. The rule covers Preferences'
+  whole file, so the Pl@ntNet API key kept there (§12) stays off backups too.
 - Expiry: the session's `expires_at` is the device's clock when the request
   was sent plus GoTrue's `expires_in`, not GoTrue's `expires_at`, so that a
   device clock set wrong does not make every session due (a refresh loop)
@@ -715,12 +720,12 @@ capture / pick
 ## 6. Reference pipeline
 
 Triggered when a plant gets a `gbif_key` (link intercepted, search pick,
-"Lier"), on manual ↻, or on opening the species page when online and the
-plant's rows are due (`refs/fanout.ml`): a fetched source without a live row,
-a row older than 90 days, or a `failed`/`partial` row older than one day (so
-one bad connection does not leave the fiche empty for three months). The due
-check runs once per entry into the fiche, never on the reloads the fetch
-itself causes.
+"Lier", the choice of an identification, §12), on manual ↻, or on opening the
+species page when online and the plant's rows are due (`refs/fanout.ml`): a
+fetched source without a live row, a row older than 90 days, or a
+`failed`/`partial` row older than one day (so one bad connection does not
+leave the fiche empty for three months). The due check runs once per entry
+into the fiche, never on the reloads the fetch itself causes.
 
 ```
 gbif_key
@@ -871,7 +876,9 @@ input (URL or text)
   → classify by host/pattern
      gbif       → key from path
      plantnet   → decode "Genus species Author" from path → GBIF species/match
-     plantnet observation → no name in the path, and Pl@ntNet's API needs a key:
+     plantnet observation → no name in the path, and Pl@ntNet's API has no public
+                  route for an observation (`/v2/observations/{id}` is for partners;
+                  identification, §12, takes photos, not ids):
                   4i fallback with the shared text around the link (often empty)
      plantuse   → "Genus_species" wiki page name → GBIF species/match
      wikipedia  → REST summary → wikibase_item → Wikidata P846
@@ -1073,9 +1080,212 @@ Each is one or two days and answers a question the reports left open.
    screen releases every binding (no stale updates, no growth in
    `performance.memory`). If it disappoints, redo 4a in ocaml-vdom and
    compare.
+7. **Identification spike** (added 2026-11-16 with §12, plan M9.63): a
+   Pl@ntNet key exposed for `https://localhost` used from the WebView with
+   `fetch`; the identify answers recorded as fixtures; how many related
+   images a species gets; a preview's scores against a q0.9 encode of the
+   same original. Pass = a key the user exposes for `https://localhost`
+   and types in 4m works from the WebView (§12, decided 2026-11-16); fail =
+   plan R10 (a native request with a key that is not exposed).
 
 ## 11. Non-goals restated
 
-No identification, no sharing, no multi-user, no Google Photos (for now),
-no server-side rendering, no push notifications, no Play Store listing
-required (sideload is fine; Play's target SDK rules do not apply).
+No identification model on the device (identifying is in scope since
+2026-11-16 and goes through Pl@ntNet's API, §12). No sharing and no account
+management: several separate accounts can sign in to the same project, each
+seeing only its own rows (owner-only RLS on every synced table), but nothing
+is shared between them and the app has no invitations, roles or user list.
+No Google Photos (for now), no server-side rendering, no push
+notifications, no Play Store listing required (sideload is fine; Play's
+target SDK rules do not apply).
+
+## 12. Identification (Pl@ntNet identify API)
+
+Added to the scope on 2026-11-16 (plan M9; Claude Design tour 6 in
+`design_handoff_herbier/identification/`, screens 6a–6k). Identifying is one
+more way to name a plant, next to the name field, a link and a search: the
+photos go to Pl@ntNet, the proposals come back, and choosing one links the GBIF
+taxon Pl@ntNet gives, after which the reference loads as after an intercepted
+link (4j, §6). Facts, quotes and sources:
+`exploratory_research/plantnet-identify-api.md` (2026-11-16).
+
+```
+photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg)
+  → POST https://my-api.plantnet.org/v2/identify/<flora>
+         ?lang=fr&include-related-images=true&nb-results=5[&no-reject=true]&api-key=…
+         multipart/form-data: images (JPEG), organs (auto, or the one the user set)
+  → 200  proposals in Pl@ntNet's order: score, names, family, gbif.id, related
+         images; predictedOrgans; remainingIdentificationRequests
+    404  "Species not found": not a plant (6g; « Voir quand même » re-asks with
+         no-reject, which may still answer 404)
+    429  the day's 500 are used up until 00:00 UTC · 401 the key is refused
+    timeout, network, 5xx: unreachable (« Réessayer »)
+  → a choice: Refs.Resolve.resolve (Gbif id), or the name match without an id,
+    as for a link (§7: the one-hop synonym rule)
+  → 4d: the save's target · 4k: attach or create · 4g: link, free name → alias
+  → the reference fetch (§6), as after an intercepted link
+```
+
+- **Entry points.** 4d Noter: the Identifier button in the name field (6a);
+  with « Identifier dès la photo » (on by default, 4m), the session's first
+  photo, shutter or gallery, opens the send screen (6b) at once. Later, online:
+  « Identifier avec Pl@ntNet » on an « À identifier » observation (4k → 6i,
+  6j) and « Identifier » on a free-name fiche (4g → 6k), which sends one
+  observation's photos (Pl@ntNet assumes one individual per request).
+- **The request.** `POST /v2/identify/{flora}` with the key as the `api-key`
+  query parameter, `lang=fr` (French common names), `include-related-images=true`
+  (the closest images of each species), `nb-results=5` (the design lists three
+  to five; fewer results answer faster) and `no-reject=true` only for « Voir
+  quand même ». The body is `multipart/form-data`: one `images` part per photo,
+  at most five, each with its `organs` value: `auto` unless the user corrected
+  the detected organ (« fleur ▾ ») or added a photo of an organ (« + feuille »).
+  Built with Brr's `Form.Data` (the WebView sets the boundary) through
+  `Timed_fetch.request_form`, 30 s, one request at a time per caller (a newer
+  one makes the older answer stale), never retried by itself.
+- **Where the code lives.** `app/identify/` is pure and native: it defines
+  a `TRANSPORT` signature (an abstract `'a io`, an abstract preview `image`,
+  `post_form` returning status and body text or a timeout / network
+  failure, and `get` for the flora list) and the functor
+  `Identify.Make (T : TRANSPORT)`, which builds the request (flora, organs,
+  `include-related-images`, `no-reject`, `lang=fr`, the key as `api-key`),
+  decodes the answer, classifies the errors and applies the rules below; its
+  tests run it over a fake transport replaying the recorded answers. There is
+  no `identify_io` library: the Brr transport (`Form.Data` with the preview
+  Blobs, previews read through `store_io/files.ml`, the 30 s timed fetch,
+  error mapping without the URL) is one module, `ui/app/plantnet_transport.ml`,
+  and `ui/app/identification.ml` applies
+  `module Identify_io = Identify.Make (Plantnet_transport)` and keeps the
+  key (Preferences), the per-caller staleness and the session's flora list,
+  as `sync/` applies `Rest.Make` over its own transport (layout §2).
+- **What leaves the phone.** The device previews (≤ 1600 px, JPEG q0.7,
+  re-encoded on a canvas, so without EXIF) and the flora's id: no position
+  (the identify route takes none, and the flora list is asked without
+  `lat`/`lon`), never an original. Pl@ntNet's terms: the photos "are not stored
+  in the database", they stay "in our server volatile memory during the
+  identification process"; the query history (date, time) is kept; hosted by
+  CIRAD in Montpellier. If previews identify worse than a q0.9 encode (plan
+  R13), 4d sends a q0.9 encode made at capture, still from a canvas.
+- **CORS.** The API answers preflights and errors with the caller's origin
+  (`https://localhost` for the WebView, observed 2026-11-16), so `fetch` works
+  and reads error bodies. A key used from a browser must be **exposed** in the
+  Pl@ntNet account, and is then accepted only from its "Authorized domains"
+  (checked on `Origin`) and, for requests without `Origin`, only from its
+  "Authorized IPs". Whether the list takes `https://localhost` is the spike's
+  question (plan R10). The quota headers are not exposed to CORS: the WebView
+  reads `remainingIdentificationRequests` from the body.
+- **The key never reaches a log.** It rides in the query string, so the
+  console line is `identify: POST <flora> <n> photo(s) → <status>, <remaining>
+  left today`, never the URL; the fixtures are recorded with the key stripped.
+- **The answer, fields used.** Per proposal: `score` (0 to 1, shown as a
+  percent), `species.scientificNameWithoutAuthor` and
+  `scientificNameAuthorship` (the Latin line), `species.commonNames` (French
+  with `lang=fr`; the first one names a new fiche), `species.family`, `gbif.id`
+  (a string in every recorded answer, a number in the OpenAPI: both decode; it
+  may be missing), and `images` (organ, author, licence, citation, `url.s` for
+  6c's tiles, `url.m` for 6d), kept only under `https://bs.plantnet.org/`.
+  `predictedOrgans` gives each photo's detected organ, `preferedReferential`
+  the flora `all` picked, `remainingIdentificationRequests` the day's credits
+  left (logged). The rest (`bestMatch`, `powo`, `iucn`, `version`) is ignored.
+- **Rules** (pure, `app/identify/`, tested on recorded answers): the
+  proposals keep Pl@ntNet's order; each shows its four closest images, the rest
+  as « +N »; 6d shows the images of the same organ as my photo first. Uncertain
+  (6f): the best score below 0.5, or less than 0.15 ahead of the second (two
+  constants, to tune). The organ to add: a flower when none was sent, else a
+  leaf, else any (« + photo »), none at five photos. « Dans ma collection »: a
+  live plant whose `gbif_key` is the proposal's id (`Ref_pick`'s matching),
+  with the count of its live observations.
+- **The choice and the GBIF id.** Pl@ntNet's `gbif.id` is a GBIF backbone
+  `usageKey` (the documentation's ids are accepted backbone species, checked
+  2026-11-16), Herbier's primary key (`stack.md`). Choosing resolves it with
+  `Refs.Resolve.resolve (Gbif id)` (a synonym becomes its accepted taxon), or
+  with the name match (`Plantnet "<Latin name and author>"`) when Pl@ntNet gave
+  no id, through `refs_io/resolver.ml`, as an intercepted link is resolved.
+  - 4d (6e): the field shows my display name when the taxon is already a
+    plant of mine, else Pl@ntNet's first French name, else the Latin name.
+    « Enregistrer » never waits: a plant of mine gets the observation (no
+    duplicate); otherwise `App.create_linked` creates the plant with the
+    resolved taxon, or with Pl@ntNet's own id and names when GBIF has not
+    answered yet (plan R12).
+  - 4k (6j): « Lier » attaches the observation to the plant of mine;
+    « + Créer » creates the linked plant with the observation's upsert, as
+    4k's « + »; then the next observation of the queue.
+  - 4g (6k): `App.link ~name` (`Ref_pick`'s `Relink`): Pl@ntNet's French name
+    becomes the display name and the free name an alias, as 4g's « Lier »; two
+    plants may share a taxon.
+
+  Then the reference fetch of §6 runs, as after a link. Nothing about the
+  identification itself is stored (no score, flora or date column): the rows
+  written are those a search pick or a link writes.
+- **Screens.** The identification screens (6b, 6c, 6f, 6g, and 6d over 6c)
+  are a layer over their caller, not a route: 4d's shots live in its screen,
+  and a route change releases a screen. Android back closes the layer as it
+  closes a shown Google Picker (the back listener of `ui/router.ml`). 6b never
+  blocks: « Continuer sans attendre » and ← return to Noter with the photos;
+  the request goes on, and its answer is kept with 4d's photos for the same
+  photos, organs and flora, so the Identifier button opens 6c without a second
+  request. Related images are `<img>` elements on `bs.plantnet.org` (an image
+  needs no CORS), behind the striped loading state with « Pl@ntNet… » after
+  600 ms; they are never downloaded or stored.
+- **Offline, and the « À identifier » queue.** Offline (`State.network`), or
+  without a key, the Identifier buttons are disabled with their reason and
+  nothing is queued: a
+  plant saved without a name is « À identifier » and comes back through 6i, or
+  6k for a free name, by a tap once online. There is no background
+  identification of the queue: each request is a tap (or the first photo with
+  « Identifier dès la photo »), since each one costs a credit.
+- **Quota and rate.** Free plan: 500 identifications a day per account, reset
+  at 00:00 UTC, never billed; beyond, 429 until the reset (its `Retry-After`
+  is not readable from the WebView); since 2026-02-13 a request that answers an
+  error costs a credit too; at most 20 simultaneous requests per client
+  (Herbier sends one at a time). Every re-ask (organ corrected, photo added,
+  flora changed, no-reject, « Réessayer ») is one credit and one tap. The flora
+  list (`GET /v2/projects`) is not counted.
+- **Floras.** `project` is a flora id from `GET /v2/projects?lang=fr` (`id`,
+  `title`, `description`, `speciesCount`), or `all`, for which Pl@ntNet picks
+  the most relevant flora and names it in `preferedReferential`. Regional
+  floras are Pl@ntNet's "KT" ones (POWO + WGSRPD level 2; France is in
+  `k-southwestern-europe`); legacy floras run a model Pl@ntNet "will not
+  update anymore". The default is `all`, « Automatique » (plan Decisions, « Flore
+  par défaut », decided by Tristan on 2026-11-16: a fixed Western-Europe flora
+  "would make it harder to identify non-indigenous plants"); the design's
+  « Europe de l'Ouest » is replaced, and any flora of the list stays
+  selectable in 4m and 6c.
+- **Settings** (local, never synced; M9.66): `identify_on_photo` (« Identifier
+  dès la photo », unset = on) and `plantnet_project` (the flora, compact JSON
+  `{"id","title"}`, unset = `all`) in the SQLite `settings` table; the API key
+  apart, in Capacitor Preferences (below).
+- **Credits and licences.** Pl@ntNet is named on every identification screen
+  (tour 6's rule). Related images are "usually" CC BY-SA and must credit
+  Pl@ntNet, the licence and the contributor: 6d prints « © <author> ·
+  <licence> · Pl@ntNet » from each image's own `author` and `license` fields.
+  The free plan does not require the "Powered by Pl@ntNet" logo ("appreciated,
+  not required").
+- **The API key: the user's own, typed in 4m** (plan Decisions, « Clé API
+  Pl@ntNet », decided by Tristan on 2026-11-16, option C: « une clé dans les
+  réglages c'est bien pour le moment »). One key per user, each with its own
+  500 identifications a day; nothing in the APK, no Supabase Edge Function.
+  - Stored only on the device, as the Capacitor Preferences key
+    `plantnet.api_key`, not in the SQLite `settings` table: the database is in
+    Android's backups, while Preferences' file is left out of them like
+    `auth.session` (§4; `backup_rules.xml`, `data_extraction_rules.xml`). It
+    is never synced to Supabase and never logged (above); a reinstall asks for
+    it again.
+  - No Supabase dependency: identification works signed out and while the
+    project is paused.
+  - 4m's Identification section (6h) gains a « Clé API Pl@ntNet » row the
+    design does not have: the key masked, « Modifier », and a help line with a
+    link to my.plantnet.org, where a key is made.
+  - Exposed all the same: per Pl@ntNet's documentation a key used from a
+    browser-side app must have « expose my API key » checked and the calling
+    origin among its "Authorized domains"; the WebView's `fetch` sends
+    `Origin: https://localhost`, so the help line asks for both, and the
+    spike (§10, 7) checks it. Whoever reads the key off the phone can forge
+    that `Origin` and spend the day's 500, nothing more (the free plan never
+    bills; the key is regenerated in the account and pasted again).
+  - Without a key, every Identifier button (6a, 6i, 6k) is disabled with one
+    line pointing to Réglages, as 4m's « Dossier Drive » row is in a build
+    without the Picker's project number, and « Identifier dès la photo » does
+    nothing. A 401 (key refused) says to check the key in Réglages.
+
+  The options set aside (A, the key built into the APK; B, a Supabase Edge
+  Function) are in `exploratory_research/plantnet-identify-api.md` §10.

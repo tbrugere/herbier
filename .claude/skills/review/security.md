@@ -18,14 +18,21 @@ Any changed code file, `.github/**`, the Android manifest, `capacitor.config.ts`
   committed file.
 - **Where keys are read from.** A key hard-coded in OCaml instead of injected at build time
   through the mechanism the step chose; a debug build that points at the production project.
+- **The Pl@ntNet API key** (plan M9) is the user's, typed in 4m (« Clé API Pl@ntNet », decided
+  2026-11-16): it lives only in Capacitor Preferences (`plantnet.api_key`), never built into the
+  APK or read from a build variable, never in the SQLite `settings` table (backed up) or an outbox
+  entry (synced), never in a commit, a test fixture or a log line, and shown masked in 4m. It rides
+  in the identify request's query string (`api-key=`), so a log line, error message or dev page
+  that prints that URL leaks it; fixture recorders must strip it.
 - **Untrusted input from Android.** A URL or text arriving through the share target or an
   intent filter is attacker-controlled: it must go through `Domain.Link` classification before
   any network call, never be interpolated into a URL path, a SQL string or HTML, and the hosts
   it is matched against must be exact (`identify.plantnet.org`, not a `contains`).
 - **Untrusted input from APIs.** GBIF, Wikidata, Wikipedia, Tela Botanica payloads are data:
-  decoded by `refs/` into typed records, never evaluated, never rendered as HTML (`innerHTML`,
-  `El.set_prop El.Prop.inner_html`), image URLs restricted to the expected hosts and schemes
-  before being loaded.
+  decoded by `refs/` into typed records (Pl@ntNet's identify answers by `identify/`, M9), never
+  evaluated, never rendered as HTML (`innerHTML`, `El.set_prop El.Prop.inner_html`), image URLs
+  restricted to the expected hosts and schemes before being loaded (`https://bs.plantnet.org/`
+  for Pl@ntNet's images).
 - **SQL built from strings.** Any query in `store/` that concatenates a value into the SQL
   text instead of binding a parameter, including `LIKE` patterns and FTS5 `MATCH` expressions
   (FTS5 query syntax must be escaped or quoted).

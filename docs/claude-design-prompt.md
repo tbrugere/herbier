@@ -3,6 +3,13 @@
 > Paste everything below the line into Claude Design. It deliberately describes
 > intent and capabilities only; screens, navigation and visual language are left
 > to the design tool.
+>
+> Kept as it was given. One point changed since: on 2026-11-16 the user added
+> identification through the Pl@ntNet API to the scope (Claude Design tour 6,
+> `design_handoff_herbier/identification/`; plan M9, architecture §12), so the
+> three places below that rule identification out ("not a plant identification
+> tool", "Plant identification is out of scope", "No plant identification from
+> photos") no longer hold; link interception stays as described.
 
 ---
 

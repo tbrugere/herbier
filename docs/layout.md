@@ -21,8 +21,8 @@ herbier/
   dune.lock/              `dune pkg lock` output, committed
   .ocamlformat            version = 0.29.0, profile = default, margin = 80
   .env.prod.example       production build settings for scripts/release.sh (backend values, the
-                          release key, the optional key rotation); the filled-in .env.prod is
-                          git-ignored
+                          release key, the optional key rotation; never the Pl@ntNet API key, typed in 4m);
+                          the filled-in .env.prod is git-ignored
   package.json            Capacitor CLI + plugins, maplibre-gl, pmtiles, exifr, esbuild, sass
   package-lock.json
   capacitor.config.ts     appId, webDir → _build/default/web/dist (filled by `dune build @web`)
@@ -138,7 +138,8 @@ app/
     web_path.ml           fetch of a plugin's webPath as a Blob, a non-ok status as an error
     timed_fetch.ml        fetch aborted after a timeout (15 s by default), the answer as status, headers and
                           text (sync's GoTrue and PostgREST calls, geocoder, http); request_blob sends a
-                          binary body (Drive uploads)
+                          binary body (Drive uploads); request_form a Form.Data body (M9: the identify
+                          request's photos, the WebView setting the multipart boundary)
     web_crypto.ml         getRandomValues and the SHA-256 digest, bytes as a string (the sign-in nonce)
     blob_frame.ml         new Blob([prefix, blob, suffix]): a multipart upload's frame around a photo
     camera_stream.ml      getUserMedia back/front camera, <video> attach, ImageCapture.takePhoto, a video frame as JPEG
@@ -312,6 +313,22 @@ app/
     organ_thumbs.ml       a plant's ref_images follow its Pl@ntNet row; missing thumbnails downloaded
                           (cap_http), resized on a canvas, written to refthumbs/
     regional.ml           pluggable France layer (Tela, INPN), later
+  identify/               §12 of architecture, pure part (M9): domain + net + yojson, no Brr, tested in
+                          test/identify/
+    plantnet.ml           the identify request as a value (flora, lang=fr, related images, nb-results, no-reject;
+                          the images and organs parts, at most five), its answer decoded (proposals, related
+                          images on https://bs.plantnet.org/ only, predicted organs, credits left; a GBIF id
+                          as a string or a number), the error classes (no plant, key refused, quota, refused
+                          request, unreachable), the flora list
+    organ.ml              the organs sent and detected, their French labels, the organ to suggest next
+    proposal.ml           a proposal's four closest images and « +N », the same organ first (6d), each image's
+                          credit line, the uncertain rule (6f)
+    transport.ml          TRANSPORT: abstract 'a io (return, bind) and image (a preview to send), post_form
+                          (URL, fields, image parts → status and body text, or timeout / network failure)
+                          and get (the flora list); no key storage, no files, no log
+    make.ml               Identify.Make (T : TRANSPORT): identify (request built with the key as api-key,
+                          sent, decoded, errors classified, uncertain rule applied) and projects (the flora
+                          list), each with its console line, never the URL; no identify_io library, see Notes
   geo/                    §8 of architecture, pure part: domain + yojson, no Brr, tested in test/geo/
     style.ml              online (OpenFreeMap) style plus Herbier's overlay sources and layers (5b's
                           origin ghost among them), merged in OCaml; pure, tested in test/geo/; the
@@ -353,7 +370,9 @@ app/
     arrival.ml the incoming text, labels.ml, sheet.ml the resolution states, card.ml the card texts,
     recent tags and first observation; intercept.ml re-exports them), gps.ml (a new
     observation's fix: searching, fix, none), move_plan.ml (5b's texts and what « Valider » writes),
-    plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys)
+    plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys),
+    identify/ (M9: the identification layer's states, its French texts, and what a proposal's button
+    does for each caller: « Choisir » in 4d, « Lier » or « + Créer » in 4k, « Lier » in 4g)
     snap.ml               the sheet's snap points: nearest, clamp, release projection
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
@@ -413,6 +432,16 @@ app/
       packs.ml            the « IGN hors-ligne » packs' download and delete
       drive_folder.ml     4m « Dossier Drive »: the Picker's build config, « Choisir » (token, Picker,
                           files.get check, store, serialised with the upload passes), « Par défaut »
+      plantnet_transport.ml  M9: Identify.TRANSPORT over Brr: 'a io = Fut.t, an image is a preview Blob in
+                          memory (4d) or previews/<id>.jpg read through store_io/files.ml (4k, 4g),
+                          post_form through bindings/timed_fetch.ml's request_form (Form.Data, 30 s, no
+                          retry), get through request; JS errors and timeouts mapped without the URL
+      identification.ml   M9: module Identify_io = Identify.Make (Plantnet_transport); the user's Pl@ntNet key (Capacitor Preferences `plantnet.api_key` through
+                          bindings/cap_preferences.ml, never in the SQLite settings, never logged) and
+                          whether it is there, the network, 4m's two identification settings as
+                          signals, the flora list (once per session), the identify requests (one at a time
+                          per caller, a newer one making the older stale), and a choice resolved through
+                          refs_io/resolver.ml then App.link or App.create_linked
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
@@ -442,6 +471,9 @@ app/
                           originals' queue (its rows, a silent or interactive pass, « Marquer en échec »);
                           rest_check.ml (#dev/rest): a tags upsert, a tags pull (since none / one minute) and
                           an invalid-token upsert over sync/net/transport.ml, with the session's or a pasted token;
+                          identify_check.ml (#dev/identify, M9): the identification spike (one gallery
+                          photo's preview sent with a key pasted on the page, never stored) and the
+                          layer's states replayed from the recorded fixtures through a fake transport;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier` in one Db.bare_transaction; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
@@ -472,19 +504,26 @@ app/
                           (app/dev_pages.ml, see app/dune)
     widgets/              button, icon_button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
-                          month_grid
+                          month_grid; identify_glyph (M9: the Identifier glyph as inline SVG, not a Material
+                          Symbol, its vein cut out by a mask)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
-      journal.ml (4c)     record.ml (4d)
-      saved.ml (4e)       species.ml (4f, 4g)  observation.ml (4h)
+      journal.ml (4c)     record.ml (4d; 6a, 6e with M9)
+      saved.ml (4e)       species.ml (4f, 4g; 6k with M9)  observation.ml (4h)
       resolve.ml (4i, 4j, 4k, 5c, and 4i for one plant from 4g « Lier » / 5a « Changer › »:
-                  one screen, one entry mode each; 4j is M4.39's sheet mode, its « Chercher » enters 4i)
+                  one screen, one entry mode each; 4j is M4.39's sheet mode, its « Chercher » enters 4i;
+                  4k's « Identifier avec Pl@ntNet », 6i, with M9)
+      identify.ml (M9: 6b, 6c, 6f, 6g; a layer over 4d, 4k or 4g, not a route, since a route change would
+                  release 4d's shots; Android back closes it)
+      identify_compare.ml (M9: 6d, a layer over 6c)
       tags.ml (4l)        manage_tags.ml (5d)
       settings/ (4m)      settings.ml (the screen; its main module), pending.ml (the card under « File
                           d'envoi »: « Serveur en pause », « Réception bloquée », the parked entries),
                           offline_row.ml (« Données hors-ligne »: sizes, « Libérer » and its dialog),
                           folder_row.ml (« Dossier Drive »: the folder, « Choisir », « Par défaut »), row.ml
-                          (a title-and-meta row)
+                          (a title-and-meta row), identification.ml (M9, 6h: « Identifier dès la photo »,
+                          « Flore Pl@ntNet », « Clé API Pl@ntNet » (masked, « Modifier », the
+                          my.plantnet.org link; not in the design), first section under the account card)
       edit_plant.ml (5a)  move_point.ml (5b)  viewer.ml (5e)
 ```
 
@@ -499,16 +538,18 @@ postgrest ← yojson, ptime, uri           (lib/; no domain, no Brr, no ppxlib)
 postgrest-codegen ← ppxlib, ppx_deriving_yojson, yojson (lib/postgrest/codegen/, its own package; a build-time tool, no app library links it;
                                          postgrest only as an opam version constraint, = version: the output targets its API)
 refs      ← domain, net, yojson, ptime   (no Brr)
+identify  ← domain, net, yojson          (no Brr; M9)
 photos    ← domain, net, yojson, ptime   (no Brr)
 geo       ← domain, net, yojson          (no Brr)
 bindings  ← brr
 store     ← domain, postgrest, yojson, ptime   (no Brr)
 store_io  ← store, domain, bindings, postgrest, brr (for Fut)
 sync_core ← domain, net, store, postgrest, uri, yojson, ptime   (no Brr)
-ui_model  ← domain, refs, store, sync_core, postgrest, yojson, ptime  (no Brr, no React)
+ui_model  ← domain, refs, store, sync_core, postgrest, yojson, ptime, and identify with M9  (no Brr, no React)
 sync      ← sync_core, domain, net, store, store_io, bindings, postgrest, uri, yojson, ptime, ptime.clock.os, brr (for Fut)
-photos_io | refs_io | geo_io   ← domain, store, store_io, bindings, brr (for Fut); photos_io also photos, yojson, ptime;
-                                 refs_io also refs, version, yojson, ptime, ptime.clock.os; geo_io also geo, yojson
+photos_io | refs_io | geo_io   ← domain, store, store_io, bindings, brr (for Fut); photos_io also photos,
+                                 yojson, ptime; refs_io also refs, version, yojson, ptime, ptime.clock.os; geo_io also
+                                 geo, yojson   (identify has no _io sibling: its Brr transport is in ui/app/, Notes)
                                          (siblings never import each other: photos_io/preview.ml and
                                           refs_io/organ_thumbs.ml share their canvas draw and JPEG encode
                                           through bindings/canvas_jpeg.ml, each with its own size and quality)
@@ -517,7 +558,7 @@ main      ← ui, sync, store, store_io, domain, brr (main.ml opens the db, read
                                          account and the router)
 
 preprocessors (each dune file's preprocess field; dune links their runtimes):
-store, geo, photos, ui_model, ui ← ppx_deriving.eq
+store, geo, photos, ui_model, ui, identify (M9) ← ppx_deriving.eq
 domain, refs             ← ppx_deriving.eq, ppx_deriving.show (show for the tests' printers only, stack.md)
 sync_core, sync          ← ppx_deriving.eq, ppx_deriving.show, ppx_deriving_yojson (style-guide 5.5)
 ```
@@ -530,7 +571,8 @@ Notes:
   under jsoo. `domain/` uses `Yojson.Safe.t` only for the `to_json` /
   `of_json` of its ids and closed value sets, which the table metadata
   names (`id=<Module>`, `ocaml=<Module>`, stack.md); rows go through `Postgrest` column types,
-  never `Jv`, and external payloads are decoded in `refs/`.
+  never `Jv`, and external payloads are decoded in `refs/` (Pl@ntNet's identify answers in
+  `identify/`, M9).
 - `lib/postgrest/` knows nothing of Herbier and does no HTTP; the Brr fetch
   adapter is `sync/net/transport.ml` (a `Postgrest.Client.HTTP`). If `postgrest`
   is published, that adapter could become a `postgrest-brr` package.
@@ -550,6 +592,19 @@ Notes:
   geocode) lives in `ui/app/`, which keeps the siblings independent. Its
   modules form a stack (Core, Geocoding, Reference_fetch, Packs): each calls
   only those before it, so the commit-then-geocode `save` is Geocoding's.
+  M9's Identification comes after Reference_fetch, whose link and
+  create_linked a choice ends in.
+- `identify/` has no `identify_io` sibling (decided 2026-11-16). Its IO is
+  a functor, `Identify.Make (T : TRANSPORT)`, so the request building,
+  decoding, error classes and rules all stay in the native library and are
+  tested there over a fake transport replaying the recorded answers. The
+  only Brr code left is the transport itself (Form.Data, reading previews,
+  the timed fetch, error mapping), one module, `ui/app/plantnet_transport.ml`,
+  and the functor is applied next to it in `ui/app/identification.ml`, a
+  jsoo-only library, as `Postgrest.Client.Make` and `Rest.Make` are applied
+  in `sync/` over `sync/net/transport.ml`. A library around one adapter
+  module and one functor application would add a dune stanza and a
+  dependency line for nothing.
 - Known copies between siblings, kept because they never import each other:
   `geo_io/geocoder.ml`'s queue guard mirrors `refs_io/http.ml`'s. A fix to
   one goes to the other. The JSON, URL and hex helpers (`parse`, `member`,
@@ -589,7 +644,8 @@ web/
     screens/              one file per screens/*.ml module, its handoff ids in a header comment:
                           collection (4a, 4n), map_tab (4b), journal (4c), record (4d), saved (4e),
                           species (4f, 4g), observation (4h), resolve (4i, 4j, 4k, 5c), tags (4l),
-                          settings (4m), edit_plant (5a), move_point (5b), manage_tags (5d), viewer (5e);
+                          settings (4m), edit_plant (5a), move_point (5b), manage_tags (5d), viewer (5e),
+                          and with M9 identify (6b, 6c, 6f, 6g, 6j) and identify_compare (6d);
                           5f lives in _base.sass and _tokens.sass
   fonts/                  Manrope, Newsreader (variable woff2), Material Symbols subset
   js/
@@ -718,6 +774,10 @@ There is no backup repo and no database dump: the keep-alive is a background
 job in the app (plan M6.50, `web/runner/keepalive.js`, architecture §4), and
 Supabase is the only copy besides the device.
 
+No Edge Function exists. Identification needs none: the Pl@ntNet key is the
+user's own, typed in 4m and kept on the device (plan Decisions « Clé API
+Pl@ntNet », 2026-11-16).
+
 ## 6. `test/`
 
 ```
@@ -754,8 +814,12 @@ test/
   geo/          native, alcotest: herbier_geo (features, style over the
                 recorded web/map/positron.json; geocode, place_name and communes over
                 fixtures/{photon,geoplateforme}_*.json, the WFS ones geoplateforme_wfs_*.json)
+  identify/     native, alcotest (M9): herbier_identify (the rendered request, the answers and
+                errors decoded over fixtures/plantnet_*.json, organs, the proposal rules;
+                Make over a fake transport replaying those answers: the parts and query
+                sent, each error class, no key in a console line)
   fetch/
-    jsoo/       js_of_ocaml build of Http.get, Geocoder.run, Timed_fetch.request and request_blob run
+    jsoo/       js_of_ocaml build of Http.get, Geocoder.run, Timed_fetch.request, request_blob (and request_form, M9) run
                 under node over a stubbed fetch (stub.js): 2xx, non-2xx, unreadable body, rejected fetch,
                 timeout; a Blob_frame body echoed back
   sync/         native, alcotest: herbier_sync_core (app/sync_core/: auth/session, auth/drive_consent,
@@ -791,14 +855,16 @@ test/
                 scripts/record-geo-fixtures.sh; gotrue_<endpoint>_<case>_<status>.json from the local
                 stack, scripts/record-gotrue-fixtures.sh; sync_<verb>_<table>_<case>_<status>.json
                 from the local stack, scripts/record-sync-fixtures.sh; drive_files_<verb>_<case>_<status>.json
-                and drive_session_<verb>_<case>_<status>.txt from Google, scripts/record-drive-fixtures.sh) and exifr output (exifr_<name>.json,
+                and drive_session_<verb>_<case>_<status>.txt from Google, scripts/record-drive-fixtures.sh;
+                plantnet_<route>_<case>_<status>.json from Pl@ntNet with its own example images,
+                scripts/record-plantnet-fixtures.sh, the key never written, M9) and exifr output (exifr_<name>.json,
                 scripts/exifr-fixture.mjs); never app rows
   js/           browser-side tests; added only if the UI spike's leak check fails
 ```
 
 alcotest runs natively, in `dune test` on every CI job, on every library without
 a Brr dependency (`domain`, `postgrest`, `refs`, `photos`, `geo`, `ui_model`,
-`store`, `sync_core`). The store builds statements as values and never runs them, so
+`store`, `sync_core`, and `identify` with M9). The store builds statements as values and never runs them, so
 their SQL runs natively through the sqlite3 CLI (`test/store/sqlite_cli.ml`
 emulates `Db.edit` without its transaction). `store_io` (`db.ml`: the
 transaction, its rollback, the serialisation; `files.ml`), sync,
@@ -840,7 +906,12 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   `drive_*.txt` kept verbatim (a resumable session's headers, an unknown
   session's 404): the error answers without a token, the success ones with a
   `drive.file` token in `HERBIER_DRIVE_TOKEN`, in a throwaway folder trashed at
-  the end), `upload-sink.mjs` (a stand-in for a Drive resumable session on
+  the end), `record-plantnet-fixtures.sh` (M9: Pl@ntNet's identify and
+  projects answers `test/fixtures/plantnet_*.json`, from Pl@ntNet's own
+  example images, never a user photo; the key read from the environment and
+  stripped from everything written; `Origin: https://localhost` sent, since an
+  exposed key refuses requests without it; each identify request spends one of
+  the day's 500), `upload-sink.mjs` (a stand-in for a Drive resumable session on
   127.0.0.1, with injected 503s and expired sessions: the device checks of the
   originals' uploads, reached through `adb reverse`), `pause-proxy.mjs` (a
   proxy to the local stack that answers 540 to `/rest/v1/*` on demand: 4m's

@@ -2,11 +2,13 @@
 
 ## Vue d'ensemble
 
-Herbier est une application Android mono-utilisateur pour tenir un herbier de terrain : les plantes rencontrées, où, quand, avec ses propres photos, notes et tags. Ce n'est ni une app sociale ni un outil d'identification. Le cœur est la **fiche espèce**, qui fusionne *mes données* et des *données de référence* récupérées de sources externes (GBIF, Pl@ntNet, Wikipédia, POWO, INPN, Tela Botanica). Les plantes entrent dans la collection surtout par **interception de liens** partagés depuis Pl@ntNet (vers GBIF, etc.) et par la **prise de note rapide sur le terrain**.
+Herbier est une application Android mono-utilisateur pour tenir un herbier de terrain : les plantes rencontrées, où, quand, avec ses propres photos, notes et tags. Ce n'est pas une app sociale. Ce n'était pas non plus un outil d'identification : depuis le **tour 6** (2026-11-16), Herbier peut demander à **Pl@ntNet** d'identifier une plante d'après ses photos (6a–6k, plus bas), comme une autre façon de la nommer. Le cœur est la **fiche espèce**, qui fusionne *mes données* et des *données de référence* récupérées de sources externes (GBIF, Pl@ntNet, Wikipédia, POWO, INPN, Tela Botanica). Les plantes entrent dans la collection surtout par **interception de liens** partagés depuis Pl@ntNet (vers GBIF, etc.), par la **prise de note rapide sur le terrain** et, depuis le tour 6, par l'**identification Pl@ntNet** depuis Noter.
 
 ## À propos des fichiers de design
 
-`Herbier v2.dc.html` est une **référence de design en HTML** : des maquettes statiques montrant l'aspect et le comportement voulus. Ce n'est pas du code à réutiliser. La tâche est de **recréer ces écrans dans l'environnement Android cible** (Jetpack Compose recommandé, Material 3 comme base, thématisé avec les jetons ci-dessous). `Herbier.dc.html` contient l'historique des explorations (tours 1–3) ; seul **v2** fait foi, et à l'intérieur de v2, le **tour 5** (5a–5f) et le jeu consolidé (4a–4n) — les tours antérieurs sont conservés pour contexte.
+`Herbier v2.dc.html` est une **référence de design en HTML** : des maquettes statiques montrant l'aspect et le comportement voulus. Ce n'est pas du code à réutiliser. La tâche est de **recréer ces écrans dans l'environnement Android cible** (Jetpack Compose recommandé, Material 3 comme base, thématisé avec les jetons ci-dessous). `Herbier.dc.html` contient l'historique des explorations (tours 1–3) ; seul **v2** fait foi, et à l'intérieur de v2, le **tour 5** (5a–5f) et le jeu consolidé (4a–4n) — les tours antérieurs sont conservés pour contexte. Le **tour 6** (identification Pl@ntNet, 6a–6k et le glyphe Identifier) est un canevas à part, dans `identification/` ; il fait foi pour ces écrans et pour ce qu'il change de 4d, 4g, 4k et 4m.
+
+Les lieux et espèces des maquettes (Arnica, Col de la Schlucht, la flore « Europe de l'Ouest »…) sont des exemples, pas des exigences.
 
 Les photos des maquettes sont chargées à la volée depuis Wikimedia pour illustrer ; dans l'app, elles viennent de l'appareil, de Google Photos/Drive, ou des sources de référence.
 
@@ -24,13 +26,13 @@ Entrées                          Cœur                         Lentilles
 + Noter (terrain)      ──►   Fiche espèce (Plante)   ◄──   Collection (par nom, filtres tags)
 Lien intercepté        ──►     ├─ Mes photos                Carte (par lieu)
 Recherche / coller     ──►     ├─ Mes observations          Journal (par date)
-                               ├─ Mes notes, tags
+Identifier (Pl@ntNet)  ──►     ├─ Mes notes, tags
                                └─ Référence (externe)
 ```
 
 **Navigation** : barre inférieure à 5 emplacements — `Collection · Carte · [+ Noter] · Journal · Réglages`. Le bouton central Noter (60 px, vert mousse, débordant de 28 px vers le haut) ouvre l'appareil photo en modal plein écran. Les tags **ne sont pas** une destination : ce sont des filtres persistants partagés par Collection, Carte et Journal. « À identifier » est aussi un filtre (ocre) qui fait office de file.
 
-**Écrans modaux** (sans barre) : Chercher, Lien intercepté, À identifier → lier, Tags, Fiche espèce, Observation, Modifier la fiche, Déplacer le point, Changer d'espèce, Gérer les tags, Visionneuse photo, Noter, Enregistré.
+**Écrans modaux** (sans barre) : Chercher, Lien intercepté, À identifier → lier, Tags, Fiche espèce, Observation, Modifier la fiche, Déplacer le point, Changer d'espèce, Gérer les tags, Visionneuse photo, Noter, Enregistré. L'identification Pl@ntNet (6b–6g) s'ouvre par-dessus Noter, À identifier ou la fiche nom libre, et y revient toujours.
 
 ---
 
@@ -171,6 +173,7 @@ Titre + « 112 observations ». Filtres : année (pastille pleine = active), « 
 ### 4d Noter (modal plein écran, fond sombre)
 Viseur caméra plein écran. Haut : ✕ dans voile rond 40 px ; pastille « hors-ligne · 2 en attente » si besoin ; pastille « Position acquise » avec point `mossLight` (pas de valeur de précision). Bas, sur dégradé sombre : rangée de vignettes 56 px (prises, dernière bordée crème 2 px ; case pointillée « galerie / G Photos » ouvre le sélecteur système + Google Photos Picker) ; champ « Nom de la plante — *facultatif* » (voile `rgba(246,241,231,.12)`, bordure `.25`) ; suggestions en pastilles : d'abord ma collection (« Arnica montana · déjà en collection »), puis plantes vues à < 500 m (« Vues ici ↓ ») ; rangée `[↻ 56] [Enregistrer (2 photos) 64 crème] [● 56 moss]`. Le déclencheur est le rond `moss`.
 Comportement : la position GPS est demandée à l'ouverture, jamais bloquante ; enregistrer sans nom crée une observation « À identifier » ; **jamais** d'attente réseau.
+Tour 6 : bouton Identifier dans le champ du nom et « Identifier dès la photo » (6a), espèce choisie (6e).
 
 ### 4e Enregistré
 Confirmation `paper` : rond `moss` 64 ✓, « Enregistré » 30/800, « Observation ajoutée à **Arnica** / Le Hohneck · 48.0331, 7.0028 · 14:07 ». Deux vignettes 1:1 avec badge `ochre` « ↑ en attente ». Carte `sand` avec « G » : « 2 photos → Google Photos, album Herbier / Envoi dès le retour du réseau. Copies compressées gardées sur le téléphone. » Deux lignes d'action `sand` : « Ajouter une note à cette observation », « Corriger la position sur la carte » (→ 5b). Bas : « Noter une autre plante » (60, moss) ; « Voir la fiche Arnica » (52, bordé).
@@ -195,6 +198,7 @@ Confirmation `paper` : rond `moss` 64 ✓, « Enregistré » 30/800, « Observat
 
 ### 4g Fiche sans référence (nom libre, hors-ligne)
 Comme 4f, mais : badge « local », latin remplacé par « nom libre — espèce non liée » (Newsreader ital 19, opacité .8), bloc Référence réduit à un texte « Aucune espèce de référence liée. Hors-ligne : la recherche de noms reviendra avec le réseau. » + bouton bordé 52 « Lier à une espèce de référence » (opacité .5 tant que hors-ligne).
+Tour 6 : en ligne, deux boutons « Identifier » et « Chercher un nom » (6k).
 
 ### 4h Observation (modal)
 En-tête : ←, centre « OBSERVATION / Digitale pourpre › » (lien vers la fiche), « Terminé ». Mosaïque photos : grande 4:3 (2/3) + colonne (1/3) avec petite photo et case « + » pointillée. Carte `sand` **Date** « Ven. 12 juin 2026 · 14:32 » + « Modifier ». Carte lieu : mini-carte 130 px avec point `moss` et **cercle de précision** (44 px, `rgba(79,107,58,.18)`, bordure `.6`) — seule représentation de la précision GPS ; sous la carte, nom du lieu + coordonnées + libellé, « Déplacer » → 5b. Carte « Note de cette rencontre » Newsreader 18. Bas : liste d'actions bordées « Changer d'espèce › » (5c), « Voir dans le journal › », « Supprimer l'observation › » en `danger`.
@@ -210,6 +214,7 @@ Android : `intent-filter` `VIEW` + `BROWSABLE` sur `gbif.org/species/*`, `identi
 
 ### 4k À identifier → lier (modal)
 En-tête ← / « À IDENTIFIER · 1 / 3 » (`ochre`) / « Suivante › ». Carte `sand` de l'observation (vignette 96, date, lieu, note en Newsreader 16 entre guillemets). Champ de recherche. « Dans ma collection » → bouton « Lier › » (rattache l'observation à la plante existante). « Référence · GBIF » → « + » (crée la plante puis rattache). Pied : deux boutons bordés 52 « Coller un lien » / « Nom libre » (crée une fiche 4g).
+Tour 6 : bouton principal « Identifier avec Pl@ntNet » sous la carte, la recherche « ou par le nom » en dessous (6i), propositions dans la file (6j).
 
 ### 4l Tags (modal)
 ←, « Gérer » (→ 5d). Titre « Tags » + « 12 tags · touchez pour filtrer la collection ». Grille 2 colonnes de cartes 1:1 rayon 18 (photo de couverture de la plante la plus récente du tag, nom 20/800, « 18 plantes ») pour les 4 tags les plus utilisés ; puis pastilles bordées 1,5 px 14/600 avec compteur `muted` pour le reste. Tap = applique le filtre et revient à Collection.
@@ -217,6 +222,7 @@ En-tête ← / « À IDENTIFIER · 1 / 3 » (`ochre`) / « Suivante › ». Cart
 ### 4m Réglages (onglet)
 Titre. Carte compte : avatar rond `moss` 44 initiale, « Compte Google connecté / n…@gmail.com · Photos, Drive », « Changer ». Section **Où vont mes photos** (radio, 3 options dans une carte `sand` rayon 16, lignes séparées 1 px `line`) : « Google Photos · album “Herbier” — Originaux dans ma bibliothèque, aperçus gardés sur le téléphone. » / « Google Drive · dossier “Herbier” — Un sous-dossier par espèce. » / « Dans Herbier seulement — Compressées à 1600 px · limité à 200 Mo. ». Section **Sur le téléphone** : interrupteur « Copie compressée hors-ligne » (on), « Envoyer seulement en Wi-Fi » (off), « Données hors-ligne — Aperçus photos 48 Mo · Fiches de référence 12 Mo / **Libérer** ». Section **File d'envoi** : « 3 photos en attente / Dernier envoi : hier, 19:42 / **Envoyer maintenant** ».
 Vocabulaire : jamais « cache », « vignettes », « sync » face à l'utilisateur.
+Tour 6 : nouvelle section « Identification » en tête, sous la carte du compte (6h), avec la ligne « Clé API Pl@ntNet » ajoutée à la maquette (voir 6h).
 
 ### 4n Premier lancement (Collection vide)
 Titre « Collection / 0 plante ». Centre : emplacement d'illustration 4:3 rayon 20 (à fournir), « La première plante s'ajoute dehors ou depuis un lien. » 26/800, texte explicatif 15, boutons « + Noter ma première plante » (60 moss) et « Coller un lien Pl@ntNet / GBIF » (52 bordé), note « Google Photos se connecte plus tard, à la première photo. » Pas de tunnel d'onboarding ; la connexion Google est demandée à la première photo à sauver.
@@ -239,6 +245,59 @@ Photo en `contain` sur `dark`. Haut : ✕, « 2 / 5 », ⋯ (voiles ronds 40). B
 ### 5f Lisibilité plein soleil (règles globales, déjà appliquées aux jetons)
 Texte secondaire `#5a5449` (≥ 6,3:1) ; séparateurs `#cfc6b3` ; libellés d'onglets 12 px ; dégradés sous les noms sur photo à .92. Pas de « mode extérieur », pas de mode sombre (Noter et la visionneuse sont sombres par nature).
 
+### Tour 6 · Identifier avec Pl@ntNet (6a–6k)
+Canevas « Herbier · Identification Pl@ntNet » (2026-11-16), dans `identification/` : 13 planches et `canvas.json` (titres des planches et notes). Identifier est une autre façon de nommer une plante : les photos partent chez Pl@ntNet, ses propositions reviennent, et en choisir une nomme la plante. Règles du tour :
+- Noter n'attend jamais le réseau : on peut toujours repartir vers Noter, photo gardée.
+- Choisir une proposition lie le taxon GBIF renvoyé par Pl@ntNet ; la référence se charge comme après un lien intercepté (4j).
+- Même taxon qu'une de mes plantes : l'observation lui est ajoutée, pas de doublon.
+- Pl@ntNet est nommé sur chaque écran ; ses photos sont créditées (6d).
+- Les photos des maquettes sont des emplacements rayés (le canevas ne charge pas d'images).
+
+**Le parcours** (`Main.dc.html`) : trois entrées mènent au même écran de choix (6b puis 6c) : Noter, photo prise, en ligne avec « Identifier dès la photo » actif (par défaut) ; Noter, bouton Identifier (après « Continuer sans attendre », ou réglage coupé) ; À identifier (6i) et fiche nom libre (6k), pour une plante notée hors-ligne et identifiée plus tard. Sorties : retour à Noter (6e : « Choisir » remplit nom et latin, « Aucune ne correspond » laisse le nom vide, puis Enregistrer → 4e) ; rattachée (6j : « Lier » à ma plante ou « + Créer » la fiche). Hors-ligne, le bouton Identifier est grisé : rien n'attend le réseau, la plante patiente dans « À identifier ». ←, « Continuer sans attendre » et « Aucune ne correspond » reviennent toujours à Noter, photo gardée.
+
+#### 6a Noter — bouton Identifier
+4d, avec dans le champ du nom, à droite, un rond `paper` 36 px (cible 44) portant le glyphe Identifier en `ink` : il envoie les photos déjà prises (5 au plus). Avec « Identifier dès la photo » (actif par défaut, 6h), la première photo, appareil ou galerie, ouvre directement 6b. Hors-ligne : le rond à opacité .5, désactivé, et sous le champ la ligne 12 « Hors-ligne : l'identification reviendra avec le réseau. Sans nom, la plante part dans « À identifier ». »
+
+#### 6b Identification — envoi
+Fond `paper`. En-tête ← / « PL@NTNET » (11/700 majuscules `moss`) sur « Identification » 15/800. Vignette de ma photo 64 rayon 12, « Envoi à Pl@ntNet… » 15/700, « Pl@ntNet ne conserve pas la photo. » 12 `muted`. Libellé « PROPOSITIONS » et, à droite, la flore (12/600 `muted`). Trois cartes squelettes `sand` rayon 16 : quatre vignettes 1:1 rayées (rayon 10), barre de score vide, deux lignes ; « Pl@ntNet… » monospace 10 après 600 ms, comme les photos qui chargent. Pied fixe : « Continuer sans attendre » (bordé 52). Rien ne bloque : ce bouton et ← reviennent à Noter, photo gardée.
+
+#### 6c Identification — propositions
+Même en-tête. Rangée de mes photos (64, rayon 12), l'organe détecté en bandeau bas « fleur ▾ » (on le corrige), puis une case pointillée `hint` « + feuille » et « Une feuille en plus départage les espèces proches. » 12 `muted` ; « + feuille » relance avec 2 photos (5 au plus). « PROPOSITIONS · 4 » et la flore en menu (« … ▾ »). Une carte `sand` rayon 16 par espèce, dans l'ordre et avec le score de Pl@ntNet : les 4 photos de l'espèce les plus proches de la mienne (1:1 rayon 10, bandeau d'organe 10/700), la dernière voilée avec « +N » ; barre de score 6 px `moss` sur `line` et pourcentage 13/800 ; latin Newsreader ital 19 et auteur romain 13 `muted` ; noms français 14 `inkSoft` séparés par « · » ; famille 12 `muted` ; « Choisir » (bordé 44). Si une de mes plantes a ce taxon GBIF, pied de carte (filet 1 px `#ddd5c4`) « ✓ Dans ma collection · Arnica · 2 obs. » 13/700 `moss` : l'observation lui sera ajoutée. Une vignette ou « +N » ouvre 6d. Pied fixe : « Aucune ne correspond » (bordé 52).
+
+#### 6d Comparer
+Fond `dark`. ✕ (voile rond 40) et pastille « Proposition 1 / 4 ». Deux photos de 280 px rayon 16 : en haut ma photo (pastille « Ma photo · fleur »), en bas celle de l'espèce (pastilles « Pl@ntNet · fleur » et « 3 / 15 », bandeau bas 11 « © [auteur] · CC BY-SA · Pl@ntNet »). Bas : latin 21 ital et auteur, « nom · famille » 13, « ✓ Dans ma collection · … » `mossLight`, score 17/800 ; rangée ‹ (52) / « Choisir cette espèce » (56, crème) / › (52). Facultatif : on n'y arrive qu'en touchant une photo d'espèce dans 6c ; « Choisir » de 6c valide directement (→ 6e). Ma photo en haut, celles de l'espèce en bas, même organe d'abord. Balayer : photo suivante ; ‹ › : proposition voisine. Chaque photo porte son auteur, sa licence et Pl@ntNet.
+
+#### 6e Noter — espèce choisie
+Noter, le champ du nom devenu la carte du choix : bordure 1,5 px `mossLight`, ✓ `mossLight`, nom 16/800, sous-ligne « *latin* · Pl@ntNet 82 % » (Newsreader ital 14), ✕ (cible 44) qui efface le choix. Ligne 12 « Déjà dans ma collection : l'observation s'ajoutera à Arnica. » Le nom affiché est mon nom d'affichage si l'espèce est dans ma collection, sinon le nom français de Pl@ntNet (la fiche est créée et liée à GBIF à l'enregistrement).
+
+#### 6f Propositions incertaines
+6c avec un cadre `ochre` 1,5 px rayon 16 autour de mes photos, et la case de l'organe utile mise en avant (« + fleur », pointillé et texte `moss` 800) : le meilleur score est bas ou talonné (seuils à régler, par exemple < 50 % ou moins de 15 points d'écart). L'action utile est la photo d'un autre organe ; « + fleur » relance.
+
+#### 6g Aucune plante reconnue
+Même en-tête ; ma photo et une case « + photo ». Centre : glyphe 48 `hint`, « Aucune plante reconnue » 26/800, « Pas de plante détectée sur cette photo. » 15 ; « Reprendre la photo » (60 `moss`, icône appareil), « Garder la photo, sans nom » (bordé 52), lien 14/700 `moss` « Voir quand même les propositions peu probables ». Pl@ntNet a répondu « Species not found » : pas de plante sur la photo ; « Voir quand même » relance avec `no-reject`. Même écran si Pl@ntNet ne répond pas, avec « Réessayer ».
+
+#### 6h Réglages — Identification
+Nouvelle section en tête de 4m, sous la carte du compte : « IDENTIFICATION », carte `sand` rayon 16 avec l'interrupteur « Identifier dès la photo » (« Pl@ntNet propose les espèces avant de nommer. En ligne seulement. », actif par défaut) et la ligne « Flore Pl@ntNet » (valeur 13 `muted`, chevron). Note 12 `muted` : « Pl@ntNet ne conserve pas les photos envoyées. Jusqu'à 500 identifications par jour. » La flore est le projet Pl@ntNet de la requête. **Changement par rapport à la maquette (décision de Tristan, 2026-11-16)** : la flore par défaut est « Automatique » (`all`, Pl@ntNet choisit la flore à chaque requête), pas « Europe de l'Ouest » comme sur la maquette (« using 'europe de l'ouest' would make it harder to identify non-indigenous plants ») ; la liste des flores reste au choix dans 4m et 6c. Le reste des réglages ne change pas.
+
+**Ajout à la maquette (2026-11-16, décision de Tristan sur la clé API, plan « Clé API Pl@ntNet »)** : la clé API Pl@ntNet est celle de l'utilisateur, saisie dans Réglages, une par personne ; le canevas n'a pas cette ligne. Dans la carte Identification, une ligne « Clé API Pl@ntNet » : valeur masquée 13 `muted` (« •••• » et les quatre derniers caractères, ou « Aucune clé »), « Modifier » (champ pour coller ou taper la clé ; vide = l'effacer), et une note 12 `muted` : « Clé gratuite et personnelle, à créer sur my.plantnet.org. Dans votre compte Pl@ntNet, cochez « expose my API key » et ajoutez https://localhost aux domaines autorisés. », « my.plantnet.org » en lien (`moss`) vers https://my.plantnet.org/. La clé reste sur le téléphone : jamais envoyée à Supabase, hors des sauvegardes Android, jamais dans les journaux ; l'identification marche sans être connecté. Sans clé, les boutons Identifier (6a, 6i, 6k) sont désactivés avec une ligne 12 qui renvoie à Réglages, « Ajoutez votre clé API Pl@ntNet dans Réglages pour identifier. » (comme la ligne « Dossier Drive » sans numéro de projet), et « Identifier dès la photo » ne fait rien.
+
+#### 6i À identifier — Pl@ntNet
+4k gagne un bouton principal 60 `moss` « Identifier avec Pl@ntNet » (glyphe 22) sous la carte de l'observation, qui envoie les photos de l'observation. En dessous, séparateur « OU PAR LE NOM », champ « Nom, latin, alias… », et en pied « Coller un lien » / « Nom libre » (bordés 52), inchangés.
+
+#### 6j Propositions — À identifier
+Même écran que 6c, dans la file À identifier : en-tête « À IDENTIFIER · 1 / 3 » `ochre` sur « Identification », la note de l'observation (Newsreader 15) à côté de sa photo, « PROPOSITIONS PL@NTNET · 3 ». « Lier » rattache l'observation à ma plante ; « + Créer » crée la fiche liée et l'y range, comme le « + » de 4k. Puis l'observation suivante. « Aucune ne correspond » revient à 6i.
+
+#### 6k Fiche nom libre — Pl@ntNet
+Fiche nom libre (4g), réseau revenu. Bloc Référence : « Aucune espèce de référence liée. » et deux boutons 52 : « Identifier » (`moss`, glyphe 20) et « Chercher un nom » (bordé). Pl@ntNet reçoit les photos d'une seule observation : il suppose un seul individu. Lier garde le nom libre en alias, comme « Lier » aujourd'hui.
+
+#### Bouton Identifier · glyphe
+Un cadre de visée autour d'une feuille : identifier cette plante d'après la photo. Grille 24, trait 2 px, coins r 1, feuille pleine, nervure évidée (trait 1,4), pour voisiner avec les Material Symbols Outlined de l'app (qui n'ont pas ce glyphe). Tailles 48, 24, 20. En place : rond crème dans le champ du nom de Noter (6a, cible 44 px) ; bouton plein `moss` avec libellé « Identifier avec Pl@ntNet » (6i, 6k) ; 48 `hint` dans 6g. Variante retenue : A, cadre et feuille (encadrée dans la planche) ; B (loupe et feuille) et C (feuille seule) sont écartées. Tracé (`Icone.dc.html`) :
+```
+cadre    M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4  (trait 2)
+feuille  M8 16C8 11.6 11.6 8 16 8C16 12.4 12.4 16 8 16Z                                                  (plein)
+nervure  M9.7 14.3L13.6 10.4                                                                             (trait 1,4, rond, évidé)
+```
+
 ---
 
 ## Interactions & comportements
@@ -246,7 +305,7 @@ Texte secondaire `#5a5449` (≥ 6,3:1) ; séparateurs `#cfc6b3` ; libellés d'on
 - **Transitions** : modaux depuis le bas (300 ms, decelerate) ; feuilles basses avec poignée, glisser pour fermer ; fiche espèce = héros partagé depuis la carte de Collection (shared element, 350 ms). Onglets sans animation.
 - **Pressed** : boutons pleins → `mossDark` ; pastilles bordées → fond `sand` ; lignes de liste → fond `sand`.
 - **Chargement des photos** : toujours le fond rayé `sandDeep`/`sand` (jamais une case vide ni un spinner seul) ; libellé monospace 10 `muted` de la source si > 600 ms ; anneau 18 px sur les petites vignettes.
-- **Hors-ligne** : bandeau discret dans la barre d'état « hors-ligne · N en attente ». Noter, Enregistré, Fiche (mes données + référence en cache), Journal, Carte (tuiles en cache) fonctionnent. Recherche référence et « Lier » sont désactivés (.5) avec texte explicite.
+- **Hors-ligne** : bandeau discret dans la barre d'état « hors-ligne · N en attente ». Noter, Enregistré, Fiche (mes données + référence en cache), Journal, Carte (tuiles en cache) fonctionnent. Recherche référence, « Lier » et « Identifier » (tour 6) sont désactivés (.5) avec texte explicite.
 - **File d'envoi** : WorkManager, contrainte réseau (Wi-Fi si réglage), réessais exponentiels ; badge `ochre` « ↑ » par photo tant que `PENDING`.
 - **Référence** : récupération à la liaison, puis rafraîchie sur demande (↻) ou si > 90 jours à l'ouverture avec réseau. Vignettes des photos de référence (≈ 300 px) et textes conservés en local ; « Libérer » les efface.
 - **Google** : sign-in unique différé à la première photo à sauver ; Photos Library API (album « Herbier ») ou Drive API (dossier « Herbier »/espèce) selon le réglage ; le sélecteur « Depuis Google Photos » utilise Google Photos Picker API.
@@ -268,7 +327,7 @@ Texte secondaire `#5a5449` (≥ 6,3:1) ; séparateurs `#cfc6b3` ; libellés d'on
 | Source | Usage | API |
 |---|---|---|
 | GBIF | recherche/suggestion d'espèces, noms vernaculaires, résolution des liens | `api.gbif.org/v1/species/suggest`, `/species/{key}`, `/species/{key}/vernacularNames`, `/species/match` |
-| Pl@ntNet | photos par organe, résolution des liens species | API publique limitée ; à vérifier (scraping exclu) |
+| Pl@ntNet | identification par photos (tour 6) ; photos par organe ; résolution des liens species | identification : `my-api.plantnet.org/v2/identify/{flore}` (clé API de l'utilisateur, saisie dans 4m, 500 identifications par jour gratuites ; `docs/exploratory_research/plantnet-identify-api.md`) ; photos par organe : jeu Pl@ntNet de GBIF (scraping exclu) |
 | Wikipédia | toxicité / résumé, image | REST `page/summary/{title}` (fr puis en) |
 | POWO (Kew) | aire native / introduite | `powo.science.kew.org/api/2/taxon/{ipni}` (non officielle) |
 | INPN / TaxRef | statut FR, protection, liste rouge | `taxref.mnhn.fr/api` (OpenAPI) |
@@ -287,4 +346,5 @@ Texte secondaire `#5a5449` (≥ 6,3:1) ; séparateurs `#cfc6b3` ; libellés d'on
 
 - `Herbier v2.dc.html` — **référence** : jeu consolidé 4a–4n + tour 5 (5a–5f). Ancre `#4f` etc. pour chaque écran.
 - `Herbier.dc.html` — historique des explorations (tours 1–3, alternatives de navigation 1a/1b/1c). Contexte uniquement.
+- `identification/` — **référence** du tour 6 (canevas « Herbier · Identification Pl@ntNet ») : `Main.dc.html` (le parcours), `Icone.dc.html` (glyphe), `Noter-Identifier` (6a), `Envoi` (6b), `Propositions` (6c), `Comparer` (6d), `Noter-Choisie` (6e), `Incertain` (6f), `Aucune` (6g), `Reglages` (6h), `A-identifier` (6i), `A-identifier-Propositions` (6j), `Nom-libre` (6k), tous en `.dc.html`, et `canvas.json` (position et titre des planches, et les notes : règles du tour et une note par écran). Ces fichiers chargent `./support.js`, non fourni avec le tour : pour en ouvrir un dans un navigateur, copier `../support.js` à côté (il porte les mêmes balises `x-dc`, `sc-if`, `DCLogic` ; rendu non vérifié).
 - `support.js` — runtime des maquettes, sans intérêt pour l'implémentation.

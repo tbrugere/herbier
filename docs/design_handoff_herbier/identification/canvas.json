@@ -1,0 +1,290 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "A-identifier-Propositions.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6j · Propositions — À identifier",
+      "w": 390,
+      "x": 470,
+      "y": 4508
+    },
+    "A-identifier.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6i · À identifier — Pl@ntNet",
+      "w": 390,
+      "x": 0,
+      "y": 4508
+    },
+    "Aucune.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6g · Aucune plante reconnue",
+      "w": 390,
+      "x": 470,
+      "y": 2944
+    },
+    "Comparer.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6d · Comparer",
+      "w": 390,
+      "x": 1410,
+      "y": 1380
+    },
+    "Envoi.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6b · Identification — envoi",
+      "w": 390,
+      "x": 470,
+      "y": 1380
+    },
+    "Icone.dc.html": {
+      "h": 860,
+      "title": "Bouton Identifier · glyphe",
+      "w": 960,
+      "x": 1480,
+      "y": 0
+    },
+    "Incertain.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6f · Propositions incertaines",
+      "w": 390,
+      "x": 0,
+      "y": 2944
+    },
+    "Main.dc.html": {
+      "h": 860,
+      "title": "Le parcours",
+      "w": 1400,
+      "x": 0,
+      "y": 0
+    },
+    "Nom-libre.dc.html": {
+      "h": 844,
+      "radius": 30,
+      "title": "6k · Fiche nom libre — Pl@ntNet",
+      "w": 390,
+      "x": 940,
+      "y": 4508
+    },
+    "Noter-Choisie.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6e · Noter — espèce choisie",
+      "w": 390,
+      "x": 1880,
+      "y": 1380
+    },
+    "Noter-Identifier.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6a · Noter — bouton Identifier",
+      "w": 390,
+      "x": 0,
+      "y": 1380
+    },
+    "Propositions.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "radius": 30,
+      "title": "6c · Identification — propositions",
+      "w": 390,
+      "x": 940,
+      "y": 1380
+    },
+    "Reglages.dc.html": {
+      "h": 844,
+      "radius": 30,
+      "title": "6h · Réglages — Identification",
+      "w": 390,
+      "x": 940,
+      "y": 2944
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-16T10:53:50Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "t0",
+    "rules",
+    "t1",
+    "s6a",
+    "s6b",
+    "s6c",
+    "s6d",
+    "s6e",
+    "t2",
+    "s6f",
+    "s6g",
+    "s6h",
+    "t3",
+    "s6i",
+    "s6j",
+    "s6k"
+  ],
+  "notes": {
+    "rules": {
+      "fill": "orange",
+      "size": 24,
+      "text": "Règles du tour 6\n\n• Noter n'attend jamais le réseau : on peut toujours repartir vers Noter, photo gardée.\n• Choisir une proposition lie le taxon GBIF renvoyé par Pl@ntNet ; la référence se charge comme après un lien intercepté (4j).\n• Même taxon qu'une de mes plantes : l'observation lui est ajoutée, pas de doublon.\n• Pl@ntNet est nommé sur chaque écran ; ses photos sont créditées (6d).\n• Photos : emplacements rayés, ce canevas ne charge pas d'images.",
+      "w": 420,
+      "x": 2520,
+      "y": 0
+    },
+    "s6a": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Le bouton vit dans le champ du nom : identifier est une autre façon de nommer. Il envoie les photos déjà prises (5 au plus). Avec « Identifier dès la photo » (actif par défaut), la première photo, appareil ou galerie, ouvre directement 6b. Hors-ligne : Tweaks › horsLigne.",
+      "w": 390,
+      "x": 0,
+      "y": 2264
+    },
+    "s6b": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Rien ne bloque : « Continuer sans attendre » et ← reviennent à Noter, photo gardée. Squelettes rayés, puis « Pl@ntNet… » après 600 ms, comme les photos qui chargent.",
+      "w": 390,
+      "x": 470,
+      "y": 2264
+    },
+    "s6c": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Ordre et score de Pl@ntNet. Par espèce, les 4 photos les plus proches de la mienne ; une vignette ou « +14 » ouvre 6d. « Dans ma collection » : une de mes plantes a ce taxon GBIF, l'observation lui sera ajoutée. L'organe est détecté (« fleur ▾ ») et se corrige ; « + feuille » relance avec 2 photos.",
+      "w": 390,
+      "x": 940,
+      "y": 2264
+    },
+    "s6d": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Facultatif : on n'y arrive qu'en touchant une photo d'espèce dans 6c ; « Choisir » valide directement (→ 6e). Ma photo en haut, celles de l'espèce en bas, même organe d'abord. Balayer : photo suivante ; ‹ › : proposition voisine. Chaque photo porte son auteur, la licence CC BY-SA et Pl@ntNet.",
+      "w": 390,
+      "x": 1410,
+      "y": 2264
+    },
+    "s6e": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Retour à Noter, nom rempli : mon nom d'affichage si l'espèce est dans ma collection, sinon le nom français de Pl@ntNet (la fiche est créée et liée à GBIF à l'enregistrement). ✕ efface le choix.",
+      "w": 390,
+      "x": 1880,
+      "y": 2264
+    },
+    "s6f": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Bandeau ocre quand le meilleur score est bas ou talonné (seuils à régler, par exemple < 50 % ou moins de 15 points d'écart). L'action utile est une photo d'un autre organe : « + fleur » relance.",
+      "w": 390,
+      "x": 0,
+      "y": 3828
+    },
+    "s6g": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Pl@ntNet répond « Species not found » : pas de plante sur la photo. « Voir quand même » relance avec no-reject. Même écran si Pl@ntNet ne répond pas, avec « Réessayer ».",
+      "w": 390,
+      "x": 470,
+      "y": 3828
+    },
+    "s6h": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Nouvelle section en tête de 4m. « Identifier dès la photo » est actif par défaut. La flore est le projet Pl@ntNet de la requête. Le reste des réglages ne change pas.",
+      "w": 390,
+      "x": 940,
+      "y": 3828
+    },
+    "s6i": {
+      "fill": "gray",
+      "size": 24,
+      "text": "4k gagne un bouton principal, qui envoie les photos de l'observation. La recherche par nom, « Coller un lien » et « Nom libre » restent en dessous.",
+      "w": 390,
+      "x": 0,
+      "y": 5392
+    },
+    "s6j": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Même écran que 6c, dans la file À identifier. « Lier » rattache l'observation à ma plante ; « + Créer » crée la fiche liée et l'y range, comme le « + » de 4k. Puis l'observation suivante.",
+      "w": 390,
+      "x": 470,
+      "y": 5392
+    },
+    "s6k": {
+      "fill": "gray",
+      "size": 24,
+      "text": "Fiche nom libre (4g), réseau revenu. Pl@ntNet reçoit les photos d'une seule observation : il suppose un seul individu. Lier garde le nom libre en alias, comme « Lier » aujourd'hui.",
+      "w": 390,
+      "x": 940,
+      "y": 5392
+    },
+    "t0": {
+      "kind": "title1",
+      "maxW": 2940,
+      "text": "Tour 6 · Identifier avec Pl@ntNet",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "t1": {
+      "kind": "title1",
+      "maxW": 2270,
+      "text": "Depuis Noter, en ligne",
+      "w": 240,
+      "x": 0,
+      "y": 1120
+    },
+    "t2": {
+      "kind": "title1",
+      "maxW": 1330,
+      "text": "États limites et réglage",
+      "w": 240,
+      "x": 0,
+      "y": 2684
+    },
+    "t3": {
+      "kind": "title1",
+      "maxW": 1330,
+      "text": "Notée hors-ligne, identifiée plus tard",
+      "w": 240,
+      "x": 0,
+      "y": 4248
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Icone.dc.html",
+    "Noter-Identifier.dc.html",
+    "Envoi.dc.html",
+    "Propositions.dc.html",
+    "Comparer.dc.html",
+    "Noter-Choisie.dc.html",
+    "Incertain.dc.html",
+    "Aucune.dc.html",
+    "Reglages.dc.html",
+    "A-identifier.dc.html",
+    "A-identifier-Propositions.dc.html",
+    "Nom-libre.dc.html"
+  ],
+  "pages": [],
+  "title": "Herbier · Identification Pl@ntNet"
+}
