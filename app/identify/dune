@@ -1,0 +1,10 @@
+; Pl@ntNet identification, pure part (architecture §12): the identify request
+; as a value, its answers and errors decoded, organs, the proposal rules, and
+; Make, the functor over a transport. No Brr: test/identify links it natively.
+(library
+ (name herbier_identify)
+ (public_name herbier.identify)
+ (libraries herbier_domain herbier_net yojson)
+ (modules_without_implementation transport)
+ (preprocess
+  (pps ppx_deriving.eq)))

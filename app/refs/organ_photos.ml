@@ -6,17 +6,7 @@ module Gbif_image = Sources.Gbif.Image
 
 let host = "bs.plantnet.org"
 let prefix = "https://" ^ host ^ "/"
-
-(* The URL is only fetched natively: characters that could break a path
-   are refused, not escaped. *)
-let safe_char = function
-  | '\x00' .. ' ' | '\x7f' | '"' | '<' | '>' | '\\' -> false
-  | _ -> true
-
-let downloadable url =
-  String.starts_with ~prefix url
-  && String.length url > String.length prefix
-  && String.for_all safe_char url
+let downloadable url = Herbier_net.Url.under ~prefix url
 
 let wanted images =
   List.filter_map

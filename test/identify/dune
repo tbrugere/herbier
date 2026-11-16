@@ -1,7 +1,17 @@
-; Native checks of the Pl@ntNet fixtures.
+; Native checks of the recorded Pl@ntNet fixtures (test_fixtures) and of
+; herbier_identify: the rendered request, the answers
+; and errors decoded, organs, the proposal rules, and Make over
+; fake_transport, a fake TRANSPORT replaying those answers.
 (test
  (name test_identify)
- (modules test_identify test_fixtures)
- (libraries herbier_test_support yojson alcotest)
+ (modules
+  test_identify
+  test_fixtures
+  fake_transport
+  test_organ
+  test_plantnet
+  test_proposal
+  test_make)
+ (libraries herbier_identify herbier_net herbier_test_support yojson alcotest)
  (deps
   (glob_files %{project_root}/test/fixtures/plantnet_*.json)))

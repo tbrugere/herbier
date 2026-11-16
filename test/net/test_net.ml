@@ -1,7 +1,7 @@
 (* Herbier_net against the helpers it replaced, copied below verbatim from
    refs/decode.ml, refs/request.ml, geo/geocode.ml, geo/features.ml,
-   photos/exif.ml, sync_core/auth/nonce.ml and sync_core/auth/gotrue.ml: the same
-   answer on every input here, error messages included. *)
+   photos/exif.ml, sync_core/auth/nonce.ml, sync_core/auth/gotrue.ml and
+   refs/organ_photos.ml: the same answer on every input here, error messages included. *)
 
 module Hex = Herbier_net.Hex
 module Json = Herbier_net.Json
@@ -81,6 +81,18 @@ module Old = struct
       (fun i ->
         let b = Char.code bytes.[i / 2] in
         digits.[match i mod 2 with 0 -> b lsr 4 | _ -> b land 15])
+
+  (* refs/organ_photos.ml's downloadable. *)
+  let prefix = "https://bs.plantnet.org/"
+
+  let safe_char = function
+    | '\x00' .. ' ' | '\x7f' | '"' | '<' | '>' | '\\' -> false
+    | _ -> true
+
+  let downloadable url =
+    String.starts_with ~prefix url
+    && String.length url > String.length prefix
+    && String.for_all safe_char url
 
   (* sync_core/auth/gotrue.ml. *)
   let rec strip_slashes s =
@@ -240,6 +252,37 @@ let strip () =
       "/a/b/";
     ]
 
+let under () =
+  List.iter
+    (fun (url, expected) ->
+      Alcotest.(check bool)
+        (Printf.sprintf "under %S (as downloadable)" url)
+        (Old.downloadable url)
+        (Url.under ~prefix:Old.prefix url);
+      Alcotest.(check bool)
+        (Printf.sprintf "under %S" url)
+        expected
+        (Url.under ~prefix:Old.prefix url))
+    [
+      ("https://bs.plantnet.org/image/s/abc", true);
+      ("https://bs.plantnet.org/\xc3\xa9", true);
+      ("https://bs.plantnet.org/", false);
+      ("", false);
+      ("http://bs.plantnet.org/a", false);
+      ("https://bs.plantnet.org.evil.com/a", false);
+      ("https://x@bs.plantnet.org/a", false);
+      ("https://bs.plantnet.org:443/a", false);
+      ("https://bs.plantnet.org/a b", false);
+      ("https://bs.plantnet.org/a\tb", false);
+      ("https://bs.plantnet.org/a\nb", false);
+      ("https://bs.plantnet.org/a\x00b", false);
+      ("https://bs.plantnet.org/a\x7fb", false);
+      ("https://bs.plantnet.org/a\"b", false);
+      ("https://bs.plantnet.org/a<b", false);
+      ("https://bs.plantnet.org/a>b", false);
+      ("https://bs.plantnet.org/a\\b", false);
+    ]
+
 let hex () =
   List.iter
     (fun bytes ->
@@ -272,6 +315,9 @@ let () =
         [
           ("encode: every byte as refs and geo encoded it", `Quick, encode);
           ("strip_trailing_slashes: gotrue's strip_slashes", `Quick, strip);
+          ( "under: organ_photos' downloadable, every refused character",
+            `Quick,
+            under );
         ] );
       ("Hex", [("encode: the nonce's lowercase hex", `Quick, hex)]);
     ]

@@ -83,7 +83,9 @@ run on `test/fixtures/`.
 6. **`predictedOrgans`**: one element per image, `{image, filename, organ,
    score}`. With `auto`, `image_1` is predicted `flower` (0.866). With
    `flower` + `leaf`, the elements follow the organs sent (`flower` 0.866,
-   `leaf` 0.804). `filename` echoes the uploaded part's file name
+   `leaf` 0.804): observed, not documented (the OpenAPI schema says nothing
+   of their order), so the decoder matches each `image` with the ids
+   `query.images` lists in the order sent. `filename` echoes the uploaded part's file name
    (`image_1.jpeg`): the app sends `photo-<i>.jpg`, never a gallery name
    (plan 64, architecture §12).
 7. **Floras** (`jq '[.[] | {id, title}]' plantnet_projects_fr_200.json`): 75
