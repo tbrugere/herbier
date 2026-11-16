@@ -1,0 +1,452 @@
+[
+  {
+    "id": "k-world-flora",
+    "title": "Flore mondiale",
+    "description": "Plantes de la flore mondiale",
+    "speciesCount": 85912
+  },
+  {
+    "id": "useful",
+    "title": "Plantes utiles",
+    "description": "Plantes cultivées et d'ornement",
+    "speciesCount": 5459
+  },
+  {
+    "id": "weeds",
+    "title": "Adventices des cultures",
+    "description": "Biodiversité des champs cultivés d'Europe",
+    "speciesCount": 1424
+  },
+  {
+    "id": "invasion",
+    "title": "Plantes envahissantes",
+    "description": "Plantes présentant un potentiel d'envahissement dans le monde",
+    "speciesCount": 1082
+  },
+  {
+    "id": "prota",
+    "title": "Plantes utiles d'Afrique tropicale",
+    "description": "Ressources végétales de l’Afrique tropicale",
+    "speciesCount": 2197
+  },
+  {
+    "id": "prosea",
+    "title": "Plantes utiles d'Asie",
+    "description": "Ressources végétales d'Asie",
+    "speciesCount": 2140
+  },
+  {
+    "id": "k-northern-europe",
+    "title": "Europe du Nord",
+    "description": "Europe du Nord",
+    "speciesCount": 4256
+  },
+  {
+    "id": "k-middle-europe",
+    "title": "Europe Centrale",
+    "description": "Europe Centrale",
+    "speciesCount": 5429
+  },
+  {
+    "id": "k-southwestern-europe",
+    "title": "Europe du Sud-Ouest",
+    "description": "Europe du Sud-Ouest",
+    "speciesCount": 7748
+  },
+  {
+    "id": "k-southeastern-europe",
+    "title": "Europe du Sud-Est",
+    "description": "Europe du Sud-Est",
+    "speciesCount": 7518
+  },
+  {
+    "id": "k-eastern-europe",
+    "title": "Europe de l'Est",
+    "description": "Europe de l'Est",
+    "speciesCount": 3931
+  },
+  {
+    "id": "k-northern-africa",
+    "title": "Afrique du Nord",
+    "description": "Afrique du Nord",
+    "speciesCount": 4566
+  },
+  {
+    "id": "k-macaronesia",
+    "title": "Macaronésie",
+    "description": "Macaronésie",
+    "speciesCount": 3040
+  },
+  {
+    "id": "k-west-tropical-africa",
+    "title": "Afrique tropicale de l'Ouest",
+    "description": "Afrique tropicale de l'Ouest",
+    "speciesCount": 5644
+  },
+  {
+    "id": "k-west-central-tropical-africa",
+    "title": "Afrique tropicale du Centre-Ouest",
+    "description": "Afrique tropicale du Centre-Ouest",
+    "speciesCount": 11989
+  },
+  {
+    "id": "k-northeast-tropical-africa",
+    "title": "Afrique tropicale du Nord-Est",
+    "description": "Afrique tropicale du Nord-Est",
+    "speciesCount": 5054
+  },
+  {
+    "id": "k-east-tropical-africa",
+    "title": "Afrique tropicale de l'Est",
+    "description": "Plantes d'Afrique tropicale de l'Est",
+    "speciesCount": 6532
+  },
+  {
+    "id": "k-south-tropical-africa",
+    "title": "Afrique Tropicale du Sud",
+    "description": "Afrique Tropicale du Sud",
+    "speciesCount": 6601
+  },
+  {
+    "id": "k-southern-africa",
+    "title": "Sud de l'Afrique",
+    "description": "Sud de l'Afrique",
+    "speciesCount": 6590
+  },
+  {
+    "id": "k-middle-atlantic-ocean",
+    "title": "Océan Atlantique Centre",
+    "description": "Océan Atlantique Centre",
+    "speciesCount": 458
+  },
+  {
+    "id": "k-western-indian-ocean",
+    "title": "Océan Indien Ouest",
+    "description": "Océan Indien Ouest",
+    "speciesCount": 10454
+  },
+  {
+    "id": "k-siberia",
+    "title": "Sibérie",
+    "description": "Sibérie",
+    "speciesCount": 2067
+  },
+  {
+    "id": "k-russian-far-east",
+    "title": "Extrême-Orient russe",
+    "description": "Extrême-Orient russe",
+    "speciesCount": 2072
+  },
+  {
+    "id": "k-middle-asia",
+    "title": "Asie Centrale",
+    "description": "Asie Centrale",
+    "speciesCount": 2871
+  },
+  {
+    "id": "k-caucasus",
+    "title": "Caucase",
+    "description": "Caucase",
+    "speciesCount": 3396
+  },
+  {
+    "id": "k-western-asia",
+    "title": "Asie de l'Ouest",
+    "description": "Asie de l'Ouest",
+    "speciesCount": 6016
+  },
+  {
+    "id": "k-arabian-peninsula",
+    "title": "Péninsule arabique",
+    "description": "Péninsule arabique",
+    "speciesCount": 2200
+  },
+  {
+    "id": "k-china",
+    "title": "Chine",
+    "description": "Chine",
+    "speciesCount": 7921
+  },
+  {
+    "id": "k-mongolia",
+    "title": "Mongolie",
+    "description": "Mongolie",
+    "speciesCount": 1212
+  },
+  {
+    "id": "k-eastern-asia",
+    "title": "Asie de l'Est",
+    "description": "Asie de l'Est",
+    "speciesCount": 5014
+  },
+  {
+    "id": "k-indian-subcontinent",
+    "title": "Sous-continent indien",
+    "description": "Sous-continent indien",
+    "speciesCount": 7763
+  },
+  {
+    "id": "k-indo-china",
+    "title": "Indochine",
+    "description": "Indochine",
+    "speciesCount": 5740
+  },
+  {
+    "id": "k-malesia",
+    "title": "Malaisie",
+    "description": "Malaisie",
+    "speciesCount": 4932
+  },
+  {
+    "id": "k-papuasia",
+    "title": "Papouasie",
+    "description": "Papouasie",
+    "speciesCount": 2249
+  },
+  {
+    "id": "k-australia",
+    "title": "Australie",
+    "description": "Australie",
+    "speciesCount": 5298
+  },
+  {
+    "id": "k-new-zealand",
+    "title": "Nouvelle Zélande",
+    "description": "Nouvelle Zélande",
+    "speciesCount": 1815
+  },
+  {
+    "id": "k-southwestern-pacific",
+    "title": "Pacifique Sud-Ouest",
+    "description": "Pacifique Sud-Ouest",
+    "speciesCount": 3891
+  },
+  {
+    "id": "k-south-central-pacific",
+    "title": "Pacifique Sud-Centre",
+    "description": "Pacifique Sud-Centre",
+    "speciesCount": 1166
+  },
+  {
+    "id": "k-northwestern-pacific",
+    "title": "Pacifique Nord-Ouest",
+    "description": "Pacifique Nord-Ouest",
+    "speciesCount": 1268
+  },
+  {
+    "id": "k-north-central-pacific",
+    "title": "Pacifique Nord-Centre",
+    "description": "Pacifique Nord-Centre",
+    "speciesCount": 1511
+  },
+  {
+    "id": "k-subarctic-america",
+    "title": "Amérique sub-arctique",
+    "description": "Amérique sub-arctique",
+    "speciesCount": 1266
+  },
+  {
+    "id": "k-western-canada",
+    "title": "Ouest du Canada",
+    "description": "Ouest du Canada",
+    "speciesCount": 2572
+  },
+  {
+    "id": "k-eastern-canada",
+    "title": "Est du Canada",
+    "description": "Est du Canada",
+    "speciesCount": 2735
+  },
+  {
+    "id": "k-northwestern-u-s-a",
+    "title": "Nord-Ouest des États-Unis",
+    "description": "Nord-Ouest des États-Unis",
+    "speciesCount": 3996
+  },
+  {
+    "id": "k-north-central-u-s-a",
+    "title": "Nord-Centre des États-Unis",
+    "description": "Nord-Centre des États-Unis",
+    "speciesCount": 3958
+  },
+  {
+    "id": "k-northeastern-u-s-a",
+    "title": "Nord-Est des États-Unis",
+    "description": "Nord-Est des États-Unis",
+    "speciesCount": 4079
+  },
+  {
+    "id": "k-southwestern-u-s-a",
+    "title": "Sud-Ouest des États-Unis",
+    "description": "Sud-Ouest des États-Unis",
+    "speciesCount": 5691
+  },
+  {
+    "id": "k-south-central-u-s-a",
+    "title": "Sud-Centre des État-Unis",
+    "description": "Sud-Centre des État-Unis",
+    "speciesCount": 4489
+  },
+  {
+    "id": "k-southeastern-u-s-a",
+    "title": "Sud-Est des États-Unis",
+    "description": "Sud-Est des États-Unis",
+    "speciesCount": 5642
+  },
+  {
+    "id": "k-mexico",
+    "title": "Mexique",
+    "description": "Mexique",
+    "speciesCount": 11647
+  },
+  {
+    "id": "k-central-america",
+    "title": "Amérique Centrale",
+    "description": "Amérique Centrale",
+    "speciesCount": 15924
+  },
+  {
+    "id": "k-caribbean",
+    "title": "Caraïbes",
+    "description": "Caraïbes",
+    "speciesCount": 6274
+  },
+  {
+    "id": "k-northern-south-america",
+    "title": "Nord de l'Amérique du Sud",
+    "description": "Nord de l'Amérique du Sud",
+    "speciesCount": 8817
+  },
+  {
+    "id": "k-western-south-america",
+    "title": "Ouest de l'Amérique du Sud",
+    "description": "Ouest de l'Amérique du Sud",
+    "speciesCount": 13883
+  },
+  {
+    "id": "k-brazil",
+    "title": "Brésil",
+    "description": "Brésil",
+    "speciesCount": 10768
+  },
+  {
+    "id": "k-southern-south-america",
+    "title": "Sud de l'Amérique du Sud",
+    "description": "Sud de l'Amérique du Sud",
+    "speciesCount": 6241
+  },
+  {
+    "id": "k-subantarctic-islands",
+    "title": "Îles sub-antarctiques",
+    "description": "Îles sub-antarctiques",
+    "speciesCount": 419
+  },
+  {
+    "id": "k-antarctic-continent",
+    "title": "Antarctique",
+    "description": "Antarctique",
+    "speciesCount": 2
+  },
+  {
+    "id": "salad",
+    "title": "Les Ecologistes de l'Euzière",
+    "description": "Salades sauvages",
+    "speciesCount": 244
+  },
+  {
+    "id": "lewa",
+    "title": "LEWA in KENYA",
+    "description": "Lewa Wildlife Conservancy",
+    "speciesCount": 848
+  },
+  {
+    "id": "ordesa",
+    "title": "Ordesa",
+    "description": "Les plantes du parc national d'Ordesa",
+    "speciesCount": 141
+  },
+  {
+    "id": "cevennes",
+    "title": "Cévennes",
+    "description": "Flore du Parc national des Cévennes",
+    "speciesCount": 2389
+  },
+  {
+    "id": "monver",
+    "title": "Arbres ornementaux méditerranéens",
+    "description": "Arbres et arbustes pour les villes et les jardins en Méditerranée",
+    "speciesCount": 229
+  },
+  {
+    "id": "eu-crops",
+    "title": "Cultures",
+    "description": "Cultures plantées et cultivées",
+    "speciesCount": 221
+  },
+  {
+    "id": "eu-trees",
+    "title": "Arbres d'Europe",
+    "description": "Espèces d'arbres et de buissons observées en Europe",
+    "speciesCount": 619
+  },
+  {
+    "id": "clcpro",
+    "title": "Biotopes du Criquet pèlerin en Afrique de l’Ouest",
+    "description": "Florule des biotopes du Criquet pèlerin en Afrique de l’Ouest",
+    "speciesCount": 237
+  },
+  {
+    "id": "alpes-maritimes",
+    "title": "Flore remarquable des Alpes-Maritimes",
+    "description": "Flore patrimoniale des parcs naturels départementaux des Alpes-Maritimes ",
+    "speciesCount": 99
+  },
+  {
+    "id": "esalq",
+    "title": "ESALQ and Piracicaba trees",
+    "description": "Trees and shrubs of ESALQ park and surrounding areas",
+    "speciesCount": 585
+  },
+  {
+    "id": "xprize-final",
+    "title": "Amazonie brésilienne",
+    "description": "Flore d'Amazonie brésilienne",
+    "speciesCount": 4400
+  },
+  {
+    "id": "xprize-final-trees",
+    "title": "Arbres d'Amazonie brésilienne",
+    "description": "Flore des arbres d'Amazonie brésilienne",
+    "speciesCount": 2473
+  },
+  {
+    "id": "couloubrier",
+    "title": "Domaine Saint Jacques du Couloubrier",
+    "description": "Flore du domaine Saint Jacques du Couloubrier",
+    "speciesCount": 1174
+  },
+  {
+    "id": "sugarcane",
+    "title": "Adventices de la canne à sucre en Australie",
+    "description": "Flore adventice en champ de canne a sucre en Australie (Queensland et New South Wales)",
+    "speciesCount": 329
+  },
+  {
+    "id": "museum-albert-kahn",
+    "title": "Jardin du musée départemental Albert-Kahn",
+    "description": "Jardin du musée départemental Albert-Kahn",
+    "speciesCount": 180
+  },
+  {
+    "id": "acg",
+    "title": "Zone de conservation de Guanacaste, Costa Rica",
+    "description": "Espèces végétales de la zone de conservation de Guanacaste, Costa Rica",
+    "speciesCount": 3713
+  },
+  {
+    "id": "bcnm",
+    "title": "Monument naturel de Barro Colorado",
+    "description": "Espèces végétales du monument naturel de Barro Colorado, Panama",
+    "speciesCount": 1344
+  }
+]

@@ -1164,6 +1164,8 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
     404  "Species not found": not a plant (6g; « Voir quand même » re-asks with
          no-reject, which may still answer 404)
     429  the day's 500 are used up until 00:00 UTC · 401 the key is refused
+    403  "CORS error: Origin not allowed": the key is not exposed for the app
+         (fixed on my.plantnet.org)
     timeout, network, 5xx: unreachable (« Réessayer »)
   → a choice: Refs.Resolve.resolve (Gbif id), or the name match without an id,
     as for a link (§7: the one-hop synonym rule)
@@ -1182,7 +1184,8 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   (the closest images of each species), `nb-results=5` (the design lists three
   to five; fewer results answer faster) and `no-reject=true` only for « Voir
   quand même ». The body is `multipart/form-data`: one `images` part per photo,
-  at most five, each with its `organs` value: `auto` unless the user corrected
+  at most five, named `photo-<i>.jpg` (never the gallery file name, which
+  Pl@ntNet echoes in `predictedOrgans`), each with its `organs` value: `auto` unless the user corrected
   the detected organ (« fleur ▾ ») or added a photo of an organ (« + feuille »).
   Built with Brr's `Form.Data` (the WebView sets the boundary) through
   `Timed_fetch.request_form`, 30 s, one request at a time per caller (a newer
@@ -1215,9 +1218,14 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   and reads error bodies. A key used from a browser must be **exposed** in the
   Pl@ntNet account, and is then accepted only from its "Authorized domains"
   (checked on `Origin`) and, for requests without `Origin`, only from its
-  "Authorized IPs". Whether the list takes `https://localhost` is the spike's
-  question (plan R10). The quota headers are not exposed to CORS: the WebView
-  reads `remainingIdentificationRequests` from the body.
+  "Authorized IPs". A key that is not exposed is refused from every `Origin`,
+  `https://localhost` included (403 `{"message":"CORS error: Origin not
+  allowed"}`, readable by the WebView), and answers 200 without one (spike,
+  `notes/plantnet-webview.md`); once exposed with `https://localhost` among
+  its "Authorized domains", it answers 200 to that origin (curl and the
+  WebView itself), 403 to any other and 403 « remote IP not allowed »
+  without one (plan R10 closed). The quota headers are not exposed to CORS:
+  the WebView reads `remainingIdentificationRequests` from the body.
 - **The key never reaches a log.** It rides in the query string, so the
   console line is `identify: POST <flora> <n> photo(s) → <status>, <remaining>
   left today`, never the URL; the fixtures are recorded with the key stripped.

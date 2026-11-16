@@ -1,0 +1,7 @@
+; Native checks of the Pl@ntNet fixtures.
+(test
+ (name test_identify)
+ (modules test_identify test_fixtures)
+ (libraries herbier_test_support yojson alcotest)
+ (deps
+  (glob_files %{project_root}/test/fixtures/plantnet_*.json)))

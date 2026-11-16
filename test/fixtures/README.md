@@ -163,6 +163,37 @@ and are recorded by `scripts/record-drive-fixtures.sh` with
 No personal data in any of them: a throwaway `abc` file id and a token that
 was never valid.
 
+`plantnet_<route>_<case>_<status>.json`: Pl@ntNet's `/v2/projects` and
+`/v2/identify/all` answers, read by `test/identify/test_fixtures.ml`,
+recorded by `scripts/record-plantnet-fixtures.sh [--force]` from Pl@ntNet's
+own two example images (never a user photo) and one generated uniform-grey
+JPEG, with `Origin: https://localhost` on every request but the two
+`projects` refusal cases; the key comes only from `HERBIER_PLANTNET_API_KEY`, is never
+written to any file, and the script greps every answer for it before
+keeping. Eight files, the status taken from the answer for the three whose
+status is the question:
+
+- `plantnet_projects_fr_200.json`: `GET /v2/projects?lang=fr`, the flora
+  list.
+- `plantnet_projects_origin_refused_<status>.json`: the same request with
+  `Origin: https://example.org`.
+- `plantnet_projects_no_origin_<status>.json`: the same request with no
+  `Origin` header.
+- `plantnet_identify_invalid_key_401.json`: `POST /v2/identify/all` with
+  `invalid-key-for-fixtures`, one example image, `organs=auto`.
+- `plantnet_identify_one_auto_200.json`: one example image, `organs=auto`.
+- `plantnet_identify_two_flower_leaf_200.json`: the two example images,
+  `organs=flower` then `organs=leaf`.
+- `plantnet_identify_not_plant_404.json`: the generated grey square,
+  `organs=auto`.
+- `plantnet_identify_not_plant_no_reject_<status>.json`: the same request
+  with `&no-reject=true`.
+
+Recorded on 2026-11-16 with the user's key exposed for `https://localhost`
+(four identify credits); the other `Origin` and the missing `Origin` both
+answered 403, the no-reject request 404. `docs/notes/plantnet-webview.md`
+has what the answers say.
+
 `capacitor_filesystem_readdir_{previews,refthumbs,missing}.json`: the
 Capacitor Filesystem plugin's answers to `readdir` (« Libérer »), read
 by `test/bindings/jsoo/cap_filesystem_smoke.ml` (and by its stub,

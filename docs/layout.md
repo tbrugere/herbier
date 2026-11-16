@@ -488,8 +488,8 @@ app/
                           rest_check.ml (#dev/rest): a tags upsert, a tags pull (since none / one minute) and
                           an invalid-token upsert over sync/net/transport.ml, with the session's or a pasted token;
                           identify_check.ml (#dev/identify, M9): the identification spike (one gallery
-                          photo's preview sent with a key pasted on the page, never stored) and the
-                          layer's states replayed from the recorded fixtures through a fake transport;
+                          photo's preview sent with a key pasted on the page, never stored) and, from
+                          67, the layer's states replayed from the recorded fixtures through a fake transport;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier` in one Db.bare_transaction; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
@@ -872,9 +872,9 @@ test/
   version/      native, alcotest: the git describe stamp (herbier_version), apart so that a commit
                 relinks only this test
   net/          native, alcotest: herbier_net against the copies it replaced (copied into test_net.ml)
-  support/      herbier_test_support, the helpers the native suites share: Fixture.read (a file of
-                fixtures/), Text.contains, Testable.yojson, Value (time, uuid4, uuid7, id: the literals
-                rows are built from)
+  support/      herbier_test_support, the helpers the native suites share: Fixture.read / exists /
+                names (a file of fixtures/, its presence, the names by prefix), Text.contains,
+                Testable.yojson, Value (time, uuid4, uuid7, id: the literals rows are built from)
   fixtures/     recorded payloads only: API responses (<source>_<endpoint>_<id>.json, e.g.
                 gbif_species_5414995.json, wikidata_entity_Q157555.json, recorded by
                 scripts/record-refs-fixtures.sh; photon_* and geoplateforme_* by

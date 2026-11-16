@@ -201,8 +201,9 @@ POST /v2/identify/all?lang=fr&api-key=<invalid>    → 401, www-authenticate: Be
 GET  /v2/_status                                   → 200 {"status":"ok"}  (no key needed)
 ```
 
-The bodies of a 404 "Species not found", a 429 and an unauthorized origin are
-UNVERIFIED (M9.63 records them). Changelog 2026-02-13, "Credits consumption for
+The bodies of a 404 "Species not found" and an unauthorized origin were
+recorded by M9.63 (`docs/notes/plantnet-webview.md`); the 429's body is
+UNVERIFIED (not recorded: it would spend the day's 500). Changelog 2026-02-13, "Credits consumption for
 free plan": on the free plan, "requests returning an error will consume 1
 credit as well". So a client must not retry on its own: every retry, `no-reject`
 re-ask, organ correction or added photo is one of the day's 500.

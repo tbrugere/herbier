@@ -1,0 +1,611 @@
+{
+  "query": {
+    "project": "all",
+    "images": [
+      "284e73fb7521165a3a8667d86b377c90"
+    ],
+    "organs": [
+      "auto"
+    ],
+    "includeRelatedImages": true,
+    "noReject": false,
+    "type": null
+  },
+  "predictedOrgans": [
+    {
+      "image": "284e73fb7521165a3a8667d86b377c90",
+      "filename": "image_1.jpeg",
+      "organ": "flower",
+      "score": 0.86588
+    }
+  ],
+  "language": "fr",
+  "preferedReferential": "useful",
+  "bestMatch": "Hibiscus rosa-sinensis L.",
+  "results": [
+    {
+      "score": 0.44239,
+      "species": {
+        "scientificNameWithoutAuthor": "Hibiscus rosa-sinensis",
+        "scientificNameAuthorship": "L.",
+        "genus": {
+          "scientificNameWithoutAuthor": "Hibiscus",
+          "scientificNameAuthorship": "",
+          "scientificName": "Hibiscus"
+        },
+        "family": {
+          "scientificNameWithoutAuthor": "Malvaceae",
+          "scientificNameAuthorship": "",
+          "scientificName": "Malvaceae"
+        },
+        "commonNames": [
+          "Rose de Chine",
+          "Hibiscus",
+          "Hibiscus rose de Chine"
+        ],
+        "scientificName": "Hibiscus rosa-sinensis L."
+      },
+      "images": [
+        {
+          "organ": "flower",
+          "author": "Daniel Mardare",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1589193393280,
+            "string": "11 mai 2020"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/867e64badfe4372bd5556eb1676b377579bb4e5f",
+            "m": "https://bs.plantnet.org/image/m/867e64badfe4372bd5556eb1676b377579bb4e5f",
+            "s": "https://bs.plantnet.org/image/s/867e64badfe4372bd5556eb1676b377579bb4e5f"
+          },
+          "citation": "Daniel Mardare / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "luca luca",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1588092909224,
+            "string": "28 avril 2020"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/35656937a8651ba482163c1f3188f96cc31a2e9e",
+            "m": "https://bs.plantnet.org/image/m/35656937a8651ba482163c1f3188f96cc31a2e9e",
+            "s": "https://bs.plantnet.org/image/s/35656937a8651ba482163c1f3188f96cc31a2e9e"
+          },
+          "citation": "luca luca / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "eva",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1625401908924,
+            "string": "4 juillet 2021"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/393d84183ce487947aacebdfd42d198c39376a25",
+            "m": "https://bs.plantnet.org/image/m/393d84183ce487947aacebdfd42d198c39376a25",
+            "s": "https://bs.plantnet.org/image/s/393d84183ce487947aacebdfd42d198c39376a25"
+          },
+          "citation": "eva / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "other",
+          "author": "T Fu",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1475648548000,
+            "string": "5 octobre 2016"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/67d5f8e1b2c0fae033d2118cccc62ce564b7b481",
+            "m": "https://bs.plantnet.org/image/m/67d5f8e1b2c0fae033d2118cccc62ce564b7b481",
+            "s": "https://bs.plantnet.org/image/s/67d5f8e1b2c0fae033d2118cccc62ce564b7b481"
+          },
+          "citation": "T Fu / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "bastos javier",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1563611518769,
+            "string": "20 juillet 2019"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/a448b3d9aeeaa3e43cc6c0c08390837cd9f9d0de",
+            "m": "https://bs.plantnet.org/image/m/a448b3d9aeeaa3e43cc6c0c08390837cd9f9d0de",
+            "s": "https://bs.plantnet.org/image/s/a448b3d9aeeaa3e43cc6c0c08390837cd9f9d0de"
+          },
+          "citation": "bastos javier / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "sonnenblume19",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1568100856869,
+            "string": "10 septembre 2019"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/7aeab0dbf69838daf70bb5a703f943334fb326cc",
+            "m": "https://bs.plantnet.org/image/m/7aeab0dbf69838daf70bb5a703f943334fb326cc",
+            "s": "https://bs.plantnet.org/image/s/7aeab0dbf69838daf70bb5a703f943334fb326cc"
+          },
+          "citation": "sonnenblume19 / Pl@ntNet, cc-by-sa"
+        }
+      ],
+      "gbif": {
+        "id": "3152559"
+      },
+      "powo": {
+        "id": "560756-1"
+      }
+    },
+    {
+      "score": 0.01927,
+      "species": {
+        "scientificNameWithoutAuthor": "Hibiscus schizopetalus",
+        "scientificNameAuthorship": "(Dyer) Hook.f.",
+        "genus": {
+          "scientificNameWithoutAuthor": "Hibiscus",
+          "scientificNameAuthorship": "",
+          "scientificName": "Hibiscus"
+        },
+        "family": {
+          "scientificNameWithoutAuthor": "Malvaceae",
+          "scientificNameAuthorship": "",
+          "scientificName": "Malvaceae"
+        },
+        "commonNames": [
+          "Lanterne japonaise",
+          "Hibiscus lanterne",
+          "Hibiscus corail"
+        ],
+        "scientificName": "Hibiscus schizopetalus (Dyer) Hook.f."
+      },
+      "images": [
+        {
+          "organ": "flower",
+          "author": "Sarita Sharma",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1649660207501,
+            "string": "11 avril 2022"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/ffb1e6378b7be731e0e5ff9b03d759b751b468e6",
+            "m": "https://bs.plantnet.org/image/m/ffb1e6378b7be731e0e5ff9b03d759b751b468e6",
+            "s": "https://bs.plantnet.org/image/s/ffb1e6378b7be731e0e5ff9b03d759b751b468e6"
+          },
+          "citation": "Sarita Sharma / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Santiago Pérez",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1716216133983,
+            "string": "20 mai 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/2ed3066027b85ec36e14f00b25c9ab5c5427621c",
+            "m": "https://bs.plantnet.org/image/m/2ed3066027b85ec36e14f00b25c9ab5c5427621c",
+            "s": "https://bs.plantnet.org/image/s/2ed3066027b85ec36e14f00b25c9ab5c5427621c"
+          },
+          "citation": "Santiago Pérez / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Karan ...",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1724733973064,
+            "string": "27 août 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/3f1cfc769fa24f7f7b696fc049584b43047a02f9",
+            "m": "https://bs.plantnet.org/image/m/3f1cfc769fa24f7f7b696fc049584b43047a02f9",
+            "s": "https://bs.plantnet.org/image/s/3f1cfc769fa24f7f7b696fc049584b43047a02f9"
+          },
+          "citation": "Karan ... / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "dany bloch",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1716495407021,
+            "string": "23 mai 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/1cf1dfe8d9231cbf6fb5b841a0482a7ff561ce4b",
+            "m": "https://bs.plantnet.org/image/m/1cf1dfe8d9231cbf6fb5b841a0482a7ff561ce4b",
+            "s": "https://bs.plantnet.org/image/s/1cf1dfe8d9231cbf6fb5b841a0482a7ff561ce4b"
+          },
+          "citation": "dany bloch / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Aryasatya P.",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1764984275879,
+            "string": "6 décembre 2025"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/ecd8229f79d67fb414cc045a327e3eeda1131e17",
+            "m": "https://bs.plantnet.org/image/m/ecd8229f79d67fb414cc045a327e3eeda1131e17",
+            "s": "https://bs.plantnet.org/image/s/ecd8229f79d67fb414cc045a327e3eeda1131e17"
+          },
+          "citation": "Aryasatya P. / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Sr.Uchiha uchiha456",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1727961677261,
+            "string": "3 octobre 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/e8fd082b310b91e1f903c066a80cab3e336d840a",
+            "m": "https://bs.plantnet.org/image/m/e8fd082b310b91e1f903c066a80cab3e336d840a",
+            "s": "https://bs.plantnet.org/image/s/e8fd082b310b91e1f903c066a80cab3e336d840a"
+          },
+          "citation": "Sr.Uchiha uchiha456 / Pl@ntNet, cc-by-sa"
+        }
+      ],
+      "gbif": {
+        "id": "9064581"
+      }
+    },
+    {
+      "score": 0.01006,
+      "species": {
+        "scientificNameWithoutAuthor": "Hibiscus moscheutos",
+        "scientificNameAuthorship": "L.",
+        "genus": {
+          "scientificNameWithoutAuthor": "Hibiscus",
+          "scientificNameAuthorship": "",
+          "scientificName": "Hibiscus"
+        },
+        "family": {
+          "scientificNameWithoutAuthor": "Malvaceae",
+          "scientificNameAuthorship": "",
+          "scientificName": "Malvaceae"
+        },
+        "commonNames": [
+          "Hibiscus des marais",
+          "Ketmie des marais",
+          "Hibiscus moscheutos"
+        ],
+        "scientificName": "Hibiscus moscheutos L."
+      },
+      "images": [
+        {
+          "organ": "flower",
+          "author": "Jessica P.",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1678890462426,
+            "string": "15 mars 2023"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/73d763cfbb8e8059a0c3d561d5ccf34ee901a2da",
+            "m": "https://bs.plantnet.org/image/m/73d763cfbb8e8059a0c3d561d5ccf34ee901a2da",
+            "s": "https://bs.plantnet.org/image/s/73d763cfbb8e8059a0c3d561d5ccf34ee901a2da"
+          },
+          "citation": "Jessica P. / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Selai Valentine",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1642045397407,
+            "string": "13 janvier 2022"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/82a030328f5b4ec4afb12924d4e9eefdbc0ac47c",
+            "m": "https://bs.plantnet.org/image/m/82a030328f5b4ec4afb12924d4e9eefdbc0ac47c",
+            "s": "https://bs.plantnet.org/image/s/82a030328f5b4ec4afb12924d4e9eefdbc0ac47c"
+          },
+          "citation": "Selai Valentine / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Martin David",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1661601638033,
+            "string": "27 août 2022"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/ce11dd3cded7448c321e6b71559a023ed6ab90d0",
+            "m": "https://bs.plantnet.org/image/m/ce11dd3cded7448c321e6b71559a023ed6ab90d0",
+            "s": "https://bs.plantnet.org/image/s/ce11dd3cded7448c321e6b71559a023ed6ab90d0"
+          },
+          "citation": "Martin David / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "sarita phex",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1760801223241,
+            "string": "18 octobre 2025"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/e1a3da01e77feee6d78a879494d0c41f2dfecb17",
+            "m": "https://bs.plantnet.org/image/m/e1a3da01e77feee6d78a879494d0c41f2dfecb17",
+            "s": "https://bs.plantnet.org/image/s/e1a3da01e77feee6d78a879494d0c41f2dfecb17"
+          },
+          "citation": "sarita phex / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "gelau",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1660661179695,
+            "string": "16 août 2022"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/06d217fe0cd5b5006cf405b7345241d4840de95b",
+            "m": "https://bs.plantnet.org/image/m/06d217fe0cd5b5006cf405b7345241d4840de95b",
+            "s": "https://bs.plantnet.org/image/s/06d217fe0cd5b5006cf405b7345241d4840de95b"
+          },
+          "citation": "gelau / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "اسماعيل 44",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1713521783910,
+            "string": "19 avril 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/e4940d0331aa884f5a3bff332434c058b0e0d0e7",
+            "m": "https://bs.plantnet.org/image/m/e4940d0331aa884f5a3bff332434c058b0e0d0e7",
+            "s": "https://bs.plantnet.org/image/s/e4940d0331aa884f5a3bff332434c058b0e0d0e7"
+          },
+          "citation": "اسماعيل 44 / Pl@ntNet, cc-by-sa"
+        }
+      ],
+      "gbif": {
+        "id": "3152596"
+      },
+      "powo": {
+        "id": "30181863-2"
+      },
+      "iucn": {
+        "id": "64314251",
+        "category": "LC"
+      }
+    },
+    {
+      "score": 0.00996,
+      "species": {
+        "scientificNameWithoutAuthor": "Hibiscus spp.",
+        "scientificNameAuthorship": "",
+        "genus": {
+          "scientificNameWithoutAuthor": "Hibiscus",
+          "scientificNameAuthorship": "",
+          "scientificName": "Hibiscus"
+        },
+        "family": {
+          "scientificNameWithoutAuthor": "Malvaceae",
+          "scientificNameAuthorship": "",
+          "scientificName": "Malvaceae"
+        },
+        "commonNames": [
+          "Hibiscus commun"
+        ],
+        "scientificName": "Hibiscus spp."
+      },
+      "images": [
+        {
+          "organ": "flower",
+          "author": "Janet Torrea",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1722684214365,
+            "string": "3 août 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/a6b0a5eabb26fbcec17053a755050989ad7b67d0",
+            "m": "https://bs.plantnet.org/image/m/a6b0a5eabb26fbcec17053a755050989ad7b67d0",
+            "s": "https://bs.plantnet.org/image/s/a6b0a5eabb26fbcec17053a755050989ad7b67d0"
+          },
+          "citation": "Janet Torrea / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "dobb.andrew",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1729488506314,
+            "string": "21 octobre 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/5e8b718aa996edb126d70fa5a4cccb9021b51f5f",
+            "m": "https://bs.plantnet.org/image/m/5e8b718aa996edb126d70fa5a4cccb9021b51f5f",
+            "s": "https://bs.plantnet.org/image/s/5e8b718aa996edb126d70fa5a4cccb9021b51f5f"
+          },
+          "citation": "dobb.andrew / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Lindsay Martin",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1760328117031,
+            "string": "13 octobre 2025"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/60eec88b8995df3d07eb8ebf6458c0faf94836df",
+            "m": "https://bs.plantnet.org/image/m/60eec88b8995df3d07eb8ebf6458c0faf94836df",
+            "s": "https://bs.plantnet.org/image/s/60eec88b8995df3d07eb8ebf6458c0faf94836df"
+          },
+          "citation": "Lindsay Martin / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Mello Luiz",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1709910642476,
+            "string": "8 mars 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/947ea8fa387374b6b526246e1dc71d7c3be923a5",
+            "m": "https://bs.plantnet.org/image/m/947ea8fa387374b6b526246e1dc71d7c3be923a5",
+            "s": "https://bs.plantnet.org/image/s/947ea8fa387374b6b526246e1dc71d7c3be923a5"
+          },
+          "citation": "Mello Luiz / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Tereza Carmine",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1721386275929,
+            "string": "19 juillet 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/aa1baf9978248d2e2160800b4c8d9500a796558e",
+            "m": "https://bs.plantnet.org/image/m/aa1baf9978248d2e2160800b4c8d9500a796558e",
+            "s": "https://bs.plantnet.org/image/s/aa1baf9978248d2e2160800b4c8d9500a796558e"
+          },
+          "citation": "Tereza Carmine / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "Erik Hilmarsen",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1763489956181,
+            "string": "18 novembre 2025"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/86550340b074b18e5991a8d52701c0e9e5a4087a",
+            "m": "https://bs.plantnet.org/image/m/86550340b074b18e5991a8d52701c0e9e5a4087a",
+            "s": "https://bs.plantnet.org/image/s/86550340b074b18e5991a8d52701c0e9e5a4087a"
+          },
+          "citation": "Erik Hilmarsen / Pl@ntNet, cc-by-sa"
+        }
+      ],
+      "gbif": null
+    },
+    {
+      "score": 0.00355,
+      "species": {
+        "scientificNameWithoutAuthor": "Hibiscus acetosella",
+        "scientificNameAuthorship": "Welw. ex Hiern",
+        "genus": {
+          "scientificNameWithoutAuthor": "Hibiscus",
+          "scientificNameAuthorship": "",
+          "scientificName": "Hibiscus"
+        },
+        "family": {
+          "scientificNameWithoutAuthor": "Malvaceae",
+          "scientificNameAuthorship": "",
+          "scientificName": "Malvaceae"
+        },
+        "commonNames": [
+          "Hibiscus à feuilles rouges"
+        ],
+        "scientificName": "Hibiscus acetosella Welw. ex Hiern"
+      },
+      "images": [
+        {
+          "organ": "flower",
+          "author": "Fabrice Rubio",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1738567816282,
+            "string": "3 février 2025"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/45139523d2981e05aa8c0c12718276953440cc7e",
+            "m": "https://bs.plantnet.org/image/m/45139523d2981e05aa8c0c12718276953440cc7e",
+            "s": "https://bs.plantnet.org/image/s/45139523d2981e05aa8c0c12718276953440cc7e"
+          },
+          "citation": "Fabrice Rubio / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "William Coville",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1707419448691,
+            "string": "8 février 2024"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/c83f3e10c322a72cc41986b2ba422737e8241994",
+            "m": "https://bs.plantnet.org/image/m/c83f3e10c322a72cc41986b2ba422737e8241994",
+            "s": "https://bs.plantnet.org/image/s/c83f3e10c322a72cc41986b2ba422737e8241994"
+          },
+          "citation": "William Coville / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "William Coville",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1642987974530,
+            "string": "24 janvier 2022"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/ff2ec0948aa85e047cc3b30f1fb8f83e7dd3e35a",
+            "m": "https://bs.plantnet.org/image/m/ff2ec0948aa85e047cc3b30f1fb8f83e7dd3e35a",
+            "s": "https://bs.plantnet.org/image/s/ff2ec0948aa85e047cc3b30f1fb8f83e7dd3e35a"
+          },
+          "citation": "William Coville / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "William Coville",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1642987974530,
+            "string": "24 janvier 2022"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/65707812a1aa2bd7af8b979f5e9f554bea52dd43",
+            "m": "https://bs.plantnet.org/image/m/65707812a1aa2bd7af8b979f5e9f554bea52dd43",
+            "s": "https://bs.plantnet.org/image/s/65707812a1aa2bd7af8b979f5e9f554bea52dd43"
+          },
+          "citation": "William Coville / Pl@ntNet, cc-by-sa"
+        },
+        {
+          "organ": "flower",
+          "author": "earthlydelights",
+          "license": "cc-by-sa",
+          "date": {
+            "timestamp": 1702464603886,
+            "string": "13 décembre 2023"
+          },
+          "url": {
+            "o": "https://bs.plantnet.org/image/o/34d4bb20217c21a36c7f6576c41da0c117a559bc",
+            "m": "https://bs.plantnet.org/image/m/34d4bb20217c21a36c7f6576c41da0c117a559bc",
+            "s": "https://bs.plantnet.org/image/s/34d4bb20217c21a36c7f6576c41da0c117a559bc"
+          },
+          "citation": "earthlydelights / Pl@ntNet, cc-by-sa"
+        }
+      ],
+      "gbif": {
+        "id": "3152551"
+      },
+      "powo": {
+        "id": "559896-1"
+      }
+    }
+  ],
+  "version": "2026-03-20 (7.5)",
+  "remainingIdentificationRequests": 499
+}
