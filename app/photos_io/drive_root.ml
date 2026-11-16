@@ -61,10 +61,11 @@ let read_ids db =
 
 let account db = lenient_find db Drive_account ~what:"account"
 
-(* The account and the three keys in one transaction: a half-written choice
-   could name one folder in 4m while uploads go into another, or keep an old
-   account's folder ids for the new account. *)
-let write db ({account; ids} : Api.account_choice) ~picked ~done_ =
+(* The account, the three keys and, when given, the storage target in one
+   transaction: a half-written choice could name one folder in 4m while
+   uploads go into another, keep an old account's folder ids for the new
+   account, or leave the storage on Drive without its folder. *)
+let write db ({account; ids} : Api.account_choice) ~picked ~storage ~done_ =
   let open Fut.Result_syntax in
   Fut.map
     (function
@@ -73,6 +74,10 @@ let write db ({account; ids} : Api.account_choice) ~picked ~done_ =
           | Some (_ : string) ->
               Brr.Console.(
                 log [str "drive: account changed, root folder forgotten"])
+          | None -> ());
+          (match storage with
+          | Some (_ : Herbier_domain.Photo.Original_target.t) ->
+              Brr.Console.(log [str "drive: storage set with the pick"])
           | None -> ());
           Ok (log done_)
       | Error e ->
@@ -86,7 +91,7 @@ let write db ({account; ids} : Api.account_choice) ~picked ~done_ =
              ())
            (Fut.return (Ok ()))
            (Settings.drive_choice ~account ~at:(Ptime_clock.now ())
-              ~root:ids.root ~picked ~default:ids.default)))
+              ~root:ids.root ~picked ~default:ids.default ~storage)))
 
 let read_all db =
   let open Fut.Result_syntax in
@@ -94,19 +99,19 @@ let read_all db =
   let+ stored = account db in
   (ids, stored)
 
-let choose db ~account (folder : Settings.drive_folder) =
+let choose db ~account ~storage (folder : Settings.drive_folder) =
   let open Fut.Result_syntax in
   let* ids, stored = read_all db in
   write db
     (Api.choose_for_account ids ~stored ~account ~folder:(Some folder.id))
-    ~picked:(Some folder) ~done_:"picked"
+    ~picked:(Some folder) ~storage ~done_:"picked"
 
 let reset db ~account =
   let open Fut.Result_syntax in
   let* ids, stored = read_all db in
   write db
     (Api.choose_for_account ids ~stored ~account ~folder:None)
-    ~picked:None ~done_:"reset"
+    ~picked:None ~storage:None ~done_:"reset"
 
 let seed db ~session_email =
   let open Fut.Result_syntax in
@@ -137,4 +142,4 @@ let forget_account db =
            (Fut.return (Ok ()))
            (Settings.unset Drive_account
            :: Settings.drive_choice ~account:None ~at:(Ptime_clock.now ())
-                ~root:None ~picked:None ~default:None)))
+                ~root:None ~picked:None ~default:None ~storage:None)))

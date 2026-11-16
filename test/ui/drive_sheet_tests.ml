@@ -22,9 +22,10 @@ let phase_name p = Drive_sheet.show_phase p
 let picker_ready = Drive_text.Picker_ready
 let picker_unconfigured = Drive_text.Picker_unconfigured
 
-let state ?(stored = None) ?(folder = Drive_text.Default)
-    ?(picker = picker_ready) ?(error = None) phase : Drive_sheet.t =
-  {Drive_sheet.stored; folder; picker; phase; error}
+let state ?(purpose = Drive_sheet.Change) ?(stored = None)
+    ?(folder = Drive_text.Default) ?(picker = picker_ready) ?(error = None)
+    phase : Drive_sheet.t =
+  {Drive_sheet.purpose; stored; folder; picker; phase; error}
 
 (* An Idle sheet whose account is the stored one: the common base below. *)
 let idle_with_account =
@@ -45,35 +46,42 @@ let open_phases =
 
 (* ---------- open_ ---------- *)
 
+(* [Change] opens the same way with or without the Picker: without it, the
+   sheet still chooses the account. *)
 let open_tests =
-  let case name ~stored expected =
-    ( name,
-      `Quick,
-      fun () ->
-        Alcotest.check step_t "open_" expected
-          (Drive_sheet.open_ ~stored ~folder:Drive_text.Default
-             ~picker:picker_ready) )
-  in
-  [
-    case "stored = None: Choosing, [Run_chooser]" ~stored:None
-      (state (Drive_sheet.Choosing {previous = None}), [Drive_sheet.Run_chooser]);
-    case "stored = Some e: Authorizing e, [Ask_token e]" ~stored:(Some "a@x.fr")
-      ( state ~stored:(Some "a@x.fr") (Drive_sheet.Authorizing "a@x.fr"),
-        [Drive_sheet.Ask_token "a@x.fr"] );
-    case "a padded stored account: trimmed" ~stored:(Some " a@x.fr ")
-      ( state ~stored:(Some " a@x.fr ") (Drive_sheet.Authorizing "a@x.fr"),
-        [Drive_sheet.Ask_token "a@x.fr"] );
-    case "a blank stored account: the chooser" ~stored:(Some "  ")
-      ( state ~stored:(Some "  ") (Drive_sheet.Choosing {previous = None}),
-        [Drive_sheet.Run_chooser] );
-  ]
+  List.concat_map
+    (fun picker ->
+      let case name ~stored phase commands =
+        ( Printf.sprintf "%s (%s)" name (Drive_text.show_picker_config picker),
+          `Quick,
+          fun () ->
+            Alcotest.check step_t "open_"
+              (state ~stored ~picker phase, commands)
+              (Drive_sheet.open_ ~purpose:Drive_sheet.Change ~stored
+                 ~folder:Drive_text.Default ~picker) )
+      in
+      [
+        case "stored = None: Choosing, [Run_chooser]" ~stored:None
+          (Drive_sheet.Choosing {previous = None})
+          [Drive_sheet.Run_chooser];
+        case "stored = Some e: Authorizing e, [Ask_token e]"
+          ~stored:(Some "a@x.fr") (Drive_sheet.Authorizing "a@x.fr")
+          [Drive_sheet.Ask_token "a@x.fr"];
+        case "a padded stored account: trimmed" ~stored:(Some " a@x.fr ")
+          (Drive_sheet.Authorizing "a@x.fr")
+          [Drive_sheet.Ask_token "a@x.fr"];
+        case "a blank stored account: the chooser" ~stored:(Some "  ")
+          (Drive_sheet.Choosing {previous = None})
+          [Drive_sheet.Run_chooser];
+      ])
+    [picker_ready; picker_unconfigured]
 
 (* ---------- first open, no account ---------- *)
 
 let first_open_cancel_closes_the_sheet () =
   let t0, (_ : Drive_sheet.command list) =
-    Drive_sheet.open_ ~stored:None ~folder:Drive_text.Default
-      ~picker:picker_ready
+    Drive_sheet.open_ ~purpose:Drive_sheet.Change ~stored:None
+      ~folder:Drive_text.Default ~picker:picker_ready
   in
   Alcotest.check step_t
     "the first choice was cancelled: Closed, Close, nothing else changed"
@@ -82,8 +90,8 @@ let first_open_cancel_closes_the_sheet () =
 
 let first_open_success_chain () =
   let t0, (_ : Drive_sheet.command list) =
-    Drive_sheet.open_ ~stored:None ~folder:Drive_text.Default
-      ~picker:picker_ready
+    Drive_sheet.open_ ~purpose:Drive_sheet.Change ~stored:None
+      ~folder:Drive_text.Default ~picker:picker_ready
   in
   let t1, cmds1 = Drive_sheet.step t0 (Drive_sheet.Chosen " b@x.fr ") in
   Alcotest.check step_t "Chosen is trimmed"
@@ -654,6 +662,571 @@ let busy_tests =
       case Closed false;
     ]
 
+(* ---------- Turn_on: the 4m Drive radio's first choice ----------
+
+   [Turn_on] is a straight line (chooser → token → Picker → store) with no
+   sheet controls: every end other than a stored pick closes with nothing
+   stored, the storage unchanged. Each case below checks the full (t,
+   commands) pair, as the [Change] cases above do. *)
+
+let all_denials =
+  Drive_text.
+    [
+      Unconfigured;
+      No_drive_account;
+      Consent_needed;
+      Consent_refused;
+      Offline;
+      Misconfigured;
+      No_account;
+      Failed;
+    ]
+
+let denial_name = function
+  | Drive_text.Unconfigured -> "Unconfigured"
+  | Drive_text.No_drive_account -> "No_drive_account"
+  | Drive_text.Consent_needed -> "Consent_needed"
+  | Drive_text.Consent_refused -> "Consent_refused"
+  | Drive_text.Offline -> "Offline"
+  | Drive_text.Misconfigured -> "Misconfigured"
+  | Drive_text.No_account -> "No_account"
+  | Drive_text.Failed -> "Failed"
+
+let turn_on_closed ?error () =
+  state ~purpose:Drive_sheet.Turn_on ?error Drive_sheet.Closed
+
+(* open_ *)
+let turn_on_open_tests =
+  [
+    ( "stored = None: Choosing, [Run_chooser]",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "open_"
+          ( state ~purpose:Drive_sheet.Turn_on
+              (Drive_sheet.Choosing {previous = None}),
+            [Drive_sheet.Run_chooser] )
+          (Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on ~stored:None
+             ~folder:Drive_text.Default ~picker:picker_ready) );
+    ( "a stored account: straight to Authorizing, [Ask_token], no chooser",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "open_"
+          ( state ~purpose:Drive_sheet.Turn_on ~stored:(Some " a@x.fr ")
+              (Drive_sheet.Authorizing "a@x.fr"),
+            [Drive_sheet.Ask_token "a@x.fr"] )
+          (Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on
+             ~stored:(Some " a@x.fr ") ~folder:Drive_text.Default
+             ~picker:picker_ready) );
+    ( "Picker_unconfigured, no account stored: Closed, Picker_unavailable, \
+       [Close] (the machine's own guard: never a chooser or a token)",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "open_"
+          ( state ~purpose:Drive_sheet.Turn_on ~picker:picker_unconfigured
+              ~error:(Some Drive_text.Picker_unavailable) Drive_sheet.Closed,
+            [Drive_sheet.Close] )
+          (Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on ~stored:None
+             ~folder:Drive_text.Default ~picker:picker_unconfigured) );
+    ( "Picker_unconfigured, an account stored: Closed too",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "open_"
+          ( state ~purpose:Drive_sheet.Turn_on ~stored:(Some "a@x.fr")
+              ~picker:picker_unconfigured
+              ~error:(Some Drive_text.Picker_unavailable) Drive_sheet.Closed,
+            [Drive_sheet.Close] )
+          (Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on
+             ~stored:(Some "a@x.fr") ~folder:Drive_text.Default
+             ~picker:picker_unconfigured) );
+  ]
+
+(* cancel at the chooser *)
+let turn_on_cancel_at_chooser_tests =
+  let case name previous =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "step"
+          (turn_on_closed (), [Drive_sheet.Close])
+          (Drive_sheet.step
+             (state ~purpose:Drive_sheet.Turn_on
+                (Drive_sheet.Choosing {previous}))
+             (Drive_sheet.Choose_failed Drive_account.Cancelled)) )
+  in
+  [
+    case "Choosing {previous = None}, Choose_failed Cancelled: Closed, no error"
+      None;
+    case "Choosing {previous = Some _}, Choose_failed Cancelled: Closed too"
+      (Some "a@x.fr");
+  ]
+
+(* the other chooser failures, and a blank Chosen *)
+let turn_on_chooser_error_tests =
+  let choosing =
+    state ~purpose:Drive_sheet.Turn_on (Drive_sheet.Choosing {previous = None})
+  in
+  [
+    ( "Choose_failed No_google_account: Closed, Chooser_no_account",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "step"
+          ( turn_on_closed ~error:(Some Drive_text.Chooser_no_account) (),
+            [Drive_sheet.Close] )
+          (Drive_sheet.step choosing
+             (Drive_sheet.Choose_failed Drive_account.No_google_account)) );
+    ( "Choose_failed Choose_failed: Closed, Chooser_failed",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "step"
+          ( turn_on_closed ~error:(Some Drive_text.Chooser_failed) (),
+            [Drive_sheet.Close] )
+          (Drive_sheet.step choosing
+             (Drive_sheet.Choose_failed Drive_account.Choose_failed)) );
+    ( "Chosen \"  \" (blank): Closed, Chooser_failed",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "step"
+          ( turn_on_closed ~error:(Some Drive_text.Chooser_failed) (),
+            [Drive_sheet.Close] )
+          (Drive_sheet.step choosing (Drive_sheet.Chosen "  ")) );
+  ]
+
+(* A token refused, for every denial. The stored account refused: the
+   chooser, once (the radio has no « Utiliser un autre compte »); an account
+   just chosen, or the stored one refused again: Closed. *)
+let turn_on_token_error_tests =
+  List.concat_map
+    (fun d ->
+      let refused = Some (Drive_text.Token d) in
+      let case name ~stored ~error expected =
+        ( Printf.sprintf "Token (Error %s), %s" (denial_name d) name,
+          `Quick,
+          fun () ->
+            Alcotest.check step_t "step" expected
+              (Drive_sheet.step
+                 (state ~purpose:Drive_sheet.Turn_on ~stored ~error
+                    (Drive_sheet.Authorizing "a@x.fr"))
+                 (Drive_sheet.Token (Error d))) )
+      in
+      [
+        case "no account stored: Closed, that error" ~stored:None ~error:None
+          ( state ~purpose:Drive_sheet.Turn_on ~error:refused Drive_sheet.Closed,
+            [Drive_sheet.Close] );
+        case "another account stored: Closed, that error"
+          ~stored:(Some "b@x.fr") ~error:None
+          ( state ~purpose:Drive_sheet.Turn_on ~stored:(Some "b@x.fr")
+              ~error:refused Drive_sheet.Closed,
+            [Drive_sheet.Close] );
+        case "the stored account: the chooser, the refusal kept"
+          ~stored:(Some " A@x.fr ") ~error:None
+          ( state ~purpose:Drive_sheet.Turn_on ~stored:(Some " A@x.fr ")
+              ~error:refused
+              (Drive_sheet.Choosing {previous = None}),
+            [Drive_sheet.Run_chooser] );
+        case "the stored account refused again: Closed, that error"
+          ~stored:(Some "a@x.fr")
+          ~error:(Some (Drive_text.Token Drive_text.No_account))
+          ( state ~purpose:Drive_sheet.Turn_on ~stored:(Some "a@x.fr")
+              ~error:refused Drive_sheet.Closed,
+            [Drive_sheet.Close] );
+      ])
+    all_denials
+
+(* the defensive branch: Authorizing + Picker_unconfigured cannot be reached
+   through open_, but step still closes safely if built by
+   hand. *)
+let turn_on_authorizing_with_picker_unconfigured_by_hand_test =
+  ( "Authorizing + Picker_unconfigured, built by hand (open_ never reaches \
+     it): Token Ok still closes, with Picker_unavailable",
+    `Quick,
+    fun () ->
+      let authorizing =
+        state ~purpose:Drive_sheet.Turn_on ~picker:picker_unconfigured
+          (Drive_sheet.Authorizing "a@x.fr")
+      in
+      Alcotest.check step_t "step"
+        ( {
+            authorizing with
+            Drive_sheet.phase = Drive_sheet.Closed;
+            error = Some Drive_text.Picker_unavailable;
+          },
+          [Drive_sheet.Close] )
+        (Drive_sheet.step authorizing (Drive_sheet.Token (Ok "tok"))) )
+
+(* cancel at the Picker *)
+let turn_on_cancel_at_picker_test =
+  ( "Browsing + Picker_cancelled: Closed, no error",
+    `Quick,
+    fun () ->
+      Alcotest.check step_t "step"
+        (turn_on_closed (), [Drive_sheet.Close])
+        (Drive_sheet.step
+           (state ~purpose:Drive_sheet.Turn_on (Drive_sheet.Browsing "a@x.fr"))
+           Drive_sheet.Picker_cancelled) )
+
+(* the Picker itself fails *)
+let turn_on_picker_failed_tests =
+  let case name e =
+    ( Printf.sprintf "Picker_failed %s: Closed, that error" name,
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "step"
+          (turn_on_closed ~error:(Some e) (), [Drive_sheet.Close])
+          (Drive_sheet.step
+             (state ~purpose:Drive_sheet.Turn_on (Drive_sheet.Browsing "a@x.fr"))
+             (Drive_sheet.Picker_failed e)) )
+  in
+  [
+    case "Offline" Drive_text.Offline;
+    case "Picker_unavailable" Drive_text.Picker_unavailable;
+  ]
+
+(* a pick stores account, folder and storage together (the runner turns
+   Drive on for a Turn_on Store_pick) *)
+let turn_on_pick_stores_together_test =
+  ( "Browsing + Picker_picked: Storing, Store_pick",
+    `Quick,
+    fun () ->
+      Alcotest.check step_t "step"
+        ( state ~purpose:Drive_sheet.Turn_on (Drive_sheet.Storing "a@x.fr"),
+          [
+            Drive_sheet.Store_pick
+              {account = "a@x.fr"; folder_id = "F1"; folder_name = "Plantes"};
+          ] )
+        (Drive_sheet.step
+           (state ~purpose:Drive_sheet.Turn_on (Drive_sheet.Browsing "a@x.fr"))
+           (Drive_sheet.Picker_picked {id = "F1"; name = "Plantes"})) )
+
+(* the store's own result *)
+let turn_on_stored_tests =
+  [
+    ( "Stored (Ok ()): Closed, no error",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "step"
+          (turn_on_closed (), [Drive_sheet.Close])
+          (Drive_sheet.step
+             (state ~purpose:Drive_sheet.Turn_on (Drive_sheet.Storing "a@x.fr"))
+             (Drive_sheet.Stored (Ok ()))) );
+    ( "Stored (Error Not_saved): Closed, Not_saved",
+      `Quick,
+      fun () ->
+        Alcotest.check step_t "step"
+          ( turn_on_closed ~error:(Some Drive_text.Not_saved) (),
+            [Drive_sheet.Close] )
+          (Drive_sheet.step
+             (state ~purpose:Drive_sheet.Turn_on (Drive_sheet.Storing "a@x.fr"))
+             (Drive_sheet.Stored (Error Drive_text.Not_saved))) );
+  ]
+
+(* no controls in Turn_on, so these taps are always ignored *)
+let turn_on_ignored_taps_test =
+  ( "Tap_other_account, Tap_browse, Tap_default: unchanged, [], in every open \
+     phase",
+    `Quick,
+    fun () ->
+      List.iter
+        (fun phase ->
+          let base = state ~purpose:Drive_sheet.Turn_on phase in
+          List.iter
+            (fun event ->
+              Alcotest.check step_t
+                (Printf.sprintf "%s, %s" (phase_name phase)
+                   (Drive_sheet.show_event event))
+                (base, [])
+                (Drive_sheet.step base event))
+            Drive_sheet.[Tap_other_account; Tap_browse; Tap_default])
+        open_phases )
+
+(* The invariant, exhaustively: no Store_default in Turn_on, and a
+   Store_pick only from Browsing on Picker_picked. *)
+let invariant_phases =
+  Drive_sheet.
+    [
+      Choosing {previous = None};
+      Choosing {previous = Some "a@x.fr"};
+      Authorizing "a@x.fr";
+      Browsing "a@x.fr";
+      Storing "a@x.fr";
+      Idle None;
+      Idle (Some "a@x.fr");
+      Closed;
+    ]
+
+let invariant_events =
+  Drive_sheet.
+    [
+      Tap_other_account;
+      Tap_browse;
+      Tap_default;
+      Tap_close;
+      Chosen "x@x.fr";
+      Chosen "  ";
+      Choose_failed Drive_account.Cancelled;
+      Choose_failed Drive_account.No_google_account;
+      Choose_failed Drive_account.Choose_failed;
+      Token (Ok "tok");
+    ]
+  @ List.map (fun d -> Drive_sheet.Token (Error d)) all_denials
+  @ Drive_sheet.
+      [
+        Picker_picked {id = "F1"; name = "Plantes"};
+        Picker_cancelled;
+        Picker_failed Drive_text.Offline;
+        Picker_failed Drive_text.Picker_unavailable;
+        Stored (Ok ());
+        Stored (Error Drive_text.Not_saved);
+      ]
+
+let is_store_default (c : Drive_sheet.command) =
+  match c with Store_default _ -> true | _ -> false
+
+let is_store_pick (c : Drive_sheet.command) =
+  match c with Store_pick _ -> true | _ -> false
+
+let turn_on_invariant_test =
+  ( "step with purpose = Turn_on never emits Store_default, and emits \
+     Store_pick only from Browsing on Picker_picked",
+    `Quick,
+    fun () ->
+      List.iter
+        (fun picker ->
+          List.iter
+            (fun stored ->
+              List.iter
+                (fun phase ->
+                  List.iter
+                    (fun event ->
+                      let t =
+                        state ~purpose:Drive_sheet.Turn_on ~stored ~picker phase
+                      in
+                      let (_ : Drive_sheet.t), cmds =
+                        Drive_sheet.step t event
+                      in
+                      let label =
+                        Printf.sprintf "%s, %s, %s, %s"
+                          (Drive_text.show_picker_config picker)
+                          (Option.value ~default:"no account" stored)
+                          (phase_name phase)
+                          (Drive_sheet.show_event event)
+                      in
+                      Alcotest.(check bool)
+                        (label ^ ": no Store_default")
+                        false
+                        (List.exists is_store_default cmds);
+                      let expected =
+                        match (phase, event) with
+                        | Drive_sheet.Browsing _, Drive_sheet.Picker_picked _ ->
+                            1
+                        | _ -> 0
+                      in
+                      Alcotest.(check int)
+                        (label ^ ": Store_pick commands")
+                        expected
+                        (List.length (List.filter is_store_pick cmds)))
+                    invariant_events)
+                invariant_phases)
+            [None; Some "a@x.fr"])
+        [picker_ready; picker_unconfigured] )
+
+(* Walks, from open_, with no store command along the way except the one
+   walk that reaches a pick (tested separately above). *)
+let turn_on_walk_tests =
+  [
+    ( "chooser, choose, token Ok, then the Picker cancelled: Closed, never a \
+       store command",
+      `Quick,
+      fun () ->
+        let t0, cmds0 =
+          Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on ~stored:None
+            ~folder:Drive_text.Default ~picker:picker_ready
+        in
+        let t1, cmds1 = Drive_sheet.step t0 (Drive_sheet.Chosen "a@x.fr") in
+        let t2, cmds2 = Drive_sheet.step t1 (Drive_sheet.Token (Ok "tok")) in
+        let t3, cmds3 = Drive_sheet.step t2 Drive_sheet.Picker_cancelled in
+        Alcotest.check t_t "final state: Closed, no error" (turn_on_closed ())
+          t3;
+        Alcotest.(check bool)
+          "never a store command" false
+          (List.exists is_store_command (cmds0 @ cmds1 @ cmds2 @ cmds3)) );
+    ( "the chooser cancelled at once: Closed, no error",
+      `Quick,
+      fun () ->
+        let t0, cmds0 =
+          Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on ~stored:None
+            ~folder:Drive_text.Default ~picker:picker_ready
+        in
+        let t1, cmds1 =
+          Drive_sheet.step t0
+            (Drive_sheet.Choose_failed Drive_account.Cancelled)
+        in
+        Alcotest.check t_t "final state" (turn_on_closed ()) t1;
+        Alcotest.(check bool)
+          "never a store command" false
+          (List.exists is_store_command (cmds0 @ cmds1)) );
+    ( "the stored account gone from the phone, then the chooser cancelled: \
+       Closed with the refusal, never a store command",
+      `Quick,
+      fun () ->
+        let t0, cmds0 =
+          Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on ~stored:(Some "a@x.fr")
+            ~folder:Drive_text.Default ~picker:picker_ready
+        in
+        let t1, cmds1 =
+          Drive_sheet.step t0 (Drive_sheet.Token (Error Drive_text.No_account))
+        in
+        Alcotest.(check commands_t)
+          "the refusal opens the chooser" [Drive_sheet.Run_chooser] cmds1;
+        let t2, cmds2 =
+          Drive_sheet.step t1
+            (Drive_sheet.Choose_failed Drive_account.Cancelled)
+        in
+        Alcotest.check t_t "final state"
+          (state ~purpose:Drive_sheet.Turn_on ~stored:(Some "a@x.fr")
+             ~error:(Some (Drive_text.Token Drive_text.No_account))
+             Drive_sheet.Closed)
+          t2;
+        Alcotest.(check bool)
+          "never a store command" false
+          (List.exists is_store_command (cmds0 @ cmds1 @ cmds2)) );
+    ( "the stored account refused, another chosen and picked: Store_pick for \
+       the new account",
+      `Quick,
+      fun () ->
+        let t0, (_ : Drive_sheet.command list) =
+          Drive_sheet.open_ ~purpose:Drive_sheet.Turn_on ~stored:(Some "a@x.fr")
+            ~folder:Drive_text.Default ~picker:picker_ready
+        in
+        let t1, (_ : Drive_sheet.command list) =
+          Drive_sheet.step t0 (Drive_sheet.Token (Error Drive_text.No_account))
+        in
+        let t2, (_ : Drive_sheet.command list) =
+          Drive_sheet.step t1 (Drive_sheet.Chosen "b@x.fr")
+        in
+        let t3, (_ : Drive_sheet.command list) =
+          Drive_sheet.step t2 (Drive_sheet.Token (Ok "tok"))
+        in
+        let t4, cmds4 =
+          Drive_sheet.step t3
+            (Drive_sheet.Picker_picked {id = "F1"; name = "Plantes"})
+        in
+        Alcotest.(check commands_t)
+          "the pick"
+          [
+            Drive_sheet.Store_pick
+              {account = "b@x.fr"; folder_id = "F1"; folder_name = "Plantes"};
+          ]
+          cmds4;
+        Alcotest.check step_t "stored: Closed, no error"
+          ( state ~purpose:Drive_sheet.Turn_on ~stored:(Some "a@x.fr")
+              Drive_sheet.Closed,
+            [Drive_sheet.Close] )
+          (Drive_sheet.step t4 (Drive_sheet.Stored (Ok ()))) );
+  ]
+
+(* can_browse, can_default, picker_note and status_line *)
+let turn_on_helper_states =
+  List.concat_map
+    (fun picker ->
+      List.concat_map
+        (fun stored ->
+          List.concat_map
+            (fun folder ->
+              List.map
+                (fun phase ->
+                  state ~purpose:Drive_sheet.Turn_on ~stored ~folder ~picker
+                    phase)
+                invariant_phases)
+            Drive_text.[Default; Picked "Plantes"])
+        [None; Some "a@x.fr"])
+    [picker_ready; picker_unconfigured]
+
+let turn_on_helpers_test =
+  ( "can_browse, can_default are false and picker_note is None for every \
+     Turn_on state",
+    `Quick,
+    fun () ->
+      List.iter
+        (fun t ->
+          Alcotest.(check bool) "can_browse" false (Drive_sheet.can_browse t);
+          Alcotest.(check bool) "can_default" false (Drive_sheet.can_default t);
+          Alcotest.(check (option string))
+            "picker_note" None
+            (Drive_sheet.picker_note t))
+        turn_on_helper_states )
+
+let turn_on_status_line_tests =
+  let case phase expected =
+    ( Printf.sprintf "%s" (phase_name phase),
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "status_line, the same text as for Change" expected
+          (Drive_sheet.status_line
+             (state ~purpose:Drive_sheet.Turn_on ~stored:(Some "a@x.fr") phase))
+    )
+  in
+  Drive_sheet.
+    [
+      case (Choosing {previous = None}) None;
+      case (Authorizing "a@x.fr") (Some "Connexion à Google Drive…");
+      case (Browsing "a@x.fr") (Some "Ouverture de Google Drive…");
+      case (Storing "a@x.fr") (Some "Enregistrement…");
+      case (Idle (Some "a@x.fr")) None;
+      case Closed None;
+    ]
+
+(* Tap_close in any open phase closes, error cleared, nothing stored; and a
+   Closed machine ignores every event. *)
+let turn_on_tap_close_tests =
+  List.map
+    (fun phase ->
+      ( Printf.sprintf "%s + Tap_close: Closed, error cleared, [Close]"
+          (phase_name phase),
+        `Quick,
+        fun () ->
+          Alcotest.check step_t "step"
+            (turn_on_closed (), [Drive_sheet.Close])
+            (Drive_sheet.step
+               (state ~purpose:Drive_sheet.Turn_on
+                  ~error:(Some Drive_text.Offline) phase)
+               Drive_sheet.Tap_close) ))
+    open_phases
+
+let turn_on_closed_ignores_events_test =
+  ( "Closed ignores every event: unchanged, []",
+    `Quick,
+    fun () ->
+      let closed = turn_on_closed ~error:(Some Drive_text.Not_saved) () in
+      List.iter
+        (fun event ->
+          Alcotest.check step_t
+            (Printf.sprintf "Closed, %s" (Drive_sheet.show_event event))
+            (closed, [])
+            (Drive_sheet.step closed event))
+        invariant_events )
+
+let turn_on_tests =
+  List.concat
+    [
+      turn_on_open_tests;
+      turn_on_cancel_at_chooser_tests;
+      turn_on_chooser_error_tests;
+      turn_on_token_error_tests;
+      [turn_on_authorizing_with_picker_unconfigured_by_hand_test];
+      [turn_on_cancel_at_picker_test];
+      turn_on_picker_failed_tests;
+      [turn_on_pick_stores_together_test];
+      turn_on_stored_tests;
+      [turn_on_ignored_taps_test];
+      [turn_on_invariant_test];
+      turn_on_walk_tests;
+      [turn_on_helpers_test];
+      turn_on_status_line_tests;
+      turn_on_tap_close_tests;
+      [turn_on_closed_ignores_events_test];
+    ]
+
 let tests =
   List.concat
     [
@@ -674,4 +1247,5 @@ let tests =
       printer_tests;
       can_browse_tests;
       busy_tests;
+      turn_on_tests;
     ]

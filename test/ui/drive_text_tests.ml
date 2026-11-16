@@ -1241,6 +1241,183 @@ let viewer_drive_tests =
         Drive_text.Hidden;
     ]
 
+(* ---------- drive_option (4m's Drive radio) ---------- *)
+
+let chosen_of (o : Drive_text.drive_option) = o.chosen
+let choose_of (o : Drive_text.drive_option) = o.choose
+
+let choose_t =
+  Alcotest.testable
+    (fun ppf (c : Drive_text.choose) ->
+      match c with
+      | Enabled -> Format.pp_print_string ppf "Enabled"
+      | Disabled reason -> Format.fprintf ppf "Disabled %S" reason)
+    (fun a b ->
+      match (a, b) with
+      | Drive_text.Enabled, Drive_text.Enabled -> true
+      | Disabled a, Disabled b -> String.equal a b
+      | (Enabled | Disabled _), _ -> false)
+
+let picker_unconfigured_option_reason =
+  "Choix du dossier indisponible dans cette version."
+
+(* title = "Google Drive" always, and never mentions the old wording ("…
+   dossier « Herbier »"), over a representative spread of drive/picker/storage
+   /folder combinations. *)
+let drive_option_title_tests =
+  let module D = Drive_account in
+  let module O = Photo.Original_target in
+  let case name ~drive ~picker ~storage folder =
+    ( name,
+      `Quick,
+      fun () ->
+        let o = Drive_text.drive_option ~drive ~picker ~storage folder in
+        Alcotest.(check string) "title" "Google Drive" o.title;
+        Alcotest.(check string)
+          "detail, fixed"
+          "Un sous-dossier par esp\xc3\xa8ce. Aper\xc3\xa7us gard\xc3\xa9s sur \
+           le t\xc3\xa9l\xc3\xa9phone."
+          o.detail;
+        Alcotest.(check bool)
+          "no \xc2\xab dossier \xc2\xbb in the title" false
+          (Text.contains ~sub:"dossier" o.title);
+        Alcotest.(check bool)
+          "no \xc2\xab Herbier \xc2\xbb in the title" false
+          (Text.contains ~sub:"Herbier" o.title) )
+  in
+  Drive_text.
+    [
+      case "Unconfigured, Default, App_only, Picker_ready" ~drive:D.Unconfigured
+        ~picker:Picker_ready ~storage:O.App_only Default;
+      case "Unchosen, Default, App_only, Picker_ready" ~drive:D.Unchosen
+        ~picker:Picker_ready ~storage:O.App_only Default;
+      case "Chosen, Picked, Drive, Picker_ready" ~drive:chosen_a
+        ~picker:Picker_ready ~storage:O.Drive (Picked "Plantes");
+      case "Chosen, Default, Drive, Picker_unconfigured" ~drive:chosen_a
+        ~picker:Picker_unconfigured ~storage:O.Drive Default;
+    ]
+
+(* chosen: the folder (and account) once the storage is actually Drive and an
+   account is known; None otherwise (App_only, or the legacy Drive/Unchosen
+   state the « Dossier Drive » row prompts for). *)
+let drive_option_chosen_tests =
+  let module D = Drive_account in
+  let module O = Photo.Original_target in
+  let case ?(picker = Drive_text.Picker_ready) name ~drive ~storage folder
+      expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "chosen" expected
+          (chosen_of (Drive_text.drive_option ~drive ~picker ~storage folder))
+    )
+  in
+  [
+    case "Drive, Chosen, Picked: the folder name \xc2\xb7 the email"
+      ~drive:chosen_a ~storage:O.Drive (Picked "Plantes")
+      (Some "Plantes \xc2\xb7 a@x.fr");
+    case
+      "Drive, Chosen, Default: \xc2\xab Herbier \xc2\xbb, created by the app, \
+       then the email"
+      ~drive:chosen_a ~storage:O.Drive Default
+      (Some (herbier_detail ^ " \xc2\xb7 a@x.fr"));
+    case
+      "Drive, Chosen, Picked \" \" (blank): the blank-name fallback, then the \
+       email"
+      ~drive:chosen_a ~storage:O.Drive (Picked " ")
+      (Some "(sans nom) \xc2\xb7 a@x.fr");
+    case "App_only, Chosen: None - an old choice is not where photos go"
+      ~drive:chosen_a ~storage:O.App_only Default None;
+    case
+      "Drive, Unchosen: None - the legacy state, \xc2\xab Dossier Drive \
+       \xc2\xbb prompts instead"
+      ~drive:D.Unchosen ~storage:O.Drive Default None;
+    case "Drive, Unconfigured: None" ~drive:D.Unconfigured ~storage:O.Drive
+      Default None;
+    case "App_only, Unchosen: None" ~drive:D.Unchosen ~storage:O.App_only
+      Default None;
+    case "Drive, Chosen, Picked, without the Picker: the same line"
+      ~picker:Drive_text.Picker_unconfigured ~drive:chosen_a ~storage:O.Drive
+      (Picked "Plantes") (Some "Plantes \xc2\xb7 a@x.fr");
+  ]
+
+(* A tap starts a choice only from App_only, enabled, with none running. *)
+let drive_option_starts_tests =
+  let module O = Photo.Original_target in
+  let option choose : Drive_text.drive_option =
+    {title = "Google Drive"; detail = ""; chosen = None; choose}
+  in
+  let case ~storage ~running choose expected =
+    ( Printf.sprintf "%s, %s, %s: %b"
+        (match storage with O.Drive -> "Drive" | O.App_only -> "App_only")
+        (match choose with
+        | Drive_text.Enabled -> "Enabled"
+        | Disabled (_ : string) -> "Disabled")
+        (match running with true -> "running" | false -> "idle")
+        expected,
+      `Quick,
+      fun () ->
+        Alcotest.(check bool)
+          "starts" expected
+          (Drive_text.drive_option_starts ~storage ~running (option choose)) )
+  in
+  List.concat_map
+    (fun storage ->
+      List.concat_map
+        (fun choose ->
+          List.map
+            (fun running ->
+              let expected =
+                match (storage, choose, running) with
+                | O.App_only, Drive_text.Enabled, false -> true
+                | _ -> false
+              in
+              case ~storage ~running choose expected)
+            [false; true])
+        Drive_text.[Enabled; Disabled "no"])
+    [O.App_only; O.Drive]
+
+(* choose: Unconfigured (no Drive at all) before Picker_unconfigured (the
+   Picker's own build reason), else Enabled, whatever the storage. *)
+let drive_option_choose_tests =
+  let module D = Drive_account in
+  let module O = Photo.Original_target in
+  let case name ~drive ~picker ~storage folder expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check choose_t "choose" expected
+          (choose_of (Drive_text.drive_option ~drive ~picker ~storage folder))
+    )
+  in
+  Drive_text.
+    [
+      case "Unconfigured, App_only, Picker_ready: disabled, the build reason"
+        ~drive:D.Unconfigured ~picker:Picker_ready ~storage:O.App_only Default
+        (Disabled unconfigured_reason);
+      case "Unconfigured, Picker_unconfigured too: the build reason wins"
+        ~drive:D.Unconfigured ~picker:Picker_unconfigured ~storage:O.Drive
+        Default (Disabled unconfigured_reason);
+      case
+        "Unchosen, App_only, Picker_unconfigured: disabled, the Picker reason"
+        ~drive:D.Unchosen ~picker:Picker_unconfigured ~storage:O.App_only
+        Default (Disabled picker_unconfigured_option_reason);
+      case
+        "Unchosen, Drive, Picker_unconfigured: disabled, the Picker reason too"
+        ~drive:D.Unchosen ~picker:Picker_unconfigured ~storage:O.Drive Default
+        (Disabled picker_unconfigured_option_reason);
+      case
+        "Chosen, Drive, Picker_unconfigured: disabled, the Picker reason (a \
+         legacy install sees the radio checked but disabled)"
+        ~drive:chosen_a ~picker:Picker_unconfigured ~storage:O.Drive
+        (Picked "Plantes") (Disabled picker_unconfigured_option_reason);
+      case "Unchosen, App_only, Picker_ready: enabled" ~drive:D.Unchosen
+        ~picker:Picker_ready ~storage:O.App_only Default Enabled;
+      case "Chosen, Drive, Picker_ready: enabled" ~drive:chosen_a
+        ~picker:Picker_ready ~storage:O.Drive Default Enabled;
+    ]
+
 let drive_text =
   List.concat
     [
@@ -1264,4 +1441,8 @@ let drive_text =
       has_drive_photo_tests;
       viewer_badge_tests;
       viewer_drive_tests;
+      drive_option_title_tests;
+      drive_option_chosen_tests;
+      drive_option_choose_tests;
+      drive_option_starts_tests;
     ]

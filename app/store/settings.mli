@@ -95,10 +95,13 @@ val drive_choice :
   root:string option ->
   picked:drive_folder option ->
   default:string option ->
+  storage:Herbier_domain.Photo.Original_target.t option ->
   Stmt.t list
 (** One 4m « Dossier Drive » choice, to run in one transaction:
     [account = Some e] → {!set} [Drive_account e] and
     [Drive_account_changed_at at] first ([None]: neither is written); then
     {!Drive_root_folder}, {!Drive_root_folder_picked} and
-    {!Drive_root_folder_default}, each {!set} when [Some], {!unset} when [None].
-*)
+    {!Drive_root_folder_default}, each {!set} when [Some], {!unset} when [None];
+    then, when [storage = Some s], {!set} [Storage_target s] last ([None]: the
+    storage row is not touched). The 4m Drive radio passes [Some Drive] with a
+    pick: account, folder and storage in one write. *)

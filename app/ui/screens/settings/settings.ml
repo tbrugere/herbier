@@ -15,30 +15,6 @@ let section title children =
     ~at:[cls "settings__section"]
     (El.h2 ~at:[cls "t-section-label"] [El.txt' title] :: children)
 
-let radio ~title ~detail selected =
-  let title_el = El.span ~at:[cls "radio-row__title"] [] in
-  let el =
-    Html.button
-      ~at:[At.v (Jstr.v "role") (Jstr.v "radio")]
-      ["radio-row"]
-      [
-        El.span ~at:[cls "radio-row__dot"] [];
-        El.span
-          ~at:[cls "radio-row__text"]
-          [title_el; El.span ~at:[cls "t-meta"] [El.txt' detail]];
-      ]
-  in
-  let click, b = Rb.click el in
-  ( el,
-    click,
-    [
-      b;
-      Rb.text title_el title;
-      Rb.class_ el "radio-row--on" selected;
-      Rb.attr el "aria-checked"
-        (React.S.map (fun v -> Some (string_of_bool v)) selected);
-    ] )
-
 module Auth = Herbier_sync.Auth
 
 (* The line under the account card after a failed sign-in; a dismissed
@@ -574,18 +550,6 @@ let v app =
             set_account (fun a -> {a with wifi_only = not next}))
   in
   let account, account_b = account_card app in
-  let drive_el, drive_click, drive_b =
-    radio
-      ~title:
-        (React.S.map ~eq:String.equal
-           (fun f ->
-             "Google Drive · dossier “" ^ Drive_text.folder_name f ^ "”")
-           (App.drive_folder app))
-      ~detail:"Un sous-dossier par espèce. Aperçus gardés sur le téléphone."
-      (React.S.map
-         (function Original_target.Drive -> true | App_only -> false)
-         storage)
-  in
   let folder =
     Folder_button.v app
       ~visible:
@@ -596,10 +560,11 @@ let v app =
              | App_only -> Drive_text.pending_count q > 0)
            storage (App.upload_queue app))
   in
-  let local_el, local_click, local_b =
-    radio
+  let local =
+    Radio_row.v
       ~title:(React.S.const "Dans Herbier seulement")
-      ~detail:"Compressées à 1600 px, sur le téléphone seulement."
+      ~detail:
+        (React.S.const "Compressées à 1600 px, sur le téléphone seulement.")
       (React.S.map
          (function Original_target.App_only -> true | Drive -> false)
          storage)
@@ -644,8 +609,10 @@ let v app =
   let storage_error, set_storage_error =
     React.S.create ~eq:(Option.equal String.equal) None
   in
-  let apply_storage target =
-    Fut.await (App.set_storage app target) (function
+  let drive = Drive_radio.v app ~storage ~set_error:set_storage_error in
+  (* The only storage this screen writes alone: Drive comes with a pick. *)
+  let set_app_only () =
+    Fut.await (App.set_storage app Original_target.App_only) (function
       | Ok () -> set_storage_error None
       | Error (_ : Db.error) -> set_storage_error (Some storage_not_saved))
   in
@@ -654,17 +621,15 @@ let v app =
      photos to come. *)
   let dont_send () =
     Fut.await (App.stop_drive_uploads app) (function
-      | Ok () -> apply_storage Original_target.App_only
+      | Ok () -> set_app_only ()
       | Error (_ : Db.error) -> set_storage_error (Some stop_failed))
   in
   let stop_el, open_stop, stop_b =
-    stop_dialog
-      ~send_anyway:(fun () -> apply_storage Original_target.App_only)
-      ~dont_send
+    stop_dialog ~send_anyway:set_app_only ~dont_send
   in
   let choose_app_only () =
     match Drive_text.pending_count (React.S.value (App.upload_queue app)) with
-    | 0 -> apply_storage Original_target.App_only
+    | 0 -> set_app_only ()
     | n -> open_stop n
   in
   let storage_error_el =
@@ -691,7 +656,8 @@ let v app =
                   cls "settings__card";
                   At.v (Jstr.v "role") (Jstr.v "radiogroup");
                 ]
-              [drive_el; local_el];
+              [drive.radio; local.el];
+            drive.status;
             storage_error_el;
             folder.el;
           ];
@@ -735,16 +701,15 @@ let v app =
           parked_b;
           queue_b;
           [stop_b];
-          drive_b;
+          drive.bindings;
           folder.bindings;
-          local_b;
+          local.bindings;
           [
-            Rb.act drive_click (fun () -> apply_storage Original_target.Drive);
             Rb.text storage_error_el
               (React.S.map (Option.value ~default:"") storage_error);
             Rb.class_ storage_error_el "is-hidden"
               (React.S.map Option.is_none storage_error);
-            Rb.act local_click (fun () ->
+            Rb.act local.click (fun () ->
                 match React.S.value storage with
                 | Original_target.App_only -> ()
                 | Drive -> choose_app_only ());

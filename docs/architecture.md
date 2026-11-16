@@ -670,6 +670,36 @@ capture / pick
   account (`Drive_root.seed`), so the folders are kept. A removed account or
   revoked consent shows the `No_account` / `Consent_needed` texts, which
   point to « Dossier Drive ».
+- Choosing Drive storage (M7.72): the first choice happens from 4m's
+  « Google Drive » radio, not from the sheet. It runs the sheet's machine
+  with `purpose = Turn_on` (`ui_model/drive_sheet.ml`, through the runner
+  `ui/screens/settings/drive_flow.ml` the sheet also uses): the account
+  chooser when no Drive account is stored, then an interactive token and
+  Google Picker, every time (an account already stored skips the chooser,
+  not the Picker: the user sees where photos go; when Drive refuses the
+  stored account's token, e.g. the account was removed from the phone, the
+  chooser opens once, since the sheet's « Utiliser un autre compte » is
+  hidden under « Dans Herbier seulement »). The pick writes
+  `storage_target = drive` in the same transaction as the account and the
+  folder (`Settings.drive_choice ~storage`, `Drive_root.choose`). A cancel
+  or an error (chooser, token, Picker, `files.get` check, write) stores
+  nothing; the radios read the stored value only, so they never left the
+  previous one: "Drive without account or folder" is not reachable from the
+  UI. An install already in that state (an upgrade from before M7.72) keeps
+  Drive checked and is not switched: « Dossier Drive » shows « Aucun compte
+  choisi » and its prompt, and its sheet makes the first choice. A build
+  without a web client id or without a Cloud project number has the radio
+  disabled with its reason (no « Herbier »-only path from the radio, the
+  user's decision); the sheet (« Utiliser un autre compte », « Parcourir mes
+  dossiers », « Par défaut ») changes an existing choice. One exception to
+  "no « Herbier »-only path": a legacy install (storage Drive, no account)
+  on a build without the Picker still makes its first choice from the
+  « Dossier Drive » sheet, and there the only folder it can choose is the
+  app's « Herbier » (« Par défaut »); the alternative is switching to « Dans
+  Herbier seulement ». The app-made « Herbier » root counts as a chosen
+  folder: an account stored with no pick (« Par défaut ») is not prompted.
+  Under the radio, once the storage is Drive with an account: « <folder> ·
+  <email> ».
 - Drive layout: the root folder's id is kept in the local setting
   `drive_root_folder`. Each session start that has a file to create (the
   lookup by `appProperties` found none) checks it

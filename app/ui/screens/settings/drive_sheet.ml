@@ -1,59 +1,21 @@
 open Brr
 module Drive_text = Herbier_ui_model.Drive_text
 module Machine = Herbier_ui_model.Drive_sheet
-module Drive_account = Herbier_sync_core.Auth.Drive_account
-module Picker = Herbier_bindings.Google_picker
 module W = Widgets
 
 let cls = Html.cls
 
 let v app =
-  let opened, commands =
-    Machine.open_
-      ~stored:
-        (Drive_account.email
-           (React.S.value (State.account (App.state app))).drive)
-      ~folder:(React.S.value (App.drive_folder app))
-      ~picker:App.picker_config
+  let flow = Drive_flow.create app ~purpose:Change in
+  (* style: a local primitive signal for the machine, set from the flow's
+     callbacks (futures and click handlers, outside update steps). *)
+  let machine, set_machine =
+    React.S.create ~eq:Machine.equal (Drive_flow.state flow)
   in
-  (* style: a local primitive signal for the machine, set from futures'
-     callbacks and click handlers (outside update steps). [released] is a ref:
-     the release may run inside an update step, where no signal may be set.
-     [ticket] is a ref: each token ask takes a new one, which the next Picker
-     opening uses; nothing observes it. *)
-  let machine, set_machine = React.S.create ~eq:Machine.equal opened in
-  let released = ref false in
-  let ticket = ref (Picker.ticket ()) in
-  let rec feed event =
-    match !released with
-    | true -> ()
-    | false ->
-        let next, commands = Machine.step (React.S.value machine) event in
-        set_machine next;
-        List.iter run commands
-  and run : Machine.command -> unit = function
-    | Run_chooser ->
-        Fut.await (App.choose_account ()) (function
-          | Ok email -> feed (Chosen email)
-          | Error e -> feed (Choose_failed e))
-    | Ask_token email ->
-        ticket := Picker.ticket ();
-        Fut.await (App.folder_token app ~email) (fun r -> feed (Token r))
-    | Open_picker {account; token} ->
-        Fut.await (App.open_picker app !ticket ~account ~token) (function
-          | Ok (Picked {id; name; _}) -> feed (Picker_picked {id; name})
-          | Ok Cancelled -> feed Picker_cancelled
-          | Error e -> feed (Picker_failed e))
-    | Store_pick {account; folder_id; folder_name} ->
-        Fut.await
-          (App.store_pick app ~account {id = folder_id; name = folder_name})
-          (fun r -> feed (Stored r))
-    | Store_default account ->
-        Fut.await (App.store_default app ~account) (fun r -> feed (Stored r))
-    | Close -> ( match !released with true -> () | false -> Route.back ())
-  in
-  (* Not from inside the router's build step: a microtask later. *)
-  Fut.await (Fut.return ()) (fun () -> List.iter run commands);
+  Drive_flow.run flow
+    ~on_change:(fun m -> set_machine m)
+    ~on_close:(fun (_ : Machine.t) -> Route.back ());
+  let feed = Drive_flow.feed flow in
   let back = W.Icon_button.el ~label:"Retour" W.Icon.Arrow_back in
   let back_click, back_b = Rb.click back in
   let account_el = El.span ~at:[cls "drive-sheet__account"] [] in
@@ -169,9 +131,7 @@ let v app =
                    match Machine.busy m with
                    | true -> Some "true"
                    | false -> None));
-            Rb.on_release (fun () ->
-                released := true;
-                Picker.dismiss ());
+            Rb.on_release (fun () -> Drive_flow.release flow);
           ];
         ];
   }

@@ -148,6 +148,7 @@ val open_picker :
 val store_pick :
   t ->
   account:string ->
+  turn_on:bool ->
   Herbier_store.Settings.drive_folder ->
   (unit, Herbier_ui_model.Drive_text.pick_error) result Fut.t
 (** The sheet's pick for [account] (possibly not stored yet), inside
@@ -164,7 +165,15 @@ val store_pick :
     outcome). Then the {!drive_folder} read, and on [Ok], {!upload_pending} and
     {!check_originals}: originals not started yet go to the new folder; an
     upload whose resumable session already started finishes where it began (the
-    parent and the account are fixed when the session starts). Never raises. *)
+    parent and the account are fixed when the session starts). Never raises.
+
+    [turn_on = true] (4m's Drive radio): [Drive_root.choose] also writes
+    [Storage_target = Drive] in the same transaction (account, folder and
+    storage together; any error → nothing written, the storage unchanged); on
+    [Ok], {!State.account}'s [storage] := [Drive] after the {!drive_folder} read
+    (so the radio never shows the new account with the old folder; then
+    {!check_drive_access} for the new account). [turn_on = false] (the sheet):
+    the storage is not touched. *)
 
 val store_default :
   t ->
@@ -191,10 +200,11 @@ val set_storage :
   t ->
   Herbier_domain.Photo.Original_target.t ->
   (unit, Herbier_store_io.Db.error) result Fut.t
-(** The 4m radio: [Db.write (Settings.set Storage_target target)], then
-    {!State.account}'s [storage] (a write error is a console line, changes
-    nothing and is the result); a choice of [Drive] also runs
-    {!check_drive_access}. *)
+(** [Db.write (Settings.set Storage_target target)], then {!State.account}'s
+    [storage] (a write error is a console line, changes nothing and is the
+    result); a choice of [Drive] also runs {!check_drive_access}. From 4m,
+    [Drive] goes through {!store_pick} [~turn_on:true], so the storage is never
+    Drive without an account and a folder. *)
 
 val health : t -> Herbier_photos_io.Health.t
 (** The Drive health check, its token silent and recorded into {!drive_access}.

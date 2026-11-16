@@ -152,7 +152,44 @@ val folder_button :
     - [Chosen {email}] → detail « <where> · <email> », where [where] is
       {!app_folder} for [Default] and {!folder_name} for [Picked]; [Enabled].
       The Picker's availability does not disable the button: without it, the
-      sheet still chooses the account. *)
+      sheet still chooses the account, and for a legacy install (storage Drive,
+      no account) it makes the first choice, whose only folder is then the app's
+      « Herbier » (« Par défaut »). *)
+
+type drive_option = {
+  title : string;  (** « Google Drive » *)
+  detail : string;
+      (** « Un sous-dossier par espèce. Aperçus gardés sur le téléphone. » *)
+  chosen : string option;  (** the chosen folder and account, under [detail] *)
+  choose : choose;  (** [Disabled reason]: the radio is not selectable *)
+}
+(** 4m « Où vont mes photos »'s Drive radio. *)
+
+val equal_drive_option : drive_option -> drive_option -> bool
+
+val drive_option :
+  drive:Herbier_sync_core.Auth.Drive_account.t ->
+  picker:picker_config ->
+  storage:Photo.Original_target.t ->
+  folder ->
+  drive_option
+(** [title] and [detail] fixed (no folder name in the title). [chosen]:
+    [storage = Drive] and [drive = Chosen {email}] → [Some "<where> · <email>"],
+    [where] as in {!folder_button}; else [None] (under [App_only] an older
+    choice is not where photos go, and choosing Drive picks again; [Drive] with
+    no account is the legacy state, which the « Dossier Drive » row prompts).
+    [choose], first that applies: [drive = Unconfigured] →
+    [Disabled "Envoi vers Drive indisponible dans cette version."];
+    [picker = Picker_unconfigured] →
+    [Disabled "Choix du dossier indisponible dans cette version."]; else
+    [Enabled]. The reason is given whatever [storage] (a legacy Drive install in
+    such a build sees the radio checked but disabled). *)
+
+val drive_option_starts :
+  storage:Photo.Original_target.t -> running:bool -> drive_option -> bool
+(** Whether a tap on the Drive radio starts a choice: [storage = App_only],
+    [choose = Enabled] and no choice [running]. Already Drive, disabled, or a
+    choice running: the tap is ignored. *)
 
 (** Why the « Dossier Drive » sheet did not change the account or folder. *)
 type pick_error =

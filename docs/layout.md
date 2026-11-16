@@ -290,7 +290,8 @@ app/
                           that default; the Drive account (drive_account), written with them in one
                           transaction (Settings.drive_choice; a new account forgets the three folder
                           keys and stores drive_account_changed_at), seeded once from the session for an
-                          older install (seed), forgotten with them (forget_account)
+                          older install (seed), forgotten with them (forget_account); with a pick from
+                          4m's Drive radio, storage_target = drive in the same transaction
     upload_queue.ml       the originals' queue on the device: originals/<id> and its uploads row at save, the
                           single-flight pass (jobs, rows, photo rows, Upload_queue.next), session starts one at
                           a time over drive.ml, jobs through bindings/cap_uploader.ml, outcomes committed
@@ -401,10 +402,12 @@ app/
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
     drive_text.ml         the Drive texts of 4e, 4m and 5e: access, queue title and status, last upload,
-                          account meta, the « Dossier Drive » button and prompt, the stop dialog, 4e's card,
+                          account meta, the « Dossier Drive » button and prompt, the Drive radio's title,
+                          chosen line and disabled reason, the stop dialog, 4e's card,
                           5e's badge and Drive link
-    drive_sheet.ml        4m's « Dossier Drive » sheet as a pure machine: account choice, token, Picker, store,
-                          close (events in, commands out), its account line and labels
+    drive_sheet.ml        4m's « Dossier Drive » sheet and Drive radio (its purpose) as a pure machine:
+                          account choice, token, Picker, store, close (events in, commands out), its
+                          account line and labels
     network_text.ml       the offline texts: the global strip and 4d's pill (« hors-ligne · N en attente »),
                           4g's unlinked line, 4i's search status
     server_text.ml        4m's « Serveur en pause » (from the engine's last cycle) and the dashboard link
@@ -459,7 +462,9 @@ app/
       packs.ml            the « IGN hors-ligne » packs' download and delete
       drive_folder.ml     4m « Dossier Drive » sheet's services: the Picker's build config, the account
                           chooser, the token for the sheet's account, the Picker, the pick's files.get check
-                          and store with its account, « Par défaut » (serialised with the upload passes)
+                          and store with its account (with the Drive radio's pick, storage_target = drive
+                          too, in the same transaction, and State's storage after the folder read),
+                          « Par défaut » (serialised with the upload passes)
       plantnet_transport.ml  M9: Identify.TRANSPORT over Brr: 'a io = Fut.t, an image is a preview Blob,
                           post_form through bindings/timed_fetch.ml's request_form (Form.Data, 30 s, no
                           retry), get through request; JS errors and timeouts mapped to constant texts,
@@ -555,7 +560,11 @@ app/
                           offline_row.ml (« Données hors-ligne »: sizes, « Libérer » and its dialog),
                           folder_button.ml (« Dossier Drive »: one button, folder · account, and the Drive
                           prompt with « Autoriser »), drive_sheet.ml (its full-screen sheet: « Compte : … »,
-                          « Utiliser un autre compte », Google Picker over it, « Par défaut »), row.ml
+                          « Utiliser un autre compte », Google Picker over it, « Par défaut »),
+                          drive_flow.ml (the Drive machine's command runner, shared by the sheet and
+                          the Drive radio), drive_radio.ml (« Google Drive » in « Où vont mes photos »:
+                          its chosen folder, disabled reason, the Turn_on flow and its status line),
+                          radio_row.ml (a radio of « Où vont mes photos »), row.ml
                           (a title-and-meta row), identification.ml (M9, 6h: « Identifier dès la photo »,
                           « Flore Pl@ntNet », « Clé API Pl@ntNet » (masked, « Modifier », the
                           my.plantnet.org link; not in the design), first section under the account card)

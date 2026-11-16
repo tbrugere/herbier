@@ -196,6 +196,11 @@ val stop_drive_uploads : t -> (unit, Db.error) result Fut.t
 val set_storage :
   t -> Herbier_domain.Photo.Original_target.t -> (unit, Db.error) result Fut.t
 
+val storage_written : t -> Herbier_domain.Photo.Original_target.t -> unit
+(** After [Storage_target] was written (by {!set_storage}, or with a pick from
+    4m's Drive radio): {!State.account}'s [storage] := target; [Drive] also runs
+    {!check_drive_access}. Call it outside any update step. *)
+
 val health : t -> Herbier_photos_io.Health.t
 val check_originals : t -> unit
 

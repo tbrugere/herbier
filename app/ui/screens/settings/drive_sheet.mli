@@ -14,16 +14,11 @@
     ([role="alert"], {!Herbier_ui_model.Drive_text.pick_error_text}).
     [aria-busy] while busy.
 
-    Opening runs {!Herbier_ui_model.Drive_sheet.open_} with {!State.account}'s
-    Drive email, {!App.drive_folder} and {!App.picker_config}: with no account
-    stored, the chooser at once. Commands: [Run_chooser] →
-    {!App.choose_account}; [Ask_token] → {!App.folder_token} (a new
-    [Google_picker.ticket] taken first, so that leaving the sheet cancels the
-    pick that token is for); [Open_picker] → {!App.open_picker} (Google's
-    overlay, over the sheet); [Store_pick] / [Store_default] → {!App.store_pick}
-    / {!App.store_default}; [Close] → [Route.back]. Each result is fed back from
-    its future's callback. Leaving the sheet disposes a shown Picker
-    ({!Herbier_bindings.Google_picker.dismiss}) and ignores every later result.
-*)
+    Opening runs {!Drive_flow} with [purpose = Change] (the machine's opening
+    with {!State.account}'s Drive email, {!App.drive_folder} and
+    {!App.picker_config}: with no account stored, the chooser at once); its
+    [Close] → [Route.back]. Leaving the sheet releases the flow: a shown Picker
+    is disposed ({!Herbier_bindings.Google_picker.dismiss}) and every later
+    result ignored. *)
 
 val v : App.t -> Screen.t

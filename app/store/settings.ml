@@ -130,7 +130,7 @@ let unset key =
 let set_or_unset : type a. a key -> a option -> Stmt.t =
  fun key -> function Some v -> set key v | None -> unset key
 
-let drive_choice ~account ~at ~root ~picked ~default =
+let drive_choice ~account ~at ~root ~picked ~default ~storage =
   (match account with
     | Some email -> [set Drive_account email; set Drive_account_changed_at at]
     | None -> [])
@@ -139,3 +139,4 @@ let drive_choice ~account ~at ~root ~picked ~default =
       set_or_unset Drive_root_folder_picked picked;
       set_or_unset Drive_root_folder_default default;
     ]
+  @ match storage with Some target -> [set Storage_target target] | None -> []

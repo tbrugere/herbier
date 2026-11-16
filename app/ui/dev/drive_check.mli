@@ -5,8 +5,11 @@
     the address typed in its field (default « x@example.com ») as the Drive
     account, with no chooser ({!App.store_default}: a new address forgets the
     root, picked and default folders); « Oublier le compte » is
-    {!App.forget_account} (the account and its folders). Each button logs [ok …]
-    or the error string (never a token, only its length): « Autoriser Drive »
+    {!App.forget_account} (the account and its folders); « Stockage Drive
+    (ancien état) » is {!App.set_storage} [Drive] alone: with « Oublier le
+    compte », the state of an older install (Drive with no Drive account), which
+    4m's radio cannot reach. Each button logs [ok …] or the error string (never
+    a token, only its length): « Autoriser Drive »
     ([Auth.drive_token ~interactive:true] for that account); « Jeton silencieux
     » ([~interactive:false]); « Plugin seul »
     ([Cap_google_authorization.authorize ~account:None ~interactive:false], past

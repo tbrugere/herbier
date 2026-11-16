@@ -309,6 +309,12 @@ let page app =
         step "forget account"
           ~detail:(fun () -> None)
           ~error:Db.error_to_string (App.forget_account app))
+  and legacy =
+    Kit.action "Stockage Drive (ancien état)" (fun () ->
+        step "legacy storage"
+          ~detail:(fun () -> None)
+          ~error:Db.error_to_string
+          (App.set_storage app Herbier_domain.Photo.Original_target.Drive))
   in
   let originals =
     Kit.action "Vérifier les originaux" (fun () ->
@@ -332,7 +338,7 @@ let page app =
       El.h1 [El.txt' "Drive check"];
       status;
       account_line;
-      El.div [forced; force; unset];
+      El.div [forced; force; unset; legacy];
       El.p [El.txt' ("scope: " ^ Drive_consent.scope)];
       El.div [authorize; silent; plugin];
       El.div [species; upload; again; check; invalid];

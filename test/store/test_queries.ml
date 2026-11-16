@@ -1831,7 +1831,7 @@ let settings_drive_account_transaction_leaves_other_rows_alone () =
   in
   let switch_stmts =
     Settings.drive_choice ~account ~at:t0 ~root:ids.root ~picked:None
-      ~default:ids.default
+      ~default:ids.default ~storage:None
   in
   Cli.exec_ok "drive account switch, one transaction" db
     ("begin;\n"
@@ -1870,6 +1870,77 @@ let settings_drive_account_transaction_leaves_other_rows_alone () =
     "the upload row (with its session) is identical: the queue keeps waiting \
      rows across an account change"
     before (upload_row_json db)
+
+(* ---------- Settings.drive_choice ~storage ---------- *)
+
+(* The 4m Drive radio's pick: account + folder + storage = Drive in the one
+   transaction Drive_root.write runs. *)
+let settings_drive_choice_storage_writes_together () =
+  let db = Cli.migrated_db () in
+  check_changes "seed Storage_target App_only" 1 db
+    (Settings.set Settings.Storage_target Photo.Original_target.App_only);
+  let picked : Settings.drive_folder = {id = "F1"; name = "Plantes"} in
+  let stmts =
+    Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0 ~root:(Some "F1")
+      ~picked:(Some picked) ~default:None
+      ~storage:(Some Photo.Original_target.Drive)
+  in
+  Cli.exec_ok "drive_choice ~storage:(Some Drive), one transaction" db
+    ("begin;\n" ^ String.concat "" (List.map Cli.inline stmts) ^ "commit;\n");
+  Alcotest.(check (option string))
+    "Drive_account is set" (Some "a@x.fr")
+    (find db (Settings.get Settings.Drive_account));
+  Alcotest.(check (option string))
+    "Drive_root_folder is set" (Some "F1")
+    (find db (Settings.get Settings.Drive_root_folder));
+  Alcotest.(check (option drive_folder_t))
+    "Drive_root_folder_picked is set" (Some picked)
+    (find db (Settings.get Settings.Drive_root_folder_picked));
+  Alcotest.(check (option string))
+    "Storage_target is now drive, in the same write" (Some "drive")
+    (stored_value db "storage_target")
+
+(* ~storage:None: the existing transaction above already shows a previously
+   set Storage_target untouched; here the row is unset before and after. *)
+let settings_drive_choice_storage_none_leaves_an_unset_row_unset () =
+  let db = Cli.migrated_db () in
+  let stmts =
+    Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0 ~root:(Some "F1")
+      ~picked:(Some {Settings.id = "F1"; name = "Plantes"})
+      ~default:None ~storage:None
+  in
+  Cli.exec_ok "drive_choice ~storage:None, one transaction" db
+    ("begin;\n" ^ String.concat "" (List.map Cli.inline stmts) ^ "commit;\n");
+  Alcotest.(check (option string))
+    "Drive_account is still set (storage is simply not part of this write)"
+    (Some "a@x.fr")
+    (find db (Settings.get Settings.Drive_account));
+  Alcotest.(check (option string))
+    "storage_target row still absent, neither set nor unset" None
+    (stored_value db "storage_target")
+
+(* Statement shape: ~storage:(Some _) adds exactly one statement, Settings.set
+   Storage_target, last. *)
+let settings_drive_choice_storage_adds_one_statement_last () =
+  let args ~storage =
+    Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0 ~root:(Some "F1")
+      ~picked:(Some {Settings.id = "F1"; name = "Plantes"})
+      ~default:None ~storage
+  in
+  let without_storage = args ~storage:None in
+  let with_storage = args ~storage:(Some Photo.Original_target.Drive) in
+  Alcotest.(check int)
+    "one statement more with ~storage:(Some _)"
+    (List.length without_storage + 1)
+    (List.length with_storage);
+  match List.rev with_storage with
+  | last :: _ ->
+      Alcotest.(check string)
+        "the last statement sets Storage_target Drive"
+        (Cli.inline
+           (Settings.set Settings.Storage_target Photo.Original_target.Drive))
+        (Cli.inline last)
+  | [] -> Alcotest.fail "drive_choice returned no statements"
 
 let settings_unset_keeps_others () =
   let db = Cli.migrated_db () in
@@ -2665,6 +2736,18 @@ let () =
              set/unset) in one transaction leaves other settings and a waiting \
              upload row untouched"
             settings_drive_account_transaction_leaves_other_rows_alone;
+          case
+            "drive_choice ~storage:(Some Drive) writes account, folder and \
+             storage together"
+            settings_drive_choice_storage_writes_together;
+          case
+            "drive_choice ~storage:None leaves an unset storage_target row \
+             unset"
+            settings_drive_choice_storage_none_leaves_an_unset_row_unset;
+          case
+            "~storage:(Some _) adds exactly one statement, Settings.set \
+             Storage_target, last"
+            settings_drive_choice_storage_adds_one_statement_last;
         ] );
       ( "Search.match_expression",
         [

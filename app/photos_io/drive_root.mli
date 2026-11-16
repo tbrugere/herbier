@@ -51,19 +51,24 @@ val account : Db.t -> (string option, Db.error) result Fut.t
 val choose :
   Db.t ->
   account:string ->
+  storage:Herbier_domain.Photo.Original_target.t option ->
   Herbier_store.Settings.drive_folder ->
   (unit, Db.error) result Fut.t
-(** 4m « Dossier Drive » sheet, a folder picked for [account]: reads the three
-    keys and {!account}, then writes {!Herbier_photos.Drive.choose_for_account}
-    of them in one transaction: [Drive_account] when the account changed, then
-    [Drive_root_folder] = the folder's id, [Drive_root_folder_picked] = the
-    folder, [Drive_root_folder_default] = for the same account the root in force
-    before the first pick (kept across later picks), for another account unset
-    (the old account's folders are forgotten). Console line « drive: root folder
-    picked », plus « drive: account changed, root folder forgotten » when the
-    account changed; an error (a read, or the transaction, rolled back: nothing
-    changed) is returned and logged « drive: root folder not written: … ». Run
-    it inside [Upload_queue.exclusive]. *)
+(** 4m « Dossier Drive » sheet or Drive radio, a folder picked for [account]:
+    reads the three keys and {!account}, then writes
+    {!Herbier_photos.Drive.choose_for_account} of them in one transaction:
+    [Drive_account] when the account changed, then [Drive_root_folder] = the
+    folder's id, [Drive_root_folder_picked] = the folder,
+    [Drive_root_folder_default] = for the same account the root in force before
+    the first pick (kept across later picks), for another account unset (the old
+    account's folders are forgotten). Console line « drive: root folder picked
+    », plus « drive: account changed, root folder forgotten » when the account
+    changed; an error (a read, or the transaction, rolled back: nothing changed)
+    is returned and logged « drive: root folder not written: … ». With
+    [storage = Some s] (the 4m Drive radio), [Storage_target] = [s] is written
+    in the same transaction, so an error leaves the storage unchanged too;
+    console line « drive: storage set with the pick ». Run it inside
+    [Upload_queue.exclusive]. *)
 
 val reset : Db.t -> account:string -> (unit, Db.error) result Fut.t
 (** The sheet's « Par défaut » for [account]: as {!choose}, with no folder. The

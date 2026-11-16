@@ -225,21 +225,60 @@ let app_folder = "Herbier · créé par l’app"
 type choose = Enabled | Disabled of string [@@deriving eq]
 type folder_button = {detail : string; choose : choose} [@@deriving eq]
 
+let no_drive_build = "Envoi vers Drive indisponible dans cette version."
+
+let chosen_line folder email =
+  let where =
+    match folder with Default -> app_folder | Picked _ -> folder_name folder
+  in
+  where ^ " · " ^ email
+
 let folder_button ~(drive : Drive_account.t) folder =
   match drive with
-  | Unconfigured ->
-      {
-        detail = "Herbier";
-        choose = Disabled "Envoi vers Drive indisponible dans cette version.";
-      }
+  | Unconfigured -> {detail = "Herbier"; choose = Disabled no_drive_build}
   | Unchosen -> {detail = "Aucun compte choisi"; choose = Enabled}
-  | Chosen {email} ->
-      let where =
-        match folder with
-        | Default -> app_folder
-        | Picked _ -> folder_name folder
-      in
-      {detail = where ^ " · " ^ email; choose = Enabled}
+  | Chosen {email} -> {detail = chosen_line folder email; choose = Enabled}
+
+type drive_option = {
+  title : string;
+  detail : string;
+  chosen : string option;
+  choose : choose;
+}
+[@@deriving eq]
+
+let drive_option ~(drive : Drive_account.t) ~picker
+    ~(storage : Photo.Original_target.t) folder =
+  let chosen =
+    match (storage, drive) with
+    | Drive, Chosen {email} -> Some (chosen_line folder email)
+    | Drive, (Unconfigured | Unchosen)
+    | App_only, (Unconfigured | Unchosen | Chosen _) ->
+        None
+  in
+  let choose =
+    match (drive, picker) with
+    | Unconfigured, (Picker_ready | Picker_unconfigured) ->
+        Disabled no_drive_build
+    | (Unchosen | Chosen _), Picker_unconfigured ->
+        Disabled "Choix du dossier indisponible dans cette version."
+    | (Unchosen | Chosen _), Picker_ready -> Enabled
+  in
+  {
+    title = "Google Drive";
+    detail = "Un sous-dossier par espèce. Aperçus gardés sur le téléphone.";
+    chosen;
+    choose;
+  }
+
+let drive_option_starts ~(storage : Photo.Original_target.t) ~running
+    (o : drive_option) =
+  match (storage, o.choose, running) with
+  | App_only, Enabled, false -> true
+  | App_only, Enabled, true
+  | App_only, Disabled (_ : string), (true | false)
+  | Drive, (Enabled | Disabled (_ : string)), (true | false) ->
+      false
 
 type pick_error =
   | Not_a_folder

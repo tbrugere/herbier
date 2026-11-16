@@ -442,6 +442,11 @@ let check_originals t =
           ())
   | true, false | false, (true | false) -> ()
 
+let storage_written t (target : Herbier_domain.Photo.Original_target.t) =
+  let account = React.S.value (State.account t.state) in
+  State.set_account t.state {account with storage = target};
+  match target with Drive -> check_drive_access t | App_only -> ()
+
 let set_storage t (target : Herbier_domain.Photo.Original_target.t) =
   Fut.map
     (function
@@ -449,9 +454,7 @@ let set_storage t (target : Herbier_domain.Photo.Original_target.t) =
           log_error ["réglages: storage"; Db.error_to_string e];
           Error e
       | Ok (_ : int) ->
-          let account = React.S.value (State.account t.state) in
-          State.set_account t.state {account with storage = target};
-          (match target with Drive -> check_drive_access t | App_only -> ());
+          storage_written t target;
           Ok ())
     (Db.write t.db (Herbier_store.Settings.set Storage_target target))
 

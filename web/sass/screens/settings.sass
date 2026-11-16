@@ -94,6 +94,30 @@
   .radio-row--on &
     border: 7px solid var(--moss)
 
+// 4m's Drive radio in a build without Drive or without the Picker: inert,
+// its dot and title faded; the reason line stays readable.
+.radio-row--disabled
+  cursor: default
+  pointer-events: none
+  .radio-row__dot, .radio-row__title
+    opacity: .5
+
+// The chosen folder and account under the Drive radio's detail.
+.radio-row__chosen
+  color: var(--ink)
+  overflow-wrap: anywhere
+
+// Under the radios while the Drive choice runs (« Connexion à Google
+// Drive… »); its errors go to .settings__error. Always rendered, empty when
+// nothing runs: a live region must be in the accessibility tree before its
+// text changes.
+.settings__status-line
+  margin-top: 8px
+  margin-bottom: 0
+  padding: 0 4px
+  &:empty
+    margin: 0
+
 .radio-row__text, .settings__text
   display: flex
   flex-direction: column

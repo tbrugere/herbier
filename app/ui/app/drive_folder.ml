@@ -40,7 +40,7 @@ let open_picker (t : Core.t) ticket ~account ~token =
    stored yet when it changes): the pick must be a folder this token can reach
    (Picker's setAppId adds it to the app's drive.file grant), and the name
    shown is Drive's. *)
-let check_and_store (t : Core.t) ~account
+let check_and_store (t : Core.t) ~account ~storage
     (p : Herbier_store.Settings.drive_folder) =
   let open Fut.Syntax in
   let* info =
@@ -54,7 +54,7 @@ let check_and_store (t : Core.t) ~account
   | Ok (Usable {id; name}) ->
       Fut.map
         (Result.map_error (fun (_ : Db.error) -> Drive_text.Not_saved))
-        (Drive_root.choose t.db ~account {id; name})
+        (Drive_root.choose t.db ~account ~storage {id; name})
   | Ok Not_a_folder -> Fut.return (Error Drive_text.Not_a_folder)
   | Ok Folder_trashed -> Fut.return (Error Drive_text.Trashed)
   | Ok No_access -> Fut.return (Error Drive_text.No_access)
@@ -67,9 +67,12 @@ let check_and_store (t : Core.t) ~account
       Fut.return (Error Drive_text.Drive_failed)
 
 (* After a write: the account into State (and the last token outcome forgotten
-   when it changed), then the folder read, then a pass and the health check:
-   rows not started yet go to the new root. *)
-let stored (t : Core.t) ~account result =
+   when it changed), then the folder read, then the storage, then a pass and
+   the health check: rows not started yet go to the new root. The storage
+   waits for the folder so that 4m's Drive radio never shows the new account
+   with the previous folder; it follows the account, so the access check it
+   runs is for that account. *)
+let stored (t : Core.t) ~account ~storage result =
   let open Fut.Syntax in
   (match result with
   | Ok () ->
@@ -80,17 +83,25 @@ let stored (t : Core.t) ~account result =
   let+ () = Core.refresh_folder t in
   (match result with
   | Ok () ->
+      (match storage with
+      | Some target -> Core.storage_written t target
+      | None -> ());
       Core.upload_pending t;
       Core.check_originals t
   | Error (_ : Drive_text.pick_error) -> ());
   result
 
-let store_pick (t : Core.t) ~account folder =
+let store_pick (t : Core.t) ~account ~turn_on folder =
+  let storage =
+    match turn_on with
+    | true -> Some Herbier_domain.Photo.Original_target.Drive
+    | false -> None
+  in
   Fut.bind
     (Upload_queue.exclusive t.uploads
        ~on_raise:(fun (_ : string) -> Error Drive_text.Drive_failed)
-       (fun () -> check_and_store t ~account folder))
-    (stored t ~account)
+       (fun () -> check_and_store t ~account ~storage folder))
+    (stored t ~account ~storage)
 
 let store_default (t : Core.t) ~account =
   Fut.bind
@@ -100,7 +111,7 @@ let store_default (t : Core.t) ~account =
          Fut.map
            (Result.map_error (fun (_ : Db.error) -> Drive_text.Not_saved))
            (Drive_root.reset t.db ~account)))
-    (stored t ~account)
+    (stored t ~account ~storage:None)
 
 let forget_account (t : Core.t) =
   let open Fut.Syntax in

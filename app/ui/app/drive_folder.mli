@@ -23,6 +23,7 @@ val open_picker :
 val store_pick :
   Core.t ->
   account:string ->
+  turn_on:bool ->
   Herbier_store.Settings.drive_folder ->
   (unit, Drive_text.pick_error) result Fut.t
 

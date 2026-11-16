@@ -7,22 +7,40 @@
     {!Herbier_ui_model.Drive_text.account_meta} (the address: this is the sync
     account; Drive has its own, chosen under « Dossier Drive »). Opening the
     screen runs {!App.check_drive_access}. « Où vont mes photos » (Google Drive
-    or Herbier only; no Google Photos row, architecture §5) goes through
-    {!App.set_storage}; choosing « Dans Herbier seulement » while originals wait
-    on this phone ({!Herbier_ui_model.Drive_text.pending_count} of
-    {!App.upload_queue} > 0) first asks, in a dialog built at the tap for that
-    count ({!Herbier_ui_model.Drive_text.stop_dialog}): « Les envoyer quand même
-    » (the setting only), « Ne pas les envoyer » ({!App.stop_drive_uploads},
-    then the setting only when it succeeded) or « Annuler ». A failed write
-    leaves one line under the radios (« Le réglage n’a pas pu être enregistré.
-    », or « Les photos en attente n’ont pas pu être retirées : rien n’a changé.
-    ») until the next successful choice. Below them, while the storage is Drive
-    or originals wait on this phone, {!Folder_button} (« Dossier Drive »: the
-    Drive account and folder, the Drive prompt and « Autoriser »); the Drive
-    radio's title names {!App.drive_folder}. « Envoyer seulement en Wi-Fi » is
-    written to the local [settings] table and kept in {!State.account}. « File
-    d'envoi » follows {!App.upload_queue}:
-    {!Herbier_ui_model.Drive_text.queue_title},
+    or Herbier only; no Google Photos row, architecture §5): the radios show
+    {!State.account}'s [storage], which only a committed write changes. The
+    Drive radio is {!Herbier_ui_model.Drive_text.drive_option} (title « Google
+    Drive », its detail, the chosen « <folder> · <email> » once the storage is
+    Drive, and, in a build without a Google web client id or without a Cloud
+    project number, [aria-disabled], inert, with its reason). Choosing it runs
+    {!Drive_flow} with [purpose = Turn_on]: the account chooser when no Drive
+    account is stored, then Google Picker; a pick stores account, folder and
+    storage = Drive in one write ({!App.store_pick} [~turn_on:true]); a cancel
+    stores nothing (and shows only the stored account's refusal when that is
+    what opened the chooser), an error stores nothing and leaves its
+    {!Herbier_ui_model.Drive_text.pick_error_text} under the radios; while it
+    runs, a [role="status"] line under the radios
+    ({!Herbier_ui_model.Drive_sheet.status_line}), the radio [aria-busy], and
+    further taps on it are ignored. Leaving the screen releases a running choice
+    (a shown Picker dismissed, later results ignored; a store already running
+    completes, as a whole pick). An install whose storage is Drive with no Drive
+    account (an older install, or #dev/drive) keeps Drive checked: nothing
+    switches it; « Dossier Drive » shows « Aucun compte choisi » and its prompt,
+    and its sheet makes the first choice. Choosing « Dans Herbier seulement »
+    goes through {!App.set_storage}; choosing it while originals wait on this
+    phone ({!Herbier_ui_model.Drive_text.pending_count} of {!App.upload_queue} >
+    0) first asks, in a dialog built at the tap for that count
+    ({!Herbier_ui_model.Drive_text.stop_dialog}): « Les envoyer quand même »
+    (the setting only), « Ne pas les envoyer » ({!App.stop_drive_uploads}, then
+    the setting only when it succeeded) or « Annuler ». A failed write leaves
+    one line under the radios (« Le réglage n’a pas pu être enregistré. », or «
+    Les photos en attente n’ont pas pu être retirées : rien n’a changé. ») until
+    the next successful choice. Below them, while the storage is Drive or
+    originals wait on this phone, {!Folder_button} (« Dossier Drive »: the Drive
+    account and folder, the Drive prompt and « Autoriser »), which changes an
+    existing choice. « Envoyer seulement en Wi-Fi » is written to the local
+    [settings] table and kept in {!State.account}. « File d'envoi » follows
+    {!App.upload_queue}: {!Herbier_ui_model.Drive_text.queue_title},
     {!Herbier_ui_model.Drive_text.queue_status} (hidden when [None]),
     {!Herbier_ui_model.Drive_text.last_sent} (read again when the queue
     changes), and « Envoyer maintenant » ({!App.send_now}), [aria-disabled]
