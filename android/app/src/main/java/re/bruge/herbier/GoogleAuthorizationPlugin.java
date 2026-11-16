@@ -3,11 +3,22 @@ package re.bruge.herbier;
 import android.accounts.Account;
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.os.CancellationSignal;
 import android.util.Log;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.IntentSenderRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.ContextCompat;
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.GetCredentialCancellationException;
+import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.NoCredentialException;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -22,6 +33,8 @@ import com.google.android.gms.auth.api.identity.Identity;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.CommonStatusCodes;
 import com.google.android.gms.common.api.Scope;
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONException;
@@ -34,6 +47,17 @@ import org.json.JSONException;
  * the call is interactive. {@code clearToken} drops a token Drive refused.
  * Rejection codes are read by app/sync_core/auth/drive_consent.ml: keep them
  * in step. Only the drive.file scope is granted. No log line contains a token.
+ *
+ * <p>{@code chooseAccount} lets the user pick the Google account Drive uses
+ * (architecture §5, "Drive account"): Credential Manager's « Sign in with
+ * Google » chooser (every account on the device, « add account » included),
+ * and resolves with the chosen account's email
+ * ({@code GoogleIdTokenCredential.getEmail()}), the hint every later
+ * {@code authorize} names. The id token is discarded: never returned, stored
+ * or logged. Its rejection codes (USER_CANCELLED, NO_CREDENTIAL,
+ * CHOOSE_FAILED, INVALID_ARGUMENT, NO_ACTIVITY, BUSY) are read by
+ * app/sync_core/auth/drive_account.ml: keep them in step. No log line
+ * contains the email.
  */
 @CapacitorPlugin(name = "GoogleAuthorization")
 public class GoogleAuthorizationPlugin extends Plugin {
@@ -46,6 +70,8 @@ public class GoogleAuthorizationPlugin extends Plugin {
     // The interactive call waiting for the consent screen; one at a time.
     private PluginCall pending;
     private List<String> pendingScopes;
+    // A chooseAccount in progress; one at a time.
+    private boolean choosing;
 
     @Override
     public void load() {
@@ -98,6 +124,86 @@ public class GoogleAuthorizationPlugin extends Plugin {
                 }
             })
             .addOnFailureListener(e -> fail(call, e));
+    }
+
+    @PluginMethod
+    public void chooseAccount(PluginCall call) {
+        String webClientId = call.getString("webClientId");
+        if (webClientId == null || webClientId.trim().isEmpty()) {
+            call.reject("webClientId required", "INVALID_ARGUMENT");
+            return;
+        }
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("no activity", "NO_ACTIVITY");
+            return;
+        }
+        if (choosing) {
+            call.reject("an account choice is already showing", "BUSY");
+            return;
+        }
+        choosing = true;
+        GetSignInWithGoogleOption option = new GetSignInWithGoogleOption.Builder(webClientId).build();
+        GetCredentialRequest request = new GetCredentialRequest.Builder().addCredentialOption(option).build();
+        CredentialManager.create(activity).getCredentialAsync(
+            activity,
+            request,
+            new CancellationSignal(),
+            ContextCompat.getMainExecutor(activity),
+            new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                @Override
+                public void onResult(GetCredentialResponse response) {
+                    choosing = false;
+                    chosen(call, response.getCredential());
+                }
+
+                @Override
+                public void onError(GetCredentialException e) {
+                    choosing = false;
+                    if (e instanceof GetCredentialCancellationException) {
+                        chooseFailed(call, "chooser dismissed", "USER_CANCELLED");
+                    } else if (e instanceof NoCredentialException) {
+                        chooseFailed(call, "no Google account", "NO_CREDENTIAL");
+                    } else {
+                        // The type only: a library message is not ours to log.
+                        chooseFailed(call, e.getType(), "CHOOSE_FAILED");
+                    }
+                }
+            }
+        );
+    }
+
+    private static void chosen(PluginCall call, Credential credential) {
+        // Sign in with Google answers with the SIWG subtype; the plain one is
+        // accepted too (both are GoogleIdTokenCredential bundles).
+        String type = credential.getType();
+        if (!(credential instanceof CustomCredential)
+            || !(GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(type)
+                || GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_SIWG_CREDENTIAL.equals(type))) {
+            chooseFailed(call, "unexpected credential type " + type, "CHOOSE_FAILED");
+            return;
+        }
+        String email;
+        try {
+            email = GoogleIdTokenCredential.createFrom(credential.getData()).getEmail();
+        } catch (Exception e) {
+            // GoogleIdTokenParsingException, or a malformed bundle.
+            chooseFailed(call, "unreadable Google credential: " + e.getClass().getSimpleName(), "CHOOSE_FAILED");
+            return;
+        }
+        if (email == null || email.trim().isEmpty()) {
+            chooseFailed(call, "no email in the Google credential", "CHOOSE_FAILED");
+            return;
+        }
+        JSObject answer = new JSObject();
+        answer.put("email", email);
+        Log.i(TAG, "chooseAccount: ok");
+        call.resolve(answer);
+    }
+
+    private static void chooseFailed(PluginCall call, String message, String code) {
+        Log.i(TAG, "chooseAccount: " + code);
+        call.reject(message, code);
     }
 
     @PluginMethod

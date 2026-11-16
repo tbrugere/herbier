@@ -331,6 +331,48 @@ val default_root : root_ids -> root_ids
     ([None]: the next upload finds or creates « Herbier » at My Drive's root);
     else [root] is kept. [picked] and [default] become [None]. *)
 
+val same_account : stored:string option -> string -> bool
+(** [stored = Some s] and {!Herbier_domain.Text.same_email} [s email]. [None] →
+    [false]. *)
+
+type account_choice = {
+  account : string option;
+      (** [Some e] (trimmed): write [Drive_account] = [e]; [None]: the same
+          account, not written *)
+  ids : root_ids;  (** the three root keys to write *)
+}
+(** What the 4m « Dossier Drive » sheet stores, in one write. *)
+
+val equal_account_choice : account_choice -> account_choice -> bool
+
+val choose_for_account :
+  root_ids ->
+  stored:string option ->
+  account:string ->
+  folder:string option ->
+  account_choice
+(** The sheet's choice of [account] and [folder] ([None] = « Par défaut »),
+    given the stored ids and the stored account.
+    - The same account ({!same_account}): [account = None]; [folder = Some id] →
+      [ids = pick_root ids ~id], [None] → [ids = default_root ids].
+    - Another account, or none stored: [account = Some (String.trim account)],
+      and the old ids are dropped first, as they belong to the old account:
+      [folder = Some id] → [{root = Some id; picked = Some id; default = None}];
+      [None] → all three [None] (the next upload finds or creates « Herbier » in
+      the new Drive). Callers never pass a blank [account]. *)
+
+val seed_account :
+  stored:string option ->
+  root_ids ->
+  session_email:string option ->
+  string option
+(** The account to store once for an install that used Drive before it had its
+    own account (its tokens then named the signed-in account, so the stored
+    folder ids are that account's): no account stored, at least one of the three
+    ids set, and a non-blank [session_email] → [Some (trim email)]; anything
+    else → [None]. Storing it keeps the ids, where a first choice in the sheet
+    ({!choose_for_account} with [stored = None]) would drop them. *)
+
 type target = {
   species : string;  (** folder name, from {!species_folder} *)
   name : string;  (** from {!file_name} *)

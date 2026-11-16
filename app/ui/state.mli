@@ -23,8 +23,11 @@ type network = {online : bool}
 type account = {
   auth : Herbier_sync.Auth.status;  (** the Google account 4m shows *)
   storage : Herbier_domain.Photo.Original_target.t;
-      (** the Settings choice, kept while signed out: Drive asks for the sign-in
-          at the first photo to upload *)
+      (** the Settings choice, kept while signed out: Drive asks for the account
+          choice ({!drive}), not the sign-in *)
+  drive : Herbier_sync_core.Auth.Drive_account.t;
+      (** the Drive account (4m « Dossier Drive »), from the [drive_account]
+          setting; independent of [auth] *)
   wifi_only : bool;  (** the Settings « Envoyer seulement en Wi-Fi » *)
 }
 

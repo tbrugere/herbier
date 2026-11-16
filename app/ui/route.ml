@@ -20,6 +20,7 @@ type modal =
   | Search of string
   | Link_species of Plant_id.t
   | Intercepted of {text : string; outside : bool}
+  | Drive_folder
 
 type t = Tab of Tab_bar.tab | Modal of modal | Dev of string
 
@@ -57,6 +58,7 @@ let of_fragment = function
   | "reglages" -> Tab Tab_bar.Settings
   | "tags" -> Modal Tags
   | "tags/gerer" -> Modal Manage_tags
+  | "reglages/dossier-drive" -> Modal Drive_folder
   | "plante/nouvelle" -> Modal New_plant
   | "noter" -> Modal Record
   | "chercher" -> Modal (Search "")
@@ -103,6 +105,7 @@ let to_fragment = function
   | Tab Tab_bar.Settings -> "reglages"
   | Modal Tags -> "tags"
   | Modal Manage_tags -> "tags/gerer"
+  | Modal Drive_folder -> "reglages/dossier-drive"
   | Modal (Plant id) -> "plante/" ^ Plant_id.to_string id
   | Modal (Edit_plant id) -> "plante/" ^ Plant_id.to_string id ^ "/modifier"
   | Modal New_plant -> "plante/nouvelle"

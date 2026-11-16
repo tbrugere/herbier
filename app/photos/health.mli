@@ -17,17 +17,22 @@ type item = {
   photo_id : Photo_id.t;
   file_id : string;  (** the photo's [drive_file_id], trimmed *)
   state : Photo.Upload_state.t;  (** [Uploaded] or [Original_missing] *)
+  missing_unsure : bool;
+      (** created before the Drive account last changed: its original may be in
+          the other account's Drive, where the current token gets a 404 *)
 }
 
 val equal_item : item -> item -> bool
 
-val items : Photo.t list -> item list
+val items : account_changed_at:Ptime.t option -> Photo.t list -> item list
 (** The photos to ask about, in the list's order: live ([deleted_at = None]),
     [original_target = Drive], [drive_file_id = Some id] with [id] non-blank
     ({!Herbier_domain.Text.non_blank}; the trimmed value is kept), and
     [upload_state] [Uploaded] or [Original_missing]. Every other photo is left
     out ([Pending]/[Failed] are the queue's, [App_only] has no original). This
-    is the rule; [Photos.in_drive] only prefilters the rows read. *)
+    is the rule; [Photos.in_drive] only prefilters the rows read.
+    [missing_unsure] iff [account_changed_at = Some at] and the photo's
+    [created_at] is before [at]. *)
 
 val resume : after:Photo_id.t option -> item list -> item list
 (** The items whose photo id sorts after [after] (ids compared as their text,
@@ -64,12 +69,15 @@ val empty_report : report
 
 val program : item list -> report Drive.t
 (** For each item in order, {!Drive.presence} [~file_id]: [Ok p] →
-    [checked + 1], and a {!change} when {!verdict} gives [Some s]; [Error e]
-    with {!Drive.error_scope} [This_file] → into [skipped], next item; either
-    way [reached] is that item. [Account] → [stopped = Some e] and the program
-    ends (no request for the items after it, [reached] left at the item before).
-    [[]] → [Done empty_report], no request. Exactly these requests
-    ({!Drive.get_trashed} [~file_id] each), in this order, nothing else. *)
+    [checked + 1], and a {!change} when {!verdict} gives [Some s], except
+    [Missing] for a [missing_unsure] item, which changes nothing (a 404 is also
+    what another account's file answers; a stopgap until the account is kept per
+    photo); [Error e] with {!Drive.error_scope} [This_file] → into [skipped],
+    next item; either way [reached] is that item. [Account] → [stopped = Some e]
+    and the program ends (no request for the items after it, [reached] left at
+    the item before). [[]] → [Done empty_report], no request. Exactly these
+    requests ({!Drive.get_trashed} [~file_id] each), in this order, nothing
+    else. *)
 
 val summary : report -> string
 (** One console line, never a file id: ["checked 12, changed 1, skipped 0"],

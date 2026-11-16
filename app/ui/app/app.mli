@@ -22,12 +22,16 @@ val auth : t -> Herbier_sync.Auth.t
 
 val start_auth : t -> unit
 (** {!Herbier_sync.Auth.start} with an [on_change] that sets {!State.account}'s
-    [auth] (keeping [storage] and [wifi_only]), outside any update step, and on
-    a change to [Signed_in _] resets the last Drive token outcome
-    ({!drive_access}) in the same step, sends {!Herbier_sync.Engine.signed_in},
-    and runs {!upload_pending}, {!check_drive_access} and {!check_originals}.
-    Called once by main; dev pages never call it, so that the apps they build
-    register no app-state listener and no timer. *)
+    [auth] (keeping the other fields), outside any update step, and on a change
+    to [Signed_in {email}] sends {!Herbier_sync.Engine.signed_in}; then, with no
+    Drive account stored and a Drive folder id set,
+    [Drive_root.seed ~session_email:email] inside [Upload_queue.exclusive]
+    stores that email as the Drive account (an older install's folders stay with
+    the account its tokens named); then runs {!upload_pending},
+    {!check_drive_access} and {!check_originals} (each gated on its own
+    conditions). Otherwise the session does not change the Drive account, which
+    is 4m « Dossier Drive »'s. Called once by main; dev pages never call it, so
+    that the apps they build register no app-state listener and no timer. *)
 
 val start_sync : t -> unit
 (** {!Herbier_sync.Engine.start}: called once by main, right after
@@ -68,21 +72,22 @@ val uploads : t -> Herbier_photos_io.Upload_queue.t
 (** {1 Drive} *)
 
 val drive_access : t -> Herbier_ui_model.Drive_text.access React.signal
-(** {!Herbier_ui_model.Drive_text.access} of {!State.account}'s [auth] and the
-    last Drive token outcome since the last sign-in: every [Auth.drive_token]
-    the app asks (the queue's, the health check's, {!check_drive_access},
-    {!authorize_drive}) sets it ([Ok _] → [Granted]; [Error e] → [Denied] of e
-    mapped: [Drive_unconfigured] → [Unconfigured], [Drive_signed_out] →
-    [Signed_out], [Consent_needed], [Consent_refused], [Drive_offline] →
+(** {!Herbier_ui_model.Drive_text.access} of {!State.account}'s [drive] and the
+    last Drive token outcome for the chosen account: every [Auth.drive_token]
+    the app asks for the stored account (the queue's, the health check's,
+    {!check_drive_access}, {!authorize_drive}, the sheet's when it names the
+    stored account) sets it ([Ok _] → [Granted]; [Error e] → [Denied] of e
+    mapped: [Drive_unconfigured] → [Unconfigured], [Drive_no_account] →
+    [No_drive_account], [Consent_needed], [Consent_refused], [Drive_offline] →
     [Offline], [Drive_misconfigured] → [Misconfigured], [No_google_account] →
-    [No_account], [Drive_google _] → [Failed]); a new [Signed_in] resets it to
-    [Unknown]. Set outside any update step. *)
+    [No_account], [Drive_google _] → [Failed]); a change of the Drive account
+    resets it to [Unknown]. Set outside any update step. *)
 
 val check_drive_access : t -> unit
-(** A silent [Auth.drive_token ~interactive:false] when signed in and the
-    storage is Drive, or photos still wait in the {!upload_queue} (its
-    [pending_count > 0], after « Les envoyer quand même ») (4m's mount, after a
-    sign-in, the radio set to Drive); else nothing. Not awaited. *)
+(** A silent [Auth.drive_token ~interactive:false] when a Drive account is
+    chosen and the storage is Drive, or photos still wait in the {!upload_queue}
+    (its [pending_count > 0], after « Les envoyer quand même ») (4m's mount,
+    after a sign-in, the radio set to Drive); else nothing. Not awaited. *)
 
 val authorize_drive : t -> unit
 (** 4m « Autoriser »: [Auth.drive_token ~interactive:true] (the consent), then,
@@ -102,38 +107,79 @@ val drive_folder : t -> Herbier_ui_model.Drive_text.folder React.signal
 (** Where originals go (4m « Dossier Drive », 4e's card):
     [Drive_root.read_choice] through {!Herbier_ui_model.Drive_text.folder}, read
     by {!start_uploads}, after every pass (a pass may store or forget the root),
-    and after {!choose_drive_folder} and {!default_drive_folder}. A read error
-    is a console line and keeps the last value. Starts [Default]. *)
+    and after {!store_pick} and {!store_default}. A read error is a console line
+    and keeps the last value. Starts [Default]. *)
 
 val picker_config : Herbier_ui_model.Drive_text.picker_config
 (** {!Herbier_ui_model.Drive_text.picker_config_of_project_number} of
     {!Herbier_sync.Backend.google_cloud_project_number}. No API key is passed
     (notes/google-picker-webview.md). *)
 
-val choose_drive_folder :
-  t -> (unit, Herbier_ui_model.Drive_text.pick_error) result Fut.t
-(** 4m « Choisir »: a [Google_picker.ticket] (leaving 4m from now on cancels the
-    pick), [Auth.drive_token ~interactive:true] (recorded into {!drive_access};
-    [Error d] → [Token] of d mapped), then Google Picker on the folders
-    ([Google_picker.pick_folder], app id the project number, no key, origin
-    [window.location.origin]; [Load_failed] while offline → [Offline], any other
-    error → [Picker_unavailable]). [Cancelled] → [Ok ()], nothing written.
-    [Picked p] → inside [Upload_queue.exclusive] (no pass reads or writes the
-    root meanwhile; a raise → [Drive_failed]): [Photos_io.Drive.folder_info] of
-    its id: [Usable {id; name}] → [Drive_root.choose {id; name}] (Drive's name,
-    not the Picker's; a write error → [Not_saved]); [Not_a_folder],
-    [Folder_trashed], [No_access] → their error, nothing written; a token error
-    → [Token]; [Network] → [Offline]; any other Drive error → [Drive_failed].
-    Then the {!drive_folder} read, and on [Ok], {!upload_pending}: originals not
-    started yet go to the new folder; an upload whose resumable session already
-    started finishes in the folder it began in (the parent is fixed when the
-    session starts). Never raises. *)
+val choose_account :
+  unit ->
+  (string, Herbier_sync_core.Auth.Drive_account.choose_error) result Fut.t
+(** The sheet's account choice: [Auth.choose_drive_account] (Credential
+    Manager's « Sign in with Google » chooser). Nothing is stored. *)
 
-val default_drive_folder : t -> (unit, Herbier_store_io.Db.error) result Fut.t
-(** 4m « Par défaut »: inside [Upload_queue.exclusive], [Drive_root.reset] (its
-    outcome, logged by it; a raise → [Raised]), then the {!drive_folder} read.
-    As for {!choose_drive_folder}, a session already started finishes in its
-    folder. *)
+val folder_token :
+  t -> email:string -> (string, Herbier_ui_model.Drive_text.denial) result Fut.t
+(** The sheet's interactive drive.file token for [email] (the consent when
+    needed): [Core.drive_token_for ~interactive:true], recorded into
+    {!drive_access} only when [email] is the stored account; an error mapped as
+    {!drive_access} does. *)
+
+val open_picker :
+  t ->
+  Herbier_bindings.Google_picker.ticket ->
+  account:string ->
+  token:string ->
+  ( Herbier_bindings.Google_picker.outcome,
+    Herbier_ui_model.Drive_text.pick_error )
+  result
+  Fut.t
+(** Google Picker on the folders for [account]'s [token]
+    ([Google_picker.pick_folder], app id the project number, no key, origin
+    [window.location.origin], title {!Herbier_ui_model.Drive_sheet.picker_title}
+    of [account]: the Picker shows the token's account and has no switcher of
+    its own). [Load_failed] while offline → [Offline], any other error →
+    [Picker_unavailable]. A ticket dismissed (leaving the sheet) →
+    [Ok Cancelled]. *)
+
+val store_pick :
+  t ->
+  account:string ->
+  Herbier_store.Settings.drive_folder ->
+  (unit, Herbier_ui_model.Drive_text.pick_error) result Fut.t
+(** The sheet's pick for [account] (possibly not stored yet), inside
+    [Upload_queue.exclusive] (no pass reads or writes the root meanwhile; a
+    raise → [Drive_failed]): [Photos_io.Drive.folder_info] of its id with
+    [account]'s silent token: [Usable {id; name}] →
+    [Drive_root.choose ~account {id; name}] (Drive's name, not the Picker's;
+    account and folder in one write; a new account forgets the old one's root,
+    picked and default folders; a write error → [Not_saved]); [Not_a_folder],
+    [Folder_trashed], [No_access] → their error, nothing written; a token error
+    → [Token]; [Network] → [Offline]; any other Drive error → [Drive_failed]. On
+    [Ok], {!State.account}'s [drive] := [Chosen account]
+    ([Core.set_drive_account]: a new account resets {!drive_access}'s last
+    outcome). Then the {!drive_folder} read, and on [Ok], {!upload_pending} and
+    {!check_originals}: originals not started yet go to the new folder; an
+    upload whose resumable session already started finishes where it began (the
+    parent and the account are fixed when the session starts). Never raises. *)
+
+val store_default :
+  t ->
+  account:string ->
+  (unit, Herbier_ui_model.Drive_text.pick_error) result Fut.t
+(** The sheet's « Par défaut » for [account]: inside [Upload_queue.exclusive],
+    [Drive_root.reset ~account] (an error or a raise → [Not_saved]), then as
+    {!store_pick} after its write. *)
+
+val forget_account : t -> (unit, Herbier_store_io.Db.error) result Fut.t
+(** #dev/drive « Oublier le compte »: inside [Upload_queue.exclusive],
+    [Drive_root.forget_account] (the account and the three root keys in one
+    transaction; a raise → [Error (Raised _)]); on [Ok], {!State.account}'s
+    [drive] := [Unchosen] ([Core.set_drive_account]). Then the {!drive_folder}
+    read. *)
 
 val send_now : t -> unit
 (** [Upload_queue.send_now], then the {!upload_queue} read. Not awaited. *)
@@ -155,10 +201,11 @@ val health : t -> Herbier_photos_io.Health.t
     For #dev/drive. *)
 
 val check_originals : t -> unit
-(** [Health.run ~force:false] when {!State.network} says online and the account
-    is signed in; not awaited. Triggers: {!start_uploads} (startup), resume
-    ([Cap_app] Active), a change to [Signed_in] ({!start_auth}), and main's
-    [online] event. Not on job changes. *)
+(** [Health.run ~force:false] when {!State.network} says online and a Drive
+    account is chosen; not awaited. Triggers: {!start_uploads} (startup), resume
+    ([Cap_app] Active), a change to [Signed_in] ({!start_auth}), a Drive account
+    or folder stored by the 4m sheet ({!store_pick}, {!store_default}), and
+    main's [online] event. Not on job changes. *)
 
 val synced : t -> unit React.event
 (** Fires after every sync cycle, outside any update step. *)

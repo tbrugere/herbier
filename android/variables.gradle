@@ -14,6 +14,13 @@ ext {
     androidxEspressoCoreVersion = '3.7.0'
     cordovaAndroidVersion = '14.0.1'
     playServicesAuthVersion = '21.4.0'
+    // GoogleAuthorizationPlugin.chooseAccount (Credential Manager). googleid
+    // >= 1.2.0 for GoogleIdTokenCredential.getEmail(); 1.2.1 depends on
+    // credentials 1.6.0, which Gradle resolves for
+    // @capgo/capacitor-social-login too (it asks 1.5.0 and googleid 1.1.1):
+    // one copy of each.
+    androidxCredentialsVersion = '1.6.0'
+    googleIdVersion = '1.2.1'
     // UploaderPlugin and @capacitor/background-runner (which reads it too).
     workManagerVersion = '2.11.0'
 }

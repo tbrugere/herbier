@@ -511,6 +511,45 @@ let default_root ids =
   in
   {root; picked = None; default = None}
 
+let same_account ~stored email =
+  match stored with
+  | None -> false
+  | Some s -> Herbier_domain.Text.same_email s email
+
+type account_choice = {account : string option; ids : root_ids} [@@deriving eq]
+
+(* The old account's folders are not in the new Drive: the new account
+   starts from its own pick, or from nothing (« Herbier » found or created
+   there by the next upload). *)
+let choose_for_account ids ~stored ~account ~folder =
+  match (same_account ~stored account, folder) with
+  | true, Some id -> {account = None; ids = pick_root ids ~id}
+  | true, None -> {account = None; ids = default_root ids}
+  | false, Some id ->
+      {
+        account = Some (String.trim account);
+        ids = {root = Some id; picked = Some id; default = None};
+      }
+  | false, None ->
+      {
+        account = Some (String.trim account);
+        ids = {root = None; picked = None; default = None};
+      }
+
+(* Before the Drive account existed, Drive tokens named the signed-in
+   account: the folder ids an install kept are that account's. *)
+let seed_account ~stored ids ~session_email =
+  let has_ids =
+    match ids with
+    | {root = None; picked = None; default = None} -> false
+    | {root = Some _; _} | {picked = Some _; _} | {default = Some _; _} -> true
+  in
+  match
+    (stored, has_ids, Option.bind session_email Herbier_domain.Text.non_blank)
+  with
+  | None, true, Some email -> Some email
+  | Some (_ : string), _, _ | None, false, _ | None, true, None -> None
+
 type target = {
   species : string;
   name : string;

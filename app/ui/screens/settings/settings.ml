@@ -72,7 +72,7 @@ type card = {
 
 (* « Changer » signs in again (the account chooser); the current session
    stays until the new one is made. *)
-let card ~running ~storage ~access : Auth.status -> card = function
+let card ~running : Auth.status -> card = function
   | Unconfigured ->
       {
         avatar = "G";
@@ -97,7 +97,7 @@ let card ~running ~storage ~access : Auth.status -> card = function
       {
         avatar = Option.value (Option.bind email initial) ~default:"G";
         title = "Compte Google connecté";
-        meta = Drive_text.account_meta ~email ~storage access;
+        meta = Drive_text.account_meta ~email;
         action =
           Some (match running with true -> "Connexion…" | false -> "Changer");
       }
@@ -107,30 +107,9 @@ let account_card app =
   let running, set_running = React.S.create ~eq:Bool.equal false in
   let error, set_error = React.S.create ~eq:(Option.equal String.equal) None in
   let card =
-    React.S.l3 ~eq:equal_card
-      (fun (a : State.account) running access ->
-        card ~running ~storage:a.storage ~access a.auth)
-      (State.account state) running (App.drive_access app)
-  in
-  let prompt =
-    React.S.l3
-      ~eq:(Option.equal Drive_text.equal_prompt)
-      (fun (a : State.account) access q ->
-        Drive_text.drive_prompt ~storage:a.storage
-          ~pending:(Drive_text.pending_count q)
-          access)
-      (State.account state) (App.drive_access app) (App.upload_queue app)
-  in
-  let prompt_text = El.span ~at:[cls "t-meta"; cls "settings__text"] [] in
-  let authorize = W.Button.text "" in
-  let prompt_el =
-    El.div ~at:[cls "settings__prompt"] [prompt_text; authorize.el]
-  in
-  let prompt_action =
-    React.S.map
-      ~eq:(Option.equal String.equal)
-      (fun p -> Option.bind p (fun (p : Drive_text.prompt) -> p.action))
-      prompt
+    React.S.l2 ~eq:equal_card
+      (fun (a : State.account) running -> card ~running a.auth)
+      (State.account state) running
   in
   let avatar = El.span ~at:[cls "settings__avatar"] [] in
   let title = El.span ~at:[cls "settings__title"] [] in
@@ -186,7 +165,6 @@ let account_card app =
                 El.span ~at:[cls "settings__text"] [title; meta];
                 button.el;
               ];
-            prompt_el;
           ];
         error_el;
       ]
@@ -203,17 +181,7 @@ let account_card app =
     :: Rb.text error_el (React.S.map (Option.value ~default:"") error)
     :: Rb.class_ error_el "is-hidden" (React.S.map Option.is_none error)
     :: Rb.act button.click sign_in
-    :: Rb.text prompt_text
-         (React.S.map
-            (function Some (p : Drive_text.prompt) -> p.text | None -> "")
-            prompt)
-    :: Rb.class_ prompt_el "is-hidden" (React.S.map Option.is_none prompt)
-    :: Rb.text authorize.el
-         (React.S.map (Option.value ~default:"") prompt_action)
-    :: Rb.class_ authorize.el "is-hidden"
-         (React.S.map Option.is_none prompt_action)
-    :: Rb.act authorize.click (fun () -> App.authorize_drive app)
-    :: (button.bindings @ authorize.bindings) )
+    :: button.bindings )
 
 (* « IGN hors-ligne »: the downloaded packs and the département picker. *)
 
@@ -619,11 +587,14 @@ let v app =
          storage)
   in
   let folder =
-    Folder_row.v app
+    Folder_button.v app
       ~visible:
-        (React.S.map ~eq:Bool.equal
-           (function Original_target.Drive -> true | App_only -> false)
-           storage)
+        (React.S.l2 ~eq:Bool.equal
+           (fun (target : Original_target.t) q ->
+             match target with
+             | Drive -> true
+             | App_only -> Drive_text.pending_count q > 0)
+           storage (App.upload_queue app))
   in
   let local_el, local_click, local_b =
     radio
@@ -794,3 +765,5 @@ let v app =
           offline.bindings;
         ];
   }
+
+let drive_sheet = Drive_sheet.v

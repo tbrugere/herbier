@@ -469,6 +469,15 @@ let () =
       ( "drive picked folder as root, outside My Drive's root",
         Test_drive_root.picked_folder_tests );
       ("drive pick_root, default_root", Test_drive_root.root_ids_tests);
+      ("drive same_account", Test_drive_root.same_account_tests);
+      ("drive choose_for_account", Test_drive_root.choose_for_account_tests);
+      ("drive seed_account", Test_drive_root.seed_account_tests);
+      ( "drive seed then the same account",
+        [
+          ( "the seeded account keeps its ids",
+            `Quick,
+            Test_drive_root.seeded_then_same_account );
+        ] );
       ( "drive resolve_root (recorded fixtures)",
         Test_drive_root.fixture_root_tests );
       ("drive pp_root_change", Test_drive_root.root_change_pp_tests);
@@ -482,8 +491,11 @@ let () =
       ("health interval", Test_health.interval_tests);
       ("health due", Test_health.due_tests);
       ("health items", Test_health.items_tests);
+      ( "health items after an account change",
+        Test_health.account_change_items_tests );
       ("health verdict", Test_health.verdict_tests);
       ("health program", Test_health.program_tests);
+      ("health program, unsure items", Test_health.unsure_program_tests);
       ("health resume", Test_health.resume_tests);
       ("health summary", Test_health.summary_tests);
     ]

@@ -41,8 +41,9 @@ val run : t -> force:bool -> outcome Fut.t
     + unless [force]: [Settings.get Drive_health_checked_at] (a read or decode
       error counts as never checked, logged); not {!Herbier_photos.Health.due}
       [~now] → [Not_due] (no other read, no token);
-    + [Photos.in_drive] → {!Herbier_photos.Health.items} (read error → [Store]),
-      then {!Herbier_photos.Health.resume} after
+    + [Photos.in_drive] → {!Herbier_photos.Health.items} (read error → [Store])
+      with [~account_changed_at] from [Settings.get Drive_account_changed_at]
+      (unreadable → [None], logged), then {!Herbier_photos.Health.resume} after
       [Settings.get Drive_health_cursor] (unreadable → from the first, logged):
       a round that stopped goes on where it stopped;
     + {!Drive.health} with [token] / [drop_token] ([Error e] → [Stopped e],

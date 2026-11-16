@@ -18,6 +18,16 @@ let authorize ~scopes ~account ~interactive =
     |]
     ~ok:(fun r -> Cap_call.string_field r "accessToken")
 
+let non_empty_email r =
+  match Cap_call.string_field r "email" with
+  | Ok "" -> Error (Cap_error.Unexpected "email")
+  | (Ok (_ : string) | Error (_ : Cap_error.t)) as email -> email
+
+let choose_account ~web_client_id =
+  Cap_call.call plugin "chooseAccount"
+    [|Jv.obj [|("webClientId", Jv.of_string web_client_id)|]|]
+    ~ok:non_empty_email
+
 let clear_token ~token =
   Cap_call.call plugin "clearToken"
     [|Jv.obj [|("token", Jv.of_string token)|]|]

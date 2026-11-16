@@ -628,11 +628,48 @@ capture / pick
   scopes only at sign-in and has no silent "authorize this scope" call.
   `Auth.drive_token ~interactive`: an interactive call may show the consent
   screen (one at a time); a silent one fails with `Consent_needed` instead.
-  The account hint is the signed-in session's email, so Drive is the same
-  Google account as the sign-in; signed out (or a session without an email),
-  no token is asked. The plugin grants `drive.file` and nothing else. A 401 from
-  Drive → `clearToken` of that token (Play Services would hand it back
-  otherwise), a new token, the same request once more.
+  Every token names the Drive account (below) with `setAccount`; with none
+  chosen, no token is asked (`Drive_no_account`). Interactive calls are
+  single-flight per email, so a consent for one account never answers a
+  request for another. The plugin grants `drive.file` and nothing else. A
+  401 from Drive → `clearToken` of that token (Play Services would hand it
+  back otherwise), a new token, the same request once more.
+- Drive account (M7.62): Drive has its own Google account, independent of
+  the Supabase sign-in; signing in or out does not touch it. It is chosen in
+  4m « Dossier Drive » through `GoogleAuthorizationPlugin.chooseAccount`:
+  Credential Manager's « Sign in with Google »
+  (`GetSignInWithGoogleOption` with the web client id), then
+  `GoogleIdTokenCredential.getEmail()` (googleid ≥ 1.2.0). The id token is
+  thrown away: never sent to Supabase, stored or logged. This is the
+  documented way: an `AuthorizationResult` « does not contain any
+  information about the user account that was used »
+  (developer.android.com/identity/authorization, « Get user information
+  during authorization »), which points to Credential Manager;
+  `toGoogleSignInAccount()` is deprecated. Neither option builder has a
+  login hint, so the session's email cannot be preselected: the chooser
+  lists it with the device's other accounts. The email is the local setting
+  `drive_account` (never synced; in Android's backup like the root folder
+  ids, as it is not a credential: Play Services holds the grant). A build
+  without a Google web client id has no Drive (`Unconfigured`). The sheet
+  stores the account and the folder together, in one transaction inside
+  `Upload_queue.exclusive`, only on a pick or « Par défaut »; cancelling it
+  changes nothing. A new account forgets `drive_root_folder`,
+  `drive_root_folder_picked` and `drive_root_folder_default` (they are the
+  old Drive's); the queue keeps its waiting rows, and a resumable session
+  already started finishes in the Drive it began in (its URL is the
+  credential). A new account also stores the time of the change
+  (`drive_account_changed_at`, local): after a switch the health check's
+  token is the new account's, and the old account's files answer 404, so a
+  404 for a photo created before the change is no answer (a trashed or
+  present answer still counts: the token reaches that file). A stopgap: such
+  a photo deleted for good in Drive is not flagged; the clean fix is the
+  account per photo (a schema change), left for later. An install that used
+  Drive before this account existed kept the folder ids of the signed-in
+  account its tokens named: at the next sign-in with no Drive account
+  stored and an id set, the session's email is stored once as the Drive
+  account (`Drive_root.seed`), so the folders are kept. A removed account or
+  revoked consent shows the `No_account` / `Consent_needed` texts, which
+  point to « Dossier Drive ».
 - Drive layout: the root folder's id is kept in the local setting
   `drive_root_folder`. Each session start that has a file to create (the
   lookup by `appProperties` found none) checks it
@@ -667,8 +704,16 @@ capture / pick
   unchanged: a picked folder that is trashed or lost falls back to
   « Herbier » at the root. « Par défaut » restores the saved default (the
   app's « Herbier », wherever it was moved), or unsets the root when none was
-  saved. Species folders are still found or created by name inside the root
-  (no species ids cached). The health check and « Ouvrir dans Google
+  saved; for a newly chosen account, it is that account's « Herbier »,
+  found or created by the next upload. The pick and « Par défaut » are in
+  the « Dossier Drive » sheet (M7.62): Google Picker has no container option
+  and no account switcher on the OAuth path (it shows the token's account;
+  the PickerBuilder reference lists only `setSize`, `setTitle` and
+  `hideTitleBar` for its layout, and the guide calls it « an inline, modal
+  window »), so it opens as Google's overlay over the sheet, titled
+  « Dossier Drive · <email> »; another account means a new token and a new
+  Picker (docs/notes/google-picker-webview.md). Species folders are still
+  found or created by name inside the root (no species ids cached). The health check and « Ouvrir dans Google
   Drive » go by file id and are unaffected by moves. The species folder is the
   plant's scientific name, else its display name, else « À identifier »;
   files are not moved when the plant changes later. File names are
@@ -702,8 +747,8 @@ capture / pick
   long list is covered over several runs. The date of the last complete round
   is the local setting `drive_health_checked_at`; the cursor is cleared then.
   Photos of a soft-deleted observation are checked too: their original is
-  still the user's. Triggers (signed in only): start, resume, sign-in, back
-  online.
+  still the user's. Triggers (a Drive account chosen): start, resume,
+  sign-in, back online, a Drive account or folder stored by 4m.
 - 4m « Dernier envoi » is the local setting `last_upload_at`, written by the
   queue when an original reaches Drive on this install.
 - Switching the storage to app-only while originals wait on this phone asks

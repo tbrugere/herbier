@@ -101,6 +101,11 @@ dependencies {
     // GoogleAuthorizationPlugin; at least the play-services-auth version
     // @capgo/capacitor-social-login pins (layout.md §4).
     implementation "com.google.android.gms:play-services-auth:$playServicesAuthVersion"
+    // GoogleAuthorizationPlugin.chooseAccount (Credential Manager's « Sign in
+    // with Google » chooser, the Drive account; variables.gradle).
+    implementation "androidx.credentials:credentials:$androidxCredentialsVersion"
+    implementation "androidx.credentials:credentials-play-services-auth:$androidxCredentialsVersion"
+    implementation "com.google.android.libraries.identity.googleid:googleid:$googleIdVersion"
     // UploaderPlugin and UploadWorker (the originals' uploads); the version
     // @capacitor/background-runner also uses (variables.gradle).
     implementation "androidx.work:work-runtime:$workManagerVersion"

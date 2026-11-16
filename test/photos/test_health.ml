@@ -22,10 +22,11 @@ let pp_request ppf (r : Drive.request) =
 let request_t = Alcotest.testable pp_request Drive.equal_request
 
 let pp_item ppf (i : Health.item) =
-  Format.fprintf ppf "{photo_id = %s; file_id = %S; state = %s}"
+  Format.fprintf ppf "{photo_id = %s; file_id = %S; state = %s; unsure = %b}"
     (Ids.Photo_id.to_string i.photo_id)
     i.file_id
     (Photo.Upload_state.to_string i.state)
+    i.missing_unsure
 
 let item_t = Alcotest.testable pp_item Health.equal_item
 
@@ -99,8 +100,8 @@ let photo ?(target = Photo.Original_target.Drive)
     deleted_at;
   }
 
-let item n file_id state : Health.item =
-  {Health.photo_id = photo_id n; file_id; state}
+let item ?(missing_unsure = false) n file_id state : Health.item =
+  {Health.photo_id = photo_id n; file_id; state; missing_unsure}
 
 (* ---------- interval / due ---------- *)
 
@@ -169,7 +170,7 @@ let items_tests =
             item 2 "f2" Original_missing;
             item 10 "f3" Uploaded;
           ]
-          (Health.items
+          (Health.items ~account_changed_at:None
              [
                kept_uploaded;
                kept_missing;
@@ -185,6 +186,29 @@ let items_tests =
   ]
 
 (* ---------- verdict ---------- *)
+
+(* Photos created before the Drive account last changed may be in the other
+   account's Drive: their items are missing_unsure. *)
+let account_change_items_tests =
+  let uploaded = photo ~target:Drive ~state:Uploaded ~file_id:(Some "f1") 1 in
+  let case name account_changed_at expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check (list item_t))
+          "items" expected
+          (Health.items ~account_changed_at [uploaded]) )
+  in
+  [
+    case "no account change: sure" None [item 1 "f1" Uploaded];
+    case "created before the change: unsure"
+      (Some (shift 60))
+      [item ~missing_unsure:true 1 "f1" Uploaded];
+    case "created after the change: sure"
+      (Some (shift (-60)))
+      [item 1 "f1" Uploaded];
+    case "created at the change itself: sure" (Some t0) [item 1 "f1" Uploaded];
+  ]
 
 let verdict_tests =
   let case name state presence expected =
@@ -424,6 +448,45 @@ let program_tests =
   ]
 
 (* ---------- resume ---------- *)
+
+(* A 404 for an unsure item may be the other account's file: no change. A
+   trashed or present answer means the current token reaches the file, so it
+   is a verdict as for any item. *)
+let unsure_program_tests =
+  let run item response =
+    Drive.run (seq_net [response]) (Health.program [item])
+  in
+  let report ~changes item =
+    {
+      Health.checked = 1;
+      changes;
+      skipped = [];
+      stopped = None;
+      reached = Some item.Health.photo_id;
+    }
+  in
+  [
+    ( "unsure, Uploaded, 404: answered, no change",
+      `Quick,
+      fun () ->
+        let i = item ~missing_unsure:true 1 "f1" Uploaded in
+        Alcotest.check report_t "report" (report ~changes:[] i)
+          (run i (answer ~status:404 "{}")) );
+    ( "unsure, Uploaded, trashed: Original_missing",
+      `Quick,
+      fun () ->
+        let i = item ~missing_unsure:true 1 "f1" Uploaded in
+        Alcotest.check report_t "report"
+          (report ~changes:[{Health.item = i; state = Original_missing}] i)
+          (run i (answer {|{"id":"f1","trashed":true}|})) );
+    ( "unsure, Original_missing, present: Uploaded",
+      `Quick,
+      fun () ->
+        let i = item ~missing_unsure:true 1 "f1" Original_missing in
+        Alcotest.check report_t "report"
+          (report ~changes:[{Health.item = i; state = Uploaded}] i)
+          (run i (answer {|{"id":"f1","trashed":false}|})) );
+  ]
 
 let resume_tests =
   let items_t = Alcotest.list item_t in

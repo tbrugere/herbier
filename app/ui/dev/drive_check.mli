@@ -1,9 +1,14 @@
 (** Dev-only page [#dev/drive] (architecture §10, spike 4). Shows
-    {!Herbier_sync.Auth}'s status and
-    {!Herbier_sync_core.Auth.Drive_consent.scope}; each button logs [ok …] or
-    the error string (never a token, only its length): « Autoriser Drive »
-    ([Auth.drive_token ~interactive:true]); « Jeton silencieux »
-    ([~interactive:false]); « Plugin seul »
+    {!Herbier_sync.Auth}'s status, a line « Compte Drive : <email | aucun |
+    indisponible> » ({!State.account}'s [drive]) and
+    {!Herbier_sync_core.Auth.Drive_consent.scope}. « Forcer le compte » stores
+    the address typed in its field (default « x@example.com ») as the Drive
+    account, with no chooser ({!App.store_default}: a new address forgets the
+    root, picked and default folders); « Oublier le compte » is
+    {!App.forget_account} (the account and its folders). Each button logs [ok …]
+    or the error string (never a token, only its length): « Autoriser Drive »
+    ([Auth.drive_token ~interactive:true] for that account); « Jeton silencieux
+    » ([~interactive:false]); « Plugin seul »
     ([Cap_google_authorization.authorize ~account:None ~interactive:false], past
     the account gate: proves the native wiring on a device with no Google
     account); « Envoyer un fichier test »: a field « Espèce » (default «

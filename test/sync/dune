@@ -27,6 +27,7 @@
   test_push_order
   test_synced
   test_drive_consent
+  test_drive_account
   handoff_sample)
  (libraries
   herbier_sync_core
@@ -66,7 +67,8 @@
   test_cycle
   test_push_order
   test_synced
-  test_drive_consent)
+  test_drive_consent
+  test_drive_account)
  (libraries
   herbier_sync_helpers
   herbier_sync_core

@@ -19,6 +19,7 @@
  (libraries
   herbier_store
   herbier_domain
+  herbier_photos
   herbier_refs
   herbier_test_support
   postgrest

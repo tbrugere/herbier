@@ -1,27 +1,26 @@
 module Photo = Herbier_domain.Photo
 module Photo_id = Herbier_domain.Ids.Photo_id
-module Lifecycle = Herbier_sync_core.Auth.Lifecycle
+module Drive_account = Herbier_sync_core.Auth.Drive_account
 
 type denial =
   | Unconfigured
-  | Signed_out
+  | No_drive_account
   | Consent_needed
   | Consent_refused
   | Offline
   | Misconfigured
   | No_account
   | Failed
-[@@deriving eq]
+[@@deriving eq, show]
 
 type access = Unknown | Granted | Denied of denial [@@deriving eq]
 
-let access ~(account : Lifecycle.status) ~last =
-  match (account, last) with
+let access ~(drive : Drive_account.t) ~last =
+  match (drive, last) with
   | Unconfigured, _ -> Denied Unconfigured
-  | Signed_out, _ -> Denied Signed_out
-  | Restoring, _ -> Unknown
-  | Signed_in _, Denied (Signed_out | Unconfigured) -> Unknown
-  | ( Signed_in _,
+  | Unchosen, _ -> Denied No_drive_account
+  | Chosen _, Denied (No_drive_account | Unconfigured) -> Unknown
+  | ( Chosen _,
       ( Unknown | Granted
       | Denied
           ( Consent_needed | Consent_refused | Offline | Misconfigured
@@ -78,8 +77,15 @@ let queue_title q =
   | 0 -> base
   | f -> Printf.sprintf "%s · %d en échec" base f
 
-let not_authorized = "Google Drive n’est pas autorisé."
-let no_account = "Aucun compte Google sur le téléphone."
+let not_authorized =
+  "Google Drive n’est pas autorisé : autorisez-le, ou changez de compte dans « \
+   Dossier Drive »."
+
+let no_drive_account = "Choisissez le compte Google dans « Dossier Drive »."
+
+let no_account =
+  "Ce compte Google n’est plus sur le téléphone : changez-le dans « Dossier \
+   Drive »."
 
 let misconfigured = "Google refuse l’accès à Drive (configuration de l’app)."
 
@@ -89,7 +95,7 @@ let blocker access ~online =
   match (access, online) with
   | Denied Unconfigured, _ ->
       Some "Envoi vers Drive indisponible dans cette version."
-  | Denied Signed_out, _ -> Some "Connectez-vous pour envoyer les photos."
+  | Denied No_drive_account, _ -> Some no_drive_account
   | Denied (Consent_needed | Consent_refused), _ -> Some not_authorized
   | Denied No_account, _ -> Some no_account
   | Denied Misconfigured, _ -> Some misconfigured
@@ -138,12 +144,7 @@ let last_sent ~now ~tz_offset_s = function
       Printf.sprintf "Dernier envoi : %s, %s" label
         (Fr_date.time ~tz_offset_s at)
 
-let account_meta ~email ~(storage : Photo.Original_target.t) access =
-  let address = Option.value email ~default:"Adresse inconnue" in
-  match (storage, access) with
-  | Drive, Granted -> address ^ " · Drive"
-  | Drive, (Unknown | Denied _) | App_only, (Unknown | Granted | Denied _) ->
-      address
+let account_meta ~email = Option.value email ~default:"Adresse inconnue"
 
 type prompt = {text : string; action : string option} [@@deriving eq]
 
@@ -156,18 +157,21 @@ let drive_prompt ~(storage : Photo.Original_target.t) ~pending access =
       Some
         {
           text =
-            "Google Drive n’est pas autorisé : les photos attendent sur le \
-             téléphone.";
+            "Google Drive n’est pas autorisé pour ce compte : les photos \
+             attendent sur le téléphone. Autorisez-le, ou changez de compte \
+             dans « Dossier Drive ».";
           action = Some "Autoriser";
         }
   | (Drive | App_only), _, Denied No_account ->
       Some {text = no_account; action = None}
   | (Drive | App_only), _, Denied Misconfigured ->
       Some {text = misconfigured; action = None}
-  | (Drive | App_only), _, Denied Signed_out ->
+  | (Drive | App_only), _, Denied No_drive_account ->
       Some
         {
-          text = "Connectez-vous pour envoyer les photos vers Drive.";
+          text =
+            "Les photos attendent sur le téléphone : choisissez le compte et \
+             le dossier dans « Dossier Drive ».";
           action = None;
         }
   | ( (Drive | App_only),
@@ -192,7 +196,7 @@ type card = {title : string; detail : string} [@@deriving eq]
 
 let kept = "Copies compressées gardées sur le téléphone."
 
-type folder = Default | Picked of string [@@deriving eq]
+type folder = Default | Picked of string [@@deriving eq, show]
 
 let folder ~root ~(picked : Herbier_store.Settings.drive_folder option) =
   match (root, picked) with
@@ -206,7 +210,7 @@ let folder_name = function
       | Some _ -> n
       | None -> "(sans nom)")
 
-type picker_config = Picker_unconfigured | Picker_ready [@@deriving eq]
+type picker_config = Picker_unconfigured | Picker_ready [@@deriving eq, show]
 
 let picker_config_of_project_number number =
   match
@@ -216,33 +220,26 @@ let picker_config_of_project_number number =
   | true -> Picker_ready
   | false -> Picker_unconfigured
 
+let app_folder = "Herbier · créé par l’app"
+
 type choose = Enabled | Disabled of string [@@deriving eq]
+type folder_button = {detail : string; choose : choose} [@@deriving eq]
 
-type folder_row = {detail : string; choose : choose; default : bool}
-[@@deriving eq]
-
-let folder_row config access folder =
-  let detail =
-    match folder with
-    | Default -> "Herbier · créé par l’app"
-    | Picked _ -> folder_name folder
-  and default = match folder with Default -> false | Picked _ -> true in
-  let unavailable = "Choix du dossier indisponible dans cette version." in
-  let choose =
-    match config with
-    | Picker_unconfigured -> Disabled unavailable
-    | Picker_ready -> (
-        match access with
-        | Denied Unconfigured -> Disabled unavailable
-        | Denied Signed_out ->
-            Disabled "Connectez-vous pour choisir un dossier."
-        | Denied No_account -> Disabled no_account
-        | Denied Misconfigured -> Disabled misconfigured
-        | Unknown | Granted
-        | Denied (Consent_needed | Consent_refused | Offline | Failed) ->
-            Enabled)
-  in
-  {detail; choose; default}
+let folder_button ~(drive : Drive_account.t) folder =
+  match drive with
+  | Unconfigured ->
+      {
+        detail = "Herbier";
+        choose = Disabled "Envoi vers Drive indisponible dans cette version.";
+      }
+  | Unchosen -> {detail = "Aucun compte choisi"; choose = Enabled}
+  | Chosen {email} ->
+      let where =
+        match folder with
+        | Default -> app_folder
+        | Picked _ -> folder_name folder
+      in
+      {detail = where ^ " · " ^ email; choose = Enabled}
 
 type pick_error =
   | Not_a_folder
@@ -253,18 +250,38 @@ type pick_error =
   | Picker_unavailable
   | Not_saved
   | Drive_failed
-[@@deriving eq]
+  | Chooser_no_account
+  | Chooser_failed
+  | Other_account of denial
+[@@deriving eq, show]
 
 let pick_error_text = function
   | Not_a_folder -> "Ce n’est pas un dossier."
   | Trashed -> "Ce dossier est dans la corbeille."
   | No_access -> "Herbier n’a pas accès à ce dossier."
   | Offline -> "Pas de réseau : réessayez plus tard."
-  | Token d ->
+  | Token No_account ->
+      "Ce compte Google n’est plus sur le téléphone : utilisez un autre compte."
+  | Token (Consent_needed | Consent_refused) ->
+      "Google Drive n’est pas autorisé pour ce compte."
+  | Token Failed ->
+      "Google Drive n’a pas répondu pour ce compte : réessayez, ou utilisez un \
+       autre compte."
+  | Token ((Unconfigured | No_drive_account | Offline | Misconfigured) as d) ->
       Option.value (blocker (Denied d) ~online:true) ~default:not_authorized
   | Picker_unavailable -> "Google Picker n’a pas pu s’ouvrir."
   | Not_saved -> "Le réglage n’a pas pu être enregistré."
   | Drive_failed -> "Drive n’a pas répondu : réessayez."
+  | Chooser_no_account ->
+      "Aucun compte Google sur le téléphone : ajoutez-en un dans les réglages \
+       d’Android."
+  | Chooser_failed -> "Le choix du compte n’a pas pu s’ouvrir. Réessayez."
+  | Other_account Offline -> "Pas de réseau : rien n’a changé."
+  | Other_account (Consent_needed | Consent_refused) ->
+      "L’autre compte n’a pas autorisé Google Drive : rien n’a changé."
+  | Other_account
+      (Unconfigured | No_drive_account | Misconfigured | No_account | Failed) ->
+      "L’autre compte n’a pas pu être utilisé : rien n’a changé."
 
 let has_drive_photo (photos : Photo.t list) =
   List.exists

@@ -26,3 +26,20 @@ let tests =
       (nbsp ^ "a" ^ nbsp)
       (Some (nbsp ^ "a" ^ nbsp));
   ]
+
+let same_email name a b expected =
+  ( name,
+    `Quick,
+    fun () ->
+      Alcotest.(check bool)
+        (Printf.sprintf "same_email %S %S" a b)
+        expected (Text.same_email a b) )
+
+let same_email_tests =
+  [
+    same_email "identical" "a@x.fr" "a@x.fr" true;
+    same_email "ASCII case ignored" "Anne@X.fr" "anne@x.FR" true;
+    same_email "trimmed" "  a@x.fr\n" "a@x.fr" true;
+    same_email "another address" "a@x.fr" "b@x.fr" false;
+    same_email "both blank" "" " " true;
+  ]

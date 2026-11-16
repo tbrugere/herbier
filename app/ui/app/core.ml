@@ -133,7 +133,7 @@ let commit_edits ~db ~changed edits =
 
 let denial : Herbier_sync.Auth.drive_error -> Drive_text.denial = function
   | Drive_unconfigured -> Unconfigured
-  | Drive_signed_out -> Signed_out
+  | Drive_no_account -> No_drive_account
   | Consent_needed -> Consent_needed
   | Consent_refused -> Consent_refused
   | Drive_offline -> Offline
@@ -141,18 +141,39 @@ let denial : Herbier_sync.Auth.drive_error -> Drive_text.denial = function
   | No_google_account -> No_account
   | Drive_google _ -> Failed
 
-(* Every Drive token the app asks goes through here, so that its outcome is
-   what 4m and 4e show. The setter runs in the token's future callback,
-   outside any update step. *)
-let recorded_drive_token auth ~set_last ~interactive =
+(* Read at each call, so that the upload queue's and the health check's
+   silent tokens follow an account change without being rebuilt. *)
+let drive_account state = (React.S.value (State.account state)).drive
+
+(* The two values name one account (Text.same_email), or neither names
+   one. *)
+let same_drive_account (a : Herbier_sync_core.Auth.Drive_account.t)
+    (b : Herbier_sync_core.Auth.Drive_account.t) =
+  match
+    ( Herbier_sync_core.Auth.Drive_account.email a,
+      Herbier_sync_core.Auth.Drive_account.email b )
+  with
+  | Some a, Some b -> Herbier_domain.Text.same_email a b
+  | None, None -> true
+  | Some (_ : string), None | None, Some (_ : string) -> false
+
+(* Every Drive token the app asks for the stored account goes through here,
+   so that its outcome is what 4m and 4e show. A token that resolves after the
+   account changed is not recorded: its outcome was the old account's. The
+   setter runs in the token's future callback, outside any update step. *)
+let recorded_drive_token auth state ~set_last ~interactive =
+  let account = drive_account state in
   Fut.map
     (fun result ->
-      set_last
-        (match result with
-        | Ok (_ : string) -> Drive_text.Granted
-        | Error e -> Denied (denial e));
+      (match same_drive_account account (drive_account state) with
+      | true ->
+          set_last
+            (match result with
+            | Ok (_ : string) -> Drive_text.Granted
+            | Error e -> Denied (denial e))
+      | false -> ());
       result)
-    (Herbier_sync.Auth.drive_token auth ~interactive)
+    (Herbier_sync.Auth.drive_token auth ~account ~interactive)
 
 let create ~db ~state ~theme ~auth =
   let saved, send = React.E.create () in
@@ -176,7 +197,7 @@ let create ~db ~state ~theme ~auth =
   let set_drive_last ?step a = set_drive_last ?step a in
   let drive_access =
     React.S.l2 ~eq:Drive_text.equal_access
-      (fun (a : State.account) last -> Drive_text.access ~account:a.auth ~last)
+      (fun (a : State.account) last -> Drive_text.access ~drive:a.drive ~last)
       (State.account state) drive_last
   in
   let upload_queue, set_upload_queue =
@@ -195,7 +216,7 @@ let create ~db ~state ~theme ~auth =
   let token ~interactive =
     Fut.map
       (Result.map_error Herbier_sync.Auth.drive_error_to_string)
-      (recorded_drive_token auth
+      (recorded_drive_token auth state
          ~set_last:(fun a -> set_drive_last a)
          ~interactive)
   in
@@ -341,14 +362,40 @@ let stop_drive_uploads t =
   stopped
 
 let drive_token t ~interactive =
-  recorded_drive_token t.auth
+  recorded_drive_token t.auth t.state
     ~set_last:(fun a -> t.set_drive_last a)
     ~interactive
 
-let signed_in t =
-  match (React.S.value (State.account t.state)).auth with
-  | Signed_in _ -> true
-  | Unconfigured | Restoring | Signed_out -> false
+let stored_email t =
+  Herbier_sync_core.Auth.Drive_account.email (drive_account t.state)
+
+(* A token for an account not stored yet (the 4m sheet's new choice) says
+   nothing about the stored one: only the stored account's is recorded. *)
+let drive_token_for t ~email ~interactive =
+  match Herbier_photos.Drive.same_account ~stored:(stored_email t) email with
+  | true -> drive_token t ~interactive
+  | false ->
+      Herbier_sync.Auth.drive_token t.auth
+        ~account:(Chosen {email = String.trim email})
+        ~interactive
+
+(* A new account forgets the last token outcome (it was the old account's),
+   in the same step as the account itself. The same account keeps the
+   spelling State and the setting already have. *)
+let set_drive_account t (drive : Herbier_sync_core.Auth.Drive_account.t) =
+  match same_drive_account drive (drive_account t.state) with
+  | true -> ()
+  | false ->
+      let account = React.S.value (State.account t.state) in
+      let step = React.Step.create () in
+      State.set_account t.state ~step {account with drive};
+      t.set_drive_last ~step Drive_text.Unknown;
+      React.Step.execute step
+
+let drive_chosen t =
+  match drive_account t.state with
+  | Chosen _ -> true
+  | Unconfigured | Unchosen -> false
 
 (* Photos may still wait for Drive with the storage App_only (« Les envoyer
    quand même »): they need the access too. *)
@@ -358,7 +405,7 @@ let check_drive_access t =
     | Drive -> true
     | App_only -> Drive_text.pending_count (React.S.value t.upload_queue) > 0
   in
-  match (signed_in t, needed) with
+  match (drive_chosen t, needed) with
   | true, true ->
       Fut.await (drive_token t ~interactive:false)
         (fun (_ : (string, Herbier_sync.Auth.drive_error) result) -> ())
@@ -369,9 +416,9 @@ let authorize_drive t =
     | Ok (_ : string) -> upload_pending t
     | Error (_ : Herbier_sync.Auth.drive_error) -> ())
 
-(* Signed out (or still restoring), no token can come: the sign-in runs it. *)
+(* No Drive account chosen, no token can come: the choice runs it. *)
 let check_originals t =
-  match (online t, signed_in t) with
+  match (online t, drive_chosen t) with
   | true, true ->
       Fut.await (Health.run t.health ~force:false) (fun (_ : Health.outcome) ->
           ())
@@ -390,24 +437,39 @@ let set_storage t (target : Herbier_domain.Photo.Original_target.t) =
           Ok ())
     (Db.write t.db (Herbier_store.Settings.set Storage_target target))
 
+(* An install that used Drive before it had its own account kept the folder
+   ids of the signed-in account its tokens then named: that account is
+   stored, once, so they are kept (Drive_root.seed). The write waits for the
+   pass running, as the sheet's. *)
+let seed_drive_account t ~email =
+  match drive_account t.state with
+  | Chosen _ | Unconfigured -> Fut.return ()
+  | Unchosen ->
+      Fut.map
+        (function
+          | Ok (Some email) -> set_drive_account t (Chosen {email})
+          | Ok None -> ()
+          | Error e -> log_error ["drive: account:"; Db.error_to_string e])
+        (Upload_queue.exclusive t.uploads
+           ~on_raise:(fun (_ : string) -> Ok None)
+           (fun () ->
+             Herbier_photos_io.Drive_root.seed t.db ~session_email:email))
+
 (* Auth calls [on_change] from future and listener callbacks, never inside an
-   update step, so the setters may run here. A new sign-in forgets the last
-   Drive token outcome: it was another account's, or no account's. *)
+   update step, so the setter may run here. Drive's last token outcome is the
+   Drive account's, not the session's: a sign-in or sign-out keeps it, except
+   a sign-in that seeds the first account. *)
 let start_auth t =
   Herbier_sync.Auth.start t.auth ~on_change:(fun status ->
       let account = React.S.value (State.account t.state) in
-      let step = React.Step.create () in
-      State.set_account t.state ~step {account with auth = status};
-      (match status with
-      | Signed_in _ -> t.set_drive_last ~step Drive_text.Unknown
-      | Unconfigured | Restoring | Signed_out -> ());
-      React.Step.execute step;
+      State.set_account t.state {account with auth = status};
       match status with
-      | Signed_in _ ->
+      | Signed_in {email} ->
           Herbier_sync.Engine.signed_in t.engine;
-          upload_pending t;
-          check_drive_access t;
-          check_originals t
+          Fut.await (seed_drive_account t ~email) (fun () ->
+              upload_pending t;
+              check_drive_access t;
+              check_originals t)
       | Unconfigured | Restoring | Signed_out -> ())
 
 let start_sync t = Herbier_sync.Engine.start t.engine

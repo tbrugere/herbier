@@ -23,6 +23,7 @@ let setting db key default =
 
 type settings = {
   storage : Original_target.t;
+  drive : Herbier_sync_core.Auth.Drive_account.t;
   wifi_only : bool;
   place_sources : Herbier_geo.Place_name.sources;
 }
@@ -42,8 +43,13 @@ let settings db =
   let open Fut.Result_syntax in
   let* storage = setting db Settings.Storage_target Original_target.App_only in
   let* wifi_only = setting db Settings.Wifi_only false in
+  let* drive_account = Herbier_photos_io.Drive_root.account db in
   let+ place_sources = place_sources db in
-  {storage; wifi_only; place_sources}
+  let drive =
+    Herbier_sync_core.Auth.Drive_account.of_stored
+      ~configured:Herbier_sync.Auth.drive_configured drive_account
+  in
+  {storage; drive; wifi_only; place_sources}
 
 let tab app = function
   | Herbier_ui.Widgets.Tab_bar.Collection -> Herbier_ui.Screens.Collection.v app
@@ -54,6 +60,7 @@ let tab app = function
 let modal app = function
   | Herbier_ui.Route.Tags -> Herbier_ui.Screens.Tags.v app
   | Herbier_ui.Route.Manage_tags -> Herbier_ui.Screens.Manage_tags.v app
+  | Herbier_ui.Route.Drive_folder -> Herbier_ui.Screens.Settings.drive_sheet app
   | Herbier_ui.Route.Plant id -> Herbier_ui.Screens.Species.v app id
   | Herbier_ui.Route.Edit_plant id ->
       Herbier_ui.Screens.Edit_plant.v app
@@ -80,12 +87,12 @@ let modal app = function
 
 (* The theme is read once, here: app.css is loaded by now. [online] starts
    from the navigator and {!watch_network} keeps it current. *)
-let create_app db {storage; wifi_only; place_sources} =
+let create_app db {storage; drive; wifi_only; place_sources} =
   let auth = Herbier_sync.Auth.create () in
   let state =
     Herbier_ui.State.create
       ~network:{online = Navigator.online G.navigator}
-      ~account:{auth = Herbier_sync.Auth.status auth; storage; wifi_only}
+      ~account:{auth = Herbier_sync.Auth.status auth; storage; drive; wifi_only}
       ~place_sources
   in
   Herbier_ui.App.create ~db ~state ~theme:(Herbier_ui.Theme.load ()) ~auth

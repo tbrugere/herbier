@@ -52,6 +52,15 @@ let cursor t =
           None)
     (Db.find t.db (Settings.get Drive_health_cursor))
 
+let account_changed_at t =
+  Fut.map
+    (function
+      | Ok at -> at
+      | Error e ->
+          log ("account change unreadable: " ^ Db.error_to_string e);
+          None)
+    (Db.find t.db (Settings.get Drive_account_changed_at))
+
 let write t what stmt =
   Fut.map
     (function
@@ -87,9 +96,10 @@ let check t ~now =
   | Error e -> Fut.return (Store e)
   | Ok photos -> (
       let* after = cursor t in
+      let* account_changed_at = account_changed_at t in
       let* asked =
         Drive.health ~token:t.token ~drop_token:t.drop_token
-          (Check.resume ~after (Check.items photos))
+          (Check.resume ~after (Check.items ~account_changed_at photos))
       in
       match asked with
       | Error e -> Fut.return (Stopped e)

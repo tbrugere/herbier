@@ -4,22 +4,21 @@
     is made), no button while the session is read or when the build has no
     sign-in; a failed attempt leaves one line under the card until the next tap
     (none for a dismissed chooser). Signed in, its meta is
-    {!Herbier_ui_model.Drive_text.account_meta} (« · Drive » once Drive access
-    is granted); under it, {!Herbier_ui_model.Drive_text.drive_prompt} of
-    {!App.drive_access} and the {!App.upload_queue}'s pending count (hidden when
-    [None]), with « Autoriser » ({!App.authorize_drive}) when it offers one.
-    Opening the screen runs {!App.check_drive_access}. « Où vont mes photos »
-    (Google Drive or Herbier only; no Google Photos row, architecture §5) goes
-    through {!App.set_storage}; choosing « Dans Herbier seulement » while
-    originals wait on this phone ({!Herbier_ui_model.Drive_text.pending_count}
-    of {!App.upload_queue} > 0) first asks, in a dialog built at the tap for
-    that count ({!Herbier_ui_model.Drive_text.stop_dialog}): « Les envoyer quand
-    même » (the setting only), « Ne pas les envoyer »
-    ({!App.stop_drive_uploads}, then the setting only when it succeeded) or «
-    Annuler ». A failed write leaves one line under the radios (« Le réglage n’a
-    pas pu être enregistré. », or « Les photos en attente n’ont pas pu être
-    retirées : rien n’a changé. ») until the next successful choice. Below them,
-    while the storage is Drive, {!Folder_row} (« Dossier Drive »); the Drive
+    {!Herbier_ui_model.Drive_text.account_meta} (the address: this is the sync
+    account; Drive has its own, chosen under « Dossier Drive »). Opening the
+    screen runs {!App.check_drive_access}. « Où vont mes photos » (Google Drive
+    or Herbier only; no Google Photos row, architecture §5) goes through
+    {!App.set_storage}; choosing « Dans Herbier seulement » while originals wait
+    on this phone ({!Herbier_ui_model.Drive_text.pending_count} of
+    {!App.upload_queue} > 0) first asks, in a dialog built at the tap for that
+    count ({!Herbier_ui_model.Drive_text.stop_dialog}): « Les envoyer quand même
+    » (the setting only), « Ne pas les envoyer » ({!App.stop_drive_uploads},
+    then the setting only when it succeeded) or « Annuler ». A failed write
+    leaves one line under the radios (« Le réglage n’a pas pu être enregistré.
+    », or « Les photos en attente n’ont pas pu être retirées : rien n’a changé.
+    ») until the next successful choice. Below them, while the storage is Drive
+    or originals wait on this phone, {!Folder_button} (« Dossier Drive »: the
+    Drive account and folder, the Drive prompt and « Autoriser »); the Drive
     radio's title names {!App.drive_folder}. « Envoyer seulement en Wi-Fi » is
     written to the local [settings] table and kept in {!State.account}. « File
     d'envoi » follows {!App.upload_queue}:
@@ -52,3 +51,7 @@
     un département » while the picker is open closes it. *)
 
 val v : App.t -> Screen.t
+
+val drive_sheet : App.t -> Screen.t
+(** {!Drive_sheet.v}: 4m « Dossier Drive »'s sheet ([Route.Modal Drive_folder]).
+*)

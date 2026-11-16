@@ -21,21 +21,23 @@ type modal =
   | Intercepted of {text : string; outside : bool}
       (** 4j for [text], never blank: a link or share from another app
           ([outside], {!Intake}), or one given inside Herbier *)
+  | Drive_folder  (** 4m « Dossier Drive »: the Drive account and folder *)
 
 type t = Tab of Widgets.Tab_bar.tab | Modal of modal | Dev of string
 
 val of_fragment : string -> t
 (** [""], ["collection"] → [Tab Collection]; ["carte"], ["journal"],
     ["reglages"]; ["tags"] → [Modal Tags]; ["tags/gerer"] → [Modal Manage_tags];
-    ["plante/<id>"] → [Modal (Plant id)]; ["plante/<id>/modifier"] →
-    [Modal (Edit_plant id)]; ["plante/nouvelle"] → [Modal New_plant];
-    ["observation/<id>"], ["observation/<id>/espece"],
-    ["observation/<id>/position"], ["a-identifier/<id>"] → [Observation],
-    [Change_species], [Move_point], [Identify]; ["noter"] → [Modal Record];
-    ["noter/enregistre/<id>"] → [Modal (Saved id)]; ["photo/<id>"] →
-    [Modal (Viewer id)]; ["chercher"] → [Modal (Search "")]; ["chercher/<q>"] →
-    [Modal (Search q)], [q] percent-decoded (undecodable: as is);
-    ["plante/<id>/lier"] → [Modal (Link_species id)]; ["lien/<t>"] →
+    ["reglages/dossier-drive"] → [Modal Drive_folder]; ["plante/<id>"] →
+    [Modal (Plant id)]; ["plante/<id>/modifier"] → [Modal (Edit_plant id)];
+    ["plante/nouvelle"] → [Modal New_plant]; ["observation/<id>"],
+    ["observation/<id>/espece"], ["observation/<id>/position"],
+    ["a-identifier/<id>"] → [Observation], [Change_species], [Move_point],
+    [Identify]; ["noter"] → [Modal Record]; ["noter/enregistre/<id>"] →
+    [Modal (Saved id)]; ["photo/<id>"] → [Modal (Viewer id)]; ["chercher"] →
+    [Modal (Search "")]; ["chercher/<q>"] → [Modal (Search q)], [q]
+    percent-decoded (undecodable: as is); ["plante/<id>/lier"] →
+    [Modal (Link_species id)]; ["lien/<t>"] →
     [Modal (Intercepted {text = t; outside = true})], [t] percent-decoded as [q]
     is and taken whole (it may hold ['/']), when it is not blank; ["coller/<t>"]
     → the same with [outside = false]; ["dev/<name>"] → [Dev name]. Anything

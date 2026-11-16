@@ -16,6 +16,8 @@ type _ key =
   | Drive_root_folder : string key
   | Drive_root_folder_picked : drive_folder key
   | Drive_root_folder_default : string key
+  | Drive_account : string key
+  | Drive_account_changed_at : Ptime.t key
 
 let name : type a. a key -> string = function
   | Storage_target -> "storage_target"
@@ -30,6 +32,8 @@ let name : type a. a key -> string = function
   | Drive_root_folder -> "drive_root_folder"
   | Drive_root_folder_picked -> "drive_root_folder_picked"
   | Drive_root_folder_default -> "drive_root_folder_default"
+  | Drive_account -> "drive_account"
+  | Drive_account_changed_at -> "drive_account_changed_at"
 
 (* A local-only table: its columns live next to its queries (layout §2), not
    in Tables. *)
@@ -58,6 +62,10 @@ let photo_id_text : Herbier_domain.Ids.Photo_id.t Col.custom =
 
 let drive_id_text : string Col.custom =
   Codec.text ~name:"drive_id" ~to_string:Fun.id
+    ~of_string:Herbier_domain.Text.non_blank
+
+let email_text : string Col.custom =
+  Codec.text ~name:"email" ~to_string:Fun.id
     ~of_string:Herbier_domain.Text.non_blank
 
 let drive_folder_text : drive_folder Col.custom =
@@ -90,6 +98,8 @@ let codec : type a. a key -> a Col.custom = function
   | Drive_root_folder -> drive_id_text
   | Drive_root_folder_picked -> drive_folder_text
   | Drive_root_folder_default -> drive_id_text
+  | Drive_account -> email_text
+  | Drive_account_changed_at -> timestamp_text
 
 let value_column key : (settings, _, [`Mandatory]) Col.t =
   {ty = Not_Null (Custom (codec key)); name = "value"}
@@ -116,3 +126,16 @@ let unset key =
     Stmt.sql = "delete from settings where key = ?";
     params = [Codec.param key_column (name key)];
   }
+
+let set_or_unset : type a. a key -> a option -> Stmt.t =
+ fun key -> function Some v -> set key v | None -> unset key
+
+let drive_choice ~account ~at ~root ~picked ~default =
+  (match account with
+    | Some email -> [set Drive_account email; set Drive_account_changed_at at]
+    | None -> [])
+  @ [
+      set_or_unset Drive_root_folder root;
+      set_or_unset Drive_root_folder_picked picked;
+      set_or_unset Drive_root_folder_default default;
+    ]

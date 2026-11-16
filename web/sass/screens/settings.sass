@@ -104,8 +104,7 @@
 
 // A sand card of rows separated by 1 px lines (last: the rows reset borders).
 .settings__card
-  border-radius: 16px
-  background: var(--sand)
+  +widgets.sand-card
   > * + *
     border-top: 1px solid var(--line)
   // A pressed first or last row keeps the card's corners.
@@ -183,7 +182,82 @@
   color: var(--moss)
   text-decoration: none
 
-// 4m « Dossier Drive »: « Par défaut » at its own width.
-.settings__folder
-  .settings__text > .text-button
-    align-self: flex-start
+// 4m « Dossier Drive »: one row-button (folder · account, chevron) that opens
+// the sheet; the Drive prompt and « Autoriser » under it.
+.settings__folder-button
+  +widgets.bare-button
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 14px
+  width: 100%
+  min-height: 60px
+  padding: 10px 16px
+  text-align: left
+  +widgets.pressed-row(var(--sand-deep))
+  .settings__text
+    flex: 1
+    min-width: 0
+    display: flex
+    flex-direction: column
+    gap: 2px
+  // The reason line stays readable: only the title, detail and chevron fade.
+  &[aria-disabled]
+    pointer-events: none
+    .settings__title, .settings__email, .settings__chevron
+      opacity: .5
+
+.settings__chevron
+  flex: none
+  color: var(--muted)
+
+.settings__folder-prompt
+  margin-top: 0
+  padding: 10px 16px
+
+// The « Dossier Drive » sheet (app/ui/screens/settings/drive_sheet.ml): the
+// account in a sand card with its link, then the folder actions. Google
+// Picker opens over it (its own overlay).
+.drive-sheet
+  min-height: 100%
+  background: var(--paper)
+  &[aria-busy] .drive-sheet__card
+    opacity: .7
+
+.drive-sheet__card
+  display: flex
+  flex-direction: column
+  align-items: flex-start
+  gap: 4px
+  padding: 14px 16px
+  +widgets.sand-card
+  .text-button
+    +base.ui(12px, 700)
+    color: var(--moss)
+    min-height: var(--touch-min)
+    &[aria-disabled]
+      opacity: .5
+      pointer-events: none
+
+.drive-sheet__account
+  +base.ui(15px, 700)
+  overflow-wrap: anywhere
+
+.drive-sheet__folder, .drive-sheet__detail, .drive-sheet__note,
+.drive-sheet__status
+  margin: 0
+  padding: 0 4px
+
+.drive-sheet__default
+  display: flex
+  flex-direction: column
+  gap: 6px
+
+.drive-sheet__error
+  margin: 0
+  padding: 0 4px
+  color: var(--danger)
+
+.drive-sheet .button[aria-disabled]
+  opacity: .5
+  pointer-events: none

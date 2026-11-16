@@ -867,6 +867,134 @@ let root_ids_tests =
       (Drive.default_root (ids ~root:"N" ~picked:"P" ~default:"H" ()));
   ]
 
+(* ---------- same_account, choose_for_account ---------- *)
+
+(* same_account and choose_for_account decide what one « Dossier Drive »
+   write contains: the account when it changes, and the three root keys. *)
+
+let pp_account_choice ppf (c : Drive.account_choice) =
+  Format.fprintf ppf "{account = %a; ids = %a}"
+    (Format.pp_print_option
+       ~none:(fun ppf () -> Format.pp_print_string ppf "None")
+       Format.pp_print_string)
+    c.account pp_root_ids c.ids
+
+let account_choice_t =
+  Alcotest.testable pp_account_choice Drive.equal_account_choice
+
+let same_account_tests =
+  let case name ~stored email expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check bool)
+          "same_account" expected
+          (Drive.same_account ~stored email) )
+  in
+  [
+    case "trimmed and case-insensitive: equal" ~stored:(Some " A@X.fr")
+      "a@x.FR " true;
+    case "nothing stored: false" ~stored:None "a@x.fr" false;
+    case "a different address: false" ~stored:(Some "a@x.fr") "b@x.fr" false;
+  ]
+
+let full_ids : Drive.root_ids =
+  {root = Some "p1"; picked = Some "p1"; default = Some "h0"}
+
+let choose_for_account_tests =
+  let case name ~stored ~account ~folder expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check account_choice_t "choose_for_account" expected
+          (Drive.choose_for_account full_ids ~stored ~account ~folder) )
+  in
+  [
+    case
+      "another account, no pick: the account is stored, every root id dropped"
+      ~stored:(Some "old@x.fr") ~account:"new@x.fr" ~folder:None
+      {
+        Drive.account = Some "new@x.fr";
+        ids = {root = None; picked = None; default = None};
+      };
+    case
+      "another account, a pick: the account and the picked id are stored, the \
+       old default does not survive"
+      ~stored:(Some "old@x.fr") ~account:"new@x.fr" ~folder:(Some "n1")
+      {
+        Drive.account = Some "new@x.fr";
+        ids = {root = Some "n1"; picked = Some "n1"; default = None};
+      };
+    case "nothing stored yet behaves like another account" ~stored:None
+      ~account:"any@x.fr" ~folder:(Some "n1")
+      {
+        Drive.account = Some "any@x.fr";
+        ids = {root = Some "n1"; picked = Some "n1"; default = None};
+      };
+    case
+      "the same account (case-insensitive), a pick: pick_root, account not \
+       rewritten"
+      ~stored:(Some "old@x.fr") ~account:"OLD@x.fr" ~folder:(Some "n1")
+      {
+        Drive.account = None;
+        ids = {root = Some "n1"; picked = Some "n1"; default = Some "h0"};
+      };
+    case "the same account, « Par défaut »: default_root"
+      ~stored:(Some "old@x.fr") ~account:"OLD@x.fr" ~folder:None
+      {
+        Drive.account = None;
+        ids = {root = Some "h0"; picked = None; default = None};
+      };
+    case "the account is trimmed before it is compared and stored"
+      ~stored:(Some "old@x.fr") ~account:" new@x.fr " ~folder:None
+      {
+        Drive.account = Some "new@x.fr";
+        ids = {root = None; picked = None; default = None};
+      };
+  ]
+
+(* An install that used Drive before it had its own account: its ids are the
+   signed-in account's, which seed_account stores once so they are kept. *)
+let seed_account_tests =
+  let case name ~stored ids ~session_email expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "seed_account" expected
+          (Drive.seed_account ~stored ids ~session_email) )
+  in
+  let none : Drive.root_ids = {root = None; picked = None; default = None} in
+  [
+    case "no account, ids, signed in: the session's email (trimmed)"
+      ~stored:None full_ids ~session_email:(Some " me@x.fr ") (Some "me@x.fr");
+    case "only a default id is enough" ~stored:None
+      {none with default = Some "h0"}
+      ~session_email:(Some "me@x.fr") (Some "me@x.fr");
+    case "an account already stored: nothing" ~stored:(Some "drive@x.fr")
+      full_ids ~session_email:(Some "me@x.fr") None;
+    case "no ids (a new install): nothing" ~stored:None none
+      ~session_email:(Some "me@x.fr") None;
+    case "no session email: nothing" ~stored:None full_ids ~session_email:None
+      None;
+    case "a blank session email: nothing" ~stored:None full_ids
+      ~session_email:(Some "  ") None;
+  ]
+
+(* Seeding stores the account the ids belong to: a later choice of that same
+   account keeps them, as for any stored account. *)
+let seeded_then_same_account () =
+  let stored =
+    Drive.seed_account ~stored:None full_ids ~session_email:(Some "me@x.fr")
+  in
+  Alcotest.check account_choice_t "same account after the seed keeps the ids"
+    {
+      Drive.account = None;
+      ids = {root = Some "n1"; picked = Some "n1"; default = Some "h0"};
+    }
+    (Drive.choose_for_account full_ids ~stored ~account:"ME@x.fr"
+       ~folder:(Some "n1"))
+
 (* ---------- recorded fixtures (when present) ---------- *)
 
 let id_field file fields =

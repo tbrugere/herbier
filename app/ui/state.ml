@@ -15,6 +15,7 @@ type network = {online : bool} [@@deriving eq]
 type account = {
   auth : Herbier_sync.Auth.status;
   storage : Original_target.t;
+  drive : Herbier_sync_core.Auth.Drive_account.t;
   wifi_only : bool;
 }
 [@@deriving eq]

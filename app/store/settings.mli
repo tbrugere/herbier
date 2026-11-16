@@ -49,6 +49,21 @@ type _ key =
           pick (the app's « Herbier », wherever the user moved it), restored by
           4m « Par défaut »; as {!Drive_root_folder}'s text; unset = none (« Par
           défaut » then finds or creates « Herbier » at My Drive's root). *)
+  | Drive_account : string key
+      (** 4m « Dossier Drive »: the email of the Google account Drive tokens are
+          asked for. Trimmed on read; a blank value is refused
+          ([Row `WrongType], read as unset). Unset = none chosen. Local only,
+          never synced. Written with the root folder keys, in one transaction
+          ({!drive_choice}, [Drive_root.forget_account]), or alone by
+          [Drive_root.seed], which keeps the ids it finds (they are that
+          account's). *)
+  | Drive_account_changed_at : Ptime.t key
+      (** When a choice in 4m « Dossier Drive » last stored a new
+          {!Drive_account} (written with it by {!drive_choice}); as
+          {!Codec.timestamp}; unset = never (an install's first account seeded
+          from the session counts as no change). The health check takes a 404
+          for a photo created before it as no answer
+          ([Herbier_photos.Health.items]). Local only. *)
 
 val name : _ key -> string
 (** The stored key: ["storage_target"], ["wifi_only"],
@@ -56,7 +71,8 @@ val name : _ key -> string
     ["place_source_photon_online"], ["location_notice_seen"],
     ["drive_health_checked_at"], ["last_upload_at"], ["drive_health_cursor"],
     ["drive_root_folder"], ["drive_root_folder_picked"],
-    ["drive_root_folder_default"]. *)
+    ["drive_root_folder_default"], ["drive_account"],
+    ["drive_account_changed_at"]. *)
 
 val get : 'a key -> 'a Stmt.query
 (** 0 or 1 row: run it with [Db.find]. [None] means the key was never set, and
@@ -72,3 +88,17 @@ val set : 'a key -> 'a -> Stmt.t
 
 val unset : _ key -> Stmt.t
 (** Deletes the key's row: 1 change when it was set, 0 otherwise. *)
+
+val drive_choice :
+  account:string option ->
+  at:Ptime.t ->
+  root:string option ->
+  picked:drive_folder option ->
+  default:string option ->
+  Stmt.t list
+(** One 4m « Dossier Drive » choice, to run in one transaction:
+    [account = Some e] → {!set} [Drive_account e] and
+    [Drive_account_changed_at at] first ([None]: neither is written); then
+    {!Drive_root_folder}, {!Drive_root_folder_picked} and
+    {!Drive_root_folder_default}, each {!set} when [Some], {!unset} when [None].
+*)

@@ -87,7 +87,7 @@ type t = {
          {!create}: the binding on « Envoyer seulement en Wi-Fi », held here so
          that it stays reachable (primer §5) for the app's lifetime. *)
   drive_last : Drive_text.access React.signal;
-      (* the last Drive token outcome since the last sign-in *)
+      (* the last Drive token outcome since the last Drive account change *)
   set_drive_last : ?step:React.step -> Drive_text.access -> unit;
   drive_access : Drive_text.access React.signal;
       (* derived from {!State.account} and [drive_last]; held here so that it
@@ -125,6 +125,13 @@ val changed : t -> unit
 (** Fires {!saved} and sends the engine a local write. *)
 
 val start_auth : t -> unit
+(** [Auth.start]; each status into {!State.account}. On [Signed_in {email}]: the
+    engine is told, then, with no Drive account stored yet,
+    [Drive_root.seed ~session_email:email] inside [Upload_queue.exclusive] (an
+    older install's folders are kept for the account its tokens named; a seeded
+    account goes into State as {!set_drive_account} does), then
+    [upload_pending], [check_drive_access] and [check_originals]. *)
+
 val start_sync : t -> unit
 val start_keepalive : t -> unit
 val start_uploads : t -> unit
@@ -143,7 +150,25 @@ val refresh_folder : t -> unit Fut.t
 
 val drive_token :
   t -> interactive:bool -> (string, Herbier_sync.Auth.drive_error) result Fut.t
-(** [Auth.drive_token], its outcome recorded into {!drive_access}. *)
+(** [Auth.drive_token] for {!State.account}'s [drive], read at the call; its
+    outcome recorded into {!drive_access}, unless the account changed meanwhile
+    (the outcome was the old account's). *)
+
+val drive_token_for :
+  t ->
+  email:string ->
+  interactive:bool ->
+  (string, Herbier_sync.Auth.drive_error) result Fut.t
+(** The token for [email], which may not be the stored account yet (4m's sheet):
+    the stored account ([Drive.same_account]) → {!drive_token}; another →
+    [Auth.drive_token] for [Chosen {email = trim email}], not recorded. *)
+
+val set_drive_account : t -> Herbier_sync_core.Auth.Drive_account.t -> unit
+(** After the setting was written: when the email changes (trim and ASCII case
+    ignored), {!State.account}'s [drive] := that and the last Drive token
+    outcome is reset to [Unknown], in one update step; the same account changes
+    nothing (State keeps the spelling the setting has). Call it outside any
+    update step. *)
 
 val denial : Herbier_sync.Auth.drive_error -> Drive_text.denial
 (** The mapping {!drive_access} documents. *)

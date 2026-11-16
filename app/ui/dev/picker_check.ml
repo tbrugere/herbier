@@ -34,7 +34,7 @@ let iframe_hosts () =
       | Error (_ : Jv.Error.t) ->
           Printf.sprintf "(not a URL: %d chars)" (Jstr.length src))
 
-let page auth =
+let page app =
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
   let number = Backend.google_cloud_project_number in
   let app_id =
@@ -83,12 +83,14 @@ let page auth =
   in
   let dummy () = Fut.return (Ok dummy_token) in
   let drive () =
-    match auth with
+    match app with
     | None -> Fut.return (Error "no app")
-    | Some auth ->
+    | Some app ->
+        (* The Drive account stored in 4m (#dev/drive can force one). *)
+        let account = (React.S.value (State.account (App.state app))).drive in
         Fut.map
           (Result.map_error Auth.drive_error_to_string)
-          (Auth.drive_token auth ~interactive:true)
+          (Auth.drive_token (App.auth app) ~account ~interactive:true)
   in
   let opener label source ~with_key =
     Kit.action label (fun () -> open_picker label ~with_key (source ()))
@@ -102,9 +104,9 @@ let page auth =
           ignore)
   and close = Kit.action "Fermer" Picker.dismiss in
   let drive_buttons =
-    match auth with
+    match app with
     | None -> []
-    | Some (_ : Auth.t) ->
+    | Some (_ : App.t) ->
         [
           opener "Ouvrir (jeton Drive, sans clé)" drive ~with_key:false;
           opener "Ouvrir (jeton Drive, avec clé)" drive ~with_key:true;
@@ -131,5 +133,5 @@ let page auth =
     ]
 
 let el = function
-  | Ok app -> page (Some (App.auth app))
+  | Ok app -> page (Some app)
   | Error e -> El.div [El.p [El.txt' ("no app: " ^ e)]; page None]

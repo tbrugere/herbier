@@ -5,7 +5,8 @@ module Drive_text = Herbier_ui_model.Drive_text
 module Photo = Herbier_domain.Photo
 module Ids = Herbier_domain.Ids
 module Value = Herbier_test_support.Value
-module Lifecycle = Herbier_sync_core.Auth.Lifecycle
+module Text = Herbier_test_support.Text
+module Drive_account = Herbier_sync_core.Auth.Drive_account
 
 let utc = Fixtures.utc
 
@@ -41,13 +42,26 @@ let photo ?(target = Photo.Original_target.Drive)
 
 let denial_to_string = function
   | Drive_text.Unconfigured -> "Unconfigured"
-  | Signed_out -> "Signed_out"
+  | No_drive_account -> "No_drive_account"
   | Consent_needed -> "Consent_needed"
   | Consent_refused -> "Consent_refused"
   | Offline -> "Offline"
   | Misconfigured -> "Misconfigured"
   | No_account -> "No_account"
   | Failed -> "Failed"
+
+let all_denials =
+  Drive_text.
+    [
+      Unconfigured;
+      No_drive_account;
+      Consent_needed;
+      Consent_refused;
+      Offline;
+      Misconfigured;
+      No_account;
+      Failed;
+    ]
 
 let pp_access ppf = function
   | Drive_text.Unknown -> Format.pp_print_string ppf "Unknown"
@@ -95,14 +109,14 @@ let pp_folder ppf = function
 
 let folder_t = Alcotest.testable pp_folder Drive_text.equal_folder
 
-let pp_folder_row ppf (r : Drive_text.folder_row) =
-  Format.fprintf ppf "{detail = %S; choose = %s; default = %b}" r.detail
-    (match r.choose with
+let pp_folder_button ppf (b : Drive_text.folder_button) =
+  Format.fprintf ppf "{detail = %S; choose = %s}" b.detail
+    (match b.choose with
     | Enabled -> "Enabled"
-    | Disabled s -> Printf.sprintf "Disabled %S" s)
-    r.default
+    | Disabled reason -> Printf.sprintf "Disabled %S" reason)
 
-let folder_row_t = Alcotest.testable pp_folder_row Drive_text.equal_folder_row
+let folder_button_t =
+  Alcotest.testable pp_folder_button Drive_text.equal_folder_button
 
 let pick_error_to_string = function
   | Drive_text.Not_a_folder -> "Not_a_folder"
@@ -113,6 +127,9 @@ let pick_error_to_string = function
   | Drive_text.Picker_unavailable -> "Picker_unavailable"
   | Drive_text.Not_saved -> "Not_saved"
   | Drive_text.Drive_failed -> "Drive_failed"
+  | Drive_text.Chooser_no_account -> "Chooser_no_account"
+  | Drive_text.Chooser_failed -> "Chooser_failed"
+  | Drive_text.Other_account d -> "Other_account " ^ denial_to_string d
 
 let pp_pick_error ppf e = Format.pp_print_string ppf (pick_error_to_string e)
 let pick_error_t = Alcotest.testable pp_pick_error Drive_text.equal_pick_error
@@ -120,49 +137,46 @@ let pick_error_t = Alcotest.testable pp_pick_error Drive_text.equal_pick_error
 (* ---------- access ---------- *)
 
 let access_tests =
-  let case name account last expected =
+  let case name drive last expected =
     ( name,
       `Quick,
       fun () ->
         Alcotest.check access_t "access" expected
-          (Drive_text.access ~account ~last) )
+          (Drive_text.access ~drive ~last) )
   in
-  let signed_in = Lifecycle.Signed_in {email = Some "a@b.c"} in
+  let chosen = Drive_account.Chosen {email = "a@b.c"} in
   Drive_text.
     [
       case "Unconfigured, last Unknown: Denied Unconfigured"
-        Lifecycle.Unconfigured Unknown (Denied Unconfigured);
-      case "Unconfigured, last Granted: Denied Unconfigured"
-        Lifecycle.Unconfigured Granted (Denied Unconfigured);
+        Drive_account.Unconfigured Unknown (Denied Unconfigured);
+      case "Unconfigured, last Granted: Denied Unconfigured (whatever last was)"
+        Drive_account.Unconfigured Granted (Denied Unconfigured);
       case "Unconfigured, last Denied Consent_needed: Denied Unconfigured"
-        Lifecycle.Unconfigured (Denied Consent_needed) (Denied Unconfigured);
-      case "Unconfigured, last Denied Signed_out: Denied Unconfigured"
-        Lifecycle.Unconfigured (Denied Signed_out) (Denied Unconfigured);
-      case "Signed_out, last Unknown: Denied Signed_out" Lifecycle.Signed_out
-        Unknown (Denied Signed_out);
-      case "Signed_out, last Granted: Denied Signed_out" Lifecycle.Signed_out
-        Granted (Denied Signed_out);
-      case "Signed_out, last Denied Consent_needed: Denied Signed_out"
-        Lifecycle.Signed_out (Denied Consent_needed) (Denied Signed_out);
-      case "Signed_out, last Denied Signed_out: Denied Signed_out"
-        Lifecycle.Signed_out (Denied Signed_out) (Denied Signed_out);
-      case "Restoring, last Unknown: Unknown" Lifecycle.Restoring Unknown
-        Unknown;
-      case "Restoring, last Granted: Unknown" Lifecycle.Restoring Granted
-        Unknown;
-      case "Restoring, last Denied Consent_needed: Unknown" Lifecycle.Restoring
-        (Denied Consent_needed) Unknown;
-      case "Restoring, last Denied Signed_out: Unknown" Lifecycle.Restoring
-        (Denied Signed_out) Unknown;
-      case "Signed_in, last Unknown: Unknown" signed_in Unknown Unknown;
-      case "Signed_in, last Granted: Granted" signed_in Granted Granted;
-      case "Signed_in without an address, last Granted: Granted"
-        (Lifecycle.Signed_in {email = None})
-        Granted Granted;
-      case "Signed_in, last Denied Consent_needed: Denied Consent_needed"
-        signed_in (Denied Consent_needed) (Denied Consent_needed);
-      case "Signed_in, last Denied Signed_out (a stale denial): Unknown"
-        signed_in (Denied Signed_out) Unknown;
+        Drive_account.Unconfigured (Denied Consent_needed) (Denied Unconfigured);
+      case "Unconfigured, last Denied No_drive_account: Denied Unconfigured"
+        Drive_account.Unconfigured (Denied No_drive_account)
+        (Denied Unconfigured);
+      case "Unchosen, last Unknown: Denied No_drive_account"
+        Drive_account.Unchosen Unknown (Denied No_drive_account);
+      case "Unchosen, last Granted: Denied No_drive_account (whatever last was)"
+        Drive_account.Unchosen Granted (Denied No_drive_account);
+      case "Unchosen, last Denied Consent_needed: Denied No_drive_account"
+        Drive_account.Unchosen (Denied Consent_needed) (Denied No_drive_account);
+      case "Chosen, last Unknown: Unknown" chosen Unknown Unknown;
+      case
+        "Chosen, last Granted: Granted (no session argument at all: a \
+         signed-out user with a chosen account is not denied)"
+        chosen Granted Granted;
+      case "Chosen, last Denied Consent_needed: kept, Denied Consent_needed"
+        chosen (Denied Consent_needed) (Denied Consent_needed);
+      case
+        "Chosen, last Denied No_drive_account (stale, from before this account \
+         was chosen): cleared to Unknown"
+        chosen (Denied No_drive_account) Unknown;
+      case
+        "Chosen, last Denied Unconfigured (stale, from an earlier build): \
+         cleared to Unknown"
+        chosen (Denied Unconfigured) Unknown;
     ]
 
 (* ---------- queue_of, pending_count ---------- *)
@@ -264,6 +278,17 @@ let queue_title_tests =
 
 (* ---------- blocker ---------- *)
 
+let no_drive_account_text =
+  "Choisissez le compte Google dans \xc2\xab Dossier Drive \xc2\xbb."
+
+let not_authorized_text =
+  "Google Drive n’est pas autorisé : autorisez-le, ou changez de compte dans « \
+   Dossier Drive »."
+
+let no_account_text =
+  "Ce compte Google n\xe2\x80\x99est plus sur le t\xc3\xa9l\xc3\xa9phone : \
+   changez-le dans \xc2\xab Dossier Drive \xc2\xbb."
+
 let blocker_tests =
   let case name access ~online expected =
     ( name,
@@ -277,14 +302,15 @@ let blocker_tests =
     [
       case "Denied Unconfigured" (Denied Unconfigured) ~online:true
         (Some "Envoi vers Drive indisponible dans cette version.");
-      case "Denied Signed_out" (Denied Signed_out) ~online:true
-        (Some "Connectez-vous pour envoyer les photos.");
+      case "Denied No_drive_account: points to Dossier Drive"
+        (Denied No_drive_account) ~online:true (Some no_drive_account_text);
       case "Denied Consent_needed" (Denied Consent_needed) ~online:true
-        (Some "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.");
+        (Some not_authorized_text);
       case "Denied Consent_refused" (Denied Consent_refused) ~online:true
-        (Some "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.");
-      case "Denied No_account" (Denied No_account) ~online:true
-        (Some "Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone.");
+        (Some not_authorized_text);
+      case
+        "Denied No_account: the chosen account is gone, points to Dossier Drive"
+        (Denied No_account) ~online:true (Some no_account_text);
       case "Denied Misconfigured" (Denied Misconfigured) ~online:true
         (Some
            "Google refuse l\xe2\x80\x99acc\xc3\xa8s \xc3\xa0 Drive \
@@ -300,23 +326,95 @@ let blocker_tests =
       case "Denied Unconfigured, offline: its own text, not the network's"
         (Denied Unconfigured) ~online:false
         (Some "Envoi vers Drive indisponible dans cette version.");
-      case "Denied Signed_out, offline: the sign-in text" (Denied Signed_out)
-        ~online:false (Some "Connectez-vous pour envoyer les photos.");
+      case "Denied No_drive_account, offline: its own text"
+        (Denied No_drive_account) ~online:false (Some no_drive_account_text);
       case "Denied Consent_needed, offline: not authorized"
-        (Denied Consent_needed) ~online:false
-        (Some "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.");
+        (Denied Consent_needed) ~online:false (Some not_authorized_text);
       case "Denied Consent_refused, offline: not authorized"
-        (Denied Consent_refused) ~online:false
-        (Some "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.");
-      case "Denied No_account, offline: no account" (Denied No_account)
-        ~online:false
-        (Some "Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone.");
+        (Denied Consent_refused) ~online:false (Some not_authorized_text);
+      case "Denied No_account, offline: its own text" (Denied No_account)
+        ~online:false (Some no_account_text);
       case "Denied Misconfigured, offline: misconfigured" (Denied Misconfigured)
         ~online:false
         (Some
            "Google refuse l\xe2\x80\x99acc\xc3\xa8s \xc3\xa0 Drive \
             (configuration de l\xe2\x80\x99app).");
     ]
+
+(* No denial's text invites a sign-in (the Drive account is not the Supabase
+   session), and every denial the user can act on in the « Dossier Drive »
+   sheet names it. *)
+let blocker_never_says_connectez_vous () =
+  List.iter
+    (fun d ->
+      match Drive_text.blocker (Drive_text.Denied d) ~online:true with
+      | None -> ()
+      | Some text ->
+          Alcotest.(check bool)
+            (Printf.sprintf "%s: no \xc2\xab Connectez-vous \xc2\xbb"
+               (denial_to_string d))
+            false
+            (Text.contains ~sub:"Connectez-vous" text))
+    all_denials;
+  List.iter
+    (fun d ->
+      match
+        Drive_text.drive_prompt ~storage:Photo.Original_target.Drive ~pending:1
+          (Drive_text.Denied d)
+      with
+      | None -> ()
+      | Some (p : Drive_text.prompt) ->
+          Alcotest.(check bool)
+            (Printf.sprintf
+               "drive_prompt %s: no \xc2\xab Connectez-vous \xc2\xbb"
+               (denial_to_string d))
+            false
+            (Text.contains ~sub:"Connectez-vous" p.text))
+    all_denials
+
+let blocker_account_denials_name_dossier_drive () =
+  List.iter
+    (fun d ->
+      match Drive_text.blocker (Drive_text.Denied d) ~online:true with
+      | Some text ->
+          Alcotest.(check bool)
+            (Printf.sprintf "%s names \xc2\xab Dossier Drive \xc2\xbb"
+               (denial_to_string d))
+            true
+            (Text.contains ~sub:"Dossier Drive" text)
+      | None ->
+          Alcotest.failf "%s: expected a blocker text" (denial_to_string d))
+    Drive_text.[No_drive_account; No_account; Consent_needed; Consent_refused]
+
+let consent_prompts_name_dossier_drive () =
+  List.iter
+    (fun d ->
+      match
+        Drive_text.drive_prompt ~storage:Photo.Original_target.Drive ~pending:1
+          (Drive_text.Denied d)
+      with
+      | Some (p : Drive_text.prompt) ->
+          Alcotest.(check bool)
+            (Printf.sprintf "drive_prompt %s names « Dossier Drive »"
+               (denial_to_string d))
+            true
+            (Text.contains ~sub:"Dossier Drive" p.text)
+      | None -> Alcotest.failf "%s: expected a prompt" (denial_to_string d))
+    Drive_text.[Consent_needed; Consent_refused]
+
+let blocker_extra_tests =
+  [
+    ( "no denial's text says \xc2\xab Connectez-vous \xc2\xbb any more",
+      `Quick,
+      blocker_never_says_connectez_vous );
+    ( "No_drive_account, No_account and the consent denials name \xc2\xab \
+       Dossier Drive \xc2\xbb",
+      `Quick,
+      blocker_account_denials_name_dossier_drive );
+    ( "the 4m consent prompts name « Dossier Drive »",
+      `Quick,
+      consent_prompts_name_dossier_drive );
+  ]
 
 (* ---------- queue_status ---------- *)
 
@@ -341,8 +439,8 @@ let queue_status_tests =
         `Quick,
         fun () ->
           Alcotest.(check (option string))
-            "queue_status" (Some "Connectez-vous pour envoyer les photos.")
-            (Drive_text.queue_status (Denied Signed_out) ~online:true
+            "queue_status" (Some no_drive_account_text)
+            (Drive_text.queue_status (Denied No_drive_account) ~online:true
                ~wifi_only:false (queue ~waiting:1 ())) );
       ( "failed, no blocker: the retry text",
         `Quick,
@@ -396,8 +494,8 @@ let queue_status_tests =
         `Quick,
         fun () ->
           Alcotest.(check (option string))
-            "queue_status" (Some "Connectez-vous pour envoyer les photos.")
-            (Drive_text.queue_status (Denied Signed_out) ~online:true
+            "queue_status" (Some no_drive_account_text)
+            (Drive_text.queue_status (Denied No_drive_account) ~online:true
                ~wifi_only:false (queue ~failed:1 ())) );
     ]
 
@@ -489,37 +587,22 @@ let send_enabled_tests =
 
 (* ---------- account_meta ---------- *)
 
+(* account_meta is the sync (Supabase) account's address, or its fallback,
+   with no Drive suffix: the Drive account may differ. *)
 let account_meta_tests =
   [
-    ( "email, Drive, Granted: the email then \" \xc2\xb7 Drive\"",
+    ( "an address: itself, verbatim",
       `Quick,
       fun () ->
         Alcotest.(check string)
-          "account_meta" "a@b.c \xc2\xb7 Drive"
-          (Drive_text.account_meta ~email:(Some "a@b.c")
-             ~storage:Photo.Original_target.Drive Drive_text.Granted) );
-    ( "email, App_only, Granted: just the email",
-      `Quick,
-      fun () ->
-        Alcotest.(check string)
-          "account_meta" "a@b.c"
-          (Drive_text.account_meta ~email:(Some "a@b.c")
-             ~storage:Photo.Original_target.App_only Drive_text.Granted) );
-    ( "email, Drive, Denied: just the email (no suffix without Granted)",
-      `Quick,
-      fun () ->
-        Alcotest.(check string)
-          "account_meta" "a@b.c"
-          (Drive_text.account_meta ~email:(Some "a@b.c")
-             ~storage:Photo.Original_target.Drive
-             (Drive_text.Denied Drive_text.Consent_needed)) );
-    ( "no email: the fallback address text",
+          "account_meta" "a@b"
+          (Drive_text.account_meta ~email:(Some "a@b")) );
+    ( "no address: the fallback text",
       `Quick,
       fun () ->
         Alcotest.(check string)
           "account_meta" "Adresse inconnue"
-          (Drive_text.account_meta ~email:None
-             ~storage:Photo.Original_target.App_only Drive_text.Granted) );
+          (Drive_text.account_meta ~email:None) );
   ]
 
 (* ---------- drive_prompt ---------- *)
@@ -527,9 +610,16 @@ let account_meta_tests =
 let drive_prompt_tests =
   let consent_prompt =
     Some
-      ( "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9 : les photos \
-         attendent sur le t\xc3\xa9l\xc3\xa9phone.",
+      ( "Google Drive n’est pas autorisé pour ce compte : les photos attendent \
+         sur le téléphone. Autorisez-le, ou changez de compte dans « Dossier \
+         Drive ».",
         Some "Autoriser" )
+  in
+  let no_drive_account_prompt =
+    Some
+      ( "Les photos attendent sur le t\xc3\xa9l\xc3\xa9phone : choisissez le \
+         compte et le dossier dans \xc2\xab Dossier Drive \xc2\xbb.",
+        None )
   in
   let case ?(pending = 0) name storage access expected =
     ( name,
@@ -550,16 +640,15 @@ let drive_prompt_tests =
       (D.Denied D.Consent_refused) consent_prompt;
     case "Drive, Denied No_account: its blocker text, no action" O.Drive
       (D.Denied D.No_account)
-      (Some ("Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone.", None));
+      (Some (no_account_text, None));
     case "Drive, Denied Misconfigured: its blocker text, no action" O.Drive
       (D.Denied D.Misconfigured)
       (Some
          ( "Google refuse l\xe2\x80\x99acc\xc3\xa8s \xc3\xa0 Drive \
             (configuration de l\xe2\x80\x99app).",
            None ));
-    case "Drive, Denied Signed_out: the sign-in text, no action" O.Drive
-      (D.Denied D.Signed_out)
-      (Some ("Connectez-vous pour envoyer les photos vers Drive.", None));
+    case "Drive, Denied No_drive_account: choose the account, no action" O.Drive
+      (D.Denied D.No_drive_account) no_drive_account_prompt;
     case "Drive, Denied Unconfigured: None" O.Drive (D.Denied D.Unconfigured)
       None;
     case "Drive, Denied Offline: None" O.Drive (D.Denied D.Offline) None;
@@ -570,9 +659,10 @@ let drive_prompt_tests =
       "App_only with photos still waiting, Denied Consent_needed: the consent \
        prompt"
       O.App_only (D.Denied D.Consent_needed) consent_prompt;
-    case ~pending:1 "App_only with a photo waiting, Denied Signed_out: sign in"
-      O.App_only (D.Denied D.Signed_out)
-      (Some ("Connectez-vous pour envoyer les photos vers Drive.", None));
+    case ~pending:1
+      "App_only with a photo waiting, Denied No_drive_account: choose the \
+       account"
+      O.App_only (D.Denied D.No_drive_account) no_drive_account_prompt;
     case ~pending:1 "App_only with a photo waiting, Granted: None" O.App_only
       D.Granted None;
   ]
@@ -659,103 +749,54 @@ let folder_name_tests =
           (Drive_text.folder_name (Drive_text.Picked "  ")) );
   ]
 
-(* ---------- folder_row ---------- *)
+(* ---------- folder_button ---------- *)
 
-let unconfigured_reason = "Choix du dossier indisponible dans cette version."
+(* folder_button is the single « Dossier Drive » button. The Picker's
+   availability never disables it (the sheet still chooses the account
+   without it): only the Drive account's state does. *)
+let unconfigured_reason = "Envoi vers Drive indisponible dans cette version."
 let herbier_detail = "Herbier \xc2\xb7 cr\xc3\xa9\xc3\xa9 par l\xe2\x80\x99app"
+let chosen_a = Drive_account.Chosen {email = "a@x.fr"}
 
-let folder_row_tests =
-  let case name config access folder expected =
+let folder_button_tests =
+  let case name drive folder expected =
     ( name,
       `Quick,
       fun () ->
-        Alcotest.check folder_row_t "folder_row" expected
-          (Drive_text.folder_row config access folder) )
+        Alcotest.check folder_button_t "folder_button" expected
+          (Drive_text.folder_button ~drive folder) )
   in
   Drive_text.
     [
-      case "Picker_unconfigured, Granted, Default: disabled, not resettable"
-        Picker_unconfigured Granted Default
-        {
-          detail = herbier_detail;
-          default = false;
-          choose = Disabled unconfigured_reason;
-        };
       case
-        "Picker_unconfigured, Granted, Picked: disabled, but resettable \
-         (default is true for a Picked folder even when unconfigured)"
-        Picker_unconfigured Granted (Picked "Mes plantes")
-        {
-          detail = "Mes plantes";
-          default = true;
-          choose = Disabled unconfigured_reason;
-        };
+        "Unconfigured, Default: disabled, the build reason, detail \xc2\xab \
+         Herbier \xc2\xbb alone (no email, no account known)"
+        Drive_account.Unconfigured Default
+        {detail = "Herbier"; choose = Disabled unconfigured_reason};
       case
-        "Picker_unconfigured, Denied Signed_out: the build reason wins over \
-         the sign-in line (first that applies)"
-        Picker_unconfigured (Denied Signed_out) Default
-        {
-          detail = herbier_detail;
-          default = false;
-          choose = Disabled unconfigured_reason;
-        };
-      case "Picker_ready, Denied Unconfigured: disabled, the same reason"
-        Picker_ready (Denied Unconfigured) Default
-        {
-          detail = herbier_detail;
-          default = false;
-          choose = Disabled unconfigured_reason;
-        };
-      case "Picker_ready, Denied Signed_out: disabled, the sign-in line"
-        Picker_ready (Denied Signed_out) Default
-        {
-          detail = herbier_detail;
-          default = false;
-          choose = Disabled "Connectez-vous pour choisir un dossier.";
-        };
-      case "Picker_ready, Denied No_account: disabled, its blocker text"
-        Picker_ready (Denied No_account) Default
-        {
-          detail = herbier_detail;
-          default = false;
-          choose =
-            Disabled "Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone.";
-        };
-      case "Picker_ready, Denied Misconfigured: disabled, its blocker text"
-        Picker_ready (Denied Misconfigured) Default
-        {
-          detail = herbier_detail;
-          default = false;
-          choose =
-            Disabled
-              "Google refuse l\xe2\x80\x99acc\xc3\xa8s \xc3\xa0 Drive \
-               (configuration de l\xe2\x80\x99app).";
-        };
-      case "Picker_ready, Unknown, Default: enabled, no reason" Picker_ready
-        Unknown Default
-        {detail = herbier_detail; choose = Enabled; default = false};
-      case "Picker_ready, Granted, Picked: enabled, resettable, named"
-        Picker_ready Granted (Picked "Mes plantes")
-        {detail = "Mes plantes"; choose = Enabled; default = true};
+        "Unconfigured, Picked: still \xc2\xab Herbier \xc2\xbb alone - the \
+         folder is irrelevant without a usable build"
+        Drive_account.Unconfigured (Picked "Mes plantes")
+        {detail = "Herbier"; choose = Disabled unconfigured_reason};
+      case "Unchosen, Default: enabled, no account chosen yet, no reason"
+        Drive_account.Unchosen Default
+        {detail = "Aucun compte choisi"; choose = Enabled};
       case
-        "Picker_ready, Denied Consent_needed: enabled (the tap asks \
-         interactively and reports)"
-        Picker_ready (Denied Consent_needed) Default
-        {detail = herbier_detail; choose = Enabled; default = false};
-      case "Picker_ready, Denied Consent_refused: enabled" Picker_ready
-        (Denied Consent_refused) Default
-        {detail = herbier_detail; choose = Enabled; default = false};
-      case "Picker_ready, Denied Offline: enabled" Picker_ready (Denied Offline)
-        Default
-        {detail = herbier_detail; choose = Enabled; default = false};
-      case "Picker_ready, Denied Failed: enabled" Picker_ready (Denied Failed)
-        Default
-        {detail = herbier_detail; choose = Enabled; default = false};
+        "Unchosen, Picked: still \xc2\xab Aucun compte choisi \xc2\xbb - the \
+         folder belongs to no account yet"
+        Drive_account.Unchosen (Picked "Mes plantes")
+        {detail = "Aucun compte choisi"; choose = Enabled};
       case
-        "Picker_ready, Granted, Picked \"\": enabled, resettable, the \
-         blank-name fallback in detail"
-        Picker_ready Granted (Picked "")
-        {detail = "(sans nom)"; choose = Enabled; default = true};
+        "Chosen, Default: Herbier, created by the app, then this account's \
+         email"
+        chosen_a Default
+        {detail = herbier_detail ^ " \xc2\xb7 a@x.fr"; choose = Enabled};
+      case "Chosen, Picked: the picked name, then this account's email" chosen_a
+        (Picked "Mes plantes")
+        {detail = "Mes plantes \xc2\xb7 a@x.fr"; choose = Enabled};
+      case "Chosen, Picked \"\": the blank-name fallback, then the email"
+        chosen_a (Picked "")
+        {detail = "(sans nom) \xc2\xb7 a@x.fr"; choose = Enabled};
     ]
 
 (* ---------- picker_config_of_project_number ---------- *)
@@ -801,27 +842,48 @@ let pick_error_text_tests =
         "Pas de r\xc3\xa9seau : r\xc3\xa9essayez plus tard.";
       case "Token Unconfigured" (Token Unconfigured)
         "Envoi vers Drive indisponible dans cette version.";
-      case "Token Signed_out" (Token Signed_out)
-        "Connectez-vous pour envoyer les photos.";
-      case "Token Consent_needed" (Token Consent_needed)
-        "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.";
-      case "Token Consent_refused" (Token Consent_refused)
-        "Google Drive n\xe2\x80\x99est pas autoris\xc3\xa9.";
-      case "Token No_account" (Token No_account)
-        "Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone.";
+      case "Token No_drive_account (blocker (Denied d) ~online:true)"
+        (Token No_drive_account) no_drive_account_text;
+      case "Token Consent_needed: this account, inside the sheet"
+        (Token Consent_needed) "Google Drive n’est pas autorisé pour ce compte.";
+      case "Token Consent_refused: this account, inside the sheet"
+        (Token Consent_refused)
+        "Google Drive n’est pas autorisé pour ce compte.";
+      case "Token No_account: inside the sheet, use another account"
+        (Token No_account)
+        "Ce compte Google n’est plus sur le téléphone : utilisez un autre \
+         compte.";
       case "Token Misconfigured" (Token Misconfigured)
         "Google refuse l\xe2\x80\x99acc\xc3\xa8s \xc3\xa0 Drive (configuration \
          de l\xe2\x80\x99app).";
       case "Token Offline" (Token Offline)
         "Envoi d\xc3\xa8s le retour du r\xc3\xa9seau.";
-      case "Token Failed" (Token Failed)
-        "Envoi d\xc3\xa8s le retour du r\xc3\xa9seau.";
+      case "Token Failed: retry or another account, not the network line"
+        (Token Failed)
+        "Google Drive n’a pas répondu pour ce compte : réessayez, ou utilisez \
+         un autre compte.";
       case "Picker_unavailable" Picker_unavailable
         "Google Picker n\xe2\x80\x99a pas pu s\xe2\x80\x99ouvrir.";
       case "Not_saved" Not_saved
         "Le r\xc3\xa9glage n\xe2\x80\x99a pas pu \xc3\xaatre enregistr\xc3\xa9.";
       case "Drive_failed" Drive_failed
         "Drive n\xe2\x80\x99a pas r\xc3\xa9pondu : r\xc3\xa9essayez.";
+      case "Chooser_no_account" Chooser_no_account
+        "Aucun compte Google sur le t\xc3\xa9l\xc3\xa9phone : ajoutez-en un \
+         dans les r\xc3\xa9glages d\xe2\x80\x99Android.";
+      case "Chooser_failed" Chooser_failed
+        "Le choix du compte n\xe2\x80\x99a pas pu s\xe2\x80\x99ouvrir. \
+         R\xc3\xa9essayez.";
+      case "Other_account Offline" (Other_account Offline)
+        "Pas de réseau : rien n’a changé.";
+      case "Other_account Consent_refused" (Other_account Consent_refused)
+        "L’autre compte n’a pas autorisé Google Drive : rien n’a changé.";
+      case "Other_account Consent_needed" (Other_account Consent_needed)
+        "L’autre compte n’a pas autorisé Google Drive : rien n’a changé.";
+      case "Other_account No_account" (Other_account No_account)
+        "L’autre compte n’a pas pu être utilisé : rien n’a changé.";
+      case "Other_account Failed" (Other_account Failed)
+        "L’autre compte n’a pas pu être utilisé : rien n’a changé.";
     ]
 
 (* ---------- saved_card ---------- *)
@@ -897,7 +959,7 @@ let saved_card_tests =
           (card_opt
              (saved_card
                 ~queued:[photo_id 1]
-                (Drive_text.Denied Drive_text.Signed_out) ~online:true
+                (Drive_text.Denied Drive_text.No_drive_account) ~online:true
                 ~wifi_only:false photos)) );
     ( "a Failed photo without a queue row: its original was not kept",
       `Quick,
@@ -960,10 +1022,10 @@ let saved_card_tests =
         Alcotest.check card_option_t "saved_card"
           (Some
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Herbier",
-               "Connectez-vous pour envoyer les photos." ))
+               no_drive_account_text ))
           (card_opt
-             (saved_card (Drive_text.Denied Drive_text.Signed_out) ~online:true
-                ~wifi_only:false photos)) );
+             (saved_card (Drive_text.Denied Drive_text.No_drive_account)
+                ~online:true ~wifi_only:false photos)) );
     ( "wifi_only beats the fraction",
       `Quick,
       fun () ->
@@ -993,17 +1055,17 @@ let saved_card_tests =
           (card_opt
              (saved_card Drive_text.Granted ~online:false ~wifi_only:false
                 photos)) );
-    ( "Denied Signed_out, nothing failed: the sign-in blocker text",
+    ( "Denied No_drive_account, nothing failed: points to Dossier Drive",
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Pending 1] in
         Alcotest.check card_option_t "saved_card"
           (Some
              ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
-               "Connectez-vous pour envoyer les photos." ))
+               no_drive_account_text ))
           (card_opt
-             (saved_card (Drive_text.Denied Drive_text.Signed_out) ~online:true
-                ~wifi_only:false photos)) );
+             (saved_card (Drive_text.Denied Drive_text.No_drive_account)
+                ~online:true ~wifi_only:false photos)) );
     ( "wifi_only, no blocker, nothing failed or missing",
       `Quick,
       fun () ->
@@ -1186,6 +1248,7 @@ let drive_text =
       queue_of_tests;
       queue_title_tests;
       blocker_tests;
+      blocker_extra_tests;
       queue_status_tests;
       last_sent_tests;
       send_enabled_tests;
@@ -1194,7 +1257,7 @@ let drive_text =
       stop_dialog_tests;
       folder_tests;
       folder_name_tests;
-      folder_row_tests;
+      folder_button_tests;
       picker_config_tests;
       pick_error_text_tests;
       saved_card_tests;

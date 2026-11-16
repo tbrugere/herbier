@@ -105,7 +105,7 @@ val sign_out : t -> (unit, error) result Fut.t
     the other: a refresh in flight that resolves later changes neither memory
     nor Preferences, and one that resolved before is stored before the key is
     removed. A sign-in that completes meanwhile wins: [Ok ()], the new session
-    kept. *)
+    kept. Drive is not touched (its account is 4m's, {!drive_token}). *)
 
 val access_token : t -> (string, error) result Fut.t
 (** For the PostgREST transport: awaited per request, its token handed to a
@@ -126,11 +126,10 @@ val refresh_now : t -> (unit, error) result Fut.t
 (** {1 Drive} *)
 
 type drive_error = Drive_access.error =
-  | Drive_unconfigured  (** an [Unconfigured] build: no Google client *)
-  | Drive_signed_out
-      (** no Supabase session ([Signed_out], or still [Restoring]), or one
-          without an email: Drive is granted to the account the app is signed in
-          with *)
+  | Drive_unconfigured
+      (** this build has no Google web client id ({!drive_configured}) *)
+  | Drive_no_account
+      (** no Drive account chosen in 4m (the Supabase session plays no part) *)
   | Consent_needed
       (** [~interactive:false] and the scope is not granted: an interactive
           request is needed first *)
@@ -139,7 +138,9 @@ type drive_error = Drive_access.error =
   | Drive_offline  (** Play Services could not reach Google: retry later *)
   | Drive_misconfigured
       (** the OAuth client does not match the app's package or signing key *)
-  | No_google_account  (** no usable Google account on the device *)
+  | No_google_account
+      (** no usable Google account on the device: also the chosen Drive account
+          removed from the phone *)
   | Drive_google of Herbier_bindings.Cap_error.t
       (** anything else: no plugin (browser), Play services missing, another
           Play Services failure (its status code in the message) *)
@@ -147,26 +148,47 @@ type drive_error = Drive_access.error =
 val equal_drive_error : drive_error -> drive_error -> bool
 
 val drive_error_to_string : drive_error -> string
-(** One line for logs and the dev page; never a token. *)
+(** One line for logs and the dev page; never a token, never an email. *)
 
-val drive_token : t -> interactive:bool -> (string, drive_error) result Fut.t
-(** A Drive access token for the signed-in account, asked of Play Services at
-    each call (it caches the 1-hour token and renews it; Herbier stores none:
-    stack.md, Auth). [Unconfigured] → [Error Drive_unconfigured]; no session, or
-    a session without an email → [Error Drive_signed_out] (the plugin is not
-    called); a caller that starts at launch waits for [on_change] to leave
-    [Restoring], or retries. Signed in →
+val drive_configured : bool
+(** The build has a Google web client id (the chooser's server client id): Drive
+    works whether or not the Supabase backend is configured. *)
+
+val drive_token :
+  t ->
+  account:Herbier_sync_core.Auth.Drive_account.t ->
+  interactive:bool ->
+  (string, drive_error) result Fut.t
+(** A Drive access token for the Drive account chosen in 4m, signed out or
+    signed in alike (the session is not read), asked of Play Services at each
+    call (it caches the 1-hour token and renews it; Herbier stores none:
+    stack.md, Auth). [Drive_account.request account]: [Error No_client] →
+    [Error Drive_unconfigured], [Error No_account] → [Error Drive_no_account]
+    (the plugin is not called); [Ok email] →
     [Cap_google_authorization.authorize ~scopes:[Drive_consent.scope]
-     ~account:(Some email) ~interactive] (the session's email, so the Drive is
-    the signed-in account's). The plugin's [NEEDS_CONSENT] → [Consent_needed];
-    [USER_CANCELLED] or [SCOPE_NOT_GRANTED] → [Consent_refused]; [NETWORK_ERROR]
-    → [Drive_offline]; [DEVELOPER_ERROR] → [Drive_misconfigured];
-    [SIGN_IN_REQUIRED] → [No_google_account]; any other failure →
-    [Drive_google e]. Interactive calls are single-flight: a call made while one
-    is running gets that one's result (one consent screen at most).
+     ~account:(Some email) ~interactive]. The plugin's [NEEDS_CONSENT] →
+    [Consent_needed]; [USER_CANCELLED] or [SCOPE_NOT_GRANTED] →
+    [Consent_refused]; [NETWORK_ERROR] → [Drive_offline]; [DEVELOPER_ERROR] →
+    [Drive_misconfigured]; [SIGN_IN_REQUIRED] → [No_google_account]; any other
+    failure → [Drive_google e]. Interactive calls are single-flight per email: a
+    call for the same email made while one is running gets that one's result
+    (one consent screen at most); a call for another email goes to the plugin
+    (which answers ["BUSY"] while a consent shows → [Drive_google _]).
     Non-interactive calls are not serialised. Each outcome is one console line
     (« auth: drive token ok » / « auth: drive token <error> »). Never raises;
     the future always resolves. *)
+
+val choose_drive_account :
+  unit ->
+  (string, Herbier_sync_core.Auth.Drive_account.choose_error) result Fut.t
+(** 4m « Dossier Drive »: the « Sign in with Google » chooser
+    ([Cap_google_authorization.choose_account ~web_client_id]) → the chosen
+    account's email. Nothing is stored and no Supabase session is made (the id
+    token stays in the plugin). A rejection → [choose_error_of_code code];
+    [Unavailable _] / [Unexpected _] → [Choose_failed]; a build without a web
+    client id ({!drive_configured} false) → [Error Choose_failed] without
+    calling the plugin. One console line « auth: drive account chosen » / «
+    auth: drive account <error>: <text> », never the email. Never raises. *)
 
 val drop_drive_token : t -> string -> unit Fut.t
 (** ([t] mirrors {!drive_token}; the drop itself needs no state.) After Drive

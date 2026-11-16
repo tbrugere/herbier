@@ -14,6 +14,8 @@ module Db = Herbier_store_io.Db
 module Health = Herbier_photos_io.Health
 module Drive_root = Herbier_photos_io.Drive_root
 module Settings = Herbier_store.Settings
+module Drive_account = Herbier_sync_core.Auth.Drive_account
+module Drive_text = Herbier_ui_model.Drive_text
 
 type mark = Uploaded | Missing
 
@@ -149,11 +151,25 @@ let page app =
   let auth = App.auth app in
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
   let status = El.p [] in
+  let account_line = El.p [] in
   let root_line = El.p [] in
   let db = App.db app in
+  let drive_account () =
+    (React.S.value (State.account (App.state app))).drive
+  in
   let render () =
     El.set_children status
       [El.txt' ("status: " ^ Auth_check.status_to_string (Auth.status auth))];
+    El.set_children account_line
+      [
+        El.txt'
+          ("Compte Drive : "
+          ^
+          match drive_account () with
+          | Chosen {email} -> email
+          | Unchosen -> "aucun"
+          | Unconfigured -> "indisponible");
+      ];
     Fut.await (Drive_root.stored db) (fun stored ->
         let shown =
           match stored with
@@ -175,7 +191,9 @@ let page app =
       ()
   in
   let last = {original = None; file_id = None} in
-  let token ~interactive () = Auth.drive_token auth ~interactive in
+  let token ~interactive () =
+    Auth.drive_token auth ~account:(drive_account ()) ~interactive
+  in
   let drop_token = Auth.drop_drive_token auth in
   let step label ~detail ~error fut =
     Fut.await (Kit.step log label ~detail ~error fut) (fun _ -> render ())
@@ -184,7 +202,7 @@ let page app =
     step label
       ~detail:(fun t -> Some (token_detail t))
       ~error:Auth.drive_error_to_string
-      (Auth.drive_token auth ~interactive)
+      (Auth.drive_token auth ~account:(drive_account ()) ~interactive)
   in
   let put label (original, blob) =
     last.original <- Some (original, blob);
@@ -262,6 +280,36 @@ let page app =
           ~detail:(fun (_ : int) -> None)
           ~error:Db.error_to_string (Drive_root.forget db))
   in
+  let forced =
+    El.input
+      ~at:
+        [
+          At.type' (Jstr.v "email");
+          At.value (Jstr.v "x@example.com");
+          At.v (Jstr.v "aria-label") (Jstr.v "Compte Drive");
+        ]
+      ()
+  in
+  (* The sheet's « Par défaut » for that address, with no chooser: on a device
+     with no Google account, a new address forgets the root folder. *)
+  let force =
+    Kit.action "Forcer le compte" (fun () ->
+        match
+          Herbier_domain.Text.non_blank
+            (Jstr.to_string (El.prop El.Prop.value forced))
+        with
+        | None -> Kit.append log "force account: blank"
+        | Some account ->
+            step "force account"
+              ~detail:(fun () -> None)
+              ~error:Drive_text.pick_error_text
+              (App.store_default app ~account))
+  and unset =
+    Kit.action "Oublier le compte" (fun () ->
+        step "forget account"
+          ~detail:(fun () -> None)
+          ~error:Db.error_to_string (App.forget_account app))
+  in
   let originals =
     Kit.action "Vérifier les originaux" (fun () ->
         let open Fut.Syntax in
@@ -283,6 +331,8 @@ let page app =
     [
       El.h1 [El.txt' "Drive check"];
       status;
+      account_line;
+      El.div [forced; force; unset];
       El.p [El.txt' ("scope: " ^ Drive_consent.scope)];
       El.div [authorize; silent; plugin];
       El.div [species; upload; again; check; invalid];

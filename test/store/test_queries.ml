@@ -11,6 +11,7 @@ module Schema = Herbier_store.Schema
 module Stmt = Herbier_store.Stmt
 module Outbox = Herbier_store.Outbox
 module Settings = Herbier_store.Settings
+module Uploads = Herbier_store.Uploads
 module Search = Herbier_store.Search
 module Dev_seed = Herbier_store.Dev_seed
 module Tables = Herbier_store.Tables
@@ -1734,6 +1735,142 @@ let settings_drive_root_folder_default () =
     "a blank value is Row WrongType" (Error (Row `WrongType))
     (Cli.find_result db (Settings.get key))
 
+(* Settings.Drive_account (4m « Dossier Drive »): the email of the Google
+   account Drive tokens are asked for, trimmed on read, local only. *)
+let settings_drive_account () =
+  let db = Cli.migrated_db () in
+  let key = Settings.Drive_account in
+  Alcotest.(check string)
+    "named drive_account" "drive_account" (Settings.name key);
+  Alcotest.(check (option string))
+    "never set is None" None
+    (find db (Settings.get key));
+  check_changes "set changes 1 row" 1 db (Settings.set key "a@x.fr");
+  Alcotest.(check (option string))
+    "get gives the email back" (Some "a@x.fr")
+    (find db (Settings.get key));
+  Alcotest.(check (option string))
+    "stored as the email's text" (Some "a@x.fr")
+    (stored_value db "drive_account");
+  Cli.exec_ok "untrimmed account row" db
+    "update settings set value = ' a@x.fr ' where key = 'drive_account';\n";
+  Alcotest.(check (option string))
+    "an untrimmed value is trimmed on read" (Some "a@x.fr")
+    (find db (Settings.get key));
+  Cli.exec_ok "blank account row" db
+    "update settings set value = '   ' where key = 'drive_account';\n";
+  Alcotest.(check (result (option string) Cli.codec_error))
+    "a blank value is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get key))
+
+(* A switch of Drive account runs Settings.drive_choice's statements in one
+   transaction (as Drive_root.write does): the account is set, the old
+   account's three root-folder keys are forgotten, and nothing else changes:
+   not the other settings, not the device-only [uploads] table, whose waiting
+   rows the queue keeps across the switch. *)
+let settings_drive_account_transaction_leaves_other_rows_alone () =
+  let db = Cli.migrated_db () in
+  (* unrelated settings, as if set well before the account was ever chosen. *)
+  check_changes "seed Storage_target" 1 db
+    (Settings.set Settings.Storage_target Photo.Original_target.Drive);
+  check_changes "seed Wifi_only" 1 db (Settings.set Settings.Wifi_only true);
+  let cursor = photo_id 0x42 in
+  check_changes "seed Drive_health_cursor" 1 db
+    (Settings.set Settings.Drive_health_cursor cursor);
+  let uploaded_at = time "2026-10-01T00:00:00Z" in
+  check_changes "seed Last_upload_at" 1 db
+    (Settings.set Settings.Last_upload_at uploaded_at);
+  (* the previous account's folders, which the switch below forgets. *)
+  check_changes "seed the previous account's root folder" 1 db
+    (Settings.set Settings.Drive_root_folder "OLD1");
+  check_changes "seed the previous account's picked folder" 1 db
+    (Settings.set Settings.Drive_root_folder_picked
+       {Settings.id = "OLD1"; name = "Ancien"});
+  check_changes "seed the previous account's default folder" 1 db
+    (Settings.set Settings.Drive_root_folder_default "H0");
+  (* an observation, one of its photos, and an upload row with a session in
+     progress: the row the queue keeps waiting across the switch. *)
+  let (_ : int) =
+    write "seed observation" db (Observations.upsert (observation 0x31 t0))
+  in
+  let (_ : int) =
+    write "seed photo" db (Photos.upsert (photo ~observation:0x31 0x51 t0))
+  in
+  let uploading_id = photo_id 0x51 in
+  let upload_row : Uploads.t =
+    {
+      photo_id = uploading_id;
+      path = "originals/x";
+      mime = "image/jpeg";
+      size_bytes = 12_345;
+      session =
+        Some {Uploads.url = "https://example.test/session"; created_at = t0};
+      attempts = 0;
+      last_error = None;
+      created_at = t0;
+    }
+  in
+  let (_ : int) = write "seed upload row" db (Uploads.put upload_row) in
+  let upload_row_json db =
+    match
+      Cli.rows db
+        (Printf.sprintf "select * from uploads where photo_id = '%s';\n"
+           (Ids.Photo_id.to_string uploading_id))
+    with
+    | [row] -> row
+    | rows ->
+        Alcotest.failf "uploads: %d rows for the photo, expected one"
+          (List.length rows)
+  in
+  let before = upload_row_json db in
+  let module Drive = Herbier_photos.Drive in
+  let ({account; ids} : Drive.account_choice) =
+    Drive.choose_for_account
+      {Drive.root = Some "OLD1"; picked = Some "OLD1"; default = Some "H0"}
+      ~stored:(Some "old@x.fr") ~account:"new@x.fr" ~folder:None
+  in
+  let switch_stmts =
+    Settings.drive_choice ~account ~at:t0 ~root:ids.root ~picked:None
+      ~default:ids.default
+  in
+  Cli.exec_ok "drive account switch, one transaction" db
+    ("begin;\n"
+    ^ String.concat "" (List.map Cli.inline switch_stmts)
+    ^ "commit;\n");
+  Alcotest.(check (option string))
+    "Drive_account is now set" (Some "new@x.fr")
+    (find db (Settings.get Settings.Drive_account));
+  Alcotest.(check (option Cli.ptime))
+    "the time of the change is stored" (Some t0)
+    (find db (Settings.get Settings.Drive_account_changed_at));
+  Alcotest.(check (option string))
+    "the previous account's root folder is forgotten" None
+    (find db (Settings.get Settings.Drive_root_folder));
+  Alcotest.(check (option string))
+    "the previous account's picked folder is forgotten" None
+    (Option.map
+       (fun (f : Settings.drive_folder) -> f.id)
+       (find db (Settings.get Settings.Drive_root_folder_picked)));
+  Alcotest.(check (option string))
+    "the previous account's default folder is forgotten" None
+    (find db (Settings.get Settings.Drive_root_folder_default));
+  Alcotest.(check (option string))
+    "Storage_target untouched" (Some "drive")
+    (stored_value db "storage_target");
+  Alcotest.(check (option bool))
+    "Wifi_only untouched" (Some true)
+    (find db (Settings.get Settings.Wifi_only));
+  Alcotest.(check (option photo_id_t))
+    "Drive_health_cursor untouched" (Some cursor)
+    (find db (Settings.get Settings.Drive_health_cursor));
+  Alcotest.(check (option Cli.ptime))
+    "Last_upload_at untouched" (Some uploaded_at)
+    (find db (Settings.get Settings.Last_upload_at));
+  Alcotest.check Cli.yojson
+    "the upload row (with its session) is identical: the queue keeps waiting \
+     rows across an account change"
+    before (upload_row_json db)
+
 let settings_unset_keeps_others () =
   let db = Cli.migrated_db () in
   check_changes "set Wifi_only" 1 db (Settings.set Settings.Wifi_only true);
@@ -2519,6 +2656,15 @@ let () =
             "the default-folder key round-trips the id's text; a blank value \
              is Row WrongType"
             settings_drive_root_folder_default;
+          case
+            "the drive account key round-trips the email, trimmed; a blank \
+             stored value is Row WrongType"
+            settings_drive_account;
+          case
+            "a drive account switch (account set, the three root keys \
+             set/unset) in one transaction leaves other settings and a waiting \
+             upload row untouched"
+            settings_drive_account_transaction_leaves_other_rows_alone;
         ] );
       ( "Search.match_expression",
         [

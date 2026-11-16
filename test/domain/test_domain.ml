@@ -7,6 +7,7 @@ let () =
       ("places", Test_places.tests);
       ("link", Test_link.tests);
       ("text", Test_text.tests);
+      ("text same_email", Test_text.same_email_tests);
       ("bbox", Test_bbox.tests);
       ("fold", Test_fold.tests);
       ("schema dump", Test_schema_dump.tests);

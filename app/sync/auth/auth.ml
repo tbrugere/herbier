@@ -407,7 +407,7 @@ let debug_import t text =
 
 type drive_error = Drive_access.error =
   | Drive_unconfigured
-  | Drive_signed_out
+  | Drive_no_account
   | Consent_needed
   | Consent_refused
   | Drive_offline
@@ -417,14 +417,10 @@ type drive_error = Drive_access.error =
 
 let equal_drive_error = Drive_access.equal_error
 let drive_error_to_string = Drive_access.error_to_string
+let drive_configured = Drive_access.configured
 
-let drive_account t : Drive_access.account =
-  match status t with
-  | Unconfigured -> Unconfigured
-  | Restoring | Signed_out | Signed_in {email = None} -> Signed_out
-  | Signed_in {email = Some email} -> Signed_in {email}
+let drive_token t ~account ~interactive =
+  Drive_access.token t.drive account ~interactive
 
-let drive_token t ~interactive =
-  Drive_access.token t.drive (drive_account t) ~interactive
-
+let choose_drive_account = Drive_access.choose
 let drop_drive_token (_ : t) token = Drive_access.drop token

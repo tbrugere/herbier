@@ -7,26 +7,31 @@ module Photo_id := Herbier_domain.Ids.Photo_id
 
 (** Why no Drive token can be had (App maps [Herbier_sync.Auth.drive_error]). *)
 type denial =
-  | Unconfigured  (** a build without Google sign-in *)
-  | Signed_out
+  | Unconfigured  (** a build without a Google web client id *)
+  | No_drive_account  (** no Drive account chosen in 4m « Dossier Drive » *)
   | Consent_needed
   | Consent_refused
   | Offline
   | Misconfigured
   | No_account
+      (** no usable Google account on the device, or the chosen one removed *)
   | Failed  (** any other failure (Play Services, no plugin) *)
+
+val equal_denial : denial -> denial -> bool
+val pp_denial : Format.formatter -> denial -> unit
+val show_denial : denial -> string
 
 type access = Unknown | Granted | Denied of denial
 
 val equal_access : access -> access -> bool
 
 val access :
-  account:Herbier_sync_core.Auth.Lifecycle.status -> last:access -> access
-(** What the screens show from the auth status: [Unconfigured] →
-    [Denied Unconfigured]; [Signed_out] → [Denied Signed_out]; [Restoring] →
-    [Unknown]; [Signed_in _] → [last] (the last token outcome since this
-    sign-in; a stale [Denied Signed_out] / [Denied Unconfigured] there reads as
-    [Unknown]). *)
+  drive:Herbier_sync_core.Auth.Drive_account.t -> last:access -> access
+(** What the screens show from the Drive account (the Supabase session plays no
+    part): [Unconfigured] → [Denied Unconfigured]; [Unchosen] →
+    [Denied No_drive_account]; [Chosen _] → [last] (the last token outcome for
+    the chosen account; a stale [Denied No_drive_account] /
+    [Denied Unconfigured] there reads as [Unknown]). *)
 
 type entry = {
   photo_id : Photo_id.t;
@@ -62,13 +67,15 @@ val queue_title : queue -> string
 
 val blocker : access -> online:bool -> string option
 (** Why waiting photos cannot leave, first that applies: [Denied Unconfigured] →
-    « Envoi vers Drive indisponible dans cette version. »; [Denied Signed_out] →
-    « Connectez-vous pour envoyer les photos. »;
-    [Denied (Consent_needed | Consent_refused)] → « Google Drive n’est pas
-    autorisé. »; [Denied No_account] → « Aucun compte Google sur le téléphone.
-    »; [Denied Misconfigured] → « Google refuse l’accès à Drive (configuration
-    de l’app). »; [not online] or [Denied (Offline | Failed)] → « Envoi dès le
-    retour du réseau. »; else [None]. *)
+    « Envoi vers Drive indisponible dans cette version. »;
+    [Denied No_drive_account] → « Choisissez le compte Google dans « Dossier
+    Drive ». »; [Denied (Consent_needed | Consent_refused)] → « Google Drive
+    n’est pas autorisé : autorisez-le, ou changez de compte dans « Dossier Drive
+    ». »; [Denied No_account] → « Ce compte Google n’est plus sur le téléphone :
+    changez-le dans « Dossier Drive ». »; [Denied Misconfigured] → « Google
+    refuse l’accès à Drive (configuration de l’app). »; [not online] or
+    [Denied (Offline | Failed)] → « Envoi dès le retour du réseau. »; else
+    [None]. *)
 
 val queue_status :
   access -> online:bool -> wifi_only:bool -> queue -> string option
@@ -86,10 +93,9 @@ val last_sent : now:Ptime.t -> tz_offset_s:int -> Ptime.t option -> string
 val send_enabled : queue -> bool
 (** [pending_count q > 0]. *)
 
-val account_meta :
-  email:string option -> storage:Photo.Original_target.t -> access -> string
-(** 4m account card (signed in): the address (« Adresse inconnue » without),
-    then « · Drive » when [storage = Drive] and [Granted]. *)
+val account_meta : email:string option -> string
+(** 4m sync account card (signed in): the address, or « Adresse inconnue »
+    without. The Drive account may differ: it is « Dossier Drive »'s. *)
 
 (** {1 The Drive folder (4m « Dossier Drive »)} *)
 
@@ -97,6 +103,8 @@ val account_meta :
 type folder = Default | Picked of string  (** its name *)
 
 val equal_folder : folder -> folder -> bool
+val pp_folder : Format.formatter -> folder -> unit
+val show_folder : folder -> string
 
 val folder :
   root:string option ->
@@ -112,37 +120,41 @@ val folder_name : folder -> string
 type picker_config = Picker_unconfigured | Picker_ready
 
 val equal_picker_config : picker_config -> picker_config -> bool
+val pp_picker_config : Format.formatter -> picker_config -> unit
+val show_picker_config : picker_config -> string
 
 val picker_config_of_project_number : string -> picker_config
 (** [Picker_ready] iff the Cloud project number is non-empty and all ASCII
     digits (not trimmed: the release script refuses anything else). *)
 
-(** « Choisir »: enabled, or disabled with the one line shown under the row. *)
-type choose = Enabled | Disabled of string
+val app_folder : string
+(** « Herbier · créé par l’app »: the app's folder, as 4m names it. *)
+
+(** Whether the « Dossier Drive » button opens the sheet. *)
+type choose = Enabled | Disabled of string  (** the muted line saying why *)
 
 val equal_choose : choose -> choose -> bool
 
-type folder_row = {
-  detail : string;
+type folder_button = {
+  detail : string;  (** under the title « Dossier Drive » *)
   choose : choose;
-  default : bool;  (** « Par défaut » shown *)
 }
+(** 4m « Dossier Drive »: the one button that opens the sheet choosing the Drive
+    account and folder. *)
 
-val equal_folder_row : folder_row -> folder_row -> bool
+val equal_folder_button : folder_button -> folder_button -> bool
 
-val folder_row : picker_config -> access -> folder -> folder_row
-(** The row under the storage radios (its title « Dossier Drive » is the
-    screen's). [detail]: [Default] → « Herbier · créé par l’app »; [Picked n] →
-    {!folder_name}. [default] = [folder <> Default] (also while [choose] is
-    disabled: resetting needs no Picker). [choose], first that applies:
-    [Picker_unconfigured] or [Denied Unconfigured] → [Disabled] « Choix du
-    dossier indisponible dans cette version. »; [Denied Signed_out] → [Disabled]
-    « Connectez-vous pour choisir un dossier. »; [Denied No_account] /
-    [Denied Misconfigured] → [Disabled] of their {!blocker} text; anything else
-    (Unknown, Granted, consent needed or refused, offline, failed: the tap asks
-    interactively and reports) → [Enabled]. *)
+val folder_button :
+  drive:Herbier_sync_core.Auth.Drive_account.t -> folder -> folder_button
+(** - [Unconfigured] → detail « Herbier », [Disabled] « Envoi vers Drive
+      indisponible dans cette version. »
+    - [Unchosen] → detail « Aucun compte choisi », [Enabled].
+    - [Chosen {email}] → detail « <where> · <email> », where [where] is
+      {!app_folder} for [Default] and {!folder_name} for [Picked]; [Enabled].
+      The Picker's availability does not disable the button: without it, the
+      sheet still chooses the account. *)
 
-(** Why « Choisir » did not change the folder. *)
+(** Why the « Dossier Drive » sheet did not change the account or folder. *)
 type pick_error =
   | Not_a_folder
   | Trashed
@@ -152,15 +164,34 @@ type pick_error =
   | Picker_unavailable  (** Google Picker did not load or could not open *)
   | Not_saved  (** the settings write failed *)
   | Drive_failed  (** any other Drive error *)
+  | Chooser_no_account  (** the account chooser had no account to offer *)
+  | Chooser_failed  (** the account chooser could not open *)
+  | Other_account of denial
+      (** no token for an account chosen in the sheet: the sheet went back to
+          the stored account *)
 
 val equal_pick_error : pick_error -> pick_error -> bool
+val pp_pick_error : Format.formatter -> pick_error -> unit
+val show_pick_error : pick_error -> string
 
 val pick_error_text : pick_error -> string
 (** « Ce n’est pas un dossier. »; « Ce dossier est dans la corbeille. »; «
     Herbier n’a pas accès à ce dossier. »; « Pas de réseau : réessayez plus
-    tard. »; [Token d] → {!blocker} [(Denied d) ~online:true]; « Google Picker
-    n’a pas pu s’ouvrir. »; « Le réglage n’a pas pu être enregistré. »; « Drive
-    n’a pas répondu : réessayez. ». *)
+    tard. »; [Token No_account] → « Ce compte Google n’est plus sur le téléphone
+    : utilisez un autre compte. »; [Token (Consent_needed | Consent_refused)] →
+    « Google Drive n’est pas autorisé pour ce compte. »; [Token Failed] → «
+    Google Drive n’a pas répondu pour ce compte : réessayez, ou utilisez un
+    autre compte. » (not the queue's « Envoi dès le retour du réseau. »: the
+    sheet is open, and the emulator answers an account missing from the device
+    with such a failure); any other [Token d] → {!blocker}
+    [(Denied d) ~online:true]; « Google Picker n’a pas pu s’ouvrir. »; « Le
+    réglage n’a pas pu être enregistré. »; « Drive n’a pas répondu : réessayez.
+    »; « Aucun compte Google sur le téléphone : ajoutez-en un dans les réglages
+    d’Android. »; « Le choix du compte n’a pas pu s’ouvrir. Réessayez. »;
+    [Other_account Offline] → « Pas de réseau : rien n’a changé. »;
+    [Other_account (Consent_needed | Consent_refused)] → « L’autre compte n’a
+    pas autorisé Google Drive : rien n’a changé. »; any other [Other_account _]
+    → « L’autre compte n’a pas pu être utilisé : rien n’a changé. ». *)
 
 type prompt = {text : string; action : string option  (** a button label *)}
 
@@ -168,14 +199,16 @@ val equal_prompt : prompt -> prompt -> bool
 
 val drive_prompt :
   storage:Photo.Original_target.t -> pending:int -> access -> prompt option
-(** The row under the account card; [None] when [storage = App_only] and
-    [pending = 0] (no original waits for Drive; with [pending > 0], after « Les
-    envoyer quand même », the photos still need Drive). Else:
-    [Denied (Consent_needed | Consent_refused)] → « Google Drive n’est pas
-    autorisé : les photos attendent sur le téléphone. », [Some "Autoriser"];
-    [Denied No_account] / [Denied Misconfigured] → their {!blocker} text, no
-    action; [Denied Signed_out] → « Connectez-vous pour envoyer les photos vers
-    Drive. », no action (the card's « Se connecter » is the action); any other →
+(** The line under the « Dossier Drive » button; [None] when
+    [storage = App_only] and [pending = 0] (no original waits for Drive; with
+    [pending > 0], after « Les envoyer quand même », the photos still need
+    Drive). Else: [Denied (Consent_needed | Consent_refused)] → « Google Drive
+    n’est pas autorisé pour ce compte : les photos attendent sur le téléphone.
+    Autorisez-le, ou changez de compte dans « Dossier Drive ». »,
+    [Some "Autoriser"]; [Denied No_drive_account] → « Les photos attendent sur
+    le téléphone : choisissez le compte et le dossier dans « Dossier Drive ». »,
+    no action (the button is the action); [Denied No_account] /
+    [Denied Misconfigured] → their {!blocker} text, no action; any other →
     [None]. *)
 
 type dialog = {title : string; text : string}

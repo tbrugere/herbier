@@ -55,6 +55,7 @@ val ticket : unit -> ticket
 
 val pick_folder :
   ?on_action:(string -> unit) ->
+  ?title:string ->
   ticket ->
   config ->
   token:string ->
@@ -66,8 +67,9 @@ val pick_folder :
     [setMimeTypes "application/vnd.google-apps.folder"], [setParent "root"];
     builder [addView], [setOAuthToken token], [setAppId app_id],
     [setDeveloperKey] when given, [setOrigin origin], [setLocale "fr"],
-    [setTitle "Choisir le dossier Drive"], [setCallback], [build],
-    [setVisible true].
+    [setTitle title] (default « Choisir le dossier Drive »; 4m's sheet names the
+    account there, the Picker having no account line of its own), [setCallback],
+    [build], [setVisible true].
 
     Callback: [on_action] (default: nothing) gets every action string in order
     (for [#dev/picker]); action ["picked"] → [Picked] of [docs[0]]'s [id]

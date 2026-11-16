@@ -15,10 +15,11 @@ type item = {
   photo_id : Photo_id.t;
   file_id : string;
   state : Photo.Upload_state.t;
+  missing_unsure : bool;
 }
 [@@deriving eq]
 
-let item (p : Photo.t) =
+let item ~account_changed_at (p : Photo.t) =
   match
     ( p.deleted_at,
       p.original_target,
@@ -26,14 +27,20 @@ let item (p : Photo.t) =
       Option.bind p.drive_file_id Herbier_domain.Text.non_blank )
   with
   | None, Drive, ((Uploaded | Original_missing) as state), Some file_id ->
-      Some {photo_id = p.id; file_id; state}
+      let missing_unsure =
+        match account_changed_at with
+        | Some at -> Ptime.is_earlier p.created_at ~than:at
+        | None -> false
+      in
+      Some {photo_id = p.id; file_id; state; missing_unsure}
   | Some _, _, _, _
   | _, App_only, _, _
   | _, _, (Pending | Failed), _
   | _, _, _, None ->
       None
 
-let items photos = List.filter_map item photos
+let items ~account_changed_at photos =
+  List.filter_map (item ~account_changed_at) photos
 
 (* Text order, as [Photos.in_drive]'s [order by id]. *)
 let resume ~after items =
@@ -52,6 +59,14 @@ let verdict (state : Photo.Upload_state.t) (presence : Drive.presence) :
   | Original_missing, Present -> Some Uploaded
   | Uploaded, Present | Original_missing, (Trashed | Missing) -> None
   | (Pending | Failed), (Present | Trashed | Missing) -> None
+
+(* A 404 is also what another account's file answers (drive.file): for a
+   photo that may be in the old account's Drive, it is no answer. *)
+let item_verdict item (presence : Drive.presence) =
+  match (presence, item.missing_unsure) with
+  | Missing, true -> None
+  | Missing, false | (Present | Trashed), (true | false) ->
+      verdict item.state presence
 
 type change = {item : item; state : Photo.Upload_state.t} [@@deriving eq]
 
@@ -77,7 +92,7 @@ let program items =
         Drive.bind (Drive.presence ~file_id:item.file_id) (function
           | Ok presence ->
               let changes =
-                match verdict item.state presence with
+                match item_verdict item presence with
                 | Some state -> {item; state} :: acc.changes
                 | None -> acc.changes
               in

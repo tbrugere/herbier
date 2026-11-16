@@ -123,7 +123,9 @@ app/
     cap_uploader.ml       Herbier's inline Uploader plugin (android/, §4): one WorkManager job per file that
                           PUTs it to a Drive resumable session under a network constraint; jobs, cancel, changes
     cap_google_authorization.ml  Herbier's inline GoogleAuthorization plugin (android/, §4): a drive.file
-                          access token from Play Services' AuthorizationClient, and clearToken
+                          access token from Play Services' AuthorizationClient for the Drive account,
+                          clearToken, and chooseAccount (Credential Manager's « Sign in with Google »
+                          chooser → that account's email)
     google_picker.ml      Google Picker (apis.google.com/js/api.js, loaded on first use) in folder mode over
                           a drive.file token: one Picker at a time, picked / cancelled, dismiss (4m)
     cap_preferences.ml  maplibre.ml  pmtiles.ml  exifr.ml
@@ -167,6 +169,7 @@ app/
     stmt.ml               statements as pure values (SQL, params, row decoder), run by store_io/db.ml (all, find, write)
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
     outbox.ml  sync_state.ml  settings.ml  ref_images.ml  commune_packs.ml   local-only tables, columns declared
+                          (settings: typed keys, the Drive account and root folder keys among them)
                           next to their queries (commune_packs: « IGN hors-ligne » packs, one row per département);
     uploads.ml            the device-only queue of originals bound for Drive (path, type, size, resumable session,
                           attempts, last error), one row per photo this install holds the original of
@@ -188,11 +191,14 @@ app/
                           (readdir, recursive) and its removal (4m « Données hors-ligne »)
   sync_core/              Supabase (§4 of architecture), sans IO: no Brr, no bindings, tested in test/sync/;
                           (include_subdirs qualified), no main modules (Auth.Session, Net.Rest, Cycle.Push, …)
-    auth/                 Auth.Session, Auth.Gotrue, Auth.Grant, Auth.Lifecycle, Auth.Drive_consent
+    auth/                 Auth.Session, Auth.Gotrue, Auth.Grant, Auth.Lifecycle, Auth.Drive_consent,
+                          Auth.Drive_account
                           (callers name them here: sync/ does not re-export them)
       drive_consent.ml    the drive.file scope, and the GoogleAuthorization plugin's rejection codes read as
                           a refusal (consent needed, consent refused) or a failure (offline, misconfigured,
                           no Google account)
+      drive_account.ml    the Drive account (4m « Dossier Drive », the drive_account setting): unconfigured,
+                          unchosen or chosen, the email a token request names, the chooser's rejection codes
       session.ml          the stored session (JSON in Preferences) and its refresh timing
       gotrue.ml           GoTrue requests (id-token grant, refresh, logout) and their decoders
       grant.ml            a grant's failure, and a refresh's answer classified (fresh, revoked, failed)
@@ -233,8 +239,9 @@ app/
       auth.ml             Google id token → Supabase's id-token grant, session in Preferences, auto-refresh
                           while in the foreground; the keep-alive job's second grant; runs Lifecycle's
                           actions (timer, hooks, logs) and owns the futures
-      drive_access.ml     the Drive token (Auth.drive_token): gated on the account (configured, signed in,
-                          its email as the account hint), single-flight interactive requests, console lines
+      drive_access.ml     the Drive token (Auth.drive_token): gated on the chosen Drive account, not the
+                          session (its email as the account hint), single-flight interactive requests per
+                          email, the account chooser (Auth.choose_drive_account), console lines
       server.ml           the GoTrue calls over bindings/timed_fetch.ml on Backend (grant, refresh,
                           logout), shared by Auth and Keepalive; a refresh's answer read once (fresh,
                           revoked, failed)
@@ -261,6 +268,7 @@ app/
                           appProperties, multipart files.create, files.get?fields=id,trashed), the multipart
                           frame, the resumable session, decoders, error classes, folder and file names, the
                           root folder by its stored id (resolve_root, the root change a program reports),
+                          the root ids a pick, « Par défaut » or a new Drive account leaves (choose_for_account),
                           and the programs put_original, start_session and presence over a fake-able
                           transport
     upload_queue.ml       the originals' queue's decisions, without IO: from a photo row, its uploads row and
@@ -277,7 +285,10 @@ app/
                           session start, updated from the program's root change (run), forgotten; the folder
                           picked in 4m (drive_root_folder_picked, in force while its id is the root's)
                           and the root it replaced (drive_root_folder_default): read, chosen, reset to
-                          that default
+                          that default; the Drive account (drive_account), written with them in one
+                          transaction (Settings.drive_choice; a new account forgets the three folder
+                          keys and stores drive_account_changed_at), seeded once from the session for an
+                          older install (seed), forgotten with them (forget_account)
     upload_queue.ml       the originals' queue on the device: originals/<id> and its uploads row at save, the
                           single-flight pass (jobs, rows, photo rows, Upload_queue.next), session starts one at
                           a time over drive.ml, jobs through bindings/cap_uploader.ml, outcomes committed
@@ -378,7 +389,10 @@ app/
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
     drive_text.ml         the Drive texts of 4e, 4m and 5e: access, queue title and status, last upload,
-                          account meta and prompt, the stop dialog, 4e's card, 5e's badge and Drive link
+                          account meta, the « Dossier Drive » button and prompt, the stop dialog, 4e's card,
+                          5e's badge and Drive link
+    drive_sheet.ml        4m's « Dossier Drive » sheet as a pure machine: account choice, token, Picker, store,
+                          close (events in, commands out), its account line and labels
     network_text.ml       the offline texts: the global strip and 4d's pill (« hors-ligne · N en attente »),
                           4g's unlinked line, 4i's search status
     server_text.ml        4m's « Serveur en pause » (from the engine's last cycle) and the dashboard link
@@ -424,14 +438,16 @@ app/
                           `saved`, every cycle `synced`
       core.ml             the app's state, its creation, the services' start, commit, the photos' save and
                           their originals' queue (its triggers: start, resume, sign-in, online, job changes);
-                          Drive: the access (last token outcome since the sign-in, as 4m/4e show it), the
-                          queue as 4m/4e show it, « Envoyer maintenant », « Ne pas les envoyer », the storage
-                          radio, and the weekly health check (start, resume, sign-in, online; signed in only)
+                          Drive: the access (last token outcome for the chosen Drive account, as 4m/4e show
+                          it), the queue as 4m/4e show it, « Envoyer maintenant », « Ne pas les envoyer », the
+                          storage radio, and the weekly health check (start, resume, sign-in, online; a Drive
+                          account chosen)
       geocoding.ml        place names: the background geocoding and the 4m source switches; save
       reference_fetch.ml  a plant's reference fetch, its organ thumbnails, the GBIF link
       packs.ml            the « IGN hors-ligne » packs' download and delete
-      drive_folder.ml     4m « Dossier Drive »: the Picker's build config, « Choisir » (token, Picker,
-                          files.get check, store, serialised with the upload passes), « Par défaut »
+      drive_folder.ml     4m « Dossier Drive » sheet's services: the Picker's build config, the account
+                          chooser, the token for the sheet's account, the Picker, the pick's files.get check
+                          and store with its account, « Par défaut » (serialised with the upload passes)
       plantnet_transport.ml  M9: Identify.TRANSPORT over Brr: 'a io = Fut.t, an image is a preview Blob in
                           memory (4d) or previews/<id>.jpg read through store_io/files.ml (4k, 4g),
                           post_form through bindings/timed_fetch.ml's request_form (Form.Data, 30 s, no
@@ -520,7 +536,9 @@ app/
       settings/ (4m)      settings.ml (the screen; its main module), pending.ml (the card under « File
                           d'envoi »: « Serveur en pause », « Réception bloquée », the parked entries),
                           offline_row.ml (« Données hors-ligne »: sizes, « Libérer » and its dialog),
-                          folder_row.ml (« Dossier Drive »: the folder, « Choisir », « Par défaut »), row.ml
+                          folder_button.ml (« Dossier Drive »: one button, folder · account, and the Drive
+                          prompt with « Autoriser »), drive_sheet.ml (its full-screen sheet: « Compte : … »,
+                          « Utiliser un autre compte », Google Picker over it, « Par défaut »), row.ml
                           (a title-and-meta row), identification.ml (M9, 6h: « Identifier dès la photo »,
                           « Flore Pl@ntNet », « Clé API Pl@ntNet » (masked, « Modifier », the
                           my.plantnet.org link; not in the design), first section under the account card)
@@ -695,7 +713,9 @@ edits, all under `android/app/src/main/`:
   `@capacitor/background-runner` merges in but the keep-alive job does not
   use (background location, notifications, exact alarms).
 - `java/re/bruge/herbier/GoogleAuthorizationPlugin.java`: the Drive token
-  (Play Services' `AuthorizationClient`: `authorize`, `clearToken`), in Java
+  (Play Services' `AuthorizationClient`: `authorize`, `clearToken`) and the
+  Drive account's choice (`chooseAccount`: Credential Manager's « Sign in
+  with Google », the credential's email; the id token is discarded), in Java
   like `MainActivity` (the app module has no Kotlin toolchain).
 - `java/re/bruge/herbier/MainActivity.java`: generated; touched only to
   register a plugin by hand, to drop a launch intent that was already
@@ -729,7 +749,13 @@ file depends on `com.google.android.gms:play-services-auth` for
 `GoogleAuthorizationPlugin`, at `playServicesAuthVersion` from
 `android/variables.gradle` (at least the version
 `@capgo/capacitor-social-login` pins; a regenerated `variables.gradle` must
-keep it), and on `androidx.work:work-runtime` for `UploaderPlugin` at
+keep it), on `androidx.credentials:credentials`,
+`credentials-play-services-auth` and
+`com.google.android.libraries.identity.googleid:googleid` for its
+`chooseAccount` (`androidxCredentialsVersion`, `googleIdVersion`; googleid
+≥ 1.2.0 for `getEmail()`, the versions Gradle also resolves for
+`@capgo/capacitor-social-login`: one copy of each), and on
+`androidx.work:work-runtime` for `UploaderPlugin` at
 `workManagerVersion`, also from `variables.gradle`, which
 `@capacitor/background-runner` reads too (one WorkManager in the APK).
 It also sets the version (versionCode = the commit count at `git

@@ -109,3 +109,40 @@ A. Google's mobile Picker: an OAuth URL with `trigger_onepick=true` and
    redirect URI (custom scheme or App Link), code exchanged with PKCE.
 B. No picking: M7.60 already follows the app's « Herbier » folder by id, so
    the user can move and rename it anywhere in Drive.
+
+## Account (M7.62)
+
+Checked 2026-11-16 in Google's docs, for 4m's « Dossier Drive » sheet:
+
+- The Picker shows the account of the OAuth token it is given. The web
+  Picker sample guide
+  (developers.google.com/workspace/drive/picker/guides/web-picker-sample):
+  « The `setOAuthToken` function allows an app to use the current auth token
+  to determine which Google Account the Google Picker uses to display the
+  files », and « If a user is signed in with multiple Google Accounts, the
+  Google Picker can display the files of the appropriate authorized
+  account ». There is no account switcher inside the Picker on this path,
+  and no builder method names an account: the PickerBuilder reference
+  (fetched 2026-11-16) lists `addView`, `addViewGroup`, `build`,
+  `disableFeature`, `enableFeature`, `getRelayUrl`, `getTitle`,
+  `hideTitleBar`, `isFeatureEnabled`, `setAppId`, `setCallback`,
+  `setDeveloperKey`, `setDocument`, `setLocale`, `setMaxItems`,
+  `setOAuthToken`, `setOrigin`, `setRelayUrl`, `setSelectableMimeTypes`,
+  `setSize`, `setTitle` and `toUri` (no `setAuthUser`).
+- The PickerBuilder reference
+  (developers.google.com/workspace/drive/picker/reference/picker.pickerbuilder)
+  has no option to render into a page element: its only layout controls are
+  `setSize` (« The dialog will be auto-centered. It has a minimum size of
+  (566,350) », wider than a phone, so it spans the width), `setTitle` and
+  `hideTitleBar`, and the guide calls the Picker « an inline, modal
+  window ».
+
+So the sheet cannot hold the Picker under its own « Compte : … » line.
+The Picker opens as Google's overlay over the sheet, with
+`setTitle("Dossier Drive · <email>")` naming the account; its ✕ or Android
+back shows the sheet again, with « Utiliser un autre compte » (the account
+chooser, a drive.file token for the new account, a new Picker) and
+« Par défaut ». Rejected as hacks: restyling Google's `.picker-dialog` nodes
+(undocumented classes), raising our header over the overlay with a z-index
+picked to beat Google's, embedding `PickerBuilder.toUri()` in our own iframe
+(the callbacks travel over internal gadgets.rpc).

@@ -184,7 +184,7 @@ let on_callback ~on_action data =
       finish (Error (Picker_failed "error action"))
   | () -> ()
 
-let build ~on_action config ~token =
+let build ~on_action ~title config ~token =
   let picker_ns = Jv.get (Jv.get Jv.global "google") "picker" in
   let view =
     Jv.new'
@@ -208,16 +208,16 @@ let build ~on_action config ~token =
     config.developer_key;
   set "setOrigin" (Jv.of_string config.origin);
   set "setLocale" (Jv.of_string "fr");
-  set "setTitle" (Jv.of_string "Choisir le dossier Drive");
+  set "setTitle" (Jv.of_string title);
   set "setCallback" (Jv.callback ~arity:1 (on_callback ~on_action));
   Jv.call builder "build" [||]
 
-let show ~on_action config ~token =
+let show ~on_action ~title config ~token =
   match !shown with
   | Some (_ : shown) -> Fut.return (Error Busy)
   | None -> (
       let fut, settle = Fut.create () in
-      match build ~on_action config ~token with
+      match build ~on_action ~title config ~token with
       | picker -> (
           shown := Some {picker; settle};
           match Jv.call picker "setVisible" [|Jv.true'|] with
@@ -235,7 +235,8 @@ let show ~on_action config ~token =
           | Some m -> Fut.return (Error (Picker_failed m))
           | None -> raise exn))
 
-let pick_folder ?(on_action = fun (_ : string) -> ()) ticket config ~token =
+let pick_folder ?(on_action = fun (_ : string) -> ())
+    ?(title = "Choisir le dossier Drive") ticket config ~token =
   match !shown with
   | Some (_ : shown) -> Fut.return (Error Busy)
   | None when cancelled ticket -> Fut.return (Ok Cancelled)
@@ -244,7 +245,7 @@ let pick_folder ?(on_action = fun (_ : string) -> ()) ticket config ~token =
       let* loaded = load () in
       match loaded with
       | Ok () when cancelled ticket -> Fut.return (Ok Cancelled)
-      | Ok () -> show ~on_action config ~token
+      | Ok () -> show ~on_action ~title config ~token
       | Error e -> Fut.return (Error e))
 
 let dismiss () =

@@ -1085,4 +1085,5 @@ let () =
       ("Gotrue responses", gotrue_response_tests);
       ("Grant", grant_tests);
       ("Drive consent", Test_drive_consent.tests);
+      ("Drive account", Test_drive_account.tests);
     ]
