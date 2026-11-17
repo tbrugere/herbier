@@ -1951,6 +1951,119 @@ let settings_unset_keeps_others () =
     "Wifi_only kept" (Some true)
     (find db (Settings.get Settings.Wifi_only))
 
+(* ---------- Settings.Identify_on_photo, Settings.Plantnet_project (4m
+   « Identification »): local only, never synced, no outbox entry. ---------- *)
+
+let flora_t =
+  Alcotest.testable
+    (fun ppf (f : Settings.flora) ->
+      Format.fprintf ppf "{id = %S; title = %S}" f.id f.title)
+    Settings.equal_flora
+
+let settings_identify_names () =
+  Alcotest.(check string)
+    "Identify_on_photo is stored as identify_on_photo" "identify_on_photo"
+    (Settings.name Settings.Identify_on_photo);
+  Alcotest.(check string)
+    "Plantnet_project is stored as plantnet_project" "plantnet_project"
+    (Settings.name Settings.Plantnet_project)
+
+let settings_identify_absent () =
+  let db = Cli.migrated_db () in
+  Alcotest.(check (option bool))
+    "Identify_on_photo never set is None" None
+    (find db (Settings.get Settings.Identify_on_photo));
+  Alcotest.(check (option flora_t))
+    "Plantnet_project never set is None" None
+    (find db (Settings.get Settings.Plantnet_project))
+
+let settings_identify_on_photo () =
+  let db = Cli.migrated_db () in
+  check_changes "set Identify_on_photo true changes 1 row" 1 db
+    (Settings.set Settings.Identify_on_photo true);
+  Alcotest.(check (option bool))
+    "get is Some true" (Some true)
+    (find db (Settings.get Settings.Identify_on_photo));
+  Alcotest.(check (option string))
+    "true is stored as \"true\"" (Some "true")
+    (stored_value db "identify_on_photo");
+  check_changes "set Identify_on_photo false changes 1 row" 1 db
+    (Settings.set Settings.Identify_on_photo false);
+  Alcotest.(check (option bool))
+    "the second set replaces the value" (Some false)
+    (find db (Settings.get Settings.Identify_on_photo));
+  Alcotest.(check (option string))
+    "false is stored as \"false\"" (Some "false")
+    (stored_value db "identify_on_photo")
+
+let settings_identify_on_photo_bad_value () =
+  let db = Cli.migrated_db () in
+  Cli.exec_ok "bad identify_on_photo row" db
+    "insert into settings (key, value) values ('identify_on_photo', 'yes');\n";
+  Alcotest.(check (result (option bool) Cli.codec_error))
+    "a stored \"yes\" is Row WrongType" (Error (Row `WrongType))
+    (Cli.find_result db (Settings.get Settings.Identify_on_photo))
+
+let settings_plantnet_project () =
+  let db = Cli.migrated_db () in
+  let key = Settings.Plantnet_project in
+  let value : Settings.flora =
+    {id = "k-southwestern-europe"; title = "Europe du Sud-Ouest"}
+  in
+  check_changes "set changes 1 row" 1 db (Settings.set key value);
+  Alcotest.(check (option flora_t))
+    "get gives the value back" (Some value)
+    (find db (Settings.get key));
+  Alcotest.(check (option string))
+    "stored as compact JSON, id then title"
+    (Some {|{"id":"k-southwestern-europe","title":"Europe du Sud-Ouest"}|})
+    (stored_value db "plantnet_project");
+  let quoted : Settings.flora = {id = "k-x"; title = {|a "b" l'c \ d é|}} in
+  check_changes
+    "a title with a double quote, an apostrophe, a backslash and an accent" 1 db
+    (Settings.set key quoted);
+  Alcotest.(check (option flora_t))
+    "round-trips" (Some quoted)
+    (find db (Settings.get key));
+  Cli.exec_ok "padded id and title" db
+    "update settings set value = '{\"id\":\"  x \",\"title\":\" T \"}' where \
+     key = 'plantnet_project';\n";
+  Alcotest.(check (option flora_t))
+    "an untrimmed id and title are trimmed on read"
+    (Some {Settings.id = "x"; title = "T"})
+    (find db (Settings.get key));
+  check_changes "unset changes 1 row" 1 db (Settings.unset key);
+  Alcotest.(check (option flora_t))
+    "unset: None again" None
+    (find db (Settings.get key));
+  check_changes "unset again changes nothing" 0 db (Settings.unset key)
+
+let settings_plantnet_project_bad_value () =
+  let key = Settings.Plantnet_project in
+  List.iter
+    (fun (label, value) ->
+      let db = Cli.migrated_db () in
+      Cli.exec_ok
+        ("plantnet_project: " ^ label)
+        db
+        (Printf.sprintf
+           "insert into settings (key, value) values ('plantnet_project', '%s');\n"
+           value);
+      Alcotest.(check (result (option flora_t) Cli.codec_error))
+        (label ^ " is Row WrongType")
+        (Error (Row `WrongType))
+        (Cli.find_result db (Settings.get key)))
+    [
+      ("not JSON", "not json");
+      ("a JSON array, not an object", "[]");
+      ("missing title", {|{"id":"x"}|});
+      ("missing id", {|{"title":"T"}|});
+      ("non-string id", {|{"id":3,"title":"T"}|});
+      ("blank id", {|{"id":"","title":"T"}|});
+      ("non-string title", {|{"id":"x","title":3}|});
+      ("blank title", {|{"id":"x","title":"  "}|});
+    ]
+
 (* ---------- Search.match_expression ---------- *)
 
 let match_expression () =
@@ -2736,6 +2849,23 @@ let () =
              set/unset) in one transaction leaves other settings and a waiting \
              upload row untouched"
             settings_drive_account_transaction_leaves_other_rows_alone;
+          case
+            "Identify_on_photo and Plantnet_project are named \
+             identify_on_photo and plantnet_project"
+            settings_identify_names;
+          case "both never set is None" settings_identify_absent;
+          case "Identify_on_photo round-trips as true and false"
+            settings_identify_on_photo;
+          case "Identify_on_photo holding \"yes\" is Row WrongType"
+            settings_identify_on_photo_bad_value;
+          case
+            "Plantnet_project round-trips {id; title} as compact JSON, id then \
+             title, trimmed on read"
+            settings_plantnet_project;
+          case
+            "Plantnet_project holding invalid JSON, a non-object, a blank or \
+             missing id/title is Row WrongType"
+            settings_plantnet_project_bad_value;
           case
             "drive_choice ~storage:(Some Drive) writes account, folder and \
              storage together"

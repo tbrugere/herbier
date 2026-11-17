@@ -7,3 +7,6 @@ val state : unit -> State.t
 val auth : unit -> Herbier_sync.Auth.t
 (** A fresh {!Herbier_sync.Auth.t}, never started: no IO, no listener, no timer.
 *)
+
+val identification : Herbier_ui_model.Identify_settings.settings
+(** The identification settings of a fresh install: unset. *)

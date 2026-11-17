@@ -8,6 +8,7 @@
   herbier_ui_model
   herbier_sync_core
   herbier_domain
+  herbier_identify
   herbier_refs
   herbier_store
   herbier_test_support

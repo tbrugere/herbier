@@ -8,6 +8,7 @@ module Commune_packs = Herbier_geo_io.Commune_packs
 module Pack_rows = Herbier_store.Commune_packs
 module Code = Communes.Code
 module Drive_text = Herbier_ui_model.Drive_text
+module Identify_settings = Herbier_ui_model.Identify_settings
 module Upload_queue = Herbier_photos_io.Upload_queue
 module Health = Herbier_photos_io.Health
 
@@ -108,6 +109,23 @@ type t = {
   floras : flora_list ref;
       (* style: mutable because a flora request settles in a future's
          callback. *)
+  plantnet_key : Identify_settings.key React.signal;
+  set_plantnet_key : ?step:React.step -> Identify_settings.key -> unit;
+  key_writes : Herbier_sync.Serial.t;
+  identify_on_photo : bool React.signal;
+  set_identify_on_photo : ?step:React.step -> bool -> unit;
+  plantnet_flora : Herbier_store.Settings.flora option React.signal;
+  set_plantnet_flora :
+    ?step:React.step -> Herbier_store.Settings.flora option -> unit;
+  on_photo_writes : int ref;
+  flora_writes : int ref;
+  on_photo_stored : bool ref;
+  flora_stored : Herbier_store.Settings.flora option ref;
+      (* style: mutable because a write settles in a future's callback: a
+         counter per setting, and the value last confirmed in SQLite, what a
+         failed write falls back to. *)
+  identify_gate : Identify_settings.gate React.signal;
+  identify_gate_anchor : Rb.anchor;
 }
 
 let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
@@ -192,7 +210,8 @@ let recorded_drive_token auth state ~set_last ~interactive =
       result)
     (Herbier_sync.Auth.drive_token auth ~account ~interactive)
 
-let create ~db ~state ~theme ~auth =
+let create ~db ~state ~theme ~auth
+    ~(identification : Identify_settings.settings) =
   let saved, send = React.E.create () in
   let synced, send_synced = React.E.create () in
   let send_saved () = send () in
@@ -254,6 +273,23 @@ let create ~db ~state ~theme ~auth =
   let place_error, set_place_error =
     React.S.create ~eq:(Option.equal String.equal) None
   in
+  let plantnet_key, set_plantnet_key =
+    React.S.create ~eq:Identify_settings.equal_key Identify_settings.Loading
+  in
+  let identify_on_photo, set_identify_on_photo =
+    React.S.create ~eq:Bool.equal identification.on_photo
+  in
+  let plantnet_flora, set_plantnet_flora =
+    React.S.create
+      ~eq:(Option.equal Herbier_store.Settings.equal_flora)
+      identification.flora
+  in
+  let identify_gate =
+    React.S.l2 ~eq:Identify_settings.equal_gate
+      (fun key (n : State.network) ->
+        Identify_settings.gate key ~online:n.online)
+      plantnet_key (State.network state)
+  in
   {
     db;
     state;
@@ -295,6 +331,19 @@ let create ~db ~state ~theme ~auth =
     set_drive_folder;
     health;
     floras = ref Not_asked;
+    plantnet_key;
+    set_plantnet_key = (fun ?step k -> set_plantnet_key ?step k);
+    key_writes = Herbier_sync.Serial.create ();
+    identify_on_photo;
+    set_identify_on_photo = (fun ?step v -> set_identify_on_photo ?step v);
+    plantnet_flora;
+    set_plantnet_flora = (fun ?step f -> set_plantnet_flora ?step f);
+    on_photo_writes = ref 0;
+    flora_writes = ref 0;
+    on_photo_stored = ref identification.on_photo;
+    flora_stored = ref identification.flora;
+    identify_gate;
+    identify_gate_anchor = Rb.anchor identify_gate;
   }
 
 let db t = t.db

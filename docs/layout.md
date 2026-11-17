@@ -382,8 +382,8 @@ app/
                           (console, and observers: the dev hook); reads no setting
     commune_packs.ml      a pack downloaded through the geocoder, written to communes/<code>-<ms>.json with
                           its commune_packs row, deleted, and every pack loaded at startup
-  ui_model/               the pure modules of the screens: domain + refs + store + sync_core + ptime + yojson,
-                          no Brr, no React, tested natively in test/ui/
+  ui_model/               the pure modules of the screens: domain + refs + store + sync_core + identify + ptime
+                          + yojson, no Brr, no React, tested natively in test/ui/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
@@ -413,6 +413,10 @@ app/
     server_text.ml        4m's « Serveur en pause » (from the engine's last cycle) and the dashboard link
     offline_data.ml       4m's « Données hors-ligne »: the sizes line and the texts of « Libérer »
     parked_entry.ml       4m's parked outbox entry: its title and French reason, from Last_error
+    settings_text.ml      the texts 4m's sections share (a setting's failed write)
+    identify_settings.ml  4m « Identification » (M9): the Pl@ntNet key's rule and mask (an abstract
+                          type with no printer), the flora row and list, their texts, and the gate
+                          of the Identifier buttons (ready, waiting, no key, offline) 69–71 bind to
   ui/
     rb.ml                 react ↔ Brr glue (API in rb.mli; design in ocaml-react-primer.md §5–6)
     html.ml               cls, button (type="button", aria-label, classes), enter: the DOM helpers screens share
@@ -856,7 +860,8 @@ test/
   ui/           native, alcotest: herbier_ui_model (app/ui_model/); test_ui runs
                 one <module>_tests.ml per module (fixtures.ml: the values several share); 4f's rows
                 (ref_block) for the two spike species projected from fixtures/; 5b's move plan (test_move_plan);
-                the route transitions' rules (motion)
+                the route transitions' rules (motion); 4m « Identification »'s key mask, flora list
+                and gate (identify_settings, over fixtures/plantnet_projects_*.json)
   store/        native, alcotest: herbier_store (app/store/: codec, schema, tables, stmt,
                 the per-table queries, references included, settings, ref_images, commune_packs, uploads,
                 search, dev_seed, sync_state); schema SQL, queries, FTS triggers and

@@ -2,6 +2,7 @@ module Col = Postgrest.Col
 module Original_target = Herbier_domain.Photo.Original_target
 
 type drive_folder = {id : string; name : string} [@@deriving eq]
+type flora = {id : string; title : string} [@@deriving eq]
 
 type _ key =
   | Storage_target : Original_target.t key
@@ -18,6 +19,8 @@ type _ key =
   | Drive_root_folder_default : string key
   | Drive_account : string key
   | Drive_account_changed_at : Ptime.t key
+  | Identify_on_photo : bool key
+  | Plantnet_project : flora key
 
 let name : type a. a key -> string = function
   | Storage_target -> "storage_target"
@@ -34,6 +37,8 @@ let name : type a. a key -> string = function
   | Drive_root_folder_default -> "drive_root_folder_default"
   | Drive_account -> "drive_account"
   | Drive_account_changed_at -> "drive_account_changed_at"
+  | Identify_on_photo -> "identify_on_photo"
+  | Plantnet_project -> "plantnet_project"
 
 (* A local-only table: its columns live next to its queries (layout §2), not
    in Tables. *)
@@ -85,6 +90,26 @@ let drive_folder_text : drive_folder Col.custom =
       | _ -> None
       | exception Yojson.Json_error (_ : string) -> None)
 
+let flora_text : flora Col.custom =
+  Codec.text ~name:"flora"
+    ~to_string:(fun {id; title} ->
+      Yojson.Safe.to_string
+        (`Assoc [("id", `String id); ("title", `String title)]))
+    ~of_string:(fun s ->
+      match Yojson.Safe.from_string s with
+      | `Assoc fields -> (
+          match (List.assoc_opt "id" fields, List.assoc_opt "title" fields) with
+          | Some (`String id), Some (`String title) -> (
+              match
+                ( Herbier_domain.Text.non_blank id,
+                  Herbier_domain.Text.non_blank title )
+              with
+              | Some id, Some title -> Some {id; title}
+              | (Some _ | None), (Some _ | None) -> None)
+          | (Some _ | None), (Some _ | None) -> None)
+      | _ -> None
+      | exception Yojson.Json_error (_ : string) -> None)
+
 let codec : type a. a key -> a Col.custom = function
   | Storage_target -> Tables.photo_original_target
   | Wifi_only -> bool_text
@@ -100,6 +125,8 @@ let codec : type a. a key -> a Col.custom = function
   | Drive_root_folder_default -> drive_id_text
   | Drive_account -> email_text
   | Drive_account_changed_at -> timestamp_text
+  | Identify_on_photo -> bool_text
+  | Plantnet_project -> flora_text
 
 let value_column key : (settings, _, [`Mandatory]) Col.t =
   {ty = Not_Null (Custom (codec key)); name = "value"}

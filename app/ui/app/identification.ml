@@ -4,6 +4,10 @@ module Identify_io = Herbier_identify.Make (Plantnet_transport)
 module Files = Herbier_store_io.Files
 module Cap_error = Herbier_bindings.Cap_error
 module Photo_id = Herbier_domain.Ids.Photo_id
+module Identify_settings = Herbier_ui_model.Identify_settings
+module Settings = Herbier_store.Settings
+module Db = Herbier_store_io.Db
+module Preferences = Herbier_bindings.Cap_preferences
 
 type image = Preview of Brr.Blob.t | Stored of Photo_id.t
 
@@ -105,3 +109,87 @@ let floras (t : Core.t) ~key =
               Core.log [Identify.projects_not_sent "offline"];
               Fut.return (Error Identify_offline)
           | true -> Fut.map settled (ask_floras t ~key)))
+
+let load_plantnet_key (t : Core.t) =
+  Herbier_sync.Serial.run t.key_writes (fun () ->
+      Fut.map
+        (fun read ->
+          t.set_plantnet_key
+            (match read with
+            | Ok stored -> Identify_settings.key_of_stored stored
+            | Error e ->
+                Core.log_error
+                  ["identify: key unreadable:"; Cap_error.to_string e];
+                Absent))
+        (Preferences.get ~key:Identify_settings.preferences_key))
+
+let plantnet_key (t : Core.t) = t.plantnet_key
+
+(* The signal follows Preferences only once the write is confirmed: a key
+   shown but not stored would be gone at the next start. *)
+let set_plantnet_key (t : Core.t) input =
+  Herbier_sync.Serial.run t.key_writes (fun () ->
+      let key = Identify_settings.Key.of_input input in
+      let write =
+        match key with
+        | None -> Preferences.remove ~key:Identify_settings.preferences_key
+        | Some k ->
+            Preferences.set ~key:Identify_settings.preferences_key
+              ~value:(Identify_settings.Key.to_string k)
+      in
+      Fut.map
+        (function
+          | Ok () ->
+              (match key with
+              | None ->
+                  t.set_plantnet_key Absent;
+                  Core.log ["identify: key cleared"]
+              | Some k ->
+                  t.set_plantnet_key (Present k);
+                  Core.log ["identify: key saved"]);
+              Ok ()
+          | Error e ->
+              Core.log_error ["identify: key not saved:"; Cap_error.to_string e];
+              Error e)
+        write)
+
+(* Shown before the write, so a second tap while it runs flips it back; a
+   failure reverts, to the value SQLite last confirmed, only when no later
+   write was started. The writes settle in the order they were issued. *)
+let write_setting (t : Core.t) ~writes ~stored ~set ~what value stmt =
+  incr writes;
+  let mine = !writes in
+  set value;
+  Fut.map
+    (function
+      | Ok (_ : int) ->
+          stored := value;
+          Ok ()
+      | Error e ->
+          Core.log_error
+            ["réglages: identification"; what; Db.error_to_string e];
+          (match Int.equal !writes mine with
+          | true -> set !stored
+          | false -> ());
+          Error e)
+    (Db.write t.db stmt)
+
+let identify_on_photo (t : Core.t) = t.identify_on_photo
+
+let set_identify_on_photo (t : Core.t) v =
+  write_setting t ~writes:t.on_photo_writes ~stored:t.on_photo_stored
+    ~set:(fun v -> t.set_identify_on_photo v)
+    ~what:"on_photo" v
+    (Settings.set Identify_on_photo v)
+
+let plantnet_flora (t : Core.t) = t.plantnet_flora
+
+let set_plantnet_flora (t : Core.t) flora =
+  write_setting t ~writes:t.flora_writes ~stored:t.flora_stored
+    ~set:(fun f -> t.set_plantnet_flora f)
+    ~what:"flora" flora
+    (match flora with
+    | Some f -> Settings.set Plantnet_project f
+    | None -> Settings.unset Plantnet_project)
+
+let identify_gate (t : Core.t) = t.identify_gate

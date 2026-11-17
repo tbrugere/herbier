@@ -327,6 +327,27 @@ let app_buttons ~key_value ~flora_value log actions =
       button)
     actions
 
+let gate_label : Herbier_ui_model.Identify_settings.gate -> string * string =
+  function
+  | Ready (_ : Herbier_ui_model.Identify_settings.Key.t) -> ("prête", "ready")
+  | Waiting -> ("chargement", "waiting")
+  | No_key -> ("pas de clé", "no_key")
+  | Offline -> ("hors-ligne", "offline")
+
+let gate_line app =
+  let label =
+    React.S.map
+      ~eq:(fun (a, b) (c, d) -> String.equal a c && String.equal b d)
+      gate_label (App.identify_gate app)
+  in
+  let el = El.p [] in
+  Rb.hold el
+    [
+      Rb.text el (React.S.map (fun (text, _) -> "porte : " ^ text) label);
+      Rb.attr el "data-gate" (React.S.map (fun (_, attr) -> Some attr) label);
+    ];
+  el
+
 let app_block app ~key_value ~flora_value =
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
   match app with
@@ -357,7 +378,7 @@ let app_block app ~key_value ~flora_value =
             ("Identifier le dernier aperçu stocké", app_stored app channel);
           ]
       in
-      El.div [El.h2 [El.txt' "Identify_io"]; El.div buttons; log]
+      El.div [El.h2 [El.txt' "Identify_io"]; gate_line app; El.div buttons; log]
 
 let el app =
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in

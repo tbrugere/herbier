@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android 11 and lower. Capacitor Preferences holds the Supabase session
-     (refresh token), and the keep-alive job's KV (named after its runner
-     label) holds its own session: both stay on the device. Same rules as
+     (refresh token) and the user's Pl@ntNet API key (plantnet.api_key),
+     and the keep-alive job's KV (named after its runner label) holds its
+     own session: both stay on the device. Same rules as
      data_extraction_rules.xml. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="CapacitorStorage.xml" />

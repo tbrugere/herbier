@@ -285,3 +285,45 @@
 .drive-sheet .button[aria-disabled]
   opacity: .5
   pointer-events: none
+
+// 4m « Identification » (app/ui/screens/settings/identification.ml): the key
+// editor (field, then « Annuler » and « Enregistrer », wrapping on a narrow
+// screen), the help line with its link, the footnote under the card. The
+// flora row and its list reuse .settings__folder-button and the département
+// picker's list.
+.settings__key-editor
+  display: flex
+  flex-wrap: wrap
+  align-items: center
+  gap: 4px 10px
+  padding: 10px 16px
+  &[hidden]
+    display: none
+  .text-field
+    flex: 1 1 200px
+    min-width: 0
+    background: var(--paper)
+  .settings__error
+    flex-basis: 100%
+    margin: 0
+
+.settings__key-actions
+  display: flex
+  flex: none
+  gap: 10px
+  margin-left: auto
+  .text-button[aria-disabled]
+    opacity: .5
+    pointer-events: none
+
+// Inline in the sentence; the padding widens its tap target without moving
+// the lines.
+.settings__key-help .settings__link
+  display: inline
+  font-size: inherit
+  min-height: 0
+  padding: 12px 0
+
+.settings__footnote
+  margin: 0
+  padding: 0 4px

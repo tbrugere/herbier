@@ -7,6 +7,13 @@ type drive_folder = {id : string; name : string}
 
 val equal_drive_folder : drive_folder -> drive_folder -> bool
 
+type flora = {id : string; title : string}
+(** A Pl@ntNet flora as the list gave it: its id and French title. It mirrors
+    [Herbier_identify.Plantnet.project], as store does not depend on identify.
+*)
+
+val equal_flora : flora -> flora -> bool
+
 type _ key =
   | Storage_target : Herbier_domain.Photo.Original_target.t key
       (** 4m « Où vont mes photos »; stored as the enum label. *)
@@ -64,6 +71,15 @@ type _ key =
           from the session counts as no change). The health check takes a 404
           for a photo created before it as no answer
           ([Herbier_photos.Health.items]). Local only. *)
+  | Identify_on_photo : bool key
+      (** 4m « Identifier dès la photo »; ["true"] / ["false"]; unset = on. *)
+  | Plantnet_project : flora key
+      (** 4m « Flore Pl@ntNet »: compact JSON [{"id":…,"title":…}] (in that
+          order); [id] and [title] trimmed on read, each non-blank; invalid
+          JSON, not an object, a missing / non-string / blank [id] or [title] →
+          [Row `WrongType] (read as unset). Unset = « Automatique » ([all]);
+          choosing « Automatique » {!unset}s it. Local only, never synced. The
+          Pl@ntNet key itself is never a setting (Capacitor Preferences). *)
 
 val name : _ key -> string
 (** The stored key: ["storage_target"], ["wifi_only"],
@@ -72,7 +88,8 @@ val name : _ key -> string
     ["drive_health_checked_at"], ["last_upload_at"], ["drive_health_cursor"],
     ["drive_root_folder"], ["drive_root_folder_picked"],
     ["drive_root_folder_default"], ["drive_account"],
-    ["drive_account_changed_at"]. *)
+    ["drive_account_changed_at"], ["identify_on_photo"], ["plantnet_project"].
+*)
 
 val get : 'a key -> 'a Stmt.query
 (** 0 or 1 row: run it with [Db.find]. [None] means the key was never set, and

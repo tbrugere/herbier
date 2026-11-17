@@ -12,20 +12,22 @@ let root () =
       root
 
 (* A setting as the app starts with it: unset, or a stored value that does
-   not parse (Settings.get), is the default given here. *)
-let setting db key default =
+   not parse (Settings.get), is [None]. *)
+let stored db key =
   Fut.map
     (function
-      | Ok (Some v) -> Ok v
-      | Ok None | Error (Db.Decode _) -> Ok default
-      | Error e -> Error e)
+      | Ok v -> Ok v | Error (Db.Decode _) -> Ok None | Error e -> Error e)
     (Db.find db (Settings.get key))
+
+let setting db key default =
+  Fut.map (Result.map (Option.value ~default)) (stored db key)
 
 type settings = {
   storage : Original_target.t;
   drive : Herbier_sync_core.Auth.Drive_account.t;
   wifi_only : bool;
   place_sources : Herbier_geo.Place_name.sources;
+  identification : Herbier_ui_model.Identify_settings.settings;
 }
 
 let place_sources db =
@@ -44,12 +46,21 @@ let settings db =
   let* storage = setting db Settings.Storage_target Original_target.App_only in
   let* wifi_only = setting db Settings.Wifi_only false in
   let* drive_account = Herbier_photos_io.Drive_root.account db in
-  let+ place_sources = place_sources db in
+  let* place_sources = place_sources db in
+  let* on_photo = stored db Settings.Identify_on_photo in
+  let+ flora = stored db Settings.Plantnet_project in
   let drive =
     Herbier_sync_core.Auth.Drive_account.of_stored
       ~configured:Herbier_sync.Auth.drive_configured drive_account
   in
-  {storage; drive; wifi_only; place_sources}
+  {
+    storage;
+    drive;
+    wifi_only;
+    place_sources;
+    identification =
+      Herbier_ui_model.Identify_settings.settings_of_stored ~on_photo ~flora;
+  }
 
 let tab app = function
   | Herbier_ui.Widgets.Tab_bar.Collection -> Herbier_ui.Screens.Collection.v app
@@ -87,7 +98,7 @@ let modal app = function
 
 (* The theme is read once, here: app.css is loaded by now. [online] starts
    from the navigator and {!watch_network} keeps it current. *)
-let create_app db {storage; drive; wifi_only; place_sources} =
+let create_app db {storage; drive; wifi_only; place_sources; identification} =
   let auth = Herbier_sync.Auth.create () in
   let state =
     Herbier_ui.State.create
@@ -96,6 +107,7 @@ let create_app db {storage; drive; wifi_only; place_sources} =
       ~place_sources
   in
   Herbier_ui.App.create ~db ~state ~theme:(Herbier_ui.Theme.load ()) ~auth
+    ~identification
 
 (* The window's online and offline events update [State.network]; coming
    back online asks the enabled place-name sources for what was saved
@@ -175,6 +187,7 @@ let () =
           Herbier_ui.App.start_keepalive app;
           Herbier_ui.App.start_uploads app;
           Herbier_ui.App.geocode_pending app;
+          Fut.await (Herbier_ui.App.load_plantnet_key app) Fun.id;
           (* A veil over a dev page would cover the emulator's checks; the
              notice shows at the next start on an app route. *)
           match Herbier_ui.Route.current () with

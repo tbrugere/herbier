@@ -10,3 +10,7 @@ let state () =
     ~place_sources:Herbier_geo.Place_name.none
 
 let auth () = Herbier_sync.Auth.create ()
+
+let identification =
+  Herbier_ui_model.Identify_settings.settings_of_stored ~on_photo:None
+    ~flora:None

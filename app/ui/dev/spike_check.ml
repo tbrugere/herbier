@@ -69,7 +69,8 @@ let run ~db ~stage ~result ~current =
   let enter_and_leave i =
     let screen =
       Screens.Collection.v
-        (App.create ~db ~state ~theme:(Theme.load ()) ~auth:(Fixture.auth ()))
+        (App.create ~db ~state ~theme:(Theme.load ()) ~auth:(Fixture.auth ())
+           ~identification:Fixture.identification)
     in
     mount screen;
     let* filled =
@@ -116,7 +117,8 @@ let run ~db ~stage ~result ~current =
   in
   let control =
     Screens.Collection.v
-      (App.create ~db ~state ~theme:(Theme.load ()) ~auth:(Fixture.auth ()))
+      (App.create ~db ~state ~theme:(Theme.load ()) ~auth:(Fixture.auth ())
+         ~identification:Fixture.identification)
   in
   mount control;
   let* filled =

@@ -10,11 +10,14 @@ val create :
   state:State.t ->
   theme:(Theme.t, Theme.error) result ->
   auth:Herbier_sync.Auth.t ->
+  identification:Herbier_ui_model.Identify_settings.settings ->
   t
-(** [theme]: {!Theme.load}'s result, read once at startup. [auth] is not started
-    here (see {!start_auth}); the sync engine is built but not started (see
-    {!start_sync}), and so is the keep-alive's side ({!keepalive}, started by
-    {!start_keepalive}). No IO. *)
+(** [theme]: {!Theme.load}'s result, read once at startup. [identification]: «
+    Identifier dès la photo » and « Flore Pl@ntNet » as main read them from the
+    settings table before building the app; the Pl@ntNet key is read later
+    ({!load_plantnet_key}). [auth] is not started here (see {!start_auth}); the
+    sync engine is built but not started (see {!start_sync}), and so is the
+    keep-alive's side ({!keepalive}, started by {!start_keepalive}). No IO. *)
 
 val db : t -> Herbier_store_io.Db.t
 val state : t -> State.t
@@ -479,10 +482,10 @@ val delete_pack :
     ({!Plantnet_transport}: the timed fetch, 30 s for an identify POST, no
     retry). The key is the caller's (the Preferences key [plantnet.api_key]):
     nothing is built into the APK, no Supabase call or session is involved (it
-    works signed out and while the project is paused). Never stores anything; no
-    console line holds the key or a request's URL, nor a fetch error's text (the
-    one line with a JS error's text is a preview read's, the Filesystem plugin's
-    message). *)
+    works signed out and while the project is paused). A request stores nothing;
+    no console line holds the key or a request's URL, nor a fetch error's text
+    (the one line with a JS error's text is a preview read's, the Filesystem
+    plugin's message). *)
 
 type image = Identification.image =
   | Preview of Brr.Blob.t  (** a preview in memory (4d's shots) *)
@@ -550,3 +553,65 @@ val floras :
     again). A caller that joins the request in flight gets its result, errors
     included, whatever its own key: an [Ok] is never a check of the key. Never
     raises. *)
+
+(** {2 4m « Identification »: the key and the two settings}
+
+    The user's Pl@ntNet key lives in Capacitor Preferences
+    ({!Herbier_ui_model.Identify_settings.preferences_key}), outside Android's
+    backups, never in SQLite, the outbox or Supabase; « Identifier dès la photo
+    » and « Flore Pl@ntNet » are local SQLite settings
+    ({!Herbier_store.Settings.Identify_on_photo},
+    {!Herbier_store.Settings.Plantnet_project}). No console line holds the key
+    or its mask. *)
+
+val load_plantnet_key : t -> unit Fut.t
+(** Once, by main, right after the app is built. Reads the Preferences key
+    (through the key's write queue, so after any write started before):
+    [Ok stored] → {!Herbier_ui_model.Identify_settings.key_of_stored}; [Error e]
+    → [Absent] and the console error
+    [identify: key unreadable: <Cap_error.to_string e>]. Never raises. *)
+
+val plantnet_key : t -> Herbier_ui_model.Identify_settings.key React.signal
+(** [Loading] until {!load_plantnet_key} reads it. *)
+
+val set_plantnet_key :
+  t -> string -> (unit, Herbier_bindings.Cap_error.t) result Fut.t
+(** 4m « Modifier » → « Enregistrer ». [Identify_settings.Key.of_input input]:
+    - [None] (blank) → [Cap_preferences.remove]; on [Ok] the signal becomes
+      [Absent] and the console logs [identify: key cleared];
+    - [Some k] → [Cap_preferences.set] of the trimmed key; on [Ok] the signal
+      becomes [Present k], log [identify: key saved].
+
+    On [Error e]: the signal is unchanged (it never shows a key that is not
+    stored), log [identify: key not saved: <Cap_error.to_string e>], [Error e]
+    returned. Reads and writes of the key run one after another, in call order.
+    Never raises. *)
+
+val identify_on_photo : t -> bool React.signal
+(** 4m « Identifier dès la photo », from [create]'s [identification]. Without a
+    key it does nothing ({!Herbier_ui_model.Identify_settings.opens_on_photo}).
+*)
+
+val set_identify_on_photo :
+  t -> bool -> (unit, Herbier_store_io.Db.error) result Fut.t
+(** Sets the signal at once (a second tap while the write runs flips it back),
+    then [Db.write (Settings.set Identify_on_photo v)]. Error → logged
+    ([réglages: identification on_photo …]), the signal goes back to the value
+    last confirmed in SQLite (the startup value or the last successful write)
+    when no later call was made, [Error e]. *)
+
+val plantnet_flora : t -> Herbier_store.Settings.flora option React.signal
+(** The stored flora; [None] = « Automatique » ([all]). *)
+
+val set_plantnet_flora :
+  t ->
+  Herbier_store.Settings.flora option ->
+  (unit, Herbier_store_io.Db.error) result Fut.t
+(** Signal at once, then [Settings.set Plantnet_project f] ([Some f]) or
+    [Settings.unset Plantnet_project] ([None]: no row is kept for « Automatique
+    »). Error → as {!set_identify_on_photo} ([… flora …]). *)
+
+val identify_gate : t -> Herbier_ui_model.Identify_settings.gate React.signal
+(** [Identify_settings.gate] of {!plantnet_key} and {!State.network}'s [online],
+    kept updating for the app's lifetime: what the Identifier buttons bind their
+    disabled state and reason to, and what [Ready k] gives them the key from. *)

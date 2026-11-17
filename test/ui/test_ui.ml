@@ -31,4 +31,5 @@ let () =
       ("network_text", Network_text_tests.network_text);
       ("server_text", Server_text_tests.server_text);
       ("offline_data", Offline_data_tests.offline_data);
+      ("identify_settings", Identify_settings_tests.identify_settings);
     ]

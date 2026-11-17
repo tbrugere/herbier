@@ -11,6 +11,7 @@ module Communes := Herbier_geo.Communes
 module Pack_rows := Herbier_store.Commune_packs
 module Code := Communes.Code
 module Drive_text := Herbier_ui_model.Drive_text
+module Identify_settings := Herbier_ui_model.Identify_settings
 
 type geocode_run =
   | Idle
@@ -114,6 +115,28 @@ type t = {
   floras : flora_list ref;
       (* style: mutable because a flora request settles in a future's
          callback. *)
+  plantnet_key : Identify_settings.key React.signal; (* starts [Loading] *)
+  set_plantnet_key : ?step:React.step -> Identify_settings.key -> unit;
+  key_writes : Herbier_sync.Serial.t;
+      (* the key's Preferences reads and writes, one after another *)
+  identify_on_photo : bool React.signal;
+  set_identify_on_photo : ?step:React.step -> bool -> unit;
+  plantnet_flora : Herbier_store.Settings.flora option React.signal;
+  set_plantnet_flora :
+    ?step:React.step -> Herbier_store.Settings.flora option -> unit;
+  on_photo_writes : int ref;
+  flora_writes : int ref;
+  on_photo_stored : bool ref;
+  flora_stored : Herbier_store.Settings.flora option ref;
+      (* style: mutable because a write settles in a future's callback: the
+         writes started so far and the value last confirmed in SQLite, per
+         setting. Only the latest write's failure reverts the signal, to the
+         confirmed value. *)
+  identify_gate : Identify_settings.gate React.signal;
+      (* {!Identify_settings.gate} of [plantnet_key] and {!State.network} *)
+  identify_gate_anchor : Rb.anchor;
+      (* keeps [identify_gate] updating for the app's lifetime: a screen's
+          released binding would otherwise stop it ({!Rb.release}) *)
 }
 
 val log_error : string list -> unit
@@ -127,6 +150,7 @@ val create :
   state:State.t ->
   theme:(Theme.t, Theme.error) result ->
   auth:Herbier_sync.Auth.t ->
+  identification:Identify_settings.settings ->
   t
 
 val db : t -> Db.t

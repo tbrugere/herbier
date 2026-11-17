@@ -1,7 +1,7 @@
 ; The pure modules of the screens: filters, plans, texts, the sheet's snap
-; points, the shared-link intake rules, 4m's parked entries. No Brr, no React,
-; no store IO: the libraries below enforce it, and test/ui links this library
-; natively.
+; points, the shared-link intake rules, 4m's parked entries, Identification's
+; settings. No Brr, no React, no store IO: the libraries below enforce it, and
+; test/ui links this library natively.
 ; Subdirectories are qualified modules (intercept/: Intercept and its parts).
 (include_subdirs qualified)
 
@@ -10,6 +10,7 @@
  (public_name herbier.ui_model)
  (libraries
   herbier_domain
+  herbier_identify
   herbier_refs
   herbier_store
   herbier_sync_core

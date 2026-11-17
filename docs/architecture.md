@@ -1269,6 +1269,9 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   6g shows it, like a refused request or a malformed answer, as the same
   generic error, without « Réessayer » (resending would fail the same way).
   The setup help in 4m's key row (66) still asks for the key to be exposed.
+  4m's flora list keeps « Réessayer » under every error, the generic one
+  included: the list costs no credit, and the key may have been exposed
+  meanwhile.
 - **The answer, fields used.** Per proposal: `score` (0 to 1, shown as a
   percent), `species.scientificNameWithoutAuthor` and
   `scientificNameAuthorship` (the Latin line), `species.commonNames` (French
@@ -1346,7 +1349,8 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
 - **Settings** (local, never synced; M9.66): `identify_on_photo` (« Identifier
   dès la photo », unset = on) and `plantnet_project` (the flora, compact JSON
   `{"id","title"}`, unset = `all`) in the SQLite `settings` table; the API key
-  apart, in Capacitor Preferences (below).
+  apart, in Capacitor Preferences (below). Main reads the two settings with
+  the others before building the app; only the key is read after.
 - **Credits and licences.** Pl@ntNet is named on every identification screen
   (tour 6's rule). Related images are "usually" CC BY-SA and must credit
   Pl@ntNet, the licence and the contributor: 6d prints « © <author> ·

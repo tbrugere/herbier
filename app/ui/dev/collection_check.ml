@@ -8,7 +8,7 @@ let el db =
       let screen =
         Screens.Collection.v
           (App.create ~db ~state:(Fixture.state ()) ~theme:(Theme.load ())
-             ~auth:(Fixture.auth ()))
+             ~auth:(Fixture.auth ()) ~identification:Fixture.identification)
       in
       let root = El.div [screen.el] in
       (* The page is left by a reload: nothing releases the screen, so its

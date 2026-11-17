@@ -5,19 +5,21 @@
     sign-in; a failed attempt leaves one line under the card until the next tap
     (none for a dismissed chooser). Signed in, its meta is
     {!Herbier_ui_model.Drive_text.account_meta} (the address: this is the sync
-    account; Drive has its own, chosen under « Dossier Drive »). Opening the
-    screen runs {!App.check_drive_access}. « Où vont mes photos » (Google Drive
-    or Herbier only; no Google Photos row, architecture §5): the radios show
-    {!State.account}'s [storage], which only a committed write changes. The
-    Drive radio is {!Herbier_ui_model.Drive_text.drive_option} (title « Google
-    Drive », its detail, the chosen « <folder> · <email> » once the storage is
-    Drive, and, in a build without a Google web client id or without a Cloud
-    project number, [aria-disabled], inert, with its reason). Choosing it runs
-    {!Drive_flow} with [purpose = Turn_on]: the account chooser when no Drive
-    account is stored, then Google Picker; a pick stores account, folder and
-    storage = Drive in one write ({!App.store_pick} [~turn_on:true]); a cancel
-    stores nothing (and shows only the stored account's refusal when that is
-    what opened the chooser), an error stores nothing and leaves its
+    account; Drive has its own, chosen under « Dossier Drive »). Right under the
+    card, « Identification » ({!Identification}: Pl@ntNet's switch, flora and
+    key). Opening the screen runs {!App.check_drive_access}. « Où vont mes
+    photos » (Google Drive or Herbier only; no Google Photos row, architecture
+    §5): the radios show {!State.account}'s [storage], which only a committed
+    write changes. The Drive radio is
+    {!Herbier_ui_model.Drive_text.drive_option} (title « Google Drive », its
+    detail, the chosen « <folder> · <email> » once the storage is Drive, and, in
+    a build without a Google web client id or without a Cloud project number,
+    [aria-disabled], inert, with its reason). Choosing it runs {!Drive_flow}
+    with [purpose = Turn_on]: the account chooser when no Drive account is
+    stored, then Google Picker; a pick stores account, folder and storage =
+    Drive in one write ({!App.store_pick} [~turn_on:true]); a cancel stores
+    nothing (and shows only the stored account's refusal when that is what
+    opened the chooser), an error stores nothing and leaves its
     {!Herbier_ui_model.Drive_text.pick_error_text} under the radios; while it
     runs, a [role="status"] line under the radios
     ({!Herbier_ui_model.Drive_sheet.status_line}), the radio [aria-busy], and

@@ -309,7 +309,7 @@ let pick_error_text = function
   | Token ((Unconfigured | No_drive_account | Offline | Misconfigured) as d) ->
       Option.value (blocker (Denied d) ~online:true) ~default:not_authorized
   | Picker_unavailable -> "Google Picker n’a pas pu s’ouvrir."
-  | Not_saved -> "Le réglage n’a pas pu être enregistré."
+  | Not_saved -> Settings_text.not_saved
   | Drive_failed -> "Drive n’a pas répondu : réessayez."
   | Chooser_no_account ->
       "Aucun compte Google sur le téléphone : ajoutez-en un dans les réglages \

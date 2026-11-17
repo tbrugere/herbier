@@ -512,7 +512,7 @@ let stop_dialog ~send_anyway ~dont_send =
   in
   (host, open_, Rb.on_release (fun () -> Rb.release !current))
 
-let storage_not_saved = "Le réglage n’a pas pu être enregistré."
+let storage_not_saved = Herbier_ui_model.Settings_text.not_saved
 
 let stop_failed =
   "Les photos en attente n’ont pas pu être retirées : rien n’a changé."
@@ -550,6 +550,7 @@ let v app =
             set_account (fun a -> {a with wifi_only = not next}))
   in
   let account, account_b = account_card app in
+  let identification = Identification.v app in
   let folder =
     Folder_button.v app
       ~visible:
@@ -648,6 +649,8 @@ let v app =
       [
         El.h1 ~at:[cls "t-screen-title"] [El.txt' "Réglages"];
         account;
+        section Herbier_ui_model.Identify_settings.section_title
+          identification.els;
         section "Où vont mes photos"
           [
             El.div
@@ -698,6 +701,7 @@ let v app =
       List.concat
         [
           account_b;
+          identification.bindings;
           parked_b;
           queue_b;
           [stop_b];
