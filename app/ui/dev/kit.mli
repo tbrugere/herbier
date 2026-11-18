@@ -1,4 +1,5 @@
-(** What the dev pages repeat: a log line, a plain button and its click. *)
+(** What the dev pages share: a log line, buttons and their clicks, steps, a
+    test JPEG, a substring test. *)
 
 val append : Brr.El.t -> string -> unit
 (** One [<div>] line of text at the end of the log. *)
@@ -30,3 +31,10 @@ val step :
 val action : string -> (unit -> unit) -> Brr.El.t
 (** A [<button>] (no [type]) with that text, calling [f] on every click for the
     page's lifetime. *)
+
+val test_jpeg : ?color:string -> unit -> (Brr.Blob.t, string) result Fut.t
+(** A 64×64 JPEG (quality 0.9): a square of [color] (default ["#2e7d32"]) with a
+    red band across. The error is the encoder's, as text. *)
+
+val contains : sub:string -> string -> bool
+(** Whether [sub] occurs in the string. *)

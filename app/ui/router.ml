@@ -65,17 +65,20 @@ let warn_cap what = function
    history is at its start unless a [backButton] listener leaves the app: the
    plugin's own handler only goes back. A tab press replaces its entry, so this
    is where back from any tab exits; a pushed entry (a modal) is walked back.
-   An open Google Picker is an overlay with no entry of its own: back closes
-   it and goes nowhere. *)
+   An open Google Picker, or an Overlay (the identification layer), has no
+   entry of its own: back closes it and goes nowhere. *)
 let listen_back_button () =
   let back ~can_go_back =
-    match (Herbier_bindings.Google_picker.dismiss_if_shown (), can_go_back) with
-    | true, (true | false) -> ()
-    | false, true -> Route.back ()
-    | false, false ->
-        Fut.await
-          (Herbier_bindings.Cap_app.exit_app ())
-          (warn_cap "router: exitApp")
+    match Herbier_bindings.Google_picker.dismiss_if_shown () with
+    | true -> ()
+    | false -> (
+        match (Overlay.close_top (), can_go_back) with
+        | true, (true | false) -> ()
+        | false, true -> Route.back ()
+        | false, false ->
+            Fut.await
+              (Herbier_bindings.Cap_app.exit_app ())
+              (warn_cap "router: exitApp"))
   in
   Fut.await
     (Herbier_bindings.Cap_app.on_back_button back)

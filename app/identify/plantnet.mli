@@ -42,6 +42,9 @@ type 'image request = {
           [i] from 1, in photo order *)
 }
 
+val daily_quota : int
+(** 500: the identifications a free key gets per day. *)
+
 type error =
   | No_key  (** blank key: nothing sent *)
   | No_photo  (** no photo: nothing sent *)
@@ -50,7 +53,8 @@ type error =
   | Key_not_exposed
       (** 403 whose body's [message] is ["CORS error: Origin not allowed"]: the
           key is not exposed for https://localhost; fixed on my.plantnet.org *)
-  | Quota_used_up  (** 429: the day's 500 are spent until 00:00 UTC *)
+  | Quota_used_up
+      (** 429: the day's {!daily_quota} are spent until 00:00 UTC *)
   | Refused_request of int
       (** 400, 413, 414, 415, any other 4xx (a 403 with another body, a 404 on
           the flora list), and any non-2xx below 400: this request as is will

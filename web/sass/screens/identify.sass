@@ -1,0 +1,459 @@
+// The identification layer, 6b, 6c, 6f, 6g (app/ui/screens/identify.ml):
+// full screen over its caller, paper, its own scroll; sizes from the
+// handoff's identification/ artboards.
+@use '../base'
+@use '../widgets'
+
+// A part of the layer re-rendered on its own: no box of its own.
+.identify__slot
+  display: contents
+
+// Above the caller and its sheets (10), below the offline strip (15).
+.identify
+  position: fixed
+  inset: 0
+  z-index: 12
+  display: flex
+  flex-direction: column
+  overflow-y: auto
+  background: var(--paper)
+  color: var(--ink)
+  +base.body
+
+.identify-glyph
+  display: block
+  flex: none
+
+// ← / « PL@NTNET » over « Identification », centred.
+.identify__header
+  display: grid
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr)
+  align-items: center
+  // The touch target below the top padding, as in the handoff.
+  box-sizing: content-box
+  min-height: var(--touch-min)
+  padding: calc(16px + env(safe-area-inset-top) + var(--offline-inset)) var(--space-screen) 0
+
+.identify__back
+  +widgets.bare-button
+  display: flex
+  align-items: center
+  justify-content: center
+  width: var(--touch-min)
+  height: var(--touch-min)
+  margin-left: -10px
+  color: var(--ink)
+  +widgets.pressed-text
+
+.identify__heading
+  display: flex
+  flex-direction: column
+  align-items: center
+  gap: 2px
+  text-align: center
+
+.identify__kicker
+  +base.section-label(var(--moss))
+  line-height: 1.2
+
+.identify__kicker--queue
+  color: var(--ochre)
+
+.identify__title
+  margin: 0
+  +base.ui(15px, 800)
+  line-height: 1.2
+
+// Room under the content for the fixed footer button.
+.identify__body
+  flex: 1
+  padding-bottom: 100px
+
+.identify__footer
+  position: fixed
+  left: 0
+  right: 0
+  bottom: 0
+  z-index: 1
+  padding: 12px var(--space-screen) calc(26px + env(safe-area-inset-bottom))
+  background: var(--paper)
+  border-top: 1px solid var(--line)
+
+// 6b: the photos and « Envoi à Pl@ntNet… » side by side.
+.identify__sending
+  display: flex
+  align-items: center
+  gap: 12px
+  padding: 14px var(--space-screen) 0
+  .identify__photos
+    padding: 0
+
+.identify__status-block
+  flex: 1
+  min-width: 0
+  display: flex
+  flex-direction: column
+  gap: 2px
+
+.identify__status
+  margin: 0
+  +base.ui(15px, 700)
+  line-height: 1.3
+
+.identify__note
+  margin: 0
+  +base.meta(12px)
+  line-height: 1.35
+
+// My photos, the organ band at the bottom.
+.identify__photos
+  display: flex
+  flex-wrap: wrap
+  align-items: center
+  gap: 10px
+  padding: 14px var(--space-screen) 0
+
+// 6f: the ochre frame around my photos.
+.identify__photos--uncertain
+  margin: 14px var(--space-screen) 0
+  padding: 12px
+  border-radius: 16px
+  border: 1.5px solid var(--ochre)
+
+.identify__photo
+  position: relative
+  flex: none
+  width: 64px
+  height: 64px
+
+.identify__thumb
+  width: 100%
+  height: 100%
+  border-radius: var(--radius-thumb-small)
+  overflow: hidden
+  +widgets.striped
+
+.identify__thumb-img
+  display: block
+  width: 100%
+  height: 100%
+  object-fit: cover
+
+// The whole photo is the organ button; its label sits on the dark band at
+// the bottom (« fleur ▾ »).
+.identify__organ
+  +widgets.bare-button
+  position: absolute
+  inset: 0
+  display: flex
+  align-items: flex-end
+  justify-content: center
+  padding: 3px 0
+  border-radius: var(--radius-thumb-small)
+  background: linear-gradient(to top, var(--organ-band) 0 18px, transparent 18px)
+  color: var(--paper)
+  +base.ui(10px, 700)
+  line-height: 1.2
+  +widgets.pressed-text(.8)
+  &[aria-disabled]
+    cursor: default
+
+.identify__add
+  +widgets.bare-button
+  flex: none
+  display: flex
+  flex-direction: column
+  align-items: center
+  justify-content: center
+  gap: 2px
+  width: 64px
+  height: 64px
+  border-radius: var(--radius-thumb-small)
+  border: 1.5px dashed var(--hint)
+  color: var(--muted)
+  +base.ui(11px, 700)
+  +widgets.pressed-bordered
+  &[aria-disabled]
+    opacity: .5
+    cursor: default
+
+// 6f: the useful organ put forward.
+.identify__add--strong
+  border-color: var(--moss)
+  color: var(--moss)
+  font-weight: 800
+
+.identify__add-hint
+  flex: 1
+  min-width: 140px
+  +base.meta(12px)
+  line-height: 1.35
+
+// The organ and flora lists: a sand card under what opened them.
+.identify__menu, .identify__flora-panel
+  display: flex
+  flex-direction: column
+  margin: 10px var(--space-screen) 0
+  padding: 6px
+  border-radius: 16px
+  background: var(--sand)
+
+.identify__flora-panel
+  gap: 6px
+
+.identify__flora-list
+  display: flex
+  flex-direction: column
+  max-height: 50vh
+  overflow-y: auto
+
+.identify__flora-line
+  margin: 6px 8px
+  +base.meta(13px)
+
+.identify__option
+  +widgets.bare-button
+  min-height: var(--touch-min)
+  padding: 0 10px
+  border-radius: 10px
+  +base.ui(15px, 600)
+  color: var(--ink)
+  +widgets.pressed-row(var(--sand-deep))
+  &[aria-selected="true"]
+    color: var(--moss)
+    font-weight: 800
+  &[aria-disabled]
+    opacity: .5
+    cursor: default
+
+.identify__blocked
+  margin: 10px var(--space-screen) 0
+  +base.meta(12px)
+
+// « PROPOSITIONS · 4 » and the flora at the right.
+.identify__label-row
+  display: flex
+  justify-content: space-between
+  align-items: center
+  gap: 12px
+  padding: 14px var(--space-screen) 6px
+
+.identify__label
+  +base.section-label
+
+.identify__flora
+  +base.meta(12px, 600)
+  text-align: right
+
+button.identify__flora
+  +widgets.bare-button
+  min-height: var(--touch-min)
+  margin: -6px 0
+  +widgets.pressed-text
+  &[aria-disabled]
+    opacity: .5
+    cursor: default
+
+.identify__cards
+  display: flex
+  flex-direction: column
+  gap: 10px
+  padding: 0 var(--space-screen)
+
+.identify-card
+  display: flex
+  flex-direction: column
+  gap: 10px
+  padding: 12px
+  border-radius: 16px
+  background: var(--sand)
+
+.identify-card__tiles
+  display: grid
+  grid-template-columns: repeat(4, minmax(0, 1fr))
+  gap: 6px
+
+.identify-card__tile
+  position: relative
+  aspect-ratio: 1
+  border-radius: 10px
+  overflow: hidden
+  +widgets.striped
+
+.identify-card__img
+  display: block
+  width: 100%
+  height: 100%
+  object-fit: cover
+
+.identify-card__band
+  position: absolute
+  left: 0
+  right: 0
+  bottom: 0
+  padding: 3px 0
+  background: var(--organ-band)
+  color: var(--paper)
+  text-align: center
+  +base.ui(10px, 700)
+  line-height: 1.2
+
+// « +N » over the fourth tile.
+.identify-card__more
+  position: absolute
+  inset: 0
+  display: flex
+  align-items: center
+  justify-content: center
+  padding-bottom: 14px
+  background: var(--scrim-mid)
+  color: var(--paper)
+  +base.ui(16px, 800)
+
+// « Pl@ntNet… » after 600 ms, as on loading photos.
+.identify__skeleton-label
+  +widgets.loading-label
+  left: 6px
+  top: 5px
+
+.identify-card__score
+  display: flex
+  align-items: center
+  gap: 10px
+
+.identify-card__bar-track
+  flex: 1
+  height: 6px
+  border-radius: 3px
+  background: var(--line)
+  overflow: hidden
+
+.identify-card--skeleton .identify-card__bar-track
+  flex: none
+  background: var(--sand-deep)
+
+// --bar-width: Text.bar_width of the proposal's score, set by the screen.
+.identify-card__bar
+  width: var(--bar-width, 0)
+  height: 6px
+  border-radius: 3px
+  background: var(--moss)
+
+.identify-card__percent
+  min-width: 40px
+  text-align: right
+  white-space: nowrap
+  +base.ui(13px, 800)
+
+.identify-card__names
+  display: flex
+  align-items: center
+  gap: 12px
+
+.identify-card__text
+  flex: 1
+  min-width: 0
+
+.identify-card__latin
+  +base.sci(19px)
+  line-height: 1.25
+
+.identify-card__author
+  font-family: var(--font-ui)
+  font-style: normal
+  font-size: 13px
+  color: var(--muted)
+
+.identify-card__common
+  +base.ui(14px, 400)
+  line-height: 1.35
+  color: var(--ink-soft)
+
+.identify-card__family
+  +base.meta(12px)
+  line-height: 1.4
+
+.identify-card__action
+  +widgets.bare-button
+  flex: none
+  display: flex
+  align-items: center
+  min-height: var(--touch-min)
+  padding: 0 18px
+  border: 1px solid var(--ink)
+  color: var(--ink)
+  white-space: nowrap
+  +widgets.pill
+  +base.button-secondary
+  +widgets.pressed-bordered(var(--sand-deep))
+
+.identify-card__owned
+  display: flex
+  align-items: center
+  gap: 6px
+  padding-top: 10px
+  border-top: 1px solid var(--line-ref)
+  color: var(--moss)
+  +base.ui(13px, 700)
+
+.identify-card__lines
+  display: flex
+  flex-direction: column
+  gap: 8px
+  padding-bottom: 4px
+
+.identify-card__line
+  width: 62%
+  height: 14px
+  border-radius: 7px
+  background: var(--sand-deep)
+
+.identify-card__line--short
+  width: 44%
+  height: 12px
+
+// 6g: glyph, title, text and the ways out, centred in the height.
+.identify__failure
+  display: flex
+  flex-direction: column
+  justify-content: center
+  gap: 16px
+  min-height: 60vh
+  padding: 0 28px
+
+.identify__glyph
+  display: flex
+  color: var(--hint)
+
+.identify__failure-title
+  margin: 0
+  +base.ui(26px, 800)
+  letter-spacing: -0.03em
+  line-height: 1.1
+
+.identify__failure-body
+  margin: 0
+  +base.ui(15px, 400)
+  line-height: 1.5
+  color: var(--ink-soft)
+
+.identify__failure-actions
+  display: flex
+  flex-direction: column
+  gap: 10px
+  margin-top: 8px
+  .button[aria-disabled]
+    opacity: .5
+
+.identify__force
+  +widgets.bare-button
+  align-self: center
+  min-height: var(--touch-min)
+  padding: 0 8px
+  text-align: center
+  color: var(--moss)
+  +base.ui(14px, 700)
+  +widgets.pressed-text
+  &[aria-disabled]
+    opacity: .5
+    cursor: default

@@ -11,6 +11,7 @@ type t =
   | Map
   | More_horiz
   | My_location
+  | Photo_camera
   | Refresh
   | Search
   | Settings
@@ -27,6 +28,7 @@ let all =
     Map;
     More_horiz;
     My_location;
+    Photo_camera;
     Refresh;
     Search;
     Settings;
@@ -43,6 +45,7 @@ let name = function
   | Map -> "map"
   | More_horiz -> "more_horiz"
   | My_location -> "my_location"
+  | Photo_camera -> "photo_camera"
   | Refresh -> "refresh"
   | Search -> "search"
   | Settings -> "settings"

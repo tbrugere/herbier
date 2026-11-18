@@ -29,3 +29,22 @@ let action label f =
   let b = El.button [El.txt' label] in
   on_click b f;
   b
+
+let test_jpeg ?(color = "#2e7d32") () =
+  let module C2d = Brr_canvas.C2d in
+  let module Canvas_jpeg = Herbier_bindings.Canvas_jpeg in
+  let canvas = Brr_canvas.Canvas.create ~w:64 ~h:64 [] in
+  let ctx = C2d.get_context canvas in
+  C2d.set_fill_style ctx (C2d.color (Jstr.v color));
+  C2d.fill_rect ctx ~x:0. ~y:0. ~w:64. ~h:64.;
+  C2d.set_fill_style ctx (C2d.color (Jstr.v "#c62828"));
+  C2d.fill_rect ctx ~x:0. ~y:24. ~w:64. ~h:16.;
+  Fut.map
+    (Result.map_error (function
+      | Canvas_jpeg.Encode e ->
+          "encode: " ^ Herbier_bindings.Cap_error.to_string e
+      | Canvas_jpeg.Not_jpeg t -> "not a JPEG: " ^ t))
+    (Canvas_jpeg.encode ~quality:0.9 canvas)
+
+let contains ~sub s =
+  Option.is_some (Jstr.find_sub ~sub:(Jstr.v sub) (Jstr.v s))

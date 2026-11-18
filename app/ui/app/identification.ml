@@ -25,6 +25,12 @@ type identify_error =
 
 type 'a current = Settled of ('a, identify_error) result | Superseded
 
+let flora_list_text : identify_error -> string = function
+  | Plantnet e -> Identify_settings.flora_list_error e
+  | Identify_offline -> Identify_settings.flora_list_offline
+  | Preview_unreadable (_ : Herbier_domain.Ids.Photo_id.t) ->
+      Identify_settings.flora_list_generic
+
 let blob (image, organ) =
   match image with
   | Preview b -> Fut.return (Ok (b, organ))

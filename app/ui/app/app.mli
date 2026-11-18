@@ -506,6 +506,11 @@ type identify_error =
           that has not rebuilt it yet): nothing sent *)
   | Plantnet of Herbier_identify.Plantnet.error
 
+val flora_list_text : identify_error -> string
+(** The line a flora list shows when {!floras} fails (4m and 6c): [Plantnet e] →
+    {!Herbier_ui_model.Identify_settings.flora_list_error}; [Identify_offline] →
+    [flora_list_offline]; [Preview_unreadable _] → [flora_list_generic]. *)
+
 type 'a current =
   | Settled of ('a, identify_error) result
   | Superseded

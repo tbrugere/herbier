@@ -11,6 +11,7 @@ list
 map
 more_horiz
 my_location
+photo_camera
 refresh
 search
 settings

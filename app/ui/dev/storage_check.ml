@@ -107,9 +107,6 @@ let filesystem log =
   step log "read after delete fails" ~detail:Fun.id
     (expect_error (Cap_filesystem.read_text ~path:txt))
 
-let contains ~sub s =
-  Option.is_some (Jstr.find_sub ~sub:(Jstr.v sub) (Jstr.v s))
-
 let expect_row fut =
   Fut.map
     (fun r ->
@@ -117,8 +114,8 @@ let expect_row fut =
           match
             List.find_opt
               (fun row ->
-                contains ~sub:{|"label":"Digitale pourpre"|} row
-                && contains ~sub:{|"n":null|} row)
+                Kit.contains ~sub:{|"label":"Digitale pourpre"|} row
+                && Kit.contains ~sub:{|"n":null|} row)
               rows
           with
           | Some row -> Ok row

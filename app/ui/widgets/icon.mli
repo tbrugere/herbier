@@ -14,6 +14,7 @@ type t =
   | Map
   | More_horiz
   | My_location
+  | Photo_camera
   | Refresh
   | Search
   | Settings

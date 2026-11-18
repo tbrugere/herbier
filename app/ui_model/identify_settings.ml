@@ -166,8 +166,10 @@ let key_help_after =
    https://localhost aux domaines autorisés."
 
 let footnote =
-  "Pl@ntNet ne conserve pas les photos envoyées. Jusqu'à 500 identifications \
-   par jour."
+  Printf.sprintf
+    "Pl@ntNet ne conserve pas les photos envoyées. Jusqu'à %d identifications \
+     par jour."
+    Herbier_identify.Plantnet.daily_quota
 
 let search_placeholder = "Flore"
 let loading = "Chargement\u{2026}"

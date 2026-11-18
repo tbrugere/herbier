@@ -7,7 +7,6 @@ module Canvas_jpeg = Herbier_bindings.Canvas_jpeg
 module Cap_error = Herbier_bindings.Cap_error
 module Photo_id = Herbier_domain.Ids.Photo_id
 module Drive_consent = Herbier_sync_core.Auth.Drive_consent
-module C2d = Brr_canvas.C2d
 module Photo = Herbier_domain.Photo
 module Photos = Herbier_store.Photos
 module Db = Herbier_store_io.Db
@@ -78,21 +77,6 @@ let presence_detail = function
   | Api.Trashed -> "Trashed"
   | Api.Missing -> "Missing"
 
-(* A small test image: a green square with a red band, so that a corrupted
-   upload shows in Drive's preview. *)
-let test_jpeg () =
-  let canvas = Brr_canvas.Canvas.create ~w:64 ~h:64 [] in
-  let ctx = C2d.get_context canvas in
-  C2d.set_fill_style ctx (C2d.color (Jstr.v "#2e7d32"));
-  C2d.fill_rect ctx ~x:0. ~y:0. ~w:64. ~h:64.;
-  C2d.set_fill_style ctx (C2d.color (Jstr.v "#c62828"));
-  C2d.fill_rect ctx ~x:0. ~y:24. ~w:64. ~h:16.;
-  Fut.map
-    (Result.map_error (function
-      | Canvas_jpeg.Encode e -> "encode: " ^ Cap_error.to_string e
-      | Canvas_jpeg.Not_jpeg t -> "not a JPEG: " ^ t))
-    (Canvas_jpeg.encode ~quality:0.9 canvas)
-
 let species_of input =
   match
     Herbier_domain.Text.non_blank (Jstr.to_string (El.prop El.Prop.value input))
@@ -102,7 +86,7 @@ let species_of input =
 
 let fresh_original ~species =
   let open Fut.Result_syntax in
-  let* blob = test_jpeg () in
+  let* blob = Kit.test_jpeg () in
   let* sha256 =
     Herbier_bindings.Fut_result.map_error Preview.error_to_string
       (Preview.sha256_hex blob)

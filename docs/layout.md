@@ -396,7 +396,11 @@ app/
     observation's fix: searching, fix, none), move_plan.ml (5b's texts and what « Valider » writes),
     plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys),
     identify/ (M9: the identification layer's states, its French texts, and what a proposal's button
-    does for each caller: « Choisir » in 4d, « Lier » or « + Créer » in 4k, « Lier » in 4g)
+    does for each caller: « Choisir » in 4d, « Lier » or « + Créer » in 4k, « Lier » in 4g; caller.ml
+    (who opened it, its button, its 6g exits), owned.ml (« Dans ma collection »), failure.ml (6g's
+    variants from an error: the key not exposed, a refused request and a malformed answer show the
+    unreachable screen), layer.ml (the layer as a pure machine: events in, commands out, one
+    request per tap), text.ml (every French text of 6b, 6c, 6f, 6g); identify.ml re-exports them)
     snap.ml               the sheet's snap points: nearest, clamp, release projection
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
@@ -431,7 +435,10 @@ app/
                           hidden on 4d (its own pill) and dev pages, following the router's shown route;
                           <html data-offline> while it shows
     router.ml             route = URL fragment, builds the new screen and releases the old one on switch,
-                          through Transition.run; the shell holds the tab bar
+                          through Transition.run; the shell holds the tab bar; Android back closes a
+                          shown Google Picker, else the top Overlay, else walks history or exits
+    overlay.ml            the overlays without a history entry (M9: the identification layer), a stack
+                          Android back closes from the top before the router walks history
     screen.ml             a screen's root element + its bindings + when its first content shows (ready),
                           as the router takes them
     transition.ml         runs a Motion kind around a route change: View Transitions API, the hero's
@@ -515,7 +522,9 @@ app/
                           identify_check.ml (#dev/identify, M9): the identification spike (one gallery
                           photo's preview sent with a key pasted on the page, never stored), an
                           « Identify_io » block through App.identify / App.floras (a gallery preview, the
-                          newest stored preview, the flora list) and, from 67, the layer's states replayed from the recorded fixtures through a fake transport;
+                          newest stored preview, the flora list) and, from 67, dev/identify_replay.ml's block: the
+                          layer's states replayed from the recorded fixtures (embedded by app/ui/dev/dune,
+                          dev pages only) through Identify.Make over a fake transport;
                           seed_check.ml (#dev/seed): applies store/dev_seed.ml
                           to `herbier` in one Db.bare_transaction; refs_http_check.ml (#dev/refs-http): queued reference GETs, logged
                           with the sources in flight, then each refs/sources request for Digitalis
@@ -861,7 +870,9 @@ test/
                 one <module>_tests.ml per module (fixtures.ml: the values several share); 4f's rows
                 (ref_block) for the two spike species projected from fixtures/; 5b's move plan (test_move_plan);
                 the route transitions' rules (motion); 4m « Identification »'s key mask, flora list
-                and gate (identify_settings, over fixtures/plantnet_projects_*.json)
+                and gate (identify_settings, over fixtures/plantnet_projects_*.json); the
+                identification layer: states, failures, texts (identify_tests, over
+                fixtures/plantnet_identify_*.json)
   store/        native, alcotest: herbier_store (app/store/: codec, schema, tables, stmt,
                 the per-table queries, references included, settings, ref_images, commune_packs, uploads,
                 search, dev_seed, sync_state); schema SQL, queries, FTS triggers and

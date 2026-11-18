@@ -402,4 +402,5 @@ let el app =
       El.div buttons;
       log;
       app_block app ~key_value ~flora_value;
+      Identify_replay.el ();
     ]

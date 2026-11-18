@@ -15,12 +15,6 @@ type picker =
   | List_failed of string
   | Choosing of Plantnet.project list
 
-let list_error : App.identify_error -> string = function
-  | Plantnet e -> I.flora_list_error e
-  | Identify_offline -> I.flora_list_offline
-  | Preview_unreadable (_ : Herbier_domain.Ids.Photo_id.t) ->
-      I.flora_list_generic
-
 let shown_when el shown =
   Rb.attr el "hidden"
     (React.S.map (function true -> None | false -> Some "") shown)
@@ -100,7 +94,7 @@ let flora_block app ~report =
                 | Ok projects ->
                     set_picker (Choosing projects);
                     El.set_has_focus true field.input
-                | Error e -> set_picker (List_failed (list_error e))))
+                | Error e -> set_picker (List_failed (App.flora_list_text e))))
   in
   let toggle () =
     match (React.S.value enabled, React.S.value picker) with

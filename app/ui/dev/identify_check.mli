@@ -45,7 +45,9 @@
     [porte : prête | chargement | pas de clé | hors-ligne]
     ([data-gate="ready|waiting|no_key|offline"]) bound to {!App.identify_gate}
     (the stored key's gate, never the key; the fields above do not change it).
-*)
+
+    Last, the block « Couche d'identification (rejeu) » ({!Identify_replay}):
+    the identification layer over the recorded answers, without the network. *)
 
 val el : (App.t, string) result -> Brr.El.t
 (** Without an app (a desktop browser), the Identify_io block shows the app's

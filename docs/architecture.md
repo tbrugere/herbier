@@ -1195,8 +1195,9 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
          no-reject, which may still answer 404)
     429  the day's 500 are used up until 00:00 UTC · 401 the key is refused
     403  "CORS error: Origin not allowed": the key is not exposed for the app
-         (a generic error on screen; the console line names it)
-    timeout, network, 5xx: unreachable (« Réessayer »)
+         (on screen as unreachable, « Réessayer »; the console line names it)
+    timeout, network, 5xx, 400/413/415, malformed: « Pl@ntNet n'a pas répondu »
+         (« Réessayer »)
   → a choice: Refs.Resolve.resolve (Gbif id), or the name match without an id,
     as for a link (§7: the one-hop synonym rule)
   → 4d: the save's target · 4k: attach or create · 4g: link, free name → alias
@@ -1266,9 +1267,11 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   2026-11-16: « juste une erreur générique », with a hidden log for that
   case, never the CORS cause on screen). The 403 « CORS error: Origin not
   allowed » keeps its own class (`Key_not_exposed`) for the console line;
-  6g shows it, like a refused request or a malformed answer, as the same
-  generic error, without « Réessayer » (resending would fail the same way).
-  The setup help in 4m's key row (66) still asks for the key to be exposed.
+  6g shows it as it shows an unreachable Pl@ntNet, « Pl@ntNet n'a pas
+  répondu » with « Réessayer » (Tristan, 2026-11-16: the key may be exposed
+  meanwhile, and the user never sees the cause); so do a refused request and
+  a malformed answer. Each « Réessayer » is a tap and a credit. The setup
+  help in 4m's key row (66) still asks for the key to be exposed.
   4m's flora list keeps « Réessayer » under every error, the generic one
   included: the list costs no credit, and the key may have been exposed
   meanwhile.

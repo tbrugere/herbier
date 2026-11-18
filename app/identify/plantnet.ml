@@ -29,6 +29,8 @@ type 'image request = {
   files : 'image Transport.file list;
 }
 
+let daily_quota = 500
+
 type error =
   | No_key
   | No_photo

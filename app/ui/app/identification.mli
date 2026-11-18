@@ -15,6 +15,8 @@ type identify_error =
 
 type 'a current = Settled of ('a, identify_error) result | Superseded
 
+val flora_list_text : identify_error -> string
+
 val identify :
   Core.t ->
   channel ->

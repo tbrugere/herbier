@@ -213,6 +213,45 @@ let el () =
             ~at:[At.id (Jstr.v "icons")]
             (List.map (fun i -> W.Icon.el i) W.Icon.all);
         ];
+      entry "Identify_glyph"
+        [
+          El.div
+            ~at:
+              [
+                At.id (Jstr.v "identify-glyphs");
+                At.style
+                  (Jstr.v
+                     "display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px;background:var(--dark)");
+              ]
+            [
+              El.span
+                ~at:
+                  [
+                    At.style
+                      (Jstr.v
+                         "display:inline-flex;align-items:center;gap:12px;padding:8px;background:var(--paper);color:var(--ink)");
+                  ]
+                (List.map
+                   (fun size -> W.Identify_glyph.el ~size ())
+                   [20; 22; 24; 48]);
+              El.span
+                ~at:
+                  [
+                    At.style
+                      (Jstr.v
+                         "display:inline-flex;padding:11px;border-radius:999px;background:var(--moss);color:var(--paper)");
+                  ]
+                [W.Identify_glyph.el ~size:22 ()];
+              El.span
+                ~at:
+                  [
+                    At.style
+                      (Jstr.v
+                         "display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--paper);color:var(--ink)");
+                  ]
+                [W.Identify_glyph.el ~size:24 ()];
+            ];
+        ];
       entry "Chip"
         [
           El.div
