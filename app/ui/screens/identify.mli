@@ -83,8 +83,9 @@ val open_ :
       (organ menu, add tile, flora menu, « Voir quand même », « Réessayer ») is
       [aria-disabled] and inert, with
       {!Herbier_ui_model.Identify.Text.reask_blocked}'s line, while the gate is
-      not [Ready]. The species tiles are plain images. A menu (organ or flora)
-      closes at the next event. *)
+      not [Ready]. A species tile or « +N » opens {!Identify_compare} over the
+      layer (and gets the focus back when it closes); nothing else does. Closing
+      the layer closes it. A menu (organ or flora) closes at the next event. *)
 
 val close : t -> unit
 (** As ← : outcome [Left], [on_close] called once. Idempotent; a caller calls it

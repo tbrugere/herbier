@@ -119,3 +119,45 @@ let reask_blocked : Identify_settings.gate -> string option = function
   | Ready (_ : Identify_settings.Key.t) | Waiting -> None
   | Offline -> Some "Hors-ligne : rien ne peut être envoyé à Pl@ntNet."
   | No_key -> Some Identify_settings.no_key_line
+
+let tile_label (p : Plantnet.proposal) (image : Plantnet.image) ~more =
+  let what =
+    match more > 0 with
+    | true -> (
+        match more with
+        | 1 -> Some "1 photo de plus"
+        | n -> Some (Printf.sprintf "%d photos de plus" n))
+    | false -> Option.map Organ.label image.organ
+  in
+  match what with
+  | Some w -> Printf.sprintf "Comparer : %s, %s" p.name w
+  | None -> "Comparer : " ^ p.name
+
+let compare_close = "Fermer la comparaison"
+
+let compare_position ~index ~count =
+  Printf.sprintf "Proposition %d / %d" index count
+
+let with_organ prefix = function
+  | Some o -> prefix ^ " · " ^ Organ.label o
+  | None -> prefix
+
+let compare_mine = with_organ "Ma photo"
+let compare_species = with_organ "Pl@ntNet"
+let compare_image_position ~index ~count = Printf.sprintf "%d / %d" index count
+
+let compare_names (p : Plantnet.proposal) =
+  match List.filter_map Fun.id [List.nth_opt p.common_names 0; p.family] with
+  | [] -> None
+  | parts -> Some (String.concat " · " parts)
+
+let compare_owned ({plant; observations = (_ : int)} : Owned.t) =
+  "Dans ma collection · " ^ plant.display_name
+
+let compare_action : Caller.action -> string = function
+  | Choose -> "Choisir cette espèce"
+  | (Link | Create) as a -> action a
+
+let compare_previous = "Proposition précédente"
+let compare_next = "Proposition suivante"
+let compare_no_image = "Pl@ntNet n'a pas envoyé de photo de cette espèce."

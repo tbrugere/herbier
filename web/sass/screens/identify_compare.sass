@@ -1,0 +1,240 @@
+// 6d Comparer (app/ui/screens/identify_compare.ml): dark, full screen over
+// 6c, inside its root; sizes from the handoff's identification/Comparer.
+@use '../base'
+@use '../widgets'
+
+// Above 6c's fixed footer (1, in the layer's stacking context).
+.identify-compare
+  position: fixed
+  inset: 0
+  z-index: 2
+  display: flex
+  flex-direction: column
+  background: var(--dark)
+  color: var(--paper)
+  +base.body
+
+.identify-compare__header
+  flex: none
+  display: flex
+  align-items: center
+  gap: 8px
+  padding: calc(14px + env(safe-area-inset-top) + var(--offline-inset)) 16px 0
+
+.identify-compare__round
+  +widgets.bare-button
+  flex: none
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 40px
+  height: 40px
+  border-radius: 50%
+  background: var(--paper-pill)
+  color: var(--paper)
+  +widgets.pressed-bordered(var(--paper-field-line))
+  &[aria-disabled="true"]
+    opacity: .4
+    cursor: default
+
+.identify-compare__position
+  margin-left: auto
+  display: inline-flex
+  align-items: center
+  height: 40px
+  padding: 0 14px
+  +widgets.pill
+  background: var(--paper-pill)
+  +base.ui(13px, 700)
+
+// Both frames shrink equally on a short screen.
+.identify-compare__frame
+  position: relative
+  flex: 1 1 0
+  min-height: 0
+  max-height: 280px
+  margin: 8px 16px 0
+  border-radius: 16px
+  overflow: hidden
+  +widgets.striped(var(--dark-stripe), var(--dark-stripe-light))
+
+.identify-compare__frame--mine
+  margin-top: 12px
+
+.identify-compare__frame--species
+  +widgets.striped(var(--dark-stripe-species), var(--dark-stripe-species-light))
+
+.identify-compare__mine
+  position: absolute
+  inset: 0
+  // A stored preview: the striped box of Preview_img, dark here.
+  .preview-img
+    background: none
+
+.identify-compare__img
+  position: absolute
+  inset: 0
+  display: block
+  width: 100%
+  height: 100%
+  object-fit: cover
+
+.identify-compare__track
+  position: absolute
+  inset: 0
+  display: flex
+  overflow-x: auto
+  scroll-snap-type: x mandatory
+  scrollbar-width: none
+  &::-webkit-scrollbar
+    display: none
+
+.identify-compare__slide
+  position: relative
+  flex: none
+  width: 100%
+  height: 100%
+  scroll-snap-align: start
+  // One swipe moves one image, however fast the flick.
+  scroll-snap-stop: always
+  overflow: hidden
+  .identify-compare__img
+    opacity: 0
+  &.is-loaded
+    .identify-compare__img
+      opacity: 1
+    .identify-compare__loading
+      display: none
+  // A failed image keeps the stripes and its credit, without « Pl@ntNet… ».
+  &.is-failed
+    .identify-compare__loading
+      display: none
+
+// « Pl@ntNet… » after 600 ms, as on 6b's skeletons; a CSS delay, so nothing
+// is left to clear when 6d closes.
+@keyframes identify-compare-reveal
+  from
+    opacity: 0
+  to
+    opacity: 1
+
+.identify-compare__loading
+  +widgets.loading-label
+  left: 50%
+  top: 50%
+  transform: translate(-50%, -50%)
+  color: var(--paper-faint)
+  opacity: 0
+  animation: identify-compare-reveal 0s linear 600ms forwards
+
+.identify-compare__slide--empty
+  display: flex
+  align-items: center
+  justify-content: center
+  padding: 24px
+
+.identify-compare__empty
+  margin: 0
+  text-align: center
+  color: var(--paper-soft)
+  +base.ui(13px, 600)
+
+.identify-compare__pill
+  position: absolute
+  left: 10px
+  top: 10px
+  padding: 4px 10px
+  +widgets.pill
+  background: var(--organ-band)
+  color: var(--paper)
+  +base.ui(11px, 700)
+  line-height: 1.3
+
+.identify-compare__pill--right
+  left: auto
+  right: 10px
+
+.identify-compare__credit
+  position: absolute
+  left: 0
+  right: 0
+  bottom: 0
+  padding: 6px 12px
+  background: var(--organ-band)
+  color: var(--paper-soft)
+  +base.ui(11px, 400)
+  line-height: 1.3
+  display: -webkit-box
+  -webkit-line-clamp: 2
+  -webkit-box-orient: vertical
+  overflow: hidden
+
+.identify-compare__info
+  flex: none
+  margin-top: auto
+  display: flex
+  flex-direction: column
+  gap: 14px
+  padding: 14px 16px calc(26px + env(safe-area-inset-bottom))
+
+.identify-compare__summary
+  display: flex
+  align-items: flex-start
+  gap: 12px
+
+.identify-compare__text
+  flex: 1
+  min-width: 0
+  display: flex
+  flex-direction: column
+  gap: 2px
+
+.identify-compare__latin
+  +base.sci(21px)
+  line-height: 1.2
+
+.identify-compare__author
+  font-style: normal
+  font-size: 14px
+  opacity: .85
+
+.identify-compare__names
+  +base.ui(13px, 400)
+  line-height: 1.35
+  color: var(--paper-soft)
+  &:empty
+    display: none
+
+.identify-compare__owned
+  display: flex
+  align-items: center
+  gap: 5px
+  color: var(--moss-light)
+  +base.ui(12px, 700)
+
+.identify-compare__percent
+  white-space: nowrap
+  +base.ui(17px, 800)
+
+.identify-compare__nav
+  display: grid
+  grid-template-columns: 52px minmax(0, 1fr) 52px
+  align-items: center
+  gap: 12px
+  .identify-compare__round
+    width: 52px
+    height: 52px
+
+.identify-compare__action
+  +widgets.bare-button
+  display: flex
+  align-items: center
+  justify-content: center
+  height: 56px
+  padding: 0 16px
+  +widgets.pill
+  background: var(--paper)
+  color: var(--dark)
+  text-align: center
+  +base.ui(16px, 800)
+  +widgets.pressed-bordered(var(--sand-deep))

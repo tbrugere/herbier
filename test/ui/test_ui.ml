@@ -33,4 +33,5 @@ let () =
       ("offline_data", Offline_data_tests.offline_data);
       ("identify_settings", Identify_settings_tests.identify_settings);
       ("identify", Identify_tests.identify);
+      ("identify_compare", Identify_compare_tests.identify_compare);
     ]

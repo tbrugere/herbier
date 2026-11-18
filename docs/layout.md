@@ -340,7 +340,7 @@ app/
                           refused, key not exposed, quota, refused request, unreachable, malformed), the
                           flora list
     organ.ml              the organs sent and detected, their French labels, the organ to suggest next
-    proposal.ml           a proposal's four closest images and « +N », the same organ first (6d), each image's
+    proposal.ml           a proposal's four closest images and « +N », 6d's image order, each image's
                           credit line, the uncertain rule (6f)
     transport.mli         signature only (modules_without_implementation): the wire types (answer,
                           failure, 'image file) and TRANSPORT: abstract 'a io (return, bind) and image (a
@@ -400,7 +400,9 @@ app/
     (who opened it, its button, its 6g exits), owned.ml (« Dans ma collection »), failure.ml (6g's
     variants from an error: the key not exposed, a refused request and a malformed answer show the
     unreachable screen), layer.ml (the layer as a pure machine: events in, commands out, one
-    request per tap), text.ml (every French text of 6b, 6c, 6f, 6g); identify.ml re-exports them)
+    request per tap), compare.ml (6d: the proposal and image shown, ‹ › and swipe, which of my
+    photos is on top, the images to load), text.ml (every French text of 6b, 6c, 6d, 6f, 6g);
+    identify.ml re-exports them)
     snap.ml               the sheet's snap points: nearest, clamp, release projection
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
@@ -872,7 +874,7 @@ test/
                 the route transitions' rules (motion); 4m « Identification »'s key mask, flora list
                 and gate (identify_settings, over fixtures/plantnet_projects_*.json); the
                 identification layer: states, failures, texts (identify_tests, over
-                fixtures/plantnet_identify_*.json)
+                fixtures/plantnet_identify_*.json); 6d (identify_compare_tests)
   store/        native, alcotest: herbier_store (app/store/: codec, schema, tables, stmt,
                 the per-table queries, references included, settings, ref_images, commune_packs, uploads,
                 search, dev_seed, sync_state); schema SQL, queries, FTS triggers and

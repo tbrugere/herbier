@@ -39,8 +39,8 @@
   border-radius: 999px
 
 // Thumbnail while its image loads.
-@mixin striped
-  background: repeating-linear-gradient(135deg, var(--sand-deep) 0 8px, var(--sand) 8px 16px)
+@mixin striped($a: var(--sand-deep), $b: var(--sand))
+  background: repeating-linear-gradient(135deg, $a 0 8px, $b 8px 16px)
 
 // The mono « Pl@ntNet… » / « Chargement » line over a loading image.
 @mixin loading-label

@@ -4,6 +4,8 @@ type t =
   | Add
   | Arrow_back
   | Check
+  | Chevron_left
+  | Chevron_right
   | Close
   | Edit
   | Grid_view
@@ -21,6 +23,8 @@ let all =
     Add;
     Arrow_back;
     Check;
+    Chevron_left;
+    Chevron_right;
     Close;
     Edit;
     Grid_view;
@@ -38,6 +42,8 @@ let name = function
   | Add -> "add"
   | Arrow_back -> "arrow_back"
   | Check -> "check"
+  | Chevron_left -> "chevron_left"
+  | Chevron_right -> "chevron_right"
   | Close -> "close"
   | Edit -> "edit"
   | Grid_view -> "grid_view"

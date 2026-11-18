@@ -9,6 +9,7 @@ module Caller = Herbier_ui_model.Identify.Caller
 module Owned = Herbier_ui_model.Identify.Owned
 module Failure = Herbier_ui_model.Identify.Failure
 module Layer = Herbier_ui_model.Identify.Layer
+module Compare = Herbier_ui_model.Identify.Compare
 module Text = Herbier_ui_model.Identify.Text
 module W = Widgets
 
@@ -110,17 +111,24 @@ let phase_attr : Layer.phase -> string = function
   | Failed _ -> "failed"
   | Closed _ -> "closed"
 
+(* My photo's image, for 6c's thumbnails and 6d's top frame: a preview in
+   memory through its object URL ([None] without one), a stored one through
+   Preview_img. *)
+let photo_img ~cls:c (p : photo) url =
+  match (p.image, url) with
+  | Preview (_ : Blob.t), Some url ->
+      Some (El.img ~at:[cls c; At.src url; attr "alt" ""] ())
+  | Preview (_ : Blob.t), None -> None
+  | Stored id, (Some _ | None) ->
+      Some (W.Preview_img.v ~cls:[c] (Herbier_store_io.Files.preview id))
+
 let thumb_el (p : photo) url =
-  let img =
-    match (p.image, url) with
-    | Preview (_ : Blob.t), Some url ->
-        El.img ~at:[cls "identify__thumb-img"; At.src url; attr "alt" ""] ()
-    | Preview (_ : Blob.t), None -> El.span []
-    | Stored id, (Some _ | None) ->
-        W.Preview_img.v ~cls:["identify__thumb-img"]
-          (Herbier_store_io.Files.preview id)
-  in
-  El.div ~at:[cls "identify__thumb"] [img]
+  El.div
+    ~at:[cls "identify__thumb"]
+    [
+      Option.value ~default:(El.span [])
+        (photo_img ~cls:"identify__thumb-img" p url);
+    ]
 
 (* [aria-disabled] and a click that does nothing while [enabled] is false. *)
 let gated ~enabled el click f =
@@ -169,37 +177,54 @@ let skeleton ~first ~slow =
         ];
     ]
 
-let species_tile (p : Plantnet.proposal) i (image : Plantnet.image) =
+(* A tile is a button opening 6d on its image (on the first one 6c does not
+   show, for « +N »). Its [data-tile] finds it again when 6d closes, to give it
+   the focus back: the cards may have been rebuilt in between. *)
+let tile_key k i = Printf.sprintf "%d-%d" k i
+
+let species_tile ~open_compare k (p : Plantnet.proposal) i
+    (image : Plantnet.image) =
   let alt =
     match image.organ with
     | Some o -> p.name ^ ", " ^ Organ.label o
     | None -> p.name
   in
-  let more =
-    match (i = Proposal.tiles - 1, Proposal.more_label p) with
-    | true, Some label -> [txt_el "span" ["identify-card__more"] label]
-    | true, None | false, (Some _ | None) -> []
+  let more = Proposal.tile_more p i in
+  let more_el =
+    match more > 0 with
+    | true ->
+        Option.to_list
+          (Option.map
+             (txt_el "span" ["identify-card__more"])
+             (Proposal.more_label p))
+    | false -> []
   in
   let band =
     match Text.tile_organ image.organ with
     | Some label -> [txt_el "span" ["identify-card__band"] label]
     | None -> []
   in
-  El.div
-    ~at:[cls "identify-card__tile"]
-    (El.img
-       ~at:
-         [
-           cls "identify-card__img";
-           At.src (Jstr.v image.small);
-           attr "alt" alt;
-           At.title (Jstr.v (Proposal.credit image));
-           attr "loading" "lazy";
-         ]
-       ()
-    :: (more @ band))
+  let tile =
+    Html.button
+      ~label:(Text.tile_label p image ~more)
+      ~at:[attr "data-tile" (tile_key k i)]
+      ["identify-card__tile"]
+      (El.img
+         ~at:
+           [
+             cls "identify-card__img";
+             At.src (Jstr.v image.small);
+             attr "alt" alt;
+             At.title (Jstr.v (Proposal.credit image));
+             attr "loading" "lazy";
+           ]
+         ()
+      :: (more_el @ band))
+  in
+  (tile, Rb.listen tile Ev.click (fun _ -> open_compare k i))
 
-let card ~caller ~owned ~choose k (p : Plantnet.proposal) =
+let card ~caller ~owned ~choose ~open_compare k (p : Plantnet.proposal) =
+  let tiles = List.mapi (species_tile ~open_compare k p) (Proposal.closest p) in
   let action = Caller.action caller ~owned:(Option.is_some owned) in
   let button, button_b =
     control ~enabled:true ["identify-card__action"]
@@ -243,9 +268,7 @@ let card ~caller ~owned ~choose k (p : Plantnet.proposal) =
   ( El.v (Jstr.v "article")
       ~at:[cls "identify-card"; attr "data-score" (Printf.sprintf "%g" p.score)]
       ([
-         El.div
-           ~at:[cls "identify-card__tiles"]
-           (List.mapi (species_tile p) (Proposal.closest p));
+         El.div ~at:[cls "identify-card__tiles"] (List.map fst tiles);
          El.div
            ~at:[cls "identify-card__score"]
            [
@@ -262,7 +285,7 @@ let card ~caller ~owned ~choose k (p : Plantnet.proposal) =
            ];
        ]
       @ owned_el),
-    button_b )
+    button_b @ List.map snd tiles )
 
 (* What the photo row, the menus and the label row read: one record per
    change. *)
@@ -316,11 +339,16 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
       []
   in
   let overlay = ref None in
+  (* 6d, while it is open over 6c. *)
+  let compare_layer = ref None in
   let finish outcome =
     match !closed with
     | true -> ()
     | false ->
         closed := true;
+        (* Before 6c's own release, and once [closed] is set, so that 6d's
+           [on_close] leaves the focus alone. *)
+        Option.iter Identify_compare.close !compare_layer;
         List.iter G.stop_timer !timers;
         Rb.release !bindings;
         List.iter
@@ -707,13 +735,49 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
               Owned.find ~current:(Caller.current caller) ~plants ~observations
                 p.gbif
         in
+        let open_compare k tile_index =
+          Option.iter Identify_compare.close !compare_layer;
+          match
+            Compare.open_ ~proposals:i.answer.proposals
+              ~mine:(Layer.effective_organs (React.S.value layer))
+              ~proposal:k ~tile:tile_index
+          with
+          | None -> ()
+          | Some c ->
+              let photos =
+                List.map
+                  (fun (s : shown) ~cls -> photo_img ~cls s.photo s.url)
+                  !shown
+              in
+              let focus_back () =
+                let tile =
+                  El.find_first_by_selector ~root
+                    (Jstr.v
+                       (Printf.sprintf "[data-tile=\"%s\"]"
+                          (tile_key k tile_index)))
+                in
+                El.set_has_focus true (Option.value ~default:back tile)
+              in
+              compare_layer :=
+                Some
+                  (Identify_compare.open_ ~host:root ~caller
+                     ~owned:
+                       (React.S.map ~eq:( == )
+                          (fun c p -> owned p c)
+                          collection)
+                     ~choose:(fun k -> dispatch (Choose k))
+                     ~on_close:(fun () ->
+                       compare_layer := None;
+                       match !closed with true -> () | false -> focus_back ())
+                     ~photos c)
+        in
         let cards c =
           let cards =
             List.mapi
               (fun k p ->
                 card ~caller ~owned:(owned p c)
                   ~choose:(fun k -> dispatch (Choose k))
-                  k p)
+                  ~open_compare k p)
               i.answer.proposals
           in
           ( El.div ~at:[cls "identify__cards"] (List.map fst cards),
@@ -763,6 +827,10 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
     @ [
         Rb.on_release (fun () -> ignore (view_anchor : Rb.anchor));
         Rb.view body render_body phase;
+        (* 6d shows the answer it was opened on: a new phase closes it, so
+           that its « Choisir » never picks from another answer. *)
+        Rb.act (React.S.changes phase) (fun (_ : Layer.phase) ->
+            Option.iter Identify_compare.close !compare_layer);
         Rb.view footer render_footer phase;
         Rb.class_ footer "is-hidden" (React.S.map not footer_shown);
         Rb.attr root "data-phase"

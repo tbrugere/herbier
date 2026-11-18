@@ -1,4 +1,4 @@
-(** Every French text of the identification layer (6b, 6c, 6f, 6g). Pure. No
+(** Every French text of the identification layer (6b, 6c, 6d, 6f, 6g). Pure. No
     string here names CORS, an origin, localhost, exposing or the [api-key]
     parameter: the console line of a request names its error class. *)
 
@@ -97,3 +97,53 @@ val reask_blocked : Identify_settings.gate -> string option
     [Some "Hors-ligne : rien ne peut être envoyé à Pl@ntNet."]; [No_key] →
     [Some Identify_settings.no_key_line]; [Waiting] → [None] (disabled, no
     line). *)
+
+(** {1 6d Comparer} *)
+
+val tile_label :
+  Herbier_identify.Plantnet.proposal ->
+  Herbier_identify.Plantnet.image ->
+  more:int ->
+  string
+(** The aria-label of a species tile in 6c (a button opening 6d): [more <= 0] →
+    ["Comparer : <name>, <organ label>"] (["Comparer : <name>"] when the image's
+    organ is [None]); [more > 0] (the « +N » tile) →
+    ["Comparer : <name>, <more> photos de plus"] (["1 photo de plus"] for 1).
+    [<name>] is [p.name]. *)
+
+val compare_close : string
+(** ✕'s aria-label: ["Fermer la comparaison"]. *)
+
+val compare_position : index:int -> count:int -> string
+(** 1-based: ["Proposition <index> / <count>"]. *)
+
+val compare_mine : Herbier_identify.Organ.t option -> string
+(** ["Ma photo · fleur"]; [None] → ["Ma photo"]. *)
+
+val compare_species : Herbier_identify.Organ.t option -> string
+(** ["Pl@ntNet · fleur"]; [None] → ["Pl@ntNet"]. *)
+
+val compare_image_position : index:int -> count:int -> string
+(** 1-based: ["3 / 6"]. *)
+
+val compare_names : Herbier_identify.Plantnet.proposal -> string option
+(** The first French name and the family joined by [" · "]
+    (["Rose de Chine · Malvaceae"]); either alone when the other is absent;
+    [None] when both are. *)
+
+val compare_owned : Owned.t -> string
+(** ["Dans ma collection · <display_name>"] (no observation count in 6d). *)
+
+val compare_action : Caller.action -> string
+(** [Choose] → ["Choisir cette espèce"]; [Link] → ["Lier"]; [Create] →
+    ["+ Créer"] (6c's {!action} for the last two). *)
+
+val compare_previous : string
+(** ‹ 's aria-label: ["Proposition précédente"]. *)
+
+val compare_next : string
+(** › 's aria-label: ["Proposition suivante"]. *)
+
+val compare_no_image : string
+(** A proposal without images, reached by ‹ ›:
+    ["Pl@ntNet n'a pas envoyé de photo de cette espèce."] *)

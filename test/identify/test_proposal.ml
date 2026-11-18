@@ -1,5 +1,5 @@
 (* Herbier_identify.Proposal: the four closest images and
-   « +N », same organ first, licence labels and credits, and the uncertain
+   « +N », 6d's display order, licence labels and credits, and the uncertain
    rule, over two_flower_leaf_200 and one_auto_200 decoded. *)
 
 module Plantnet = Herbier_identify.Plantnet
@@ -28,7 +28,6 @@ let image =
     Plantnet.equal_image
 
 let images = Alcotest.list image
-let organ = Alcotest.testable Organ.pp Organ.equal
 let two_flower_leaf = "plantnet_identify_two_flower_leaf_200.json"
 let one_auto = "plantnet_identify_one_auto_200.json"
 
@@ -84,86 +83,27 @@ let closest_more_tests =
           (Proposal.more_label fifth) );
   ]
 
-(* ---------- same_organ_first ---------- *)
+(* ---------- tile_more ---------- *)
 
-let is_leaf (i : Plantnet.image) =
-  match i.organ with Some o -> Organ.equal o Organ.Leaf | None -> false
-
-let same_organ_first_tests =
+let tile_more_tests =
   [
-    ( "mine = Some Leaf: the leaf images first, then the others, each group in \
-       original order",
+    ( "6 images: the last tile is « +2 », the others 0",
       `Quick,
       fun () ->
         let first, _ = first_and_fifth () in
-        let leaves, others = List.partition is_leaf first.Plantnet.images in
-        let reordered =
-          Proposal.same_organ_first ~mine:(Some Organ.Leaf)
-            first.Plantnet.images
+        Alcotest.(check (list int))
+          "tile_more 0..3" [0; 0; 0; 2]
+          (List.init Proposal.tiles (Proposal.tile_more first)) );
+    ( "exactly 4 images: no « +N » tile",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        let four =
+          {first with Plantnet.images = List.take 4 first.Plantnet.images}
         in
-        Alcotest.(check (list (option organ)))
-          "three leaves, then three flowers"
-          [
-            Some Organ.Leaf;
-            Some Organ.Leaf;
-            Some Organ.Leaf;
-            Some Organ.Flower;
-            Some Organ.Flower;
-            Some Organ.Flower;
-          ]
-          (List.map (fun (i : Plantnet.image) -> i.organ) reordered);
-        Alcotest.(check images)
-          "same_organ_first ~mine:(Some Leaf)" (leaves @ others) reordered );
-    ( "mine = Some Flower: the flower images are already first, unchanged",
-      `Quick,
-      fun () ->
-        let first, _ = first_and_fifth () in
-        Alcotest.(check images)
-          "same_organ_first ~mine:(Some Flower)" first.Plantnet.images
-          (Proposal.same_organ_first ~mine:(Some Organ.Flower)
-             first.Plantnet.images) );
-    ( "mine = None: unchanged",
-      `Quick,
-      fun () ->
-        let first, _ = first_and_fifth () in
-        Alcotest.(check images)
-          "same_organ_first ~mine:None" first.Plantnet.images
-          (Proposal.same_organ_first ~mine:None first.Plantnet.images) );
-    ( "an image whose organ is None never matches: last after the flowers",
-      `Quick,
-      fun () ->
-        match (decode one_auto).Plantnet.proposals with
-        | first :: _ ->
-            let flowers, others =
-              List.partition
-                (fun (i : Plantnet.image) ->
-                  Option.equal Organ.equal i.organ (Some Organ.Flower))
-                first.images
-            in
-            let reordered =
-              Proposal.same_organ_first ~mine:(Some Organ.Flower) first.images
-            in
-            Alcotest.(check (list (option organ)))
-              "five flowers, then the \"other\" image"
-              [
-                Some Organ.Flower;
-                Some Organ.Flower;
-                Some Organ.Flower;
-                Some Organ.Flower;
-                Some Organ.Flower;
-                None;
-              ]
-              (List.map (fun (i : Plantnet.image) -> i.organ) reordered);
-            Alcotest.(check images) "stable" (flowers @ others) reordered
-        | [] -> Alcotest.fail "no proposals" );
-    ( "mine = Some Fruit, matching no image: unchanged",
-      `Quick,
-      fun () ->
-        let first, _ = first_and_fifth () in
-        Alcotest.(check images)
-          "same_organ_first ~mine:(Some Fruit)" first.Plantnet.images
-          (Proposal.same_organ_first ~mine:(Some Organ.Fruit)
-             first.Plantnet.images) );
+        Alcotest.(check (list int))
+          "tile_more 0..3" [0; 0; 0; 0]
+          (List.init Proposal.tiles (Proposal.tile_more four)) );
   ]
 
 (* ---------- licence_label ---------- *)
@@ -274,11 +214,184 @@ let uncertain_tests =
           true );
   ]
 
+(* ---------- display_order ---------- *)
+
+let display_order_identity_tests =
+  [
+    ( "mine = []: identity",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order ~mine:[]"
+          (List.init (List.length first.Plantnet.images) (fun i -> i))
+          (Proposal.display_order ~mine:[] first.Plantnet.images) );
+    ( "mine = [None]: identity",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order ~mine:[None]"
+          (List.init (List.length first.Plantnet.images) (fun i -> i))
+          (Proposal.display_order ~mine:[None] first.Plantnet.images) );
+    ( "[] images -> []",
+      `Quick,
+      fun () ->
+        Alcotest.(check (list int))
+          "display_order ~mine:[] []" []
+          (Proposal.display_order ~mine:[] []) );
+  ]
+
+let display_order_grouping_tests =
+  [
+    ( "mine:[Some Leaf] on F F F L L L -> leaves then flowers",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order" [3; 4; 5; 0; 1; 2]
+          (Proposal.display_order ~mine:[Some Organ.Leaf] first.Plantnet.images)
+    );
+    ( "mine:[Some Flower; Some Leaf]: already grouped, identity",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order" [0; 1; 2; 3; 4; 5]
+          (Proposal.display_order
+             ~mine:[Some Organ.Flower; Some Organ.Leaf]
+             first.Plantnet.images) );
+    ( "mine:[Some Leaf; Some Flower]: the leaves' group still comes first",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order" [3; 4; 5; 0; 1; 2]
+          (Proposal.display_order
+             ~mine:[Some Organ.Leaf; Some Organ.Flower]
+             first.Plantnet.images) );
+    ( "mine:[Some Flower] on F F F L L L: the flowers already first, identity",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order" [0; 1; 2; 3; 4; 5]
+          (Proposal.display_order ~mine:[Some Organ.Flower]
+             first.Plantnet.images) );
+    ( "mine:[Some Fruit], matching no image: identity",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order" [0; 1; 2; 3; 4; 5]
+          (Proposal.display_order ~mine:[Some Organ.Fruit] first.Plantnet.images)
+    );
+  ]
+
+(* Proposal 1's images relabelled Fruit, Leaf, Flower, Fruit, Leaf, Flower:
+   three organs, so the second organ of [mine] has a group of its own between
+   the first one's and the others. *)
+let three_organs () =
+  let first, _ = first_and_fifth () in
+  let organs = Organ.[Fruit; Leaf; Flower; Fruit; Leaf; Flower] in
+  List.map2
+    (fun (i : Plantnet.image) o -> {i with organ = Some o})
+    first.Plantnet.images organs
+
+let display_order_three_organs_tests =
+  [
+    ( "mine:[Some Leaf; Some Flower] on Fr L F Fr L F: leaves, flowers, then \
+       fruits",
+      `Quick,
+      fun () ->
+        Alcotest.(check (list int))
+          "display_order" [1; 4; 2; 5; 0; 3]
+          (Proposal.display_order
+             ~mine:[Some Organ.Leaf; Some Organ.Flower]
+             (three_organs ())) );
+    ( "mine:[Some Flower; None; Some Leaf] on Fr L F Fr L F: flowers, leaves, \
+       then fruits",
+      `Quick,
+      fun () ->
+        Alcotest.(check (list int))
+          "display_order" [2; 5; 1; 4; 0; 3]
+          (Proposal.display_order
+             ~mine:[Some Organ.Flower; None; Some Organ.Leaf]
+             (three_organs ())) );
+  ]
+
+let display_order_skips_repeats_and_nones_tests =
+  [
+    ( "None and repeats in mine are skipped: same as [Some Leaf]",
+      `Quick,
+      fun () ->
+        let first, _ = first_and_fifth () in
+        Alcotest.(check (list int))
+          "display_order ~mine:[None; Some Leaf; Some Leaf]"
+          (Proposal.display_order ~mine:[Some Organ.Leaf] first.Plantnet.images)
+          (Proposal.display_order
+             ~mine:[None; Some Organ.Leaf; Some Organ.Leaf]
+             first.Plantnet.images) );
+  ]
+
+let display_order_none_organ_never_matches_tests =
+  [
+    ( "one_auto proposal 1's \"other\" image (organ None, Pl@ntNet index 3) \
+       never moves forward",
+      `Quick,
+      fun () ->
+        match (decode one_auto).Plantnet.proposals with
+        | first :: _ ->
+            Alcotest.(check (list int))
+              "display_order ~mine:[Some Flower]" [0; 1; 2; 4; 5; 3]
+              (Proposal.display_order ~mine:[Some Organ.Flower] first.images)
+        | [] -> Alcotest.fail "no proposals" );
+  ]
+
+let all_proposals () =
+  (decode two_flower_leaf).Plantnet.proposals
+  @ (decode one_auto).Plantnet.proposals
+
+let display_order_is_always_a_permutation_tests =
+  [
+    ( "display_order is a permutation of [0 .. n-1] for every proposal of both \
+       fixtures and every mine",
+      `Quick,
+      fun () ->
+        let mines =
+          [[]; [Some Organ.Leaf; Some Organ.Flower]]
+          @ List.map (fun o -> [Some o]) Organ.all
+        in
+        List.iter
+          (fun (p : Plantnet.proposal) ->
+            List.iter
+              (fun mine ->
+                let order = Proposal.display_order ~mine p.images in
+                Alcotest.(check (list int))
+                  (Printf.sprintf "permutation of %d images"
+                     (List.length p.images))
+                  (List.init (List.length p.images) (fun i -> i))
+                  (List.sort compare order))
+              mines)
+          (all_proposals ()) );
+  ]
+
 let suites =
   [
     ("proposal closest / more / more_label", closest_more_tests);
-    ("proposal same_organ_first", same_organ_first_tests);
+    ("proposal tile_more", tile_more_tests);
     ("proposal licence_label", licence_label_tests);
     ("proposal credit", credit_tests);
     ("proposal uncertain", uncertain_tests);
+    ("proposal display_order: identity cases", display_order_identity_tests);
+    ( "proposal display_order: grouping by mine's first distinct organs",
+      display_order_grouping_tests );
+    ( "proposal display_order: three organs, two of them mine",
+      display_order_three_organs_tests );
+    ( "proposal display_order: None and repeats in mine are skipped",
+      display_order_skips_repeats_and_nones_tests );
+    ( "proposal display_order: an image with organ = None never matches",
+      display_order_none_organ_never_matches_tests );
+    ( "proposal display_order: always a permutation",
+      display_order_is_always_a_permutation_tests );
   ]

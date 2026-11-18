@@ -56,8 +56,9 @@ run on `test/fixtures/`.
    WebView itself got that 403 (« Flores », below). Without `Origin` the same
    key answers 200. So the documentation is right and 66's planned help text
    (expose the key, add `https://localhost`) stands. 64 classifies this 403
-   as its own case (« clé non exposée pour l'app »), not as a network error:
-   its body is the one above.
+   as its own class (`Key_not_exposed`), for the console line only; the user
+   sees 6g's generic « Pl@ntNet n'a pas répondu » with « Réessayer »
+   (Tristan, 2026-11-16; architecture §12). Its body is the one above.
 2. **The exposed key from `Origin: https://localhost`: 200**, for the floras
    and for identify: from curl (the recorder's rows above) and from the
    WebView itself (« Flores » and « 1 aperçu », below).

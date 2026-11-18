@@ -5,16 +5,27 @@ let more (p : Plantnet.proposal) = max 0 (List.length p.images - tiles)
 let more_label p =
   match more p with 0 -> None | n -> Some (Printf.sprintf "+%d" n)
 
-let same_organ_first ~mine images =
-  match mine with
-  | None -> images
-  | Some _ ->
-      let same, others =
-        List.partition
-          (fun (i : Plantnet.image) -> Option.equal Organ.equal i.organ mine)
-          images
-      in
-      same @ others
+let tile_more p i = match i = tiles - 1 with true -> more p | false -> 0
+
+let display_order ~mine images =
+  let organs =
+    List.fold_left
+      (fun acc -> function
+        | Some o when not (List.exists (Organ.equal o) acc) -> o :: acc
+        | Some _ | None -> acc)
+      [] mine
+    |> List.rev
+  in
+  let group (i : Plantnet.image) =
+    match i.organ with
+    | None -> List.length organs
+    | Some o ->
+        List.find_index (Organ.equal o) organs
+        |> Option.value ~default:(List.length organs)
+  in
+  List.mapi (fun k i -> (group i, k)) images
+  |> List.stable_sort (fun (a, _) (b, _) -> Int.compare a b)
+  |> List.map snd
 
 let licence_label licence =
   let licence = String.trim licence in

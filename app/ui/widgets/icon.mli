@@ -7,6 +7,8 @@ type t =
   | Add
   | Arrow_back
   | Check
+  | Chevron_left
+  | Chevron_right
   | Close
   | Edit
   | Grid_view

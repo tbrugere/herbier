@@ -12,11 +12,18 @@ val more : Plantnet.proposal -> int
 val more_label : Plantnet.proposal -> string option
 (** [Some "+N"] when {!more} is [N > 0], else [None]. *)
 
-val same_organ_first :
-  mine:Organ.t option -> Plantnet.image list -> Plantnet.image list
-(** Display order of the enlarged images: the images whose [organ] is [mine]
-    first, then the others, each group in the given order (a stable partition).
-    [mine = None] → the list unchanged; images with [organ = None] never match.
+val tile_more : Plantnet.proposal -> int -> int
+(** [tile_more p i]: {!more} [p] for the last tile ([i = tiles - 1]), the « +N »
+    tile when that is [N > 0]; 0 for any other [i]. *)
+
+val display_order : mine:Organ.t option list -> Plantnet.image list -> int list
+(** 6d's order of a proposal's images, as 0-based indices into the given list
+    (Pl@ntNet's order): first the images whose [organ] is the first [Some o] of
+    [mine], then those of the next distinct [Some o'] of [mine], and so on, then
+    all the others; each group in Pl@ntNet's order (a stable partition). [None]
+    entries and repeats in [mine] are skipped; an image with [organ = None]
+    never matches. The result is a permutation of [0 .. length images - 1];
+    [mine = []] or all [None] → the identity; [[]] images → [[]]. Never raises.
 *)
 
 val licence_label : string -> string

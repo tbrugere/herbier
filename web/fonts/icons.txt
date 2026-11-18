@@ -4,6 +4,8 @@
 add
 arrow_back
 check
+chevron_left
+chevron_right
 close
 edit
 grid_view

@@ -1287,9 +1287,10 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   left (logged). The rest (`bestMatch`, `powo`, `iucn`, `version`) is ignored.
 - **Rules** (pure, `app/identify/`, tested on recorded answers): the
   proposals keep Pl@ntNet's order; each shows its four closest images, the rest
-  as « +N »; 6d shows the images of the same organ as my photo first. Uncertain
-  (6f): the best score below 0.5, or less than 0.15 ahead of the second (two
-  constants, to tune). The organ to add: a flower when none was sent, else a
+  as « +N »; 6d orders a species' images by my photos' organs (in photo order,
+  then the rest) and shows on top my photo of the shown image's organ (else my
+  first photo). Uncertain (6f): the best score below 0.5, or less than 0.15
+  ahead of the second (two constants, to tune). The organ to add: a flower when none was sent, else a
   leaf, else any (« + photo »), none at five photos. « Dans ma collection »: a
   live plant whose `gbif_key` is the proposal's id (`Ref_pick`'s matching),
   with the count of its live observations.
@@ -1317,8 +1318,9 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   written are those a search pick or a link writes.
 - **Screens.** The identification screens (6b, 6c, 6f, 6g, and 6d over 6c)
   are a layer over their caller, not a route: 4d's shots live in its screen,
-  and a route change releases a screen. Android back closes the layer as it
-  closes a shown Google Picker (the back listener of `ui/router.ml`). 6b never
+  and a route change releases a screen. Android back closes 6d first, then the
+  layer, as it closes a shown Google Picker (the back listener of
+  `ui/router.ml`); 6d makes no API request. 6b never
   blocks: « Continuer sans attendre » and ← return to Noter with the photos;
   the request goes on, and its answer is kept with 4d's photos for the same
   photos, organs and flora, so the Identifier button opens 6c without a second

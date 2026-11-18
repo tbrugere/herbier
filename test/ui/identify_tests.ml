@@ -1593,6 +1593,35 @@ let no_forbidden_wording_tests () =
     ]
   in
   List.iter (fun s -> check_text "add_hint" (Text.add_hint s)) suggestions;
+  let p0 = first_proposal (Lazy.force certain_answer) in
+  let image0 =
+    match p0.Plantnet.images with
+    | img :: _ -> img
+    | [] -> Alcotest.fail "certain fixture's first proposal has no image"
+  in
+  check_text "tile_label ~more:0" (Text.tile_label p0 image0 ~more:0);
+  check_text "tile_label ~more:2" (Text.tile_label p0 image0 ~more:2);
+  check_text "compare_close" Text.compare_close;
+  check_text "compare_position" (Text.compare_position ~index:1 ~count:5);
+  check_text "compare_mine Some Flower" (Text.compare_mine (Some Organ.Flower));
+  check_text "compare_mine None" (Text.compare_mine None);
+  check_text "compare_species Some Leaf"
+    (Text.compare_species (Some Organ.Leaf));
+  check_text "compare_species None" (Text.compare_species None);
+  check_text "compare_image_position"
+    (Text.compare_image_position ~index:3 ~count:6);
+  (match Text.compare_names p0 with
+  | None -> ()
+  | Some s -> check_text "compare_names" s);
+  check_text "compare_owned"
+    (Text.compare_owned
+       {Owned.plant = Fixtures.plant_with (); observations = 0});
+  check_text "compare_action Choose" (Text.compare_action Caller.Choose);
+  check_text "compare_action Link" (Text.compare_action Caller.Link);
+  check_text "compare_action Create" (Text.compare_action Caller.Create);
+  check_text "compare_previous" Text.compare_previous;
+  check_text "compare_next" Text.compare_next;
+  check_text "compare_no_image" Text.compare_no_image;
   List.iter
     (fun (name, text) -> check_text name text)
     [
@@ -1655,7 +1684,7 @@ let text_tests =
     Alcotest.test_case
       "no text ever names cors/origin/localhost/exposing/the api-key \
        parameter, over every Failure.t, both photo counts, every Caller.t, \
-       every gate and every suggestion"
+       every gate, every suggestion and 6d's Comparer texts"
       `Quick no_forbidden_wording_tests;
   ]
 
