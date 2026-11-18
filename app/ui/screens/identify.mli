@@ -35,6 +35,10 @@ type services = {
       (** never fails: a read error is logged and gives [([], [])] *)
 }
 
+val error_of_app : App.identify_error -> Herbier_ui_model.Identify.Failure.error
+(** [Identify_offline] → [Not_sent_offline]; [Preview_unreadable _] →
+    [Preview_unreadable]; [Plantnet e] → [Plantnet e]. *)
+
 val services : App.t -> App.channel -> services
 (** The app's: {!App.identify_gate}, {!App.plantnet_flora}, [set_flora] =
     {!App.set_plantnet_flora} (its [Error] already logged, ignored),

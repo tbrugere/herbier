@@ -11,7 +11,7 @@ type t = {
 
 let cls = Html.cls
 
-let v ?icon ?action ?(value = "") ~placeholder () =
+let v ?icon ?action ?trailing ?(value = "") ~placeholder () =
   let input =
     El.input
       ~at:
@@ -44,8 +44,9 @@ let v ?icon ?action ?(value = "") ~placeholder () =
         let e, ba = Rb.click b in
         (e, [b], [ba])
   in
+  let after = Option.to_list trailing in
   {
-    el = El.div ~at:[cls "text-field"] (lead @ (input :: trail));
+    el = El.div ~at:[cls "text-field"] (lead @ (input :: trail) @ after);
     input;
     value = typed;
     action = pressed;

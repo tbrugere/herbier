@@ -387,7 +387,9 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
-    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml, cover.ml, zoom.ml, map_filter.ml,
+    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml (4d: the save's target, the choice
+    included; 6a's button, line and first-photo opening; the kept answer; 6e's texts), cover.ml,
+    zoom.ml, map_filter.ml,
     map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
     ref_search.ml (4i's debounce / stale answer / offline state machine), ref_pick.ml (what a
     reference row does per mode), ref_paste.ml (5a's pasted link → plant ref), intercept/ (4j:
@@ -397,12 +399,13 @@ app/
     plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys),
     identify/ (M9: the identification layer's states, its French texts, and what a proposal's button
     does for each caller: « Choisir » in 4d, « Lier » or « + Créer » in 4k, « Lier » in 4g; caller.ml
-    (who opened it, its button, its 6g exits), owned.ml (« Dans ma collection »), failure.ml (6g's
-    variants from an error: the key not exposed, a refused request and a malformed answer show the
-    unreachable screen), layer.ml (the layer as a pure machine: events in, commands out, one
-    request per tap), compare.ml (6d: the proposal and image shown, ‹ › and swipe, which of my
-    photos is on top, the images to load), text.ml (every French text of 6b, 6c, 6d, 6f, 6g);
-    identify.ml re-exports them)
+    (who opened it, its button, its 6g exits), owned.ml (« Dans ma collection »), choice.ml (a chosen
+    proposal: its GBIF resolution as a Step program, R12's taxon from Pl@ntNet's answer, the plant of
+    mine that owns it, a new plant's name), failure.ml (6g's variants from an error: the key not
+    exposed, a refused request and a malformed answer show the unreachable screen), layer.ml (the
+    layer as a pure machine: events in, commands out, one request per tap), compare.ml (6d: the
+    proposal and image shown, ‹ › and swipe, which of my photos is on top, the images to load),
+    text.ml (every French text of 6b, 6c, 6d, 6f, 6g); identify.ml re-exports them)
     snap.ml               the sheet's snap points: nearest, clamp, release projection
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
@@ -491,7 +494,8 @@ app/
                           stored previews (4k, 4g) read through store_io/files.ml before the request
                           (Preview_unreadable, nothing sent), and a
                           choice resolved through
-                          refs_io/resolver.ml then App.link or App.create_linked
+                          refs_io/http.ml (resolve_choice: ui_model's Identify.Choice.resolve) then
+                          App.link or App.create_linked
     dev/                  storage_check.ml (debug page, #dev/storage): runs the bindings on the device;
                           store_check.ml (#dev/store): opens, migrates and round-trips a plants row through Db,
                           then searches, reads a setting and checks the outbox (Db.edit's transaction, rollback,
@@ -555,7 +559,8 @@ app/
                           herbierDev.markOriginal(state) through Dev_hook.export_action; linked only
                           outside the release profile
                           (app/dev_pages.ml, see app/dune)
-    widgets/              button, icon_button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
+    widgets/              button, icon_button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field (with an optional
+                          trailing element: 4d's Identifier button), inline_text, switch,
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
                           month_grid; identify_glyph (M9: the Identifier glyph as inline SVG, not a Material
                           Symbol, its vein cut out by a mask)

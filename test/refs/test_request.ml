@@ -450,6 +450,13 @@ let recorded_requests =
     ("gbif_species_2889173.json", Gbif.species ~key:2889173);
     ("gbif_species_7971454.json", Gbif.species ~key:7971454);
     ("gbif_species_5708907.json", Gbif.species ~key:5708907);
+    (* Pl@ntNet's first proposal's taxon, its name match, and the genus-level
+       "Hibiscus spp." match. *)
+    ("gbif_species_3152559.json", Gbif.species ~key:3152559);
+    ( "gbif_match_hibiscus_rosa_sinensis_l.json",
+      some "match" (Gbif.match_name ~name:"Hibiscus rosa-sinensis L.") );
+    ( "gbif_match_hibiscus_spp.json",
+      some "match" (Gbif.match_name ~name:"Hibiscus spp.") );
     ( "gbif_match_digitalis_purpurea_l.json",
       some "match" (Gbif.match_name ~name:"Digitalis purpurea L.") );
     ( "gbif_match_digitalis_purpurae.json",

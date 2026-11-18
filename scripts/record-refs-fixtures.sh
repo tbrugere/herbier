@@ -44,11 +44,14 @@ fetch gbif_species_5405976.json gbif "https://api.gbif.org/v1/species/5405976"
 fetch gbif_species_5334357.json gbif "https://api.gbif.org/v1/species/5334357"
 fetch gbif_species_7971454.json gbif "https://api.gbif.org/v1/species/7971454"
 fetch gbif_species_5708907.json gbif "https://api.gbif.org/v1/species/5708907"
+fetch gbif_species_3152559.json gbif "https://api.gbif.org/v1/species/3152559"
 
 fetch gbif_match_digitalis_purpurea_l.json gbif "https://api.gbif.org/v1/species/match?name=Digitalis%20purpurea%20L.&kingdom=Plantae"
 fetch gbif_match_digitalis_purpurae.json gbif "https://api.gbif.org/v1/species/match?name=Digitalis%20purpurae&kingdom=Plantae"
 fetch gbif_match_fallopia_japonica.json gbif "https://api.gbif.org/v1/species/match?name=Fallopia%20japonica&kingdom=Plantae"
 fetch gbif_match_xyzzy_foo.json gbif "https://api.gbif.org/v1/species/match?name=Xyzzy%20foo&kingdom=Plantae"
+fetch gbif_match_hibiscus_rosa_sinensis_l.json gbif "https://api.gbif.org/v1/species/match?name=Hibiscus%20rosa-sinensis%20L.&kingdom=Plantae"
+fetch gbif_match_hibiscus_spp.json gbif "https://api.gbif.org/v1/species/match?name=Hibiscus%20spp.&kingdom=Plantae"
 # not built by a request function: no kingdom, the only way to get matchType
 # NONE live.
 fetch gbif_match_none_zzzzqqq.json gbif "https://api.gbif.org/v1/species/match?name=zzzzqqq"

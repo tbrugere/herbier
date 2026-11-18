@@ -1293,19 +1293,33 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   ahead of the second (two constants, to tune). The organ to add: a flower when none was sent, else a
   leaf, else any (« + photo »), none at five photos. « Dans ma collection »: a
   live plant whose `gbif_key` is the proposal's id (`Ref_pick`'s matching),
-  with the count of its live observations.
+  with the count of its live observations. 6c matches on that id alone (no
+  GBIF resolution exists yet); 6e's owner also matches the resolved and
+  accepted keys once GBIF has answered (`Owned.has_key`, one rule for both).
 - **The choice and the GBIF id.** Pl@ntNet's `gbif.id` is a GBIF backbone
   `usageKey` (the documentation's ids are accepted backbone species, checked
   2026-11-16), Herbier's primary key (`stack.md`). Choosing resolves it with
   `Refs.Resolve.resolve (Gbif id)` (a synonym becomes its accepted taxon), or
   with the name match (`Plantnet "<Latin name and author>"`) when Pl@ntNet gave
-  no id, through `refs_io/resolver.ml`, as an intercepted link is resolved.
+  no id, and with the name match too when GBIF does not know the id (R12):
+  one program (`ui_model/identify/choice.ml`) run by `App.resolve_choice`
+  through `refs_io`'s queue, as an intercepted link is resolved.
   - 4d (6e): the field shows my display name when the taxon is already a
     plant of mine, else Pl@ntNet's first French name, else the Latin name.
     « Enregistrer » never waits: a plant of mine gets the observation (no
     duplicate); otherwise `App.create_linked` creates the plant with the
     resolved taxon, or with Pl@ntNet's own id and names when GBIF has not
-    answered yet (plan R12).
+    answered yet (plan R12). A proposal without id, or whose id GBIF does not
+    know and whose name matches no species (a genus-level « Hibiscus spp. »),
+    saves as a free name (Pl@ntNet's first French name), or, as a typed name
+    would, to a plant of mine with that name or alias. Known window: a save
+    made before GBIF answers only knows Pl@ntNet's id, so a synonym id with
+    the species already mine under its accepted key makes a second plant
+    (Pl@ntNet's ids are accepted species, so this needs data drift; merging
+    the two is by hand). The answer kept for a
+    reopen is a 200 or a 404 (the same photos would get the same « no plant »
+    and spend a credit); any other error, the key not exposed included, is
+    asked again at the next tap, since it may pass by then.
   - 4k (6j): « Lier » attaches the observation to the plant of mine;
     « + Créer » creates the linked plant with the observation's upsert, as
     4k's « + »; then the next observation of the queue.

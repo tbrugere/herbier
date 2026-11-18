@@ -4,12 +4,16 @@ module Plant_id = Herbier_domain.Ids.Plant_id
 
 type t = {plant : Plant.t; observations : int} [@@deriving eq]
 
+let has_key ~keys (p : Plant.t) =
+  match (p.deleted_at, p.gbif_key) with
+  | None, Some k -> List.mem k keys
+  | (None | Some _), (None | Some _) -> false
+
 let find ~current ~plants ~observations = function
   | None -> None
   | Some gbif ->
       let mine (p : Plant.t) =
-        Option.is_none p.deleted_at
-        && Option.equal Int.equal p.gbif_key (Some gbif)
+        has_key ~keys:[gbif] p
         && not (Option.equal Plant_id.equal (Some p.id) current)
       in
       List.find_opt mine plants

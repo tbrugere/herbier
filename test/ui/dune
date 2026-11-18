@@ -1,7 +1,7 @@
 ; Native checks of herbier_ui_model (app/ui_model/: no Brr, no React; its
-; libraries enforce it). test_ref_block.ml reads the recorded
-; payloads of test/fixtures/ (never writes them) for the rows of the two spike
-; species.
+; libraries enforce it). test_ref_block.ml (the rows of the two spike species)
+; and test_ui's identify_*_tests.ml read the recorded payloads of
+; test/fixtures/ (never write them).
 (tests
  (names test_ui test_ref_block test_move_plan)
  (libraries

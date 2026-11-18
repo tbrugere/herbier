@@ -51,3 +51,7 @@ val set_plantnet_flora :
 
 val identify_gate :
   Core.t -> Herbier_ui_model.Identify_settings.gate React.signal
+
+val resolve_choice :
+  Herbier_identify.Plantnet.proposal ->
+  Herbier_ui_model.Identify.Choice.resolution Fut.t

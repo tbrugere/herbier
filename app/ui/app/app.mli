@@ -620,3 +620,14 @@ val identify_gate : t -> Herbier_ui_model.Identify_settings.gate React.signal
 (** [Identify_settings.gate] of {!plantnet_key} and {!State.network}'s [online],
     kept updating for the app's lifetime: what the Identifier buttons bind their
     disabled state and reason to, and what [Ready k] gives them the key from. *)
+
+val resolve_choice :
+  Herbier_identify.Plantnet.proposal ->
+  Herbier_ui_model.Identify.Choice.resolution Fut.t
+(** The GBIF taxon of a proposal chosen in the identification layer:
+    [Herbier_refs_io.Http.run] of {!Herbier_ui_model.Identify.Choice.resolve}
+    (the reference sources' queue and timeout). Never fails, never raises. Logs:
+    [Unavailable m] → [identify: GBIF unavailable for <what>: <m>] (as an
+    error); [Unknown] → [identify: GBIF has no species for <what>]; [<what>] is
+    ["gbif <k>"] or the Latin name with its author (no Pl@ntNet key or URL: GBIF
+    needs none). Nothing is written. *)

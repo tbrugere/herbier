@@ -80,7 +80,7 @@ let attr name value = At.v (Jstr.v name) (Jstr.v value)
 let txt_el tag classes text =
   El.v (Jstr.v tag) ~at:(List.map cls classes) [El.txt' text]
 
-let to_failure : App.identify_error -> Failure.error = function
+let error_of_app : App.identify_error -> Failure.error = function
   | Identify_offline -> Not_sent_offline
   | Preview_unreadable (_ : Herbier_domain.Ids.Photo_id.t) -> Preview_unreadable
   | Plantnet e -> Plantnet e
@@ -363,6 +363,15 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
              (zip !shown organs)
           @ extra)
   in
+  (* Created before [dispatch]: a take for « + <organe> » gives it the focus
+     back. *)
+  let back =
+    Html.button ~label:Text.back_label ["identify__back"]
+      [W.Icon.el W.Icon.Arrow_back]
+  in
+  let refocus () =
+    match !closed with true -> () | false -> El.set_has_focus true back
+  in
   let rec dispatch event =
     match !closed with
     | true -> ()
@@ -387,12 +396,15 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
                  (zip (List.map (fun s -> s.photo.image) !shown) request.organs))
               (function
                 | App.Superseded -> ()
-                | Settled r -> answer (Result.map_error to_failure r)))
+                | Settled r -> answer (Result.map_error error_of_app r)))
     | Wait_slow {seq; ms} ->
         timers := G.set_timeout ~ms (fun () -> dispatch (Slow seq)) :: !timers
     | Take_photo organ ->
+        (* The focused « Annuler » is hidden when the take ends. *)
         Fut.await (add_photo organ) (function
-          | None -> dispatch (Photo_added None)
+          | None ->
+              dispatch (Photo_added None);
+              refocus ()
           | Some (p : photo) -> (
               match !closed with
               | true -> ()
@@ -402,7 +414,8 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
                   (match Layer.accepts_photo (React.S.value layer) with
                   | true -> shown := !shown @ [shown_of p]
                   | false -> ());
-                  dispatch (Photo_added (Some p.organ))))
+                  dispatch (Photo_added (Some p.organ));
+                  refocus ()))
     | Save_flora f -> Fut.await (services.set_flora f) Fun.id
     | Close outcome -> finish outcome
   in
@@ -430,10 +443,9 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
     | (No_menu | Organ_menu _ | Flora_menu), (Organ_menu _ | No_menu) ->
         set_menu m
   in
-  let back, back_b =
-    control ~label:Text.back_label ~enabled:true ["identify__back"]
-      [W.Icon.el W.Icon.Arrow_back]
-      (fun () -> dispatch Back)
+  let back_b =
+    let click, b = Rb.click back in
+    [b; gated ~enabled:true back click (fun () -> dispatch Back)]
   in
   let kicker_cls =
     match caller with

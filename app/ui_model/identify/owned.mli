@@ -5,6 +5,11 @@ type t = {plant : Herbier_domain.Plant.t; observations : int}
 
 val equal : t -> t -> bool
 
+val has_key : keys:int list -> Herbier_domain.Plant.t -> bool
+(** A live plant ([deleted_at = None]) whose [gbif_key] is one of [keys]: the
+    one rule for « this species is a plant of mine », here (6c, on the
+    proposal's id alone) and in {!Choice.owner} (6e, on {!Choice.keys}). *)
+
 val find :
   current:Herbier_domain.Ids.Plant_id.t option ->
   plants:Herbier_domain.Plant.t list ->

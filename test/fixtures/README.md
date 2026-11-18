@@ -22,6 +22,12 @@ Arnica's frwiki sitelink summary (`wikipedia_summary_fr_Arnica_des_montagnes`).
 `Resolve.chosen`'s synonym pair: `gbif_species_7971454` (Digitalis
 purpurascens Lej., SYNONYM, acceptedKey 5708907) and `gbif_species_5708907`
 (its accepted taxon, Digitalis purpurea subsp. purpurea).
+`Identify.Choice.resolve` (`test/ui/identify_choice_tests.ml`) adds:
+Pl@ntNet's first proposal's taxon (`gbif_species_3152559`, Hibiscus
+rosa-sinensis L., ACCEPTED, SPECIES), its name match
+(`gbif_match_hibiscus_rosa_sinensis_l`, EXACT, same key), and the
+genus-level match of its "Hibiscus spp." proposal
+(`gbif_match_hibiscus_spp`, HIGHERRANK, GENUS 3152542).
 
 `photon_*`, `geoplateforme_*.json`: recorded by
 `scripts/record-geo-fixtures.sh` (`[--force]` to re-record; it pauses 1.2 s

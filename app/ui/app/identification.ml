@@ -199,3 +199,24 @@ let set_plantnet_flora (t : Core.t) flora =
     | None -> Settings.unset Plantnet_project)
 
 let identify_gate (t : Core.t) = t.identify_gate
+
+module Choice = Herbier_ui_model.Identify.Choice
+
+let resolve_choice (p : Plantnet.proposal) =
+  let what =
+    match p.gbif with
+    | Some k -> "gbif " ^ string_of_int k
+    | None -> p.scientific_name
+  in
+  let program =
+    Herbier_refs.Step.recover (fun m -> Choice.Unavailable m) (Choice.resolve p)
+  in
+  Fut.map
+    (fun (r : Choice.resolution) ->
+      (match r with
+      | Unavailable m ->
+          Core.log_error ["identify: GBIF unavailable for"; what ^ ":"; m]
+      | Unknown -> Core.log ["identify: GBIF has no species for"; what]
+      | Resolved (_ : Herbier_refs.Sources.Gbif.Taxon.t) -> ());
+      r)
+    (Herbier_refs_io.Http.run program)

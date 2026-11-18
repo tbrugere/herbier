@@ -133,7 +133,14 @@
   text-align: center
   +widgets.pressed-bordered(var(--paper-field-line))
 
+// The name, the Identifier line, the 6e card and the suggestions: laid out as
+// the bottom's own rows, hidden together while a photo is taken for the layer.
+.record__naming
+  display: contents
+
 .record__name
+  // The Identifier button's 44 px target ends 1 px from the field's edge.
+  padding-right: 1px
   background: var(--paper-field)
   border: 1px solid var(--paper-field-line)
   .text-field__input
@@ -204,3 +211,106 @@
   background: var(--moss)
   box-shadow: 0 0 0 3px var(--paper)
   +widgets.pressed-filled
+
+// 6a: Pl@ntNet's glyph on a paper disc, inside the name field.
+.record__identify
+  +widgets.bare-button
+  flex: none
+  display: flex
+  width: 44px
+  height: 44px
+  align-items: center
+  justify-content: center
+  color: var(--ink)
+  +widgets.pressed-text
+  &[aria-disabled]
+    opacity: .5
+
+.record__identify-disc
+  display: flex
+  width: 36px
+  height: 36px
+  align-items: center
+  justify-content: center
+  border-radius: 50%
+  background: var(--paper)
+
+// Under the field: why Identifier is off (6a), or the owner of the choice (6e).
+.record__identify-line
+  +base.ui(12px, 400)
+  line-height: 1.4
+  color: var(--paper-soft)
+
+// 6e: the chosen species in place of the field.
+.record__choice
+  display: flex
+  align-items: center
+  gap: 10px
+  min-height: 56px
+  padding: 6px 1px 6px 14px
+  border-radius: 14px
+  background: var(--paper-field)
+  border: 1.5px solid var(--moss-light)
+
+.record__choice-check
+  display: flex
+  color: var(--moss-light)
+
+.record__choice-text
+  flex: 1
+  min-width: 0
+  display: flex
+  flex-direction: column
+
+.record__choice-name
+  +base.ui(16px, 800)
+  line-height: 1.25
+
+.record__choice-sub
+  +base.ui(12px, 400)
+  line-height: 1.35
+  color: var(--paper-soft)
+  white-space: nowrap
+  overflow: hidden
+  text-overflow: ellipsis
+
+.record__choice-latin
+  +base.sci(14px)
+
+.record__choice-clear
+  +widgets.bare-button
+  flex: none
+  display: flex
+  width: 44px
+  height: 44px
+  align-items: center
+  justify-content: center
+  color: var(--paper)
+  +widgets.pressed-text
+
+// « + <organe> » from the layer: the layer and 4d's naming and saving step
+// aside for the viewfinder; the pill says what the photo is for.
+.record__taking
+  display: none
+  align-items: center
+  justify-content: space-between
+  gap: 8px
+
+.record--taking
+  .record__taking
+    display: flex
+  .identify, .record__naming, .record__close
+    display: none
+  // Kept in its grid cell, so the shutter stays where it is.
+  .record__save
+    visibility: hidden
+
+.record__taking-cancel
+  +widgets.bare-button
+  +widgets.pill
+  +base.ui(13px, 700)
+  min-height: 44px
+  padding: 4px 16px
+  background: var(--veil)
+  color: var(--paper)
+  +widgets.pressed-bordered(var(--paper-field-line))

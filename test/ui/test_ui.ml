@@ -34,4 +34,5 @@ let () =
       ("identify_settings", Identify_settings_tests.identify_settings);
       ("identify", Identify_tests.identify);
       ("identify_compare", Identify_compare_tests.identify_compare);
+      ("identify_choice", Identify_choice_tests.identify_choice);
     ]
