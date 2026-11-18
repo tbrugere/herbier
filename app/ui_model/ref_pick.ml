@@ -38,5 +38,7 @@ let action mode ~current ~plants t =
   | false, (Browse | Attach), [] -> Create
   | false, Relink, _ -> Link_this
 
+let also_owned (p : Plant.t) = "Aussi dans ma collection : " ^ p.display_name
+
 let other_owner ~current ~plants t =
   List.find_opt (fun p -> not (is_current ~current p)) (matching ~plants t)

@@ -82,11 +82,6 @@ let rename_value (cluster : Places.cluster) =
 
 module By_observation = Map.Make (Observation_id)
 
-let compare_photos (a : Photo.t) (b : Photo.t) =
-  match Ptime.compare a.taken_at b.taken_at with
-  | 0 -> Herbier_domain.Ids.Photo_id.compare a.id b.id
-  | c -> c
-
 let photos_by_observation photos =
   let index =
     List.fold_left
@@ -95,7 +90,7 @@ let photos_by_observation photos =
           (fun l -> Some (p :: Option.value l ~default:[]))
           index)
       By_observation.empty photos
-    |> By_observation.map (List.sort compare_photos)
+    |> By_observation.map (List.sort Photo.compare_strip)
   in
   fun id -> Option.value (By_observation.find_opt id index) ~default:[]
 

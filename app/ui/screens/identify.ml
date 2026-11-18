@@ -257,7 +257,7 @@ let card ~caller ~owned ~choose ~open_compare k (p : Plantnet.proposal) =
         [
           El.div
             ~at:[cls "identify-card__owned"]
-            [W.Icon.el ~size:16 W.Icon.Check; El.txt' (Text.owned o)];
+            [W.Icon.el ~size:16 W.Icon.Check; El.txt' (Text.owned caller o)];
         ]
     | None -> []
   in
@@ -878,3 +878,84 @@ let open_ ~host services ~caller ?note ~add_photo ~on_close photos =
   t
 
 let close t = t.close ()
+
+let gallery_adder app o ~problem =
+  (* style: whether a pick runs, read and written from future callbacks only. *)
+  let adding = ref false in
+  fun organ ->
+    match !adding with
+    | true -> Fut.return None
+    | false -> (
+        adding := true;
+        let ended ?problem:met photo =
+          adding := false;
+          Option.iter problem met;
+          photo
+        in
+        let open Fut.Syntax in
+        let* picked = Herbier_photos_io.Capture.pick ~limit:1 in
+        match picked with
+        | Ok [] -> Fut.return (ended None)
+        | Error (Herbier_photos_io.Capture.Pick c) ->
+            Log.cap ~scope:"identifier" "gallery" c;
+            Fut.return (ended None)
+        | Error e ->
+            Log.error ~scope:"identifier" "gallery"
+              (Herbier_photos_io.Capture.error_to_string e);
+            Fut.return (ended ~problem:"La photo n'a pas pu être lue." None)
+        | Ok (shot :: (_ : Herbier_photos_io.Capture.shot list)) -> (
+            let+ unsaved = App.save_photos app ~observation:o [shot] in
+            match unsaved with
+            | [] -> ended (Some {image = App.Preview shot.preview.jpeg; organ})
+            | (_ : Herbier_photos_io.Capture.shot) :: _ ->
+                Log.error ~scope:"identifier" "photo not saved"
+                  "for the identification";
+                ended ~problem:"La photo n'a pas pu être enregistrée." None))
+
+(* style: the open layer and whether the caller's block is released, read and
+   written from DOM and future callbacks only, never shown. *)
+type launcher = {
+  button : El.t;
+  problem : string -> unit;
+  layer : t option ref;
+  released : bool ref;
+}
+
+let launcher ~button ~problem =
+  {button; problem; layer = ref None; released = ref false}
+
+let is_open l = Option.is_some !(l.layer)
+let released l = !(l.released)
+
+let launch l ~on_resolve open_layer =
+  match !(l.layer) with
+  | Some (_ : t) -> ()
+  | None ->
+      (* style: a problem met while this opening covers the caller, and
+         whether it closed, written from DOM and future callbacks only. *)
+      let pending = ref None and closed = ref false in
+      let problem m =
+        match (!closed, !(l.released)) with
+        | false, (true | false) -> pending := Some m
+        | true, false -> l.problem m
+        | true, true -> ()
+      in
+      let on_close outcome (_ : photo list) =
+        closed := true;
+        l.layer := None;
+        match (!(l.released), Layer.after_close outcome) with
+        | true, (Stay | Resolve _) -> ()
+        | false, Stay ->
+            Option.iter l.problem !pending;
+            El.set_has_focus true l.button
+        | false, Resolve p ->
+            Option.iter l.problem !pending;
+            El.set_has_focus true l.button;
+            on_resolve p
+      in
+      l.layer := Some (open_layer ~problem ~on_close)
+
+let release l =
+  Rb.on_release (fun () ->
+      l.released := true;
+      Option.iter close !(l.layer))

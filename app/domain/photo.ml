@@ -56,6 +56,11 @@ type t = {
 }
 [@@deriving eq, show]
 
+let compare_strip a b =
+  match Ptime.compare a.taken_at b.taken_at with
+  | 0 -> Ids.Photo_id.compare a.id b.id
+  | c -> c
+
 let awaiting_drive p =
   match (p.original_target, p.upload_state) with
   | Original_target.Drive, (Upload_state.Pending | Failed) -> true

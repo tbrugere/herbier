@@ -17,6 +17,7 @@ module Proposal = Herbier_identify.Proposal
 module Organ = Herbier_identify.Organ
 module Fixture = Herbier_test_support.Fixture
 module Support_text = Herbier_test_support.Text
+module Plant_id = Herbier_domain.Ids.Plant_id
 
 (* ---------- testables ---------- *)
 
@@ -569,12 +570,8 @@ let compare_names_tests () =
     "neither" None
     (Text.compare_names {proposal0 with family = None; common_names = []})
 
-let compare_owned_and_action_tests () =
-  let p = Fixtures.plant_with () in
-  Alcotest.(check string)
-    "compare_owned, no observation count"
-    (Printf.sprintf "Dans ma collection · %s" p.display_name)
-    (Text.compare_owned {Owned.plant = p; observations = 3});
+(* compare_owned is checked per caller in identify_tests.ml. *)
+let compare_action_tests () =
   Alcotest.(check string)
     "compare_action Choose" "Choisir cette espèce"
     (Text.compare_action Caller.Choose);
@@ -598,9 +595,8 @@ let text_tests =
     Alcotest.test_case
       "compare_names: names and family joined, either alone, neither -> None"
       `Quick compare_names_tests;
-    Alcotest.test_case
-      "compare_owned (no obs. count) and compare_action per caller action"
-      `Quick compare_owned_and_action_tests;
+    Alcotest.test_case "compare_action per caller action" `Quick
+      compare_action_tests;
   ]
 
 (* ============================================================ *)

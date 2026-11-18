@@ -30,9 +30,7 @@ let meta ~mode ~current ~plants ~action (t : Taxon.t) =
   let owner =
     match (mode : Ref_pick.mode) with
     | Ref_pick.Relink ->
-        Option.map
-          (fun (p : Plant.t) -> "Aussi dans ma collection : " ^ p.display_name)
-          (Ref_pick.other_owner ~current ~plants t)
+        Option.map Ref_pick.also_owned (Ref_pick.other_owner ~current ~plants t)
     | Ref_pick.Browse | Ref_pick.Attach -> None
   in
   String.concat " · " (List.filter_map Fun.id [here; t.family; owner])

@@ -17,6 +17,19 @@ type outcome =
 
 val equal_outcome : outcome -> outcome -> bool
 
+(** What a caller that resolves a chosen proposal does once the layer closed
+    (6i, 6k; Noter's is Record_plan.after_layer). *)
+type after =
+  | Stay  (** back to the caller, focus on its Identifier button *)
+  | Resolve of Herbier_identify.Plantnet.proposal
+      (** resolve the proposal through GBIF, then the caller's save or link *)
+
+val equal_after : after -> after -> bool
+
+val after_close : outcome -> after
+(** [Chosen p] → [Resolve p]; [Left], [None_matches] and [Retake],
+    [Keep_unnamed] (offered to Noter only) → [Stay]. *)
+
 type phase =
   | Sending of {slow : bool}
       (** 6b; [slow]: {!slow_ms} passed, the skeletons say « Pl@ntNet… » *)

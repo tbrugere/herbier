@@ -581,6 +581,15 @@ let answered_error_tests () =
   Alcotest.(check phase_t)
     "Key_not_exposed -> Failed Not_answered" (Layer.Failed Failure.Not_answered)
     t'.phase;
+  let tf, _ =
+    opened ~caller:(Caller.Free_name (Plant_id.fresh ())) [Organ.Auto]
+  in
+  let tf', _ =
+    answered tf (Error (Failure.Plantnet Plantnet.Key_not_exposed))
+  in
+  Alcotest.(check phase_t)
+    "Free_name caller: Key_not_exposed -> Failed Not_answered"
+    (Layer.Failed Failure.Not_answered) tf'.phase;
   let tp, _ = answered t (Ok (Lazy.force uncertain)) in
   let tre, _ =
     Layer.step tp (Layer.Set_organ {photo = 0; organ = Organ.Leaf})
@@ -1230,8 +1239,34 @@ let add_tile_fn_tests () =
   Alcotest.(check suggestion_opt_t)
     "Sending -> None" None (Layer.add_tile sending)
 
+let pp_after fmt = function
+  | Layer.Stay -> Format.pp_print_string fmt "Stay"
+  | Layer.Resolve (p : Plantnet.proposal) ->
+      Format.fprintf fmt "Resolve %s" p.name
+
+let after_t = Alcotest.testable pp_after Layer.equal_after
+
+let after_close_tests () =
+  Alcotest.(check after_t)
+    "Chosen p -> Resolve p" (Layer.Resolve sample_proposal)
+    (Layer.after_close (Layer.Chosen sample_proposal));
+  List.iter
+    (fun (name, outcome) ->
+      Alcotest.(check after_t)
+        (Printf.sprintf "%s -> Stay" name)
+        Layer.Stay
+        (Layer.after_close outcome))
+    [
+      ("Left", Layer.Left);
+      ("None_matches", Layer.None_matches);
+      ("Retake", Layer.Retake);
+      ("Keep_unnamed", Layer.Keep_unnamed);
+    ]
+
 let layer_tests =
   [
+    Alcotest.test_case "after_close: Chosen -> Resolve, the rest -> Stay" `Quick
+      after_close_tests;
     Alcotest.test_case
       "open_: Sending/seq 1/commands, flora, 7 organs kept to 5, [] -> Closed \
        Left"
@@ -1438,10 +1473,32 @@ let add_hint_tests () =
 let owned_and_action_tests () =
   let p = Fixtures.plant_with () in
   let o : Owned.t = {plant = p; observations = 2} in
+  let free_name_want =
+    Printf.sprintf "Aussi dans ma collection : %s" p.display_name
+  in
   Alcotest.(check string)
-    "owned, 2 obs."
+    "owned, Noter, 2 obs."
     (Printf.sprintf "Dans ma collection · %s · 2 obs." p.display_name)
-    (Text.owned o);
+    (Text.owned Caller.Noter o);
+  Alcotest.(check string)
+    "owned, Queue: same wording as Noter"
+    (Printf.sprintf "Dans ma collection · %s · 2 obs." p.display_name)
+    (Text.owned (Caller.Queue (Some {index = 1; total = 3})) o);
+  Alcotest.(check string)
+    "owned, Free_name: \"Aussi dans ma collection\", no observation count"
+    free_name_want
+    (Text.owned (Caller.Free_name (Plant_id.fresh ())) o);
+  Alcotest.(check string)
+    "compare_owned, Noter: no observation count"
+    (Printf.sprintf "Dans ma collection · %s" p.display_name)
+    (Text.compare_owned Caller.Noter o);
+  Alcotest.(check string)
+    "compare_owned, Queue: same wording as Noter"
+    (Printf.sprintf "Dans ma collection · %s" p.display_name)
+    (Text.compare_owned (Caller.Queue None) o);
+  Alcotest.(check string)
+    "compare_owned, Free_name: same wording as owned's" free_name_want
+    (Text.compare_owned (Caller.Free_name (Plant_id.fresh ())) o);
   Alcotest.(check string) "action Choose" "Choisir" (Text.action Caller.Choose);
   Alcotest.(check string) "action Link" "Lier" (Text.action Caller.Link);
   Alcotest.(check string) "action Create" "+ Créer" (Text.action Caller.Create)
@@ -1578,6 +1635,14 @@ let no_forbidden_wording_tests () =
       check_text "proposals_label ~count:(Some 3)"
         (Text.proposals_label c ~count:(Some 3)))
     callers;
+  let owned_sample : Owned.t =
+    {Owned.plant = Fixtures.plant_with (); observations = 0}
+  in
+  List.iter
+    (fun c ->
+      check_text "owned" (Text.owned c owned_sample);
+      check_text "compare_owned" (Text.compare_owned c owned_sample))
+    callers;
   let key = ready_key () in
   let gates = [Is.Ready key; Is.Waiting; Is.No_key; Is.Offline] in
   List.iter
@@ -1617,9 +1682,6 @@ let no_forbidden_wording_tests () =
   (match Text.compare_names p0 with
   | None -> ()
   | Some s -> check_text "compare_names" s);
-  check_text "compare_owned"
-    (Text.compare_owned
-       {Owned.plant = Fixtures.plant_with (); observations = 0});
   check_text "compare_action Choose" (Text.compare_action Caller.Choose);
   check_text "compare_action Link" (Text.compare_action Caller.Link);
   check_text "compare_action Create" (Text.compare_action Caller.Create);

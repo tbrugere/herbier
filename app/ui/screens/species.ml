@@ -5,6 +5,9 @@ module Journal_day = Herbier_ui_model.Journal_day
 module Plant_form = Herbier_ui_model.Plant_form
 module Ref_block = Herbier_ui_model.Ref_block
 module Ref_text = Herbier_ui_model.Ref_text
+module Free_name = Herbier_ui_model.Free_name
+module Choice = Herbier_ui_model.Identify.Choice
+module Caller = Herbier_ui_model.Identify.Caller
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -262,16 +265,104 @@ let notes app ~problem data =
   in
   (t.el, t.bindings)
 
-(* 4g *)
-let unlinked state id () =
+(* 4g / 6k: [host] is the screen root, so the layer is neither clipped by the
+   scrolled body nor re-rendered with this block. *)
+let unlinked app ~host ~problem (data : data React.signal) id () =
+  let state = App.state app in
   let offline_text = El.span [] in
-  let link =
-    W.Button.v ~kind:W.Button.Secondary "Lier à une espèce de référence"
-  in
+  let identify = W.Button.v ~kind:W.Button.Primary Free_name.identify_label in
+  El.prepend_children identify.el [W.Identify_glyph.el ~size:20 ()];
+  El.set_class (Jstr.v "species__identify") true identify.el;
+  let search = W.Button.v ~kind:W.Button.Secondary Free_name.search_label in
+  let line = El.p ~at:[cls "species__identify-line"] [] in
   let online =
     React.S.map ~eq:Bool.equal
       (fun (n : State.network) -> n.online)
       (State.network state)
+  in
+  let gate = App.identify_gate app in
+  let sent_of (d : data) =
+    Free_name.sent ~observations:d.observations ~photos:d.photos
+  in
+  let n_sent =
+    React.S.map ~eq:Int.equal
+      (fun d ->
+        match sent_of d with Some s -> List.length s.photos | None -> 0)
+      data
+  in
+  let enabled =
+    React.S.l2 ~eq:Bool.equal
+      (fun g photos -> Free_name.identify_enabled g ~photos)
+      gate n_sent
+  in
+  let line_text =
+    React.S.l2
+      ~eq:(Option.equal String.equal)
+      (fun g photos -> Free_name.identify_line g ~photos)
+      gate n_sent
+  in
+  let resolving, set_resolving = React.S.create ~eq:Bool.equal false in
+  let launcher = Identify.launcher ~button:identify.el ~problem in
+  let channel = App.channel () in
+  let ended ?message () =
+    match Identify.released launcher with
+    | true -> ()
+    | false ->
+        set_resolving false;
+        Option.iter problem message
+  in
+  let linked_to taxon name =
+    Fut.await (App.link app ~name id taxon) (function
+      | Ok () -> ended ()
+      | Error App.Plant_gone -> ended ~message:Free_name.plant_gone ()
+      | Error (App.Store e) ->
+          log_error "lier" e;
+          ended ~message:Free_name.link_failed ())
+  in
+  (* Nothing is written before GBIF answers, so a fiche left meanwhile drops
+     the choice, as 6i does. *)
+  let choose p =
+    set_resolving true;
+    Fut.await (App.resolve_choice p) (fun r ->
+        match Identify.released launcher with
+        | true -> ()
+        | false -> (
+            match Free_name.link Choice.(resolved (v p) r) with
+            | Link {name; taxon} -> linked_to taxon name
+            | (Unknown_to_gbif | Gbif_unavailable) as l ->
+                ended ?message:(Free_name.problem l) ()))
+  in
+  let open_layer () =
+    match
+      ( Identify.is_open launcher,
+        React.S.value resolving,
+        React.S.value enabled,
+        sent_of (React.S.value data) )
+    with
+    | false, false, true, Some s ->
+        problem "";
+        let photos =
+          List.map
+            (fun (p : Herbier_domain.Photo.t) ->
+              {
+                Identify.image = App.Stored p.id;
+                organ = Herbier_identify.Organ.Auto;
+              })
+            s.photos
+        in
+        Identify.launch launcher ~on_resolve:choose
+          (fun ~problem:deferred ~on_close ->
+            Identify.open_ ~host
+              (Identify.services app channel)
+              ~caller:(Caller.Free_name id)
+              ~add_photo:
+                (Identify.gallery_adder app s.observation ~problem:deferred)
+              ~on_close photos)
+    | true, _, _, _
+    | false, true, _, _
+    | false, false, false, _
+    | false, false, true, None ->
+        ()
   in
   ( El.section
       ~at:[cls "species__reference"]
@@ -280,19 +371,40 @@ let unlinked state id () =
         El.p
           ~at:[cls "t-body"]
           [El.txt' "Aucune espèce de référence liée."; offline_text];
-        link.el;
+        El.div ~at:[cls "species__reference-actions"] [identify.el; search.el];
+        line;
       ],
-    Rb.text offline_text
-      (React.S.map
-         (fun online -> Herbier_ui_model.Network_text.unlinked_offline ~online)
-         online)
-    :: Rb.class_ link.el "is-offline" (React.S.map not online)
-    :: Rb.disabled link.el (React.S.map not online)
-    :: Rb.act link.click (fun () ->
-        match (React.S.value (State.network state)).online with
-        | true -> Route.go (Route.Modal (Route.Link_species id))
-        | false -> ())
-    :: link.bindings )
+    List.concat
+      [
+        [
+          Rb.text offline_text
+            (React.S.map
+               (fun online ->
+                 Herbier_ui_model.Network_text.unlinked_offline ~online)
+               online);
+          Rb.act identify.click open_layer;
+          Identify.release launcher;
+          Rb.disabled identify.el (React.S.map not enabled);
+          Rb.attr identify.el "aria-label"
+            (React.S.l2
+               (fun g photos -> Some (Free_name.identify_aria g ~photos))
+               gate n_sent);
+          Rb.attr identify.el "aria-busy"
+            (React.S.map
+               (function true -> Some "true" | false -> None)
+               resolving);
+          Rb.text line (React.S.map (Option.value ~default:"") line_text);
+          Rb.class_ line "is-hidden" (React.S.map Option.is_none line_text);
+          (* The search needs GBIF. *)
+          Rb.disabled search.el (React.S.map not online);
+          Rb.act search.click (fun () ->
+              match React.S.value online with
+              | true -> Route.go (Route.Modal (Route.Link_species id))
+              | false -> ());
+        ];
+        identify.bindings;
+        search.bindings;
+      ] )
 
 (* The projection and the thumbnails 4f shows, from one load. *)
 let project (d : data) =
@@ -471,8 +583,7 @@ let linked app (data : data React.signal) () =
 (* The fiche of a live plant. The parts [data] shows are updated in place on
    each reload, so an editor open on the fiche (the notes, « + tag ») stays
    open across one. *)
-let render app (data : data React.signal) =
-  let state = App.state app in
+let render app ~host (data : data React.signal) =
   let id = (React.S.value data).plant.id in
   let problem_text, problem = React.S.create ~eq:String.equal "" in
   let problem_el = El.p ~at:[cls "t-meta"; cls "species__problem"] [] in
@@ -549,8 +660,17 @@ let render app (data : data React.signal) =
   let modified = El.span ~at:[cls "t-meta"] [] in
   let reference = El.div ~at:[cls "species__reference-slot"] [] in
   let reference_of = function
-    | false -> unlinked state id ()
+    | false -> unlinked app ~host ~problem data id ()
     | true -> linked app data ()
+  in
+  (* The block is swapped once the update step that changed [data] is over:
+     [linked] derives signals from [data] (its [Rb.view] reads the first
+     value), and a signal derived from [data] in the step where [data]
+     changes has no value yet ([Failure "signal value undefined yet"]). A
+     link made from 6k, with this fiche shown, is such a step. *)
+  let is_linked (d : data) = Option.is_some d.plant.gbif_key in
+  let linked_s, set_linked =
+    React.S.create ~eq:Bool.equal (is_linked (React.S.value data))
   in
   let el =
     El.div
@@ -608,10 +728,10 @@ let render app (data : data React.signal) =
           Rb.text problem_el problem_text;
           Rb.class_ problem_el "is-hidden"
             (React.S.map (String.equal "") problem_text);
-          Rb.view reference reference_of
-            (React.S.map ~eq:Bool.equal
-               (fun d -> Option.is_some d.plant.gbif_key)
-               data);
+          Rb.act
+            (React.S.changes (React.S.map ~eq:Bool.equal is_linked data))
+            (fun v -> set_linked v);
+          Rb.view reference reference_of linked_s;
         ];
         adder.bindings;
         notes_bindings;
@@ -653,6 +773,6 @@ let v app id =
         (fun () -> load (App.db app) id)
         (fun data ->
           mark_ready ();
-          render app data);
+          render app ~host:el data);
     ready;
   }

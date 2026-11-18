@@ -388,8 +388,10 @@ app/
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
     plant_form.ml, local_time.ml, to_identify.ml (4k: the queue position; 6i's button and
-    line; 6j's outcome), record_plan.ml (4d: the save's target, the choice
-    included, and 6j's; 6a's button, line and first-photo opening; the kept answer; 6e's texts), cover.ml,
+    line), free_name.ml (4g's reference block of a free-name plant, 6k: the observation sent,
+    Identifier's gate and line, what « Lier » writes), record_plan.ml (4d: the save's target,
+    the choice included, and 6j's; 6a's button, line and first-photo opening; the kept answer;
+    6e's texts), cover.ml,
     zoom.ml, map_filter.ml,
     map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
     ref_search.ml (4i's debounce / stale answer / offline state machine), ref_pick.ml (what a
@@ -404,7 +406,8 @@ app/
     proposal: its GBIF resolution as a Step program, R12's taxon from Pl@ntNet's answer, the plant of
     mine that owns it, a new plant's name), failure.ml (6g's variants from an error: the key not
     exposed, a refused request and a malformed answer show the unreachable screen), layer.ml (the
-    layer as a pure machine: events in, commands out, one request per tap), compare.ml (6d: the
+    layer as a pure machine: events in, commands out, one request per tap; what 6i and 6k do
+    once it closed), compare.ml (6d: the
     proposal and image shown, ‹ › and swipe, which of my photos is on top, the images to load),
     text.ml (every French text of 6b, 6c, 6d, 6f, 6g); identify.ml re-exports them)
     snap.ml               the sheet's snap points: nearest, clamp, release projection
@@ -573,7 +576,9 @@ app/
                   one screen, one entry mode each; 4j is M4.39's sheet mode, its « Chercher » enters 4i;
                   4k's « Identifier avec Pl@ntNet », 6i, with M9)
       identify.ml (M9: 6b, 6c, 6f, 6g; a layer over 4d, 4k or 4g, not a route, since a route change would
-                  release 4d's shots; Android back closes it)
+                  release 4d's shots; Android back closes it; gallery_adder: 4k's and 4g's
+                  « + <organe> »; launcher: 4k's and 4g's Identifier button, one layer at a
+                  time, a problem deferred while it covers the screen)
       identify_compare.ml (M9: 6d, a layer over 6c)
       tags.ml (4l)        manage_tags.ml (5d)
       settings/ (4m)      settings.ml (the screen; its main module), pending.ml (the card under « File

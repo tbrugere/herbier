@@ -6,7 +6,12 @@
     after 1200 ms (so 6b and its 600 ms label show). Nothing reaches the network
     or the store.
 
-    One button per state, each opening the layer (caller [Noter], one or two
+    A checkbox « Appelant : fiche nom libre (6k) » picks the caller of the
+    layers opened next: unticked [Noter], ticked [Free_name] of a synthetic id
+    made once per page (not the collection plant's, which then shows as « Aussi
+    dans ma collection »; « Lier » on every card; 6g with « Retour »).
+
+    One button per state, each opening the layer (the caller above, one or two
     {!Kit.test_jpeg} previews, organs [Auto]); « + <organe> » adds a new test
     JPEG at once; the gate is a constant [Ready] of the fake key ["rejeu"]; the
     flora is a local signal that « Flore » changes; the flora list replays

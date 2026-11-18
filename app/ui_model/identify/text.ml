@@ -69,9 +69,12 @@ let add_hint : Organ.suggestion -> string =
   | Add Habit -> "Le port" ^ ending
   | Add_photo -> "Une photo" ^ ending
 
-let owned ({plant; observations} : Owned.t) =
-  Printf.sprintf "Dans ma collection · %s · %d obs." plant.display_name
-    observations
+let owned (caller : Caller.t) ({plant; observations} : Owned.t) =
+  match caller with
+  | Noter | Queue _ ->
+      Printf.sprintf "Dans ma collection · %s · %d obs." plant.display_name
+        observations
+  | Free_name _ -> Ref_pick.also_owned plant
 
 let action : Caller.action -> string = function
   | Choose -> "Choisir"
@@ -153,8 +156,11 @@ let compare_names (p : Plantnet.proposal) =
   | [] -> None
   | parts -> Some (String.concat " · " parts)
 
-let compare_owned ({plant; observations = (_ : int)} : Owned.t) =
-  "Dans ma collection · " ^ plant.display_name
+let compare_owned (caller : Caller.t)
+    ({plant; observations = (_ : int)} : Owned.t) =
+  match caller with
+  | Noter | Queue _ -> "Dans ma collection · " ^ plant.display_name
+  | Free_name _ -> Ref_pick.also_owned plant
 
 let compare_action : Caller.action -> string = function
   | Choose -> "Choisir cette espèce"

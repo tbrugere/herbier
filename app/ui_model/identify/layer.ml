@@ -10,6 +10,12 @@ type outcome =
   | Keep_unnamed
 [@@deriving eq]
 
+type after = Stay | Resolve of Plantnet.proposal [@@deriving eq]
+
+let after_close = function
+  | Chosen p -> Resolve p
+  | Left | None_matches | Retake | Keep_unnamed -> Stay
+
 type phase =
   | Sending of {slow : bool}
   | Proposals of Herbier_identify.identified

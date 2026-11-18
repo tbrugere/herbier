@@ -306,11 +306,33 @@
     height: 100%
     transform: translateY(-50%)
 
-// Inert; faded while offline (4g).
+// 6k: « Identifier » (moss, glyph 20) beside « Chercher un nom ».
+.species__reference-actions
+  display: grid
+  grid-template-columns: repeat(2, minmax(0, 1fr))
+  gap: var(--grid-gap)
+  .button
+    min-height: var(--button-secondary-height)
+    font-size: 15px
+    padding: 0 8px
+
+.species__identify
+  gap: 8px
+  font-weight: 800
+  &[aria-busy]
+    opacity: .6
+
+.species__identify-line
+  +base.ui(12px, 400)
+  line-height: 1.4
+  color: var(--muted)
+  margin-top: -2px
+
+// Disabled buttons are inert and faded (4g offline; 6k without a key or a
+// photo).
 .species__reference .button[aria-disabled]
   cursor: default
-  &.is-offline
-    opacity: .5
+  opacity: .5
 
 .species__gone
   padding: calc(16px + env(safe-area-inset-top) + var(--offline-inset)) 20px 20px

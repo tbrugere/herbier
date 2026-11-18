@@ -12,7 +12,7 @@ val get : Photo_id.t -> Photo.t Stmt.query
 
 val of_observation : Observation_id.t -> Photo.t Stmt.query
 (** Live photos of the observation, ordered by [taken_at] ascending then [id]
-    (the 4d/4h strip). *)
+    (the 4d/4h strip, {!Herbier_domain.Photo.compare_strip}). *)
 
 val of_plant : Plant_id.t -> Photo.t Stmt.query
 (** Live photos of the plant's live observations, ordered by [taken_at]

@@ -101,3 +101,56 @@ val close : t -> unit
     run inside an update step as long as the caller's [on_close] sets none
     either. Releases the layer's bindings, timers and object URLs, removes its
     element, removes it from {!Overlay}. *)
+
+val gallery_adder :
+  App.t ->
+  Herbier_domain.Observation.t ->
+  problem:(string -> unit) ->
+  Herbier_identify.Organ.sent ->
+  photo option Fut.t
+(** [gallery_adder app o ~problem] is an [add_photo] for {!open_} (4k's and 4g's
+    « + <organe> »): one photo picked from the gallery
+    ([Capture.pick ~limit:1]), saved on [o] ([App.save_photos ~observation:o]),
+    given back as [{image = Preview <its preview>; organ}]. One pick at a time
+    per adder (partial application creates its guard): a call while one runs →
+    [None] at once. Cancelled → [None]. A pick plugin error → logged
+    ([Log.cap]), [None], no problem. Another read error → logged,
+    [problem "La photo n'a pas pu être lue."], [None]. Not saved → logged,
+    [problem "La photo n'a pas pu être enregistrée."], [None]. Never raises;
+    [problem] is called from a future callback (outside an update step). *)
+
+(** {1 A caller's « Identifier » button (4k's 6i, 4g's 6k)} *)
+
+type launcher
+(** One layer at a time over a caller's block: the open layer, whether the block
+    is released, the button and the block's problem line. *)
+
+val launcher : button:Brr.El.t -> problem:(string -> unit) -> launcher
+(** Nothing open, not released. [problem] shows a line on the caller's block. *)
+
+val is_open : launcher -> bool
+
+val released : launcher -> bool
+(** Whether {!release}'s binding was released: a future answered after it
+    touches no signal of the caller's block. *)
+
+val launch :
+  launcher ->
+  on_resolve:(Herbier_identify.Plantnet.proposal -> unit) ->
+  (problem:(string -> unit) ->
+  on_close:(Herbier_ui_model.Identify.Layer.outcome -> photo list -> unit) ->
+  t) ->
+  unit
+(** [launch l ~on_resolve open_layer]: nothing when a layer is open; else the
+    layer [open_layer ~problem ~on_close] gives (the caller calls {!open_} with
+    that [on_close], possibly wrapped, and its [add_photo] reports through that
+    [problem]). A problem reported while this layer is open is shown once it
+    closes (the last one); after it closed, at once; after release, never. On
+    close, unless released: that problem, the focus on [button] (it carries the
+    caller's busy state while a proposal resolves), then for
+    {!Herbier_ui_model.Identify.Layer.after_close} [= Resolve p],
+    [on_resolve p]. *)
+
+val release : launcher -> Rb.binding
+(** For the caller's bindings: on release, marks [l] released and {!close}s its
+    layer (no [on_resolve], no problem after that). *)

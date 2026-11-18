@@ -33,10 +33,14 @@ val action :
     - [Attach]: first of [matching] → [Attach_to p], none → [Create];
     - [Relink]: [Link_this] (two plants may share a taxon). *)
 
+val also_owned : Herbier_domain.Plant.t -> string
+(** A [Relink] row's owner line: ["Aussi dans ma collection : <display_name>"]
+    (also 6c/6d for a free-name fiche). *)
+
 val other_owner :
   current:Herbier_domain.Ids.Plant_id.t option ->
   plants:Herbier_domain.Plant.t list ->
   Herbier_refs.Sources.Gbif.Taxon.t ->
   Herbier_domain.Plant.t option
-(** For [Relink] rows' « Aussi dans ma collection : X »: the first of [matching]
-    that is not [current]. *)
+(** For [Relink] rows' {!also_owned}: the first of [matching] that is not
+    [current]. *)

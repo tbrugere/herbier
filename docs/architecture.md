@@ -1331,9 +1331,18 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
     « Aucune ne correspond » and ← return to 6i, no answer kept. A key not
     exposed is 6g's generic « Pl@ntNet n'a pas répondu »: 6i and 6j add no
     text about it.
-  - 4g (6k): `App.link ~name` (`Ref_pick`'s `Relink`): Pl@ntNet's French name
-    becomes the display name and the free name an alias, as 4g's « Lier »; two
-    plants may share a taxon.
+  - 4g (6k): « Identifier » sends the newest observation with photos (its
+    first five previews, 4h's order); « + <organe> » saves the picked photo
+    on that observation. 6c and 6d say « Aussi dans ma collection : <nom> »
+    when another plant has the taxon (two plants may share one), and every
+    proposal's action is « Lier ». The choice is resolved through GBIF, then
+    `App.link ~name` (`Ref_pick`'s `Relink`): Pl@ntNet's first French name
+    becomes the display name and the free name an alias, as 4g's « Lier ».
+    GBIF unavailable: linked with Pl@ntNet's own taxon (R12); GBIF knows no
+    species, or is unavailable for a proposal without id: nothing written, a
+    line under the hero says why (the plant keeps its free name). A key not
+    exposed is 6g's generic « Pl@ntNet n'a pas répondu »: 6k adds no text
+    about it.
 
   Then the reference fetch of §6 runs, as after a link. Nothing about the
   identification itself is stored (no score, flora or date column): the rows

@@ -77,6 +77,11 @@ val equal : t -> t -> bool
 
 val pp : Format.formatter -> t -> unit
 
+val compare_strip : t -> t -> int
+(** The 4d/4h strip order: [taken_at] ascending, then [id] ascending
+    ([Ids.Photo_id.compare]); the SQL of Photos.of_observation sorts the same
+    way. *)
+
 val awaiting_drive : t -> bool
 (** Whether the original is bound for Drive and not there yet: [Pending], or
     [Failed] and waiting for a retry (architecture §5). The « ↑ » badge. *)

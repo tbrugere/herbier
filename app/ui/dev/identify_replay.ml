@@ -178,12 +178,25 @@ let el () =
     incr next_color;
     photo log ~color:(color !next_color) organ
   in
+  (* 6k's caller: a free-name plant that is not the synthetic collection
+     plant, so that one shows as « Aussi dans ma collection ». *)
+  let free_name = Caller.Free_name (Ids.Plant_id.fresh ()) in
+  let as_free_name =
+    El.input
+      ~at:[At.type' (Jstr.v "checkbox"); At.id (Jstr.v "replay-caller")]
+      ()
+  in
+  let caller () =
+    match El.prop El.Prop.checked as_free_name with
+    | true -> free_name
+    | false -> Caller.Noter
+  in
   let open_layer ~photos chosen () =
     scenario := chosen;
+    let caller = caller () in
     Fut.await (shots log photos) (fun shots ->
         ignore
-          (Screens.Identify.open_ ~host:page services ~caller:Caller.Noter
-             ~add_photo
+          (Screens.Identify.open_ ~host:page services ~caller ~add_photo
              ~on_close:(fun outcome photos ->
                log_line log
                  (Printf.sprintf "fermé : %s (%d photo(s))"
@@ -216,5 +229,12 @@ let el () =
       ]
   in
   El.set_children page
-    [El.h2 [El.txt' "Couche d'identification (rejeu)"]; El.div buttons; log];
+    [
+      El.h2 [El.txt' "Couche d'identification (rejeu)"];
+      El.label
+        ~at:[At.for' (Jstr.v "replay-caller")]
+        [as_free_name; El.txt' " Appelant : fiche nom libre (6k)"];
+      El.div buttons;
+      log;
+    ];
   page

@@ -1,13 +1,12 @@
-(* Herbier_ui_model.To_identify: 6i's button, line and aria, caller, 6j's
-   after_layer, and what a chosen proposal saves (Record_plan.of_choice).
-   Proposals are decoded from the recorded fixture. *)
+(* Herbier_ui_model.To_identify: 6i's button, line and aria, caller, and what
+   a chosen proposal saves (Record_plan.of_choice). Proposals are decoded from
+   the recorded fixture. *)
 
 module To_identify = Herbier_ui_model.To_identify
 module Record_plan = Herbier_ui_model.Record_plan
 module Identify = Herbier_ui_model.Identify
 module Choice = Identify.Choice
 module Caller = Identify.Caller
-module Layer = Identify.Layer
 module Failure = Identify.Failure
 module Text = Identify.Text
 module Is = Herbier_ui_model.Identify_settings
@@ -47,13 +46,6 @@ let pp_target fmt = function
   | Record_plan.To_identify -> Format.pp_print_string fmt "To_identify"
 
 let target_t = Alcotest.testable pp_target ( = )
-
-let pp_after fmt = function
-  | To_identify.Stay -> Format.pp_print_string fmt "Stay"
-  | To_identify.Resolve (p : Plantnet.proposal) ->
-      Format.fprintf fmt "Resolve %s" p.name
-
-let after_t = Alcotest.testable pp_after To_identify.equal_after
 
 (* ---------- helpers ---------- *)
 
@@ -279,28 +271,6 @@ let caller_tests () =
     (Caller.action queue ~owned:false)
 
 (* ============================================================ *)
-(* 7. after_layer *)
-(* ============================================================ *)
-
-let after_layer_tests () =
-  let p = Lazy.force p1 in
-  Alcotest.(check after_t)
-    "Chosen p -> Resolve p" (To_identify.Resolve p)
-    (To_identify.after_layer (Layer.Chosen p));
-  List.iter
-    (fun (name, outcome) ->
-      Alcotest.(check after_t)
-        (Printf.sprintf "%s -> Stay" name)
-        To_identify.Stay
-        (To_identify.after_layer outcome))
-    [
-      ("Left", Layer.Left);
-      ("None_matches", Layer.None_matches);
-      ("Retake", Layer.Retake);
-      ("Keep_unnamed", Layer.Keep_unnamed);
-    ]
-
-(* ============================================================ *)
 (* 8. Record_plan.of_choice: what a chosen proposal saves *)
 (* ============================================================ *)
 
@@ -448,8 +418,6 @@ let identify_queue =
     Alcotest.test_case
       "caller: Some -> Queue of it, None -> Queue None, action owned/not" `Quick
       caller_tests;
-    Alcotest.test_case "after_layer: Chosen -> Resolve, the rest -> Stay" `Quick
-      after_layer_tests;
     Alcotest.test_case "save a: a live owner, pending resolution -> Existing"
       `Quick save_a_live_owner_pending;
     Alcotest.test_case "save b: the owner deleted -> Linked" `Quick

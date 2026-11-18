@@ -162,7 +162,10 @@ let open_ ~host ~caller ~owned ~choose ~on_close ~photos c =
     El.set_children owned_el
       (match owns with
       | Some o ->
-          [W.Icon.el ~size:16 W.Icon.Check; El.txt' (Text.compare_owned o)]
+          [
+            W.Icon.el ~size:16 W.Icon.Check;
+            El.txt' (Text.compare_owned caller o);
+          ]
       | None -> []);
     El.set_class (Jstr.v "is-hidden") (Option.is_none owns) owned_el;
     El.set_children action

@@ -1,7 +1,7 @@
 (** 4k « À identifier »: the queue position (« À IDENTIFIER · i / n », «
     Suivante › »), 6i's « Identifier avec Pl@ntNet » under the observation card
-    and its line, and what a proposal chosen in 6j leads to. Pure; nothing here
-    raises or logs. *)
+    and its line (what a proposal chosen in 6j leads to is
+    {!Identify.Layer.after_close}). Pure; nothing here raises or logs. *)
 
 module Photo := Herbier_domain.Photo
 
@@ -56,16 +56,3 @@ val caller : position option -> Identify.Caller.t
 (** [Some {index; total; _}] → [Queue (Some {index; total})]; [None] (the
     observation is no longer in the queue, e.g. linked by a pull since) →
     [Queue None]. *)
-
-(** {1 6j: what a chosen proposal leads to} *)
-
-type after =
-  | Stay  (** back to 6i, focus on the Identifier button *)
-  | Resolve of Herbier_identify.Plantnet.proposal
-      (** resolve the proposal through GBIF, then {!Record_plan.of_choice} *)
-
-val equal_after : after -> after -> bool
-
-val after_layer : Identify.Layer.outcome -> after
-(** [Chosen p] → [Resolve p]; [Left], [None_matches] (back to 6i) and [Retake],
-    [Keep_unnamed] (not offered to [Queue]) → [Stay]. *)

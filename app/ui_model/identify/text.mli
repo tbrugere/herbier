@@ -59,8 +59,9 @@ val add_hint : Herbier_identify.Organ.suggestion -> string
     ["Le port en plus …"]; [Add_photo] →
     ["Une photo en plus départage les espèces proches."]. *)
 
-val owned : Owned.t -> string
-(** ["Dans ma collection · <display_name> · <n> obs."] *)
+val owned : Caller.t -> Owned.t -> string
+(** [Noter], [Queue _] → ["Dans ma collection · <display_name> · <n> obs."];
+    [Free_name _] → {!Ref_pick.also_owned} (4i's Relink wording). *)
 
 val action : Caller.action -> string
 (** [Choose] → ["Choisir"]; [Link] → ["Lier"]; [Create] → ["+ Créer"]. *)
@@ -132,8 +133,10 @@ val compare_names : Herbier_identify.Plantnet.proposal -> string option
     (["Rose de Chine · Malvaceae"]); either alone when the other is absent;
     [None] when both are. *)
 
-val compare_owned : Owned.t -> string
-(** ["Dans ma collection · <display_name>"] (no observation count in 6d). *)
+val compare_owned : Caller.t -> Owned.t -> string
+(** [Noter], [Queue _] → ["Dans ma collection · <display_name>"] (no observation
+    count in 6d); [Free_name _] → ["Aussi dans ma collection : <display_name>"].
+*)
 
 val compare_action : Caller.action -> string
 (** [Choose] → ["Choisir cette espèce"]; [Link] → ["Lier"]; [Create] →

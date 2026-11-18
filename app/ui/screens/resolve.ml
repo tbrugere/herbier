@@ -24,7 +24,6 @@ module Candidate = Herbier_refs.Resolve.Candidate
 module Photo = Herbier_domain.Photo
 module Photos = Herbier_store.Photos
 module Choice = Herbier_ui_model.Identify.Choice
-module Capture = Herbier_photos_io.Capture
 module RList = ReactiveData.RList
 module W = Widgets
 
@@ -356,13 +355,9 @@ let render app mode (d : data) =
       ]
   in
   let resolving, set_resolving = React.S.create ~eq:Bool.equal false in
-  (* style: refs for the open layer, the photo being added for it and whether
-     the screen is released, read and written from DOM and future callbacks
-     only, never shown. *)
-  let layer = ref None and adding = ref false and released = ref false in
+  let launcher = Identify.launcher ~button:identify.el ~problem in
   (* style: the layer's photos as it last closed with them (added ones, organs
-     as last sent), and a problem met while it covered the screen, shown once
-     it closes. *)
+     as last sent), read and written from DOM and future callbacks only. *)
   let layer_photos =
     ref
       (List.map
@@ -372,39 +367,8 @@ let render app mode (d : data) =
              organ = Herbier_identify.Organ.Auto;
            })
          (To_identify.sent d.photos))
-  and pending_problem = ref None in
-  let channel = App.channel () in
-  let add_photo organ =
-    match !adding with
-    | true -> Fut.return None
-    | false -> (
-        adding := true;
-        let ended ?problem photo =
-          adding := false;
-          Option.iter (fun m -> pending_problem := Some m) problem;
-          photo
-        in
-        let open Fut.Syntax in
-        let* picked = Capture.pick ~limit:1 in
-        match picked with
-        | Ok [] -> Fut.return (ended None)
-        | Error (Capture.Pick c) ->
-            Log.cap ~scope:"identifier" "gallery" c;
-            Fut.return (ended None)
-        | Error e ->
-            Log.error ~scope:"identifier" "gallery" (Capture.error_to_string e);
-            Fut.return (ended ~problem:"La photo n'a pas pu être lue." None)
-        | Ok (shot :: (_ : Capture.shot list)) -> (
-            let+ unsaved = App.save_photos app ~observation:o [shot] in
-            match unsaved with
-            | [] ->
-                ended
-                  (Some {Identify.image = App.Preview shot.preview.jpeg; organ})
-            | (_ : Capture.shot) :: _ ->
-                Log.error ~scope:"identifier" "photo not saved"
-                  "for the identification";
-                ended ~problem:"La photo n'a pas pu être enregistrée." None))
   in
+  let channel = App.channel () in
   (* GBIF's answer decides again between « Lier » and « + Créer »: a synonym
      id becomes the accepted taxon, which a plant of mine may have. *)
   let save_choice p =
@@ -424,36 +388,28 @@ let render app mode (d : data) =
                     release ();
                     problem "Cette proposition n'a pas de nom.")))
   in
-  let on_close outcome photos =
-    layer := None;
-    layer_photos := photos;
-    let met = !pending_problem in
-    pending_problem := None;
-    match (!released, To_identify.after_layer outcome) with
-    | true, (Stay | Resolve _) -> ()
-    | false, Stay ->
-        Option.iter problem met;
-        El.set_has_focus true identify.el
-    | false, Resolve p ->
-        Option.iter problem met;
-        save_choice p
-  in
   (* [guarded] only checks that no save runs: one would leave the screen and
      take the layer with it, after a credit was spent. *)
   let open_layer host =
     match
-      (!layer, To_identify.identify_enabled (React.S.value gate) ~photos:n_sent)
+      ( Identify.is_open launcher,
+        To_identify.identify_enabled (React.S.value gate) ~photos:n_sent )
     with
-    | None, true ->
+    | false, true ->
         guarded (fun () ->
             release ();
-            layer :=
-              Some
-                (Identify.open_ ~host
-                   (Identify.services app channel)
-                   ~caller:(To_identify.caller position)
-                   ?note:o.note ~add_photo ~on_close !layer_photos))
-    | Some (_ : Identify.t), (true | false) | None, false -> ()
+            Identify.launch launcher ~on_resolve:save_choice
+              (fun ~problem:deferred ~on_close ->
+                Identify.open_ ~host
+                  (Identify.services app channel)
+                  ~caller:(To_identify.caller position)
+                  ?note:o.note
+                  ~add_photo:(Identify.gallery_adder app o ~problem:deferred)
+                  ~on_close:(fun outcome photos ->
+                    layer_photos := photos;
+                    on_close outcome photos)
+                  !layer_photos))
+    | true, (true | false) | false, false -> ()
   in
   (* The signals on [gate] live as long as these bindings. *)
   let identify_bindings host =
@@ -470,9 +426,7 @@ let render app mode (d : data) =
     in
     [
       Rb.act identify.click (fun () -> open_layer host);
-      Rb.on_release (fun () ->
-          released := true;
-          Option.iter Identify.close !layer);
+      Identify.release launcher;
       Rb.disabled identify.el (React.S.map not identify_enabled);
       Rb.attr identify.el "aria-label"
         (React.S.map

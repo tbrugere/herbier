@@ -42,10 +42,3 @@ let identify_aria gate ~photos =
 let caller : position option -> Identify.Caller.t = function
   | Some {index; total; _} -> Queue (Some {index; total})
   | None -> Queue None
-
-type after = Stay | Resolve of Herbier_identify.Plantnet.proposal
-[@@deriving eq]
-
-let after_layer : Identify.Layer.outcome -> after = function
-  | Chosen p -> Resolve p
-  | Left | None_matches | Retake | Keep_unnamed -> Stay
