@@ -387,8 +387,9 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
-    plant_form.ml, local_time.ml, to_identify.ml, record_plan.ml (4d: the save's target, the choice
-    included; 6a's button, line and first-photo opening; the kept answer; 6e's texts), cover.ml,
+    plant_form.ml, local_time.ml, to_identify.ml (4k: the queue position; 6i's button and
+    line; 6j's outcome), record_plan.ml (4d: the save's target, the choice
+    included, and 6j's; 6a's button, line and first-photo opening; the kept answer; 6e's texts), cover.ml,
     zoom.ml, map_filter.ml,
     map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
     ref_search.ml (4i's debounce / stale answer / offline state machine), ref_pick.ml (what a

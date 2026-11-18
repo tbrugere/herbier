@@ -291,7 +291,7 @@ let card ~caller ~owned ~choose ~open_compare k (p : Plantnet.proposal) =
    change. *)
 type view = {layer : Layer.t; photos : shown list; menu : menu; gate : I.gate}
 
-let open_ ~host services ~caller ~add_photo ~on_close photos =
+let open_ ~host services ~caller ?note ~add_photo ~on_close photos =
   let shown_of (p : photo) =
     let url =
       match p.image with
@@ -511,6 +511,11 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
       | Proposals {uncertain; _} -> uncertain
       | Sending _ | Failed _ | Closed _ -> false
     in
+    let note =
+      match Option.bind note Herbier_domain.Text.non_blank with
+      | None -> []
+      | Some n -> [(txt_el "p" ["identify__queue-note"] ("« " ^ n ^ " »"), [])]
+    in
     let add =
       match Layer.add_tile v.layer with
       | None -> []
@@ -525,15 +530,17 @@ let open_ ~host services ~caller ~add_photo ~on_close photos =
               [W.Icon.el ~size:18 W.Icon.Add; El.txt' (Text.add_word s)]
               (fun () -> dispatch Add)
           in
+          (* 6j: the observation's note takes the hint's place, as in the
+             artboard. *)
           let hint =
-            match v.layer.phase with
-            | Proposals _ ->
+            match (v.layer.phase, note) with
+            | Proposals _, [] ->
                 [txt_el "span" ["identify__add-hint"] (Text.add_hint s)]
-            | Sending _ | Failed _ | Closed _ -> []
+            | Proposals _, _ :: _ | (Sending _ | Failed _ | Closed _), _ -> []
           in
           [(tile, tile_b)] @ List.map (fun h -> (h, [])) hint
     in
-    let row = photo_els @ add in
+    let row = photo_els @ add @ note in
     ( El.div
         ~at:
           (cls "identify__photos"

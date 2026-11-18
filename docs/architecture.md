@@ -1322,7 +1322,15 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
     asked again at the next tap, since it may pass by then.
   - 4k (6j): « Lier » attaches the observation to the plant of mine;
     « + Créer » creates the linked plant with the observation's upsert, as
-    4k's « + »; then the next observation of the queue.
+    4k's « + »; then the next observation of the queue. The choice is
+    resolved through GBIF first, so « Lier » / « + Créer » is decided again on
+    GBIF's key and accepted key. GBIF unavailable: linked with Pl@ntNet's own
+    taxon (R12); GBIF knows no species: a free-name plant of Pl@ntNet's name,
+    or my plant of that name or alias, as in 4d. « + <organe> » saves the
+    picked photo on the observation (4h's « + », gallery) and re-asks;
+    « Aucune ne correspond » and ← return to 6i, no answer kept. A key not
+    exposed is 6g's generic « Pl@ntNet n'a pas répondu »: 6i and 6j add no
+    text about it.
   - 4g (6k): `App.link ~name` (`Ref_pick`'s `Relink`): Pl@ntNet's French name
     becomes the display name and the free name an alias, as 4g's « Lier »; two
     plants may share a taxon.

@@ -3,8 +3,9 @@
     parameter: the console line of a request names its error class. *)
 
 val kicker : Caller.t -> string
-(** [Noter], [Free_name _] → ["Pl@ntNet"]; [Queue {index; total}] →
-    ["À identifier · <index> / <total>"] (the CSS upper-cases it). *)
+(** [Noter], [Free_name _] → ["Pl@ntNet"]; [Queue (Some {index; total})] →
+    ["À identifier · <index> / <total>"]; [Queue None] → ["À identifier"] (the
+    CSS upper-cases it). *)
 
 val title : string
 

@@ -2,11 +2,22 @@
     reference search (4i, 4k, 5c).
 
     [Identify] is 4k: « À IDENTIFIER · i / n » with « Suivante › », the
-    observation's card, a search over my collection whose rows link the
-    observation when tapped, « Coller un lien » (shown, inert), and « Nom libre
-    », which creates a 4g plant named by the search text and links to it. After
-    a link the next unidentified observation replaces this one; after the last,
-    the modal closes.
+    observation's card, « Identifier avec Pl@ntNet » (6i, disabled with its line
+    when there is no photo, no key or no network), then « ou par le nom » over a
+    search of my collection whose rows link the observation when tapped, «
+    Coller un lien » (shown, inert), and « Nom libre », which creates a 4g plant
+    named by the search text and links to it. The Pl@ntNet button opens the
+    identification layer (6j, {!Identify}) on the observation's first five
+    photos with its note; « + <organe> » there picks one photo from the gallery,
+    saves it on the observation and sends it. A chosen proposal is resolved
+    through GBIF, then « Lier » moves the observation to my plant of that
+    species, « + Créer » creates the plant linked to it (Pl@ntNet's own taxon
+    when GBIF is unavailable) with the observation, in one save. When GBIF knows
+    no such species, it moves the observation to my plant of Pl@ntNet's name or
+    alias, else creates a free-name plant of that name
+    ({!Herbier_ui_model.Record_plan.of_choice}). After a link the next
+    unidentified observation replaces this one; after the last, the modal
+    closes.
 
     [Change] is 5c: « Actuellement X », the same search (the current plant
     greyed and inert), « Nom libre », and « Remettre “À identifier” ». When the

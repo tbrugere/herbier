@@ -414,6 +414,19 @@ let owner_tests () =
     (Some synonym_plant)
     (Choice.owner ~plants:[synonym_plant]
        (Choice.resolved (Choice.v synonym) (Choice.Resolved accepted)));
+  let on_synonym = Fixtures.plant_with ~gbif_key:(Some 5334357) () in
+  let resolved =
+    Choice.resolved (Choice.v synonym) (Choice.Resolved accepted)
+  in
+  Alcotest.(check plant_opt_t)
+    "one plant on the proposal's id, another on the accepted key: the first in \
+     list order"
+    (Some synonym_plant)
+    (Choice.owner ~plants:[synonym_plant; on_synonym] resolved);
+  Alcotest.(check plant_opt_t)
+    "the same two plants the other way round: the first in list order"
+    (Some on_synonym)
+    (Choice.owner ~plants:[on_synonym; synonym_plant] resolved);
   let unlinked = Fixtures.plant_with ~gbif_key:None () in
   Alcotest.(check plant_opt_t)
     "P4 (gbif = None) -> None even with an unlinked plant" None

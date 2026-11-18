@@ -35,4 +35,5 @@ let () =
       ("identify", Identify_tests.identify);
       ("identify_compare", Identify_compare_tests.identify_compare);
       ("identify_choice", Identify_choice_tests.identify_choice);
+      ("identify_queue", To_identify_tests.identify_queue);
     ]

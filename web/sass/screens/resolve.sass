@@ -28,6 +28,33 @@
   +base.sci(16px)
   margin-top: 4px
 
+// 6i
+.resolve__identify
+  gap: 10px
+
+  &[aria-busy]
+    opacity: .6
+
+.resolve__identify-line
+  +base.ui(12px, 400)
+  line-height: 1.4
+  color: var(--muted)
+  margin-top: -6px
+
+.resolve__or
+  display: flex
+  align-items: center
+  gap: 10px
+  margin-top: 12px
+
+.resolve__or-rule
+  flex: 1
+  height: 1px
+  background: var(--line)
+
+.resolve__or-label
+  color: var(--muted)
+
 .resolve__rows
   display: flex
   flex-direction: column

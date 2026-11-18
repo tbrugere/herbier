@@ -30,8 +30,9 @@ let plant_id_t =
 
 let pp_caller fmt = function
   | Caller.Noter -> Format.pp_print_string fmt "Noter"
-  | Caller.Queue {index; total} ->
-      Format.fprintf fmt "Queue {index = %d; total = %d}" index total
+  | Caller.Queue (Some {index; total}) ->
+      Format.fprintf fmt "Queue (Some {index = %d; total = %d})" index total
+  | Caller.Queue None -> Format.pp_print_string fmt "Queue None"
   | Caller.Free_name id ->
       Format.fprintf fmt "Free_name %s" (Plant_id.to_string id)
 
@@ -183,7 +184,7 @@ let caller_action () =
   Alcotest.(check action_t)
     "Noter, not owned" Caller.Choose
     (Caller.action Caller.Noter ~owned:false);
-  let queue = Caller.Queue {index = 1; total = 3} in
+  let queue = Caller.Queue (Some {index = 1; total = 3}) in
   Alcotest.(check action_t)
     "Queue, owned" Caller.Link
     (Caller.action queue ~owned:true);
@@ -208,11 +209,11 @@ let caller_current_and_retake () =
     (Caller.current Caller.Noter);
   Alcotest.(check (option plant_id_t))
     "Queue" None
-    (Caller.current (Caller.Queue {index = 1; total = 1}));
+    (Caller.current (Caller.Queue (Some {index = 1; total = 1})));
   Alcotest.(check bool) "retake Noter" true (Caller.retake Caller.Noter);
   Alcotest.(check bool)
     "retake Queue" false
-    (Caller.retake (Caller.Queue {index = 1; total = 1}));
+    (Caller.retake (Caller.Queue (Some {index = 1; total = 1})));
   Alcotest.(check bool)
     "retake Free_name" false
     (Caller.retake (Caller.Free_name id))
@@ -1072,7 +1073,7 @@ let retake_and_keep_unnamed_tests () =
   Alcotest.(check state_t) "Noter: Retake while Proposals unchanged" tp tpr;
   Alcotest.(check commands_t) "no command" [] cmds_p;
   let tq, _ =
-    opened ~caller:(Caller.Queue {index = 1; total = 1}) [Organ.Auto]
+    opened ~caller:(Caller.Queue (Some {index = 1; total = 1})) [Organ.Auto]
   in
   let tqf, _ = answered tq (Error (Failure.Plantnet Plantnet.Quota_used_up)) in
   let tqr, cmds3 = Layer.step tqf Layer.Retake in
@@ -1350,7 +1351,10 @@ let kicker_tests () =
     (Text.kicker (Caller.Free_name (Plant_id.fresh ())));
   Alcotest.(check string)
     "Queue" "À identifier · 1 / 3"
-    (Text.kicker (Caller.Queue {index = 1; total = 3}))
+    (Text.kicker (Caller.Queue (Some {index = 1; total = 3})));
+  Alcotest.(check string)
+    "Queue None (no longer in the queue)" "À identifier"
+    (Text.kicker (Caller.Queue None))
 
 let proposals_label_tests () =
   Alcotest.(check string)
@@ -1359,7 +1363,7 @@ let proposals_label_tests () =
   Alcotest.(check string)
     "Noter, Some 5" "Propositions · 5"
     (Text.proposals_label Caller.Noter ~count:(Some 5));
-  let queue = Caller.Queue {index = 1; total = 3} in
+  let queue = Caller.Queue (Some {index = 1; total = 3}) in
   Alcotest.(check string)
     "Queue, None" "Propositions Pl@ntNet"
     (Text.proposals_label queue ~count:None);
@@ -1562,7 +1566,7 @@ let no_forbidden_wording_tests () =
   let callers =
     [
       Caller.Noter;
-      Caller.Queue {index = 1; total = 3};
+      Caller.Queue (Some {index = 1; total = 3});
       Caller.Free_name (Plant_id.fresh ());
     ]
   in

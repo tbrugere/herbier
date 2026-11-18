@@ -23,18 +23,21 @@ val target :
   ?choice:Identify.Choice.t ->
   string ->
   target
-(** With [choice = Some c] (6e), the text and [chosen] are ignored:
-    {!Identify.Choice.owner} [~plants c] = [Some p] → [Existing p]; else
-    {!Identify.Choice.taxon} [c] = [Some t] →
-    [Linked {name = Choice.new_name c.proposal; taxon = t}]; else
-    {!Identify.Choice.new_name} [c.proposal] as if typed (a plant of [plants]
-    with that name or alias, else [Free]).
+(** With [choice = Some c] (6e), the text and [chosen] are ignored: {!of_choice}
+    [~plants c].
 
     Without [choice]: [chosen] (a tapped suggestion whose name is still the
     field's text) wins; else a plant of [plants] (the caller passes the live
     ones) whose display name or an alias equals the trimmed text, folding ASCII
     case only (« érable » is not « Érable »); else [Free], or [To_identify] when
     blank. *)
+
+val of_choice : plants:Plant.t list -> Identify.Choice.t -> target
+(** What a save with this choice means (6e, 6j): {!Identify.Choice.owner}
+    [~plants c] = [Some p] → [Existing p]; else {!Identify.Choice.taxon} [c] =
+    [Some t] → [Linked {name = Choice.new_name c.proposal; taxon = t}]; else
+    {!Identify.Choice.new_name} [c.proposal] as if typed (a plant of [plants]
+    with that name or alias, else [Free], or [To_identify] when blank). *)
 
 val choice_owner : plants:Plant.t list -> Identify.Choice.t -> Plant.t option
 (** The plant of mine a save with this choice goes to: [Some p] when {!target}

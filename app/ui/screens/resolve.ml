@@ -6,6 +6,7 @@ module List_patch = Herbier_ui_model.List_patch
 module Plant_link = Herbier_ui_model.Plant_link
 module Plant_version = Herbier_ui_model.Plant_version
 module Ref_pick = Herbier_ui_model.Ref_pick
+module Record_plan = Herbier_ui_model.Record_plan
 module Ref_search = Herbier_ui_model.Ref_search
 module To_identify = Herbier_ui_model.To_identify
 open Brr
@@ -20,6 +21,10 @@ module Plant_id = Herbier_domain.Ids.Plant_id
 module Tag_id = Herbier_domain.Ids.Tag_id
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Candidate = Herbier_refs.Resolve.Candidate
+module Photo = Herbier_domain.Photo
+module Photos = Herbier_store.Photos
+module Choice = Herbier_ui_model.Identify.Choice
+module Capture = Herbier_photos_io.Capture
 module RList = ReactiveData.RList
 module W = Widgets
 
@@ -41,9 +46,11 @@ type data = {
   current : Plant.t option;  (** [None]: « À identifier », or a deleted plant *)
   unidentified : Observation.t list;  (** newest first *)
   plants : Plant.t list;  (** live, for the reference rows' actions *)
+  photos : Photo.t list;
+      (** the observation's, for 6i's « Identifier »; [[]] in 5c *)
 }
 
-let load db id =
+let load db mode id =
   let open Fut.Result_syntax in
   let* o = Db.find db (Observations.get id) in
   match o with
@@ -55,8 +62,13 @@ let load db id =
         | Some p -> Db.find db (Plants.get p)
       in
       let* unidentified = Db.all db Observations.unidentified in
-      let+ plants = Db.all db Plants.list in
-      Some {observation = o; current; unidentified; plants}
+      let* plants = Db.all db Plants.list in
+      let+ photos =
+        match mode with
+        | Identify_obs -> Db.all db (Photos.of_observation id)
+        | Change_obs -> Fut.ok []
+      in
+      Some {observation = o; current; unidentified; plants; photos}
 
 let observation_card (o : Observation.t) =
   W.Card.panel
@@ -287,14 +299,11 @@ let render app mode (d : data) =
       moved
   in
   let move ?extra target = guarded (fun () -> move_now ?extra target) in
-  (* 4k / 5c « + »: the plant, its GBIF link and the move in one save. *)
-  let create_with (c : Candidate.t) taxon =
+  (* 4k / 5c « + » and 6j « + Créer »: the plant, its GBIF link and the move
+     in one save. *)
+  let create_with ~name taxon =
     let at = Ptime_clock.now () in
-    let plant =
-      Plant_link.create ~id:(Plant_id.fresh ()) ~at
-        ~name:(Plant_link.display_name c)
-        taxon
-    in
+    let plant = Plant_link.create ~id:(Plant_id.fresh ()) ~at ~name taxon in
     Fut.await
       (App.create_linked app
          ~extra:
@@ -304,6 +313,10 @@ let render app mode (d : data) =
            ]
          plant taxon)
       moved
+  in
+  let create_free_now name =
+    let plant = Plant.v ~id:(Plant_id.fresh ()) ~at:(Ptime_clock.now ()) name in
+    move_now ~extra:[Plants.upsert plant] (Some plant.id)
   in
   let current = Option.map (fun (p : Plant.t) -> p.id) d.current in
   let pick action (c : Candidate.t) =
@@ -315,12 +328,164 @@ let render app mode (d : data) =
               ~problem ~release c (fun action taxon ->
                 match action with
                 | Ref_pick.Attach_to p -> move_now (Some p.id)
-                | Ref_pick.Create -> create_with c taxon
+                | Ref_pick.Create ->
+                    create_with ~name:(Plant_link.display_name c) taxon
                 | Ref_pick.Inert ->
                     release ();
                     problem "L'observation est déjà sur cette plante."
                 | Ref_pick.(Open _ | Link_this) -> release ()))
     | Ref_pick.(Inert | Open _ | Link_this) -> ()
+  in
+  (* 6i: « Identifier avec Pl@ntNet » under the card, the layer (6j) it opens
+     over the screen, and what a chosen proposal saves. *)
+  let gate = App.identify_gate app in
+  let n_sent = List.length (To_identify.sent d.photos) in
+  let identify = W.Button.v ~kind:W.Button.Primary To_identify.identify_label in
+  El.prepend_children identify.el [W.Identify_glyph.el ~size:22 ()];
+  El.set_class (Jstr.v "resolve__identify") true identify.el;
+  let identify_line = El.p ~at:[cls "resolve__identify-line"] [] in
+  let or_by_name =
+    El.div
+      ~at:[cls "resolve__or"]
+      [
+        El.span ~at:[cls "resolve__or-rule"] [];
+        El.span
+          ~at:[cls "t-section-label"; cls "resolve__or-label"]
+          [El.txt' To_identify.or_by_name];
+        El.span ~at:[cls "resolve__or-rule"] [];
+      ]
+  in
+  let resolving, set_resolving = React.S.create ~eq:Bool.equal false in
+  (* style: refs for the open layer, the photo being added for it and whether
+     the screen is released, read and written from DOM and future callbacks
+     only, never shown. *)
+  let layer = ref None and adding = ref false and released = ref false in
+  (* style: the layer's photos as it last closed with them (added ones, organs
+     as last sent), and a problem met while it covered the screen, shown once
+     it closes. *)
+  let layer_photos =
+    ref
+      (List.map
+         (fun (p : Photo.t) ->
+           {
+             Identify.image = App.Stored p.id;
+             organ = Herbier_identify.Organ.Auto;
+           })
+         (To_identify.sent d.photos))
+  and pending_problem = ref None in
+  let channel = App.channel () in
+  let add_photo organ =
+    match !adding with
+    | true -> Fut.return None
+    | false -> (
+        adding := true;
+        let ended ?problem photo =
+          adding := false;
+          Option.iter (fun m -> pending_problem := Some m) problem;
+          photo
+        in
+        let open Fut.Syntax in
+        let* picked = Capture.pick ~limit:1 in
+        match picked with
+        | Ok [] -> Fut.return (ended None)
+        | Error (Capture.Pick c) ->
+            Log.cap ~scope:"identifier" "gallery" c;
+            Fut.return (ended None)
+        | Error e ->
+            Log.error ~scope:"identifier" "gallery" (Capture.error_to_string e);
+            Fut.return (ended ~problem:"La photo n'a pas pu être lue." None)
+        | Ok (shot :: (_ : Capture.shot list)) -> (
+            let+ unsaved = App.save_photos app ~observation:o [shot] in
+            match unsaved with
+            | [] ->
+                ended
+                  (Some {Identify.image = App.Preview shot.preview.jpeg; organ})
+            | (_ : Capture.shot) :: _ ->
+                Log.error ~scope:"identifier" "photo not saved"
+                  "for the identification";
+                ended ~problem:"La photo n'a pas pu être enregistrée." None))
+  in
+  (* GBIF's answer decides again between « Lier » and « + Créer »: a synonym
+     id becomes the accepted taxon, which a plant of mine may have. *)
+  let save_choice p =
+    guarded (fun () ->
+        set_resolving true;
+        Fut.await (App.resolve_choice p) (fun r ->
+            set_resolving false;
+            while_here (fun () ->
+                match
+                  Record_plan.of_choice ~plants:d.plants
+                    (Choice.resolved (Choice.v p) r)
+                with
+                | Existing pl -> move_now (Some pl.id)
+                | Linked {name; taxon} -> create_with ~name taxon
+                | Free name -> create_free_now name
+                | To_identify ->
+                    release ();
+                    problem "Cette proposition n'a pas de nom.")))
+  in
+  let on_close outcome photos =
+    layer := None;
+    layer_photos := photos;
+    let met = !pending_problem in
+    pending_problem := None;
+    match (!released, To_identify.after_layer outcome) with
+    | true, (Stay | Resolve _) -> ()
+    | false, Stay ->
+        Option.iter problem met;
+        El.set_has_focus true identify.el
+    | false, Resolve p ->
+        Option.iter problem met;
+        save_choice p
+  in
+  (* [guarded] only checks that no save runs: one would leave the screen and
+     take the layer with it, after a credit was spent. *)
+  let open_layer host =
+    match
+      (!layer, To_identify.identify_enabled (React.S.value gate) ~photos:n_sent)
+    with
+    | None, true ->
+        guarded (fun () ->
+            release ();
+            layer :=
+              Some
+                (Identify.open_ ~host
+                   (Identify.services app channel)
+                   ~caller:(To_identify.caller position)
+                   ?note:o.note ~add_photo ~on_close !layer_photos))
+    | Some (_ : Identify.t), (true | false) | None, false -> ()
+  in
+  (* The signals on [gate] live as long as these bindings. *)
+  let identify_bindings host =
+    let identify_enabled =
+      React.S.map ~eq:Bool.equal
+        (fun g -> To_identify.identify_enabled g ~photos:n_sent)
+        gate
+    in
+    let identify_text =
+      React.S.map
+        ~eq:(Option.equal String.equal)
+        (fun g -> To_identify.identify_line g ~photos:n_sent)
+        gate
+    in
+    [
+      Rb.act identify.click (fun () -> open_layer host);
+      Rb.on_release (fun () ->
+          released := true;
+          Option.iter Identify.close !layer);
+      Rb.disabled identify.el (React.S.map not identify_enabled);
+      Rb.attr identify.el "aria-label"
+        (React.S.map
+           (fun g -> Some (To_identify.identify_aria g ~photos:n_sent))
+           gate);
+      Rb.attr identify.el "aria-busy"
+        (React.S.map (function true -> Some "true" | false -> None) resolving);
+      Rb.text identify_line
+        (React.S.map (Option.value ~default:"") identify_text);
+      Rb.class_ identify_line "is-hidden"
+        (React.S.map Option.is_none identify_text);
+    ]
+    @ identify.bindings
   in
   let next = W.Button.text "Suivante ›" in
   let title, right =
@@ -407,11 +572,7 @@ let render app mode (d : data) =
   let free_name () =
     match String.trim (React.S.value search.value) with
     | "" -> El.set_has_focus true search.input
-    | name ->
-        let plant =
-          Plant.v ~id:(Plant_id.fresh ()) ~at:(Ptime_clock.now ()) name
-        in
-        move ~extra:[Plants.upsert plant] (Some plant.id)
+    | name -> guarded (fun () -> create_free_now name)
   in
   let free_hint = El.p ~at:[cls "t-meta"] [] in
   let paste = W.Button.v ~kind:W.Button.Secondary "Coller un lien" in
@@ -429,12 +590,19 @@ let render app mode (d : data) =
           (match o.plant_id with Some _ -> unlink.el | None -> El.span []);
         ]
   in
+  let identify_els =
+    match mode with
+    | Identify_obs -> [identify.el; identify_line; or_by_name]
+    | Change_obs -> []
+  in
   let el =
     El.div
       ~at:[cls "resolve__content"]
       (List.concat
          [
-           [header; problem_el; top; search.el];
+           [header; problem_el; top];
+           identify_els;
+           [search.el];
            collection_els;
            [reference.el];
            footer;
@@ -468,6 +636,9 @@ let render app mode (d : data) =
               | Keep_plant -> finish ())
             :: dialog.bindings);
         [left_binding];
+        (match mode with
+        | Identify_obs -> identify_bindings el
+        | Change_obs -> []);
         header_bindings;
         problem_bindings;
         collection_bindings;
@@ -1077,7 +1248,7 @@ let screen ~what ~failed load item =
 
 let observation app mode id =
   screen ~what:"identifier" ~failed:"L'observation n'a pas pu être lue."
-    (fun () -> load (App.db app) id)
+    (fun () -> load (App.db app) mode id)
     (function
       | None -> Loaded.notice "Cette observation n'est plus dans l'herbier."
       | Some d -> render app mode d)

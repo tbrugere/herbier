@@ -1,6 +1,8 @@
 module Plant_id = Herbier_domain.Ids.Plant_id
 
-type t = Noter | Queue of {index : int; total : int} | Free_name of Plant_id.t
+type place = {index : int; total : int} [@@deriving eq]
+
+type t = Noter | Queue of place option | Free_name of Plant_id.t
 [@@deriving eq]
 
 type action = Choose | Link | Create [@@deriving eq, show]

@@ -54,6 +54,7 @@ val open_ :
   host:Brr.El.t ->
   services ->
   caller:Herbier_ui_model.Identify.Caller.t ->
+  ?note:string ->
   add_photo:(Herbier_identify.Organ.sent -> photo option Fut.t) ->
   on_close:(Herbier_ui_model.Identify.Layer.outcome -> photo list -> unit) ->
   photo list ->
@@ -62,7 +63,10 @@ val open_ :
     {!Overlay}, reads [services.collection] once, and runs
     [Layer.open_ ~caller ~flora:(S.value services.flora)] on the photos' organs
     (the photos past {!Herbier_identify.Organ.max_photos} are not shown nor
-    sent, and go back unchanged at the end of [on_close]'s list). Commands:
+    sent, and go back unchanged at the end of [on_close]'s list). [note]: the
+    observation's note (4k), shown as « « <note> » » at the end of the layer's
+    photo row ([identify__queue-note]); absent or blank → nothing (4d, the dev
+    page). Commands:
     - [Send {seq; request}]: with [Failure.of_gate (S.value services.gate)] =
       [Ok k] →
       [services.identify ~key:(Key.to_string k) ~flora:request.flora

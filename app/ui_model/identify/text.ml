@@ -3,7 +3,9 @@ module Plantnet = Herbier_identify.Plantnet
 
 let kicker : Caller.t -> string = function
   | Noter | Free_name _ -> "Pl@ntNet"
-  | Queue {index; total} -> Printf.sprintf "À identifier · %d / %d" index total
+  | Queue (Some {index; total}) ->
+      Printf.sprintf "À identifier · %d / %d" index total
+  | Queue None -> "À identifier"
 
 let title = "Identification"
 let back_label = "Retour"

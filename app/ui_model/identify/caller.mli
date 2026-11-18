@@ -1,10 +1,16 @@
 (** Who opened the identification layer, and what a proposal's button does there
     (architecture §12). Pure. *)
 
+type place = {index : int; total : int}
+(** A 1-based [index] of [total] in 4k's « À identifier » queue. *)
+
+val equal_place : place -> place -> bool
+
 type t =
   | Noter  (** 4d: « Choisir » fills the name (6e) *)
-  | Queue of {index : int; total : int}
-      (** 4k's « À identifier » queue, 1-based [index] of [total] (6j) *)
+  | Queue of place option
+      (** 4k's « À identifier » queue (6j); [None]: the observation is no longer
+          in it *)
   | Free_name of Herbier_domain.Ids.Plant_id.t
       (** 4g: the free-name plant (6k) *)
 
