@@ -4,7 +4,7 @@
 (generate_opam_files true)
 (formatting (enabled_for ocaml))
 
-(license MIT)
+(license CECILL-B)
 (authors "Tristan Brugère")
 (maintainers "Tristan Brugère")
 (source (github tbrugere/herbier))
