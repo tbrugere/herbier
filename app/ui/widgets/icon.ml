@@ -3,6 +3,7 @@ open Brr
 type t =
   | Add
   | Arrow_back
+  | Cameraswitch
   | Check
   | Chevron_left
   | Chevron_right
@@ -22,6 +23,7 @@ let all =
   [
     Add;
     Arrow_back;
+    Cameraswitch;
     Check;
     Chevron_left;
     Chevron_right;
@@ -41,6 +43,7 @@ let all =
 let name = function
   | Add -> "add"
   | Arrow_back -> "arrow_back"
+  | Cameraswitch -> "cameraswitch"
   | Check -> "check"
   | Chevron_left -> "chevron_left"
   | Chevron_right -> "chevron_right"

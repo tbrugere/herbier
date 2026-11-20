@@ -23,7 +23,7 @@ val position :
 (** {1 6i: « Identifier avec Pl@ntNet » under the observation card} *)
 
 val identify_label : string
-(** {!Record_plan.identify_label}: ["Identifier avec Pl@ntNet"]. *)
+(** ["Identifier avec Pl@ntNet"] *)
 
 val or_by_name : string
 (** The separator's text: ["ou par le nom"] (the CSS upper-cases it). *)
@@ -33,7 +33,7 @@ val sent : Photo.t list -> Photo.t list
     given list, in its order. *)
 
 val identify_enabled : Identify_settings.gate -> photos:int -> bool
-(** {!Record_plan.identify_enabled}: [Ready _] and [photos > 0]. *)
+(** [Ready _] and [photos > 0]. *)
 
 val no_photo_line : string
 (** ["Cette observation n'a pas de photo à envoyer à Pl@ntNet."] *)
@@ -49,8 +49,11 @@ val identify_line : Identify_settings.gate -> photos:int -> string option
     [Ready _], [Waiting] → [None]. *)
 
 val identify_aria : Identify_settings.gate -> photos:int -> string
-(** [photos = 0] → ["Identifier avec Pl@ntNet, aucune photo"]; else
-    {!Record_plan.identify_aria} [gate]. *)
+(** The button's aria-label, first matching: [photos = 0] →
+    [identify_label ^ ", aucune photo"]; [Offline] →
+    [identify_label ^ ", indisponible hors-ligne"]; [No_key] →
+    [identify_label ^ ", clé API manquante"]; [Ready _], [Waiting] →
+    {!identify_label}. *)
 
 val caller : position option -> Identify.Caller.t
 (** [Some {index; total; _}] → [Queue (Some {index; total})]; [None] (the

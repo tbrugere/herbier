@@ -64,9 +64,7 @@ val no_key_line : string
 (** ["Ajoutez votre clé API Pl@ntNet dans Réglages pour identifier."] *)
 
 val opens_on_photo : on_photo:bool -> gate -> bool
-(** Whether the session's first photo opens 6b: [on_photo] and [Ready _];
-    [false] for every other gate (« Identifier dès la photo » does nothing
-    without a key, offline, or while the key loads). *)
+(** [on_photo] and [Ready _]; [false] for every other gate. *)
 
 (** {1 The two SQLite settings} *)
 

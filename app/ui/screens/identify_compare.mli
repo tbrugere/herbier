@@ -45,9 +45,9 @@ val open_ :
     is {!Herbier_ui_model.Identify.Text.compare_action}
     [(Caller.action caller ~owned:(React.S.value owned p <> None))]; a tap calls
     [choose (Compare.index c)] then {!close} (6c's [choose] runs its own
-    [Choose k]: the outcome, 6e in Noter, is the caller's). ✕ and back →
-    {!close}. [owned] is read per shown proposal, and again for the shown one
-    when it changes (6c's collection read arriving while 6d is open). *)
+    [Choose k]: the outcome is the caller's). ✕ and back → {!close}. [owned] is
+    read per shown proposal, and again for the shown one when it changes (6c's
+    collection read arriving while 6d is open). *)
 
 val close : t -> unit
 (** Idempotent: releases the bindings, removes the element, removes it from

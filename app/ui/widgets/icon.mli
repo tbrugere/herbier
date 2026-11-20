@@ -6,6 +6,7 @@
 type t =
   | Add
   | Arrow_back
+  | Cameraswitch
   | Check
   | Chevron_left
   | Chevron_right

@@ -20,10 +20,15 @@ let position (x : Observation.t) items =
   in
   find 1 items
 
-let identify_label = Record_plan.identify_label
+let identify_label = "Identifier avec Pl@ntNet"
 let or_by_name = "ou par le nom"
 let sent photos = List.take Organ.max_photos photos
-let identify_enabled = Record_plan.identify_enabled
+
+let identify_enabled gate ~photos =
+  match (gate : Identify_settings.gate) with
+  | Ready _ -> photos > 0
+  | Waiting | No_key | Offline -> false
+
 let no_photo_line = "Cette observation n'a pas de photo à envoyer à Pl@ntNet."
 let offline_line = "Hors-ligne : l'identification reviendra avec le réseau."
 
@@ -34,10 +39,13 @@ let identify_line (gate : Identify_settings.gate) ~photos =
   | _, Offline -> Some offline_line
   | _, (Ready _ | Waiting) -> None
 
-let identify_aria gate ~photos =
-  match photos with
-  | 0 -> identify_label ^ ", aucune photo"
-  | _ -> Record_plan.identify_aria gate
+let identify_aria (gate : Identify_settings.gate) ~photos =
+  match (photos, gate) with
+  | 0, (Ready _ | Waiting | Offline | No_key) ->
+      identify_label ^ ", aucune photo"
+  | _, Offline -> identify_label ^ ", indisponible hors-ligne"
+  | _, No_key -> identify_label ^ ", clé API manquante"
+  | _, (Ready _ | Waiting) -> identify_label
 
 let caller : position option -> Identify.Caller.t = function
   | Some {index; total; _} -> Queue (Some {index; total})

@@ -7,7 +7,7 @@ type place = {index : int; total : int}
 val equal_place : place -> place -> bool
 
 type t =
-  | Noter  (** 4d: « Choisir » fills the name (6e) *)
+  | Noter  (** « Choisir »; #dev/identify's caller *)
   | Queue of place option
       (** 4k's « À identifier » queue (6j); [None]: the observation is no longer
           in it *)
@@ -26,8 +26,8 @@ val pp_action : Format.formatter -> action -> unit
 val show_action : action -> string
 
 val action : t -> owned:bool -> action
-(** [Noter] → [Choose] (owned or not: 6e then says « Déjà dans ma collection »);
-    [Queue _] → [Link] when [owned], else [Create]; [Free_name _] → [Link]. *)
+(** [Noter] → [Choose] (owned or not); [Queue _] → [Link] when [owned], else
+    [Create]; [Free_name _] → [Link]. *)
 
 val current : t -> Herbier_domain.Ids.Plant_id.t option
 (** [Free_name id] → [Some id] (excluded from {!Owned.find}); else [None]. *)

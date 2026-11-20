@@ -38,12 +38,12 @@ let action_t = Alcotest.testable Caller.pp_action Caller.equal_action
 let failure_t = Alcotest.testable Failure.pp Failure.equal
 
 let pp_target fmt = function
-  | Record_plan.Existing (p : Plant.t) ->
+  | Record_plan.Target (Existing (p : Plant.t)) ->
       Format.fprintf fmt "Existing %s" p.display_name
-  | Record_plan.Free n -> Format.fprintf fmt "Free %s" n
+  | Record_plan.Target (Free n) -> Format.fprintf fmt "Free %s" n
   | Record_plan.Linked {name; taxon} ->
       Format.fprintf fmt "Linked {name = %s; taxon = %d}" name taxon.key
-  | Record_plan.To_identify -> Format.pp_print_string fmt "To_identify"
+  | Record_plan.Target To_identify -> Format.pp_print_string fmt "To_identify"
 
 let target_t = Alcotest.testable pp_target ( = )
 
@@ -193,6 +193,12 @@ let identify_aria_tests () =
     "Identifier avec Pl@ntNet, aucune photo"
     (To_identify.identify_aria Is.No_key ~photos:0);
   Alcotest.(check string)
+    "0 photo, Ready -> aucune photo" "Identifier avec Pl@ntNet, aucune photo"
+    (To_identify.identify_aria (Is.Ready k) ~photos:0);
+  Alcotest.(check string)
+    "0 photo, Waiting -> aucune photo" "Identifier avec Pl@ntNet, aucune photo"
+    (To_identify.identify_aria Is.Waiting ~photos:0);
+  Alcotest.(check string)
     "Offline, a photo -> indisponible hors-ligne"
     "Identifier avec Pl@ntNet, indisponible hors-ligne"
     (To_identify.identify_aria Is.Offline ~photos:2);
@@ -279,7 +285,7 @@ let save_a_live_owner_pending () =
   let owner = plant ~gbif_key:(Some 3152559) "Ma plante" in
   Alcotest.(check target_t)
     "a live plant with gbif_key = Some k, resolution None -> Existing it"
-    (Record_plan.Existing owner)
+    (Record_plan.Target (Existing owner))
     (Record_plan.of_choice ~plants:[owner] (Choice.v p))
 
 let save_b_deleted_owner_pending () =
@@ -298,14 +304,14 @@ let save_c_resolved_key_and_accepted_key () =
   let owner = plant ~gbif_key:(Some resolved.key) "Plante résolue" in
   Alcotest.(check target_t)
     "resolution Resolved t, t.key <> k, a live plant on t.key -> Existing it"
-    (Record_plan.Existing owner)
+    (Record_plan.Target (Existing owner))
     (Record_plan.of_choice ~plants:[owner]
        (Choice.resolved (Choice.v p) (Choice.Resolved resolved)));
   let synonym = {resolved with accepted_key = Some 7000001} in
   let accepted_owner = plant ~gbif_key:(Some 7000001) "Plante acceptée" in
   Alcotest.(check target_t)
     "t.accepted_key = Some a, a plant on a -> Existing it"
-    (Record_plan.Existing accepted_owner)
+    (Record_plan.Target (Existing accepted_owner))
     (Record_plan.of_choice ~plants:[accepted_owner]
        (Choice.resolved (Choice.v p) (Choice.Resolved synonym)))
 
@@ -331,7 +337,7 @@ let save_e2_unavailable_owner () =
   let owner = plant ~gbif_key:(Some 3152559) "Ma plante" in
   Alcotest.(check target_t)
     "Unavailable \"x\", a live plant on the proposal's id -> Existing it"
-    (Record_plan.Existing owner)
+    (Record_plan.Target (Existing owner))
     (Record_plan.of_choice ~plants:[owner]
        (Choice.resolved (Choice.v p) (Choice.Unavailable "x")))
 
@@ -339,7 +345,7 @@ let save_e3_unavailable_no_gbif_id () =
   let p = Lazy.force p4 in
   Alcotest.(check target_t)
     "gbif = None, Unavailable \"x\" -> Free (new_name p)"
-    (Record_plan.Free (Choice.new_name p))
+    (Record_plan.Target (Free (Choice.new_name p)))
     (Record_plan.of_choice ~plants:[]
        (Choice.resolved (Choice.v p) (Choice.Unavailable "x")))
 
@@ -347,7 +353,7 @@ let save_f_unknown_no_matching_plant () =
   let p = Lazy.force p1 in
   Alcotest.(check target_t)
     "Unknown, no plant of that name -> Free (new_name p)"
-    (Record_plan.Free (Choice.new_name p))
+    (Record_plan.Target (Free (Choice.new_name p)))
     (Record_plan.of_choice ~plants:[]
        (Choice.resolved (Choice.v p) Choice.Unknown))
 
@@ -358,7 +364,7 @@ let save_g_unknown_alias_case_folded () =
   Alcotest.(check target_t)
     "Unknown, a live plant whose alias is new_name p (different ASCII case) -> \
      Existing it"
-    (Record_plan.Existing owner)
+    (Record_plan.Target (Existing owner))
     (Record_plan.of_choice ~plants:[owner]
        (Choice.resolved (Choice.v p) Choice.Unknown))
 
@@ -366,7 +372,7 @@ let save_h_no_gbif_id_pending () =
   let p = Lazy.force p4 in
   Alcotest.(check target_t)
     "gbif = None, resolution None -> Free (new_name p)"
-    (Record_plan.Free (Choice.new_name p))
+    (Record_plan.Target (Free (Choice.new_name p)))
     (Record_plan.of_choice ~plants:[] (Choice.v p))
 
 let save_i_no_name_at_all () =
@@ -380,7 +386,7 @@ let save_i_no_name_at_all () =
   in
   Alcotest.(check target_t)
     "no French nor Latin name, Unknown -> To_identify (nothing saved)"
-    Record_plan.To_identify
+    (Record_plan.Target To_identify)
     (Record_plan.of_choice ~plants:[]
        (Choice.resolved (Choice.v p) Choice.Unknown))
 
@@ -390,7 +396,7 @@ let save_j_first_owner_wins () =
   and second = plant ~gbif_key:(Some 3152559) "Seconde" in
   Alcotest.(check target_t)
     "two matching plants: the first in list order wins"
-    (Record_plan.Existing first)
+    (Record_plan.Target (Existing first))
     (Record_plan.of_choice ~plants:[first; second] (Choice.v p))
 
 (* ============================================================ *)
@@ -409,8 +415,9 @@ let identify_queue =
       "identify_line: no photo first, then No_key, then Offline, else None"
       `Quick identify_line_tests;
     Alcotest.test_case
-      "identify_aria: photos = 0 wins over Offline and No_key, else 4d's" `Quick
-      identify_aria_tests;
+      "identify_aria: photos = 0 wins over every gate, then offline / no key / \
+       plain label"
+      `Quick identify_aria_tests;
     Alcotest.test_case
       "texts: the four constants, none naming CORS/origin/localhost/exposing; \
        Key_not_exposed is Not_answered, retried"

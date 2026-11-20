@@ -381,10 +381,10 @@ let render app mode (d : data) =
                   Record_plan.of_choice ~plants:d.plants
                     (Choice.resolved (Choice.v p) r)
                 with
-                | Existing pl -> move_now (Some pl.id)
+                | Target (Existing pl) -> move_now (Some pl.id)
                 | Linked {name; taxon} -> create_with ~name taxon
-                | Free name -> create_free_now name
-                | To_identify ->
+                | Target (Free name) -> create_free_now name
+                | Target To_identify ->
                     release ();
                     problem "Cette proposition n'a pas de nom.")))
   in

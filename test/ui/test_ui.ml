@@ -6,6 +6,7 @@ let () =
       ("zoom", Zoom_tests.zoom);
       ("cover", Cover_tests.cover);
       ("record_plan", Record_plan_tests.record_plan);
+      ("shot_row", Shot_row_tests.shot_row);
       ("local_time", Local_time_tests.local_time);
       ("to_identify", Local_time_tests.to_identify);
       ("plant_form", Plant_form_tests.plant_form);

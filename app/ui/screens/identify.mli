@@ -1,6 +1,6 @@
 (** The identification layer (6b, 6c, 6f, 6g; architecture §12): a full-screen
-    layer over its caller (4d, 4k, 4g, or a dev page), not a route (a route
-    change would release 4d's shots). Mounted inside [host] (the caller's root
+    layer over its caller (4k, 4g, or a dev page), not a route (a route change
+    would release the caller's state). Mounted inside [host] (the caller's root
     element), so releasing the caller's element removes it; registered with
     {!Overlay}, so Android back closes it (outcome [Left]). Runs
     {!Herbier_ui_model.Identify.Layer}: every request through

@@ -3,6 +3,7 @@
 # and commit the regenerated font.
 add
 arrow_back
+cameraswitch
 check
 chevron_left
 chevron_right

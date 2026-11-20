@@ -583,14 +583,14 @@ val delete_all_packs : t -> (unit, pack_error) result Fut.t
     plugin's message). *)
 
 type image = Identification.image =
-  | Preview of Brr.Blob.t  (** a preview in memory (4d's shots) *)
+  | Preview of Brr.Blob.t  (** a preview in memory (an unsaved shot) *)
   | Stored of Herbier_domain.Ids.Photo_id.t
       (** a stored photo's preview, [previews/<id>.jpg] (4k, 4g), read just
           before the request *)
 
 type channel
-(** One per caller (4d, 4k, 4g, a dev page): a newer {!identify} on a channel
-    makes the older one's answer {!Superseded}. *)
+(** One per caller (4k, 4g, a dev page): a newer {!identify} on a channel makes
+    the older one's answer {!Superseded}. *)
 
 val channel : unit -> channel
 
@@ -688,9 +688,7 @@ val set_plantnet_key :
     Never raises. *)
 
 val identify_on_photo : t -> bool React.signal
-(** 4m « Identifier dès la photo », from [create]'s [identification]. Without a
-    key it does nothing ({!Herbier_ui_model.Identify_settings.opens_on_photo}).
-*)
+(** 4m « Identifier dès la photo », from [create]'s [identification]. *)
 
 val set_identify_on_photo :
   t -> bool -> (unit, Herbier_store_io.Db.error) result Fut.t

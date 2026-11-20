@@ -12,13 +12,13 @@ type outcome =
           its photos; a request in flight is not aborted *)
   | Chosen of Herbier_identify.Plantnet.proposal  (** the card's button *)
   | None_matches  (** « Aucune ne correspond » *)
-  | Retake  (** 6g « Reprendre la photo » (Noter) *)
-  | Keep_unnamed  (** 6g « Garder la photo, sans nom » (Noter) *)
+  | Retake  (** 6g « Reprendre la photo » *)
+  | Keep_unnamed  (** 6g « Garder la photo, sans nom » *)
 
 val equal_outcome : outcome -> outcome -> bool
 
 (** What a caller that resolves a chosen proposal does once the layer closed
-    (6i, 6k; Noter's is Record_plan.after_layer). *)
+    (6i, 6k). *)
 type after =
   | Stay  (** back to the caller, focus on its Identifier button *)
   | Resolve of Herbier_identify.Plantnet.proposal

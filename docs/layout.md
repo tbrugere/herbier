@@ -393,11 +393,11 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
-    plant_form.ml, local_time.ml, to_identify.ml (4k: the queue position; 6i's button and
-    line), free_name.ml (4g's reference block of a free-name plant, 6k: the observation sent,
-    Identifier's gate and line, what « Lier » writes), record_plan.ml (4d: the save's target,
-    the choice included, and 6j's; 6a's button, line and first-photo opening; the kept answer;
-    6e's texts), cover.ml,
+    plant_form.ml, local_time.ml, to_identify.ml (4k: the queue position; 6i's button, its
+    gate, label and line), free_name.ml (4g's reference block of a free-name plant, 6k: the
+    observation sent, Identifier's gate and line, what « Lier » writes), record_plan.ml (4d: the
+    save's target, what 6j's chosen proposal means, the controls' labels), shot_row.ml (4d's
+    thumbnail row: a placeholder per shutter tap, in tap order; Enregistrer's gate), cover.ml,
     zoom.ml, map_filter.ml,
     map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
     ref_search.ml (4i's debounce / stale answer / offline state machine), ref_pick.ml (what a
@@ -407,7 +407,8 @@ app/
     observation's fix: searching, fix, none), move_plan.ml (5b's texts and what « Valider » writes),
     plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys),
     identify/ (M9: the identification layer's states, its French texts, and what a proposal's button
-    does for each caller: « Choisir » in 4d, « Lier » or « + Créer » in 4k, « Lier » in 4g; caller.ml
+    does for each caller: « Choisir » for the Noter caller (no production caller since M8.75, kept for
+    #dev/identify until M8.76), « Lier » or « + Créer » in 4k, « Lier » in 4g; caller.ml
     (who opened it, its button, its 6g exits), owned.ml (« Dans ma collection »), choice.ml (a chosen
     proposal: its GBIF resolution as a Step program, R12's taxon from Pl@ntNet's answer, the plant of
     mine that owns it, a new plant's name), failure.ml (6g's variants from an error: the key not
@@ -576,20 +577,19 @@ app/
                           herbierDev.markOriginal(state) through Dev_hook.export_action; linked only
                           outside the release profile
                           (app/dev_pages.ml, see app/dune)
-    widgets/              button, icon_button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field (with an optional
-                          trailing element: 4d's Identifier button), inline_text, switch,
+    widgets/              button, icon_button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
                           month_grid; identify_glyph (M9: the Identifier glyph as inline SVG, not a Material
                           Symbol, its vein cut out by a mask)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
-      journal.ml (4c)     record.ml (4d; 6a, 6e with M9)
+      journal.ml (4c)     record.ml (4d)
       saved.ml (4e)       species.ml (4f, 4g; 6k with M9)  observation.ml (4h)
       resolve.ml (4i, 4j, 4k, 5c, and 4i for one plant from 4g « Lier » / 5a « Changer › »:
                   one screen, one entry mode each; 4j is M4.39's sheet mode, its « Chercher » enters 4i;
                   4k's « Identifier avec Pl@ntNet », 6i, with M9)
-      identify.ml (M9: 6b, 6c, 6f, 6g; a layer over 4d, 4k or 4g, not a route, since a route change would
-                  release 4d's shots; Android back closes it; gallery_adder: 4k's and 4g's
+      identify.ml (M9: 6b, 6c, 6f, 6g; a layer over 4k or 4g (4h with M8.76), not a route; Android back
+                  closes it; gallery_adder: 4k's and 4g's
                   « + <organe> »; launcher: 4k's and 4g's Identifier button, one layer at a
                   time, a problem deferred while it covers the screen)
       identify_compare.ml (M9: 6d, a layer over 6c)

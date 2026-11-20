@@ -42,8 +42,9 @@ Principles:
   Pl@ntNet to identify photos (§12).
 - **Nothing blocks on the network.** Recording, browsing, editing work
   offline; "Lier", reference search and refresh are disabled offline with a
-  visible reason (handoff 4g/4i), and so is « Identifier » (6a, 6i, 6k); an
-  identification under way never holds Noter back.
+  visible reason (handoff 4g/4i), and so is « Identifier » (6i, 6k; 6a left
+  Noter on 2026-11-19, M8.75); an identification under way never holds Noter
+  back.
 - **One user, one owner id.** Multi-device is tolerated (LWW), not designed
   for.
 
@@ -1223,7 +1224,8 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
          (« Réessayer »)
   → a choice: Refs.Resolve.resolve (Gbif id), or the name match without an id,
     as for a link (§7: the one-hop synonym rule)
-  → 4d: the save's target · 4k: attach or create · 4g: link, free name → alias
+  → 4d: the save's target (superseded 2026-11-19, M8.75: see Entry points)
+    · 4k: attach or create · 4g: link, free name → alias
   → the reference fetch (§6), as after an intercepted link
 ```
 
@@ -1233,6 +1235,12 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   « Identifier avec Pl@ntNet » on an « À identifier » observation (4k → 6i,
   6j) and « Identifier » on a free-name fiche (4g → 6k), which sends one
   observation's photos (Pl@ntNet assumes one individual per request).
+  *Superseded 2026-11-19 by the user's feedback (M8.75, M8.76):* Noter has no
+  Identifier button and its first photo opens nothing; identification of a new
+  observation is from its screen 4h (M8.76), with « Lier » / « + Créer » as
+  in 6j, and « Identifier dès la photo » opens the layer there right after
+  Enregistrer. The 4d (6e) bullet, 6b's return to Noter (Screens) and « the
+  first photo » (Offline) below describe the former Noter entry.
 - **The request.** `POST /v2/identify/{flora}` with the key as the `api-key`
   query parameter, `lang=fr` (French common names), `include-related-images=true`
   (the closest images of each species), `nb-results=5` (the design lists three
@@ -1327,7 +1335,7 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   no id, and with the name match too when GBIF does not know the id (R12):
   one program (`ui_model/identify/choice.ml`) run by `App.resolve_choice`
   through `refs_io`'s queue, as an intercepted link is resolved.
-  - 4d (6e): the field shows my display name when the taxon is already a
+  - 4d (6e; superseded 2026-11-19, M8.75): the field shows my display name when the taxon is already a
     plant of mine, else Pl@ntNet's first French name, else the Latin name.
     « Enregistrer » never waits: a plant of mine gets the observation (no
     duplicate); otherwise `App.create_linked` creates the plant with the
@@ -1375,7 +1383,9 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   and a route change releases a screen. Android back closes 6d first, then the
   layer, as it closes a shown Google Picker (the back listener of
   `ui/router.ml`); 6d makes no API request. 6b never
-  blocks: « Continuer sans attendre » and ← return to Noter with the photos;
+  blocks: « Continuer sans attendre » and ← return to Noter with the photos
+  (the Noter entry, superseded 2026-11-19 by M8.75: the layer is over 4k or
+  4g, and 4h with M8.76);
   the request goes on, and its answer is kept with 4d's photos for the same
   photos, organs and flora, so the Identifier button opens 6c without a second
   request. Related images are `<img>` elements on `bs.plantnet.org` (an image
@@ -1386,8 +1396,9 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   nothing is queued: a
   plant saved without a name is « À identifier » and comes back through 6i, or
   6k for a free name, by a tap once online. There is no background
-  identification of the queue: each request is a tap (or the first photo with
-  « Identifier dès la photo »), since each one costs a credit.
+  identification of the queue: each request is a tap (or, with « Identifier
+  dès la photo », Enregistrer from M8.76; the first photo in Noter until
+  2026-11-19), since each one costs a credit.
 - **Quota and rate.** Free plan: 500 identifications a day per account, reset
   at 00:00 UTC, never billed; beyond, 429 until the reset (its `Retry-After`
   is not readable from the WebView); since 2026-02-13 a request that answers an
@@ -1438,7 +1449,8 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
     spike (§10, 7) checks it. Whoever reads the key off the phone can forge
     that `Origin` and spend the day's 500, nothing more (the free plan never
     bills; the key is regenerated in the account and pasted again).
-  - Without a key, every Identifier button (6a, 6i, 6k) is disabled with one
+  - Without a key, every Identifier button (6i, 6k; 6a left Noter, M8.75) is
+    disabled with one
     line pointing to Réglages, as 4m's « Dossier Drive » row is in a build
     without the Picker's project number, and « Identifier dès la photo » does
     nothing. A 401 (key refused) says to check the key in Réglages.

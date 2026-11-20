@@ -97,6 +97,11 @@
     outline: 2px solid var(--paper)
     outline-offset: -2px
 
+// A capture in flight: the dark screens' stripes in the thumbnail's box,
+// replaced by the preview when the shutter answers.
+.record__thumb--pending
+  +widgets.striped(var(--dark-stripe), var(--dark-stripe-light))
+
 .record__thumb-x
   // A 44 px target over the thumbnail's top-right corner, drawing a 20 px
   // disc in that corner.
@@ -133,14 +138,11 @@
   text-align: center
   +widgets.pressed-bordered(var(--paper-field-line))
 
-// The name, the Identifier line, the 6e card and the suggestions: laid out as
-// the bottom's own rows, hidden together while a photo is taken for the layer.
+// The name and the suggestions: laid out as the bottom's own rows.
 .record__naming
   display: contents
 
 .record__name
-  // The Identifier button's 44 px target ends 1 px from the field's edge.
-  padding-right: 1px
   background: var(--paper-field)
   border: 1px solid var(--paper-field-line)
   .text-field__input
@@ -173,24 +175,42 @@
   +base.ui(12px, 700)
   opacity: .8
 
+// [⇄] [● shutter] [✓]: the shutter stays centred whatever the sides' widths.
 .record__controls
   display: grid
-  grid-template-columns: 56px 1fr 56px
+  grid-template-columns: 1fr auto 1fr
   align-items: center
   gap: 12px
 
 .record__flip
+  justify-self: start
   width: 56px
   height: 56px
 
+.record__shutter
+  +widgets.bare-button
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 72px
+  height: 72px
+  border-radius: 50%
+  background: var(--moss)
+  color: var(--paper)
+  box-shadow: 0 0 0 3px var(--paper)
+  +widgets.pressed-filled
+
 .record__save
   +widgets.bare-button
-  +widgets.pill
-  +base.ui(16px, 800)
-  height: 64px
+  justify-self: end
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 56px
+  height: 56px
+  border-radius: 50%
   background: var(--paper)
   color: var(--ink)
-  text-align: center
   +widgets.pressed-bordered
   &[aria-busy]
     opacity: .6
@@ -202,115 +222,3 @@
 
 .record button:disabled
   opacity: .5
-
-.record__shutter
-  +widgets.bare-button
-  width: 56px
-  height: 56px
-  border-radius: 50%
-  background: var(--moss)
-  box-shadow: 0 0 0 3px var(--paper)
-  +widgets.pressed-filled
-
-// 6a: Pl@ntNet's glyph on a paper disc, inside the name field.
-.record__identify
-  +widgets.bare-button
-  flex: none
-  display: flex
-  width: 44px
-  height: 44px
-  align-items: center
-  justify-content: center
-  color: var(--ink)
-  +widgets.pressed-text
-  &[aria-disabled]
-    opacity: .5
-
-.record__identify-disc
-  display: flex
-  width: 36px
-  height: 36px
-  align-items: center
-  justify-content: center
-  border-radius: 50%
-  background: var(--paper)
-
-// Under the field: why Identifier is off (6a), or the owner of the choice (6e).
-.record__identify-line
-  +base.ui(12px, 400)
-  line-height: 1.4
-  color: var(--paper-soft)
-
-// 6e: the chosen species in place of the field.
-.record__choice
-  display: flex
-  align-items: center
-  gap: 10px
-  min-height: 56px
-  padding: 6px 1px 6px 14px
-  border-radius: 14px
-  background: var(--paper-field)
-  border: 1.5px solid var(--moss-light)
-
-.record__choice-check
-  display: flex
-  color: var(--moss-light)
-
-.record__choice-text
-  flex: 1
-  min-width: 0
-  display: flex
-  flex-direction: column
-
-.record__choice-name
-  +base.ui(16px, 800)
-  line-height: 1.25
-
-.record__choice-sub
-  +base.ui(12px, 400)
-  line-height: 1.35
-  color: var(--paper-soft)
-  white-space: nowrap
-  overflow: hidden
-  text-overflow: ellipsis
-
-.record__choice-latin
-  +base.sci(14px)
-
-.record__choice-clear
-  +widgets.bare-button
-  flex: none
-  display: flex
-  width: 44px
-  height: 44px
-  align-items: center
-  justify-content: center
-  color: var(--paper)
-  +widgets.pressed-text
-
-// « + <organe> » from the layer: the layer and 4d's naming and saving step
-// aside for the viewfinder; the pill says what the photo is for.
-.record__taking
-  display: none
-  align-items: center
-  justify-content: space-between
-  gap: 8px
-
-.record--taking
-  .record__taking
-    display: flex
-  .identify, .record__naming, .record__close
-    display: none
-  // Kept in its grid cell, so the shutter stays where it is.
-  .record__save
-    visibility: hidden
-
-.record__taking-cancel
-  +widgets.bare-button
-  +widgets.pill
-  +base.ui(13px, 700)
-  min-height: 44px
-  padding: 4px 16px
-  background: var(--veil)
-  color: var(--paper)
-  +widgets.pressed-bordered(var(--paper-field-line))
