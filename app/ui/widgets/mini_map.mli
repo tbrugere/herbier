@@ -18,7 +18,9 @@ type t = {
   el : Brr.El.t;
       (** [div.mini-map] holding the map and, over its canvas but under
           MapLibre's controls (the attribution), the tap target
-          [button.mini-map__tap] with [aria-label="Voir sur la carte"]; class
+          [button.mini-map__tap] with
+          [aria-label="Corriger la position sur la carte"]
+          ({!Herbier_ui_model.Observation_plan.map_label}: 4h opens 5b); class
           [is-hidden] while the position is [None] (or has a non-finite
           coordinate), and for good once the map failed *)
   tap : unit React.event;

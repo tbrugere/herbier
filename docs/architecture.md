@@ -1001,8 +1001,10 @@ the classifier must accept both a bare URL and text containing one.
   the sphere of `Places.distance_m`) in a source drawn by a fill and a line
   layer, exact at every zoom and latitude.
 - Mini-map (observation screen): a non-interactive MapLibre instance framing
-  the accuracy circle (`Widgets.Mini_map`); tapping it opens 4b centred on the
-  observation, through a one-shot framing in `State.map_view`.
+  the accuracy circle (`Widgets.Mini_map`); tapping it opens 5b, the move-point
+  screen (`Route.Move_point`), since M8.76 by the user's decision (it opened
+  4b centred, through a one-shot framing in `State.map_view`, which 4c's « ◎ »
+  still uses).
 - Moving a point (5b): an interactive map under a fixed DOM pin whose foot
   is the map's centre (the map is laid out above the drawer); the stored
   position is a grey ghost layer (`Geo.Style.origin_layer`). « Chercher un
@@ -1041,7 +1043,7 @@ the classifier must accept both a bare URL and text containing one.
      `place_source_photon_online`; unset or unreadable = off), mirrored in
      `State.place_sources`. With both IGN switches on, a point in a
      downloaded département gets its commune, never the online lieu-dit;
-  3. else nothing is stored, and 4c, 4b's sheet, 4h and 4e print
+  3. else nothing is stored, and 4c, 4b's sheet and 4h print
      « Lieu inconnu » (`Places.unknown_name`, never stored: a stored
      placeholder would sync as a fake name and stop later sources).
 
@@ -1053,7 +1055,7 @@ the classifier must accept both a bare URL and text containing one.
     only when it is an OSM `place` (city … islet), else its district, else
     its city. With both on, the chain is M5.43's (IGN, then Photon);
   - the row stores the phrase « Près de … » with the French contraction
-    (du, des, de la, de l’, d’), which 4c, 4e and 4h print as is;
+    (du, des, de la, de l’, d’), which 4c and 4h print as is;
   - written by a conditional `Observations.set_place_derived` (live, same
     position, still unnamed) through `App` with its outbox entry, so a late
     answer never overwrites a move or a newer name;
@@ -1224,7 +1226,7 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
          (« Réessayer »)
   → a choice: Refs.Resolve.resolve (Gbif id), or the name match without an id,
     as for a link (§7: the one-hop synonym rule)
-  → 4d: the save's target (superseded 2026-11-19, M8.75: see Entry points)
+  → 4h (M8.76; 4d's save target until M8.75): attach or create, as 4k
     · 4k: attach or create · 4g: link, free name → alias
   → the reference fetch (§6), as after an intercepted link
 ```
@@ -1239,7 +1241,10 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
   Identifier button and its first photo opens nothing; identification of a new
   observation is from its screen 4h (M8.76), with « Lier » / « + Créer » as
   in 6j, and « Identifier dès la photo » opens the layer there right after
-  Enregistrer. The 4d (6e) bullet, 6b's return to Noter (Screens) and « the
+  Enregistrer (4d decides it at its first write: no name typed, the setting
+  on, a key, online; 4h checks the gate again before opening, so a network
+  lost meanwhile sends nothing and leaves the button). 4h's button shows while
+  the observation is « À identifier ». The 4d (6e) bullet, 6b's return to Noter (Screens) and « the
   first photo » (Offline) below describe the former Noter entry.
 - **The request.** `POST /v2/identify/{flora}` with the key as the `api-key`
   query parameter, `lang=fr` (French common names), `include-related-images=true`

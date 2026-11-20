@@ -97,7 +97,7 @@ val authorize_drive : t -> unit
     on [Ok], {!upload_pending}. Not awaited. *)
 
 val upload_queue : t -> Herbier_ui_model.Drive_text.queue React.signal
-(** The originals' queue as 4m and 4e show it: [Upload_queue.entries] and
+(** The originals' queue as 4m and 4h show it: [Upload_queue.entries] and
     [Settings.get Last_upload_at] read again after every pass (resume, job
     change, sign-in, online, Wi-Fi setting, {!save_photos}' keep), {!send_now}
     and {!stop_drive_uploads}. 4d's « N en attente » is its
@@ -107,7 +107,7 @@ val upload_queue : t -> Herbier_ui_model.Drive_text.queue React.signal
 *)
 
 val drive_folder : t -> Herbier_ui_model.Drive_text.folder React.signal
-(** Where originals go (4m « Dossier Drive », 4e's card):
+(** Where originals go (4m « Dossier Drive », 4h's card):
     [Drive_root.read_choice] through {!Herbier_ui_model.Drive_text.folder}, read
     by {!start_uploads}, after every pass (a pass may store or forget the root),
     and after {!store_pick} and {!store_default}. A read error is a console line

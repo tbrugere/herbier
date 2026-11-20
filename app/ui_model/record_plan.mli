@@ -1,6 +1,7 @@
 (** The pure part of 4d « Noter »: which plant the typed name means (and what a
-    chosen proposal means, for 6j), what to suggest, when and where the
-    observation is, and the controls' labels. *)
+    chosen proposal means, for 6j and 4h), whether Enregistrer opens the
+    identification layer on 4h, what to suggest, when and where the observation
+    is, and the controls' labels. *)
 
 module Plant := Herbier_domain.Plant
 module Observation := Herbier_domain.Observation
@@ -29,6 +30,15 @@ val of_choice : plants:Plant.t list -> Identify.Choice.t -> choice
     {!Identify.Choice.taxon} [c] = [Some t] →
     [Linked {name = Choice.new_name c.proposal; taxon = t}]; else
     [Target ({!target} ~chosen:None (Choice.new_name c.proposal))]. *)
+
+val identify_after_save :
+  on_photo:bool -> Identify_settings.gate -> target -> bool
+(** Whether Enregistrer asks 4h to open the identification layer
+    ([Route.Recorded {identify}]; 4h checks again with
+    {!Observation_plan.opens_layer}, photos included): [To_identify] and
+    {!Identify_settings.opens_on_photo} [~on_photo gate] ([on_photo] and
+    [Ready _]). [Existing _] and [Free _] (a name was typed or picked) → [false]
+    whatever the setting and gate. *)
 
 val seen_here :
   here:Observation.position ->

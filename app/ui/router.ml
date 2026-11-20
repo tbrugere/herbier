@@ -25,7 +25,7 @@ let place_of = function
   | Modal_target (Route.Plant id) -> Fiche id
   | Modal_target
       ( Route.Tags | Manage_tags | Edit_plant _ | New_plant | Observation _
-      | Change_species _ | Move_point _ | Identify _ | Record | Saved _
+      | Change_species _ | Move_point _ | Identify _ | Record | Recorded _
       | Viewer _ | Search _ | Link_species _ | Intercepted _ | Drive_folder ) ->
       Modal
   | Dev_target _ -> Dev

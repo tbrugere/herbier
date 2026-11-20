@@ -756,3 +756,27 @@ $card-padding: 16px
   &:focus-visible
     outline: 3px solid var(--moss)
     outline-offset: -3px
+
+// A short status line over a screen (Widgets.Toast), in the app's one live
+// region. Ink on paper, as the handoff's dark pills; it fades over the last
+// 300 ms of its --toast-ms, then OCaml removes it. Text only: taps go through.
+.toast
+  +base.ui(14px, 600)
+  position: fixed
+  left: 50%
+  bottom: base.above-gesture-bar(16px)
+  transform: translateX(-50%)
+  z-index: 11
+  max-width: calc(100% - 32px)
+  margin: 0
+  padding: 10px 16px
+  border-radius: var(--radius-thumb-small)
+  pointer-events: none
+  background: var(--ink)
+  color: var(--paper)
+  text-align: center
+  animation: fade-out 300ms var(--ease-standard) calc(var(--toast-ms, 2500ms) - 300ms) forwards
+
+@media (prefers-reduced-motion: reduce)
+  .toast
+    animation: none

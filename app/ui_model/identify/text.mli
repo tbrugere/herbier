@@ -3,7 +3,7 @@
     parameter: the console line of a request names its error class. *)
 
 val kicker : Caller.t -> string
-(** [Noter], [Free_name _] → ["Pl@ntNet"]; [Queue (Some {index; total})] →
+(** [Observation], [Free_name _] → ["Pl@ntNet"]; [Queue (Some {index; total})] →
     ["À identifier · <index> / <total>"]; [Queue None] → ["À identifier"] (the
     CSS upper-cases it). *)
 
@@ -60,11 +60,12 @@ val add_hint : Herbier_identify.Organ.suggestion -> string
     ["Une photo en plus départage les espèces proches."]. *)
 
 val owned : Caller.t -> Owned.t -> string
-(** [Noter], [Queue _] → ["Dans ma collection · <display_name> · <n> obs."];
-    [Free_name _] → {!Ref_pick.also_owned} (4i's Relink wording). *)
+(** [Observation], [Queue _] →
+    ["Dans ma collection · <display_name> · <n> obs."]; [Free_name _] →
+    {!Ref_pick.also_owned} (4i's Relink wording). *)
 
 val action : Caller.action -> string
-(** [Choose] → ["Choisir"]; [Link] → ["Lier"]; [Create] → ["+ Créer"]. *)
+(** [Link] → ["Lier"]; [Create] → ["+ Créer"]. *)
 
 val none_matches : string
 
@@ -87,11 +88,6 @@ val failure_body : photos:int -> Failure.t -> string
 
 val retry : string
 val force : string
-val retake : string
-
-val keep_unnamed : photos:int -> string
-(** 1 → ["Garder la photo, sans nom"]; more → ["Garder les photos, sans nom"].
-*)
 
 val reask_blocked : Identify_settings.gate -> string option
 (** Why the re-ask controls (organ menu, add tile, flora menu, « Voir quand même
@@ -134,13 +130,12 @@ val compare_names : Herbier_identify.Plantnet.proposal -> string option
     [None] when both are. *)
 
 val compare_owned : Caller.t -> Owned.t -> string
-(** [Noter], [Queue _] → ["Dans ma collection · <display_name>"] (no observation
-    count in 6d); [Free_name _] → ["Aussi dans ma collection : <display_name>"].
-*)
+(** [Observation], [Queue _] → ["Dans ma collection · <display_name>"] (no
+    observation count in 6d); [Free_name _] →
+    ["Aussi dans ma collection : <display_name>"]. *)
 
 val compare_action : Caller.action -> string
-(** [Choose] → ["Choisir cette espèce"]; [Link] → ["Lier"]; [Create] →
-    ["+ Créer"] (6c's {!action} for the last two). *)
+(** 6c's {!action}: [Link] → ["Lier"]; [Create] → ["+ Créer"]. *)
 
 val compare_previous : string
 (** ‹ 's aria-label: ["Proposition précédente"]. *)

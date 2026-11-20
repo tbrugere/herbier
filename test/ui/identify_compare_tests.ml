@@ -573,9 +573,6 @@ let compare_names_tests () =
 (* compare_owned is checked per caller in identify_tests.ml. *)
 let compare_action_tests () =
   Alcotest.(check string)
-    "compare_action Choose" "Choisir cette espèce"
-    (Text.compare_action Caller.Choose);
-  Alcotest.(check string)
     "compare_action Link" "Lier"
     (Text.compare_action Caller.Link);
   Alcotest.(check string)

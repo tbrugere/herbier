@@ -37,7 +37,10 @@ let v ~colours position =
   (* The tap target is a button laid over the canvas, not [el]: MapLibre fills
      [el] with its attribution (a toggle and links), which must stay outside
      any button and above it. *)
-  let button = Html.button ~label:"Voir sur la carte" ["mini-map__tap"] [] in
+  let button =
+    Html.button ~label:Herbier_ui_model.Observation_plan.map_label
+      ["mini-map__tap"] []
+  in
   let el = El.div ~at:[At.class' (Jstr.v "mini-map")] [button] in
   let tap, click = Rb.click button in
   let set_hidden hidden = El.set_class (Jstr.v "is-hidden") hidden el in

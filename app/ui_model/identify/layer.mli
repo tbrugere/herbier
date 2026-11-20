@@ -12,8 +12,6 @@ type outcome =
           its photos; a request in flight is not aborted *)
   | Chosen of Herbier_identify.Plantnet.proposal  (** the card's button *)
   | None_matches  (** « Aucune ne correspond » *)
-  | Retake  (** 6g « Reprendre la photo » *)
-  | Keep_unnamed  (** 6g « Garder la photo, sans nom » *)
 
 val equal_outcome : outcome -> outcome -> bool
 
@@ -27,8 +25,7 @@ type after =
 val equal_after : after -> after -> bool
 
 val after_close : outcome -> after
-(** [Chosen p] → [Resolve p]; [Left], [None_matches] and [Retake],
-    [Keep_unnamed] (offered to Noter only) → [Stay]. *)
+(** [Chosen p] → [Resolve p]; [Left], [None_matches] → [Stay]. *)
 
 type phase =
   | Sending of {slow : bool}
@@ -94,8 +91,6 @@ type event =
   | Set_flora of Herbier_store.Settings.flora option
   | Force  (** « Voir quand même les propositions peu probables » *)
   | Retry
-  | Retake
-  | Keep_unnamed
 
 val slow_ms : int
 (** 600. *)
@@ -149,10 +144,7 @@ val step : t -> event -> t * command list
     - [Force]: [Failed (No_plant {can_force = true})] → [no_reject = true],
       re-ask. Else unchanged.
     - [Retry]: [Failed f] with [Failure.retry f] → re-ask with [no_reject]
-      unchanged. Else unchanged.
-    - [Retake] / [Keep_unnamed]: [Failed _] and [Caller.retake caller] →
-      [Closed Retake] / [Closed Keep_unnamed] with [[Close _]]. Else unchanged.
-*)
+      unchanged. Else unchanged. *)
 
 val accepts_photo : t -> bool
 (** Whether a photo added now is kept and re-asked: [Proposals _], or [Failed f]

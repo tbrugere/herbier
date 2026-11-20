@@ -396,7 +396,9 @@ app/
     plant_form.ml, local_time.ml, to_identify.ml (4k: the queue position; 6i's button, its
     gate, label and line), free_name.ml (4g's reference block of a free-name plant, 6k: the
     observation sent, Identifier's gate and line, what « Lier » writes), record_plan.ml (4d: the
-    save's target, what 6j's chosen proposal means, the controls' labels), shot_row.ml (4d's
+    save's target, what 6j's chosen proposal means, whether Enregistrer opens the layer on 4h, the
+    controls' labels), observation_plan.ml (4h: the arrival from Noter (toast, layer), the
+    Identifier button's line, what a chosen proposal writes for 4h and 6j), shot_row.ml (4d's
     thumbnail row: a placeholder per shutter tap, in tap order; Enregistrer's gate), cover.ml,
     zoom.ml, map_filter.ml,
     map_sheet.ml, plant_link.ml, ref_text.ml, ref_block.ml (4f's rows that have data),
@@ -407,9 +409,8 @@ app/
     observation's fix: searching, fix, none), move_plan.ml (5b's texts and what « Valider » writes),
     plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys),
     identify/ (M9: the identification layer's states, its French texts, and what a proposal's button
-    does for each caller: « Choisir » for the Noter caller (no production caller since M8.75, kept for
-    #dev/identify until M8.76), « Lier » or « + Créer » in 4k, « Lier » in 4g; caller.ml
-    (who opened it, its button, its 6g exits), owned.ml (« Dans ma collection »), choice.ml (a chosen
+    does for each caller: « Lier » or « + Créer » in 4k and 4h (the Observation caller, also
+    #dev/identify's), « Lier » in 4g; caller.ml (who opened it, its button), owned.ml (« Dans ma collection »), choice.ml (a chosen
     proposal: its GBIF resolution as a Step program, R12's taxon from Pl@ntNet's answer, the plant of
     mine that owns it, a new plant's name), failure.ml (6g's variants from an error: the key not
     exposed, a refused request and a malformed answer show the unreachable screen), layer.ml (the
@@ -424,9 +425,9 @@ app/
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
     france_text.ml        4m « Toute la France » texts (M5.73) and the mobile-data warning rule
-    drive_text.ml         the Drive texts of 4e, 4m and 5e: access, queue title and status, last upload,
+    drive_text.ml         the Drive texts of 4h, 4m and 5e: access, queue title and status, last upload,
                           account meta, the « Dossier Drive » button and prompt, the Drive radio's title,
-                          chosen line and disabled reason, the stop dialog, 4e's card,
+                          chosen line and disabled reason, the stop dialog, 4h's card,
                           5e's badge and Drive link
     drive_sheet.ml        4m's « Dossier Drive » sheet and Drive radio (its purpose) as a pure machine:
                           account choice, token, Picker, store, close (events in, commands out), its
@@ -476,6 +477,8 @@ app/
     gps_fix.ml            the one GPS fix a new observation takes (4d, 4j), as a Gps.t signal
     filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
+    choice_save.ml        the store writes of a proposal chosen for an « À identifier » observation
+                          (Observation_plan.write through App; 4k's 6j and picks, 4h)
     zone.ml               the phone's zone offset at an instant, for Fr_date
     loaded.ml             a screen's content from store reads: rendered per load, or once over a signal
                           that each reload sets (4f, 4h); the « Retour » notice of a missing record
@@ -486,8 +489,8 @@ app/
                           `saved`, every cycle `synced`
       core.ml             the app's state, its creation, the services' start, commit, the photos' save and
                           their originals' queue (its triggers: start, resume, sign-in, online, job changes);
-                          Drive: the access (last token outcome for the chosen Drive account, as 4m/4e show
-                          it), the queue as 4m/4e show it, « Envoyer maintenant », « Ne pas les envoyer », the
+                          Drive: the access (last token outcome for the chosen Drive account, as 4m/4h show
+                          it), the queue as 4m/4h show it, « Envoyer maintenant », « Ne pas les envoyer », the
                           storage radio, and the weekly health check (start, resume, sign-in, online; a Drive
                           account chosen)
       geocoding.ml        place names: the background geocoding and the 4m source switches; save
@@ -580,17 +583,19 @@ app/
     widgets/              button, icon_button, chip, adder, card, list_row, tab_bar, sheet, dialog, text_field, inline_text, switch,
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
                           month_grid; identify_glyph (M9: the Identifier glyph as inline SVG, not a Material
-                          Symbol, its vein cut out by a mask)
+                          Symbol, its vein cut out by a mask); toast (a short status line in one live region
+                          mounted at startup: 4h's arrival from Noter)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
       journal.ml (4c)     record.ml (4d)
-      saved.ml (4e)       species.ml (4f, 4g; 6k with M9)  observation.ml (4h)
+      species.ml (4f, 4g; 6k with M9)  observation.ml (4h; with M8.76 the arrival from 4d,
+                  its Identifier and 6j's layer, the Drive card; 4e was removed)
       resolve.ml (4i, 4j, 4k, 5c, and 4i for one plant from 4g « Lier » / 5a « Changer › »:
                   one screen, one entry mode each; 4j is M4.39's sheet mode, its « Chercher » enters 4i;
                   4k's « Identifier avec Pl@ntNet », 6i, with M9)
-      identify.ml (M9: 6b, 6c, 6f, 6g; a layer over 4k or 4g (4h with M8.76), not a route; Android back
+      identify.ml (M9: 6b, 6c, 6f, 6g; a layer over 4k, 4h or 4g, not a route; Android back
                   closes it; gallery_adder: 4k's and 4g's
-                  « + <organe> »; launcher: 4k's and 4g's Identifier button, one layer at a
+                  « + <organe> »; launcher: 4k's, 4h's and 4g's Identifier button, one layer at a
                   time, a problem deferred while it covers the screen)
       identify_compare.ml (M9: 6d, a layer over 6c)
       tags.ml (4l)        manage_tags.ml (5d)
@@ -733,7 +738,7 @@ web/
     _motion.sass          route transitions: keyframes, ::view-transition-* rules per <html data-motion>,
                           the .motion-fade-in fallback, reduced motion
     screens/              one file per screens/*.ml module, its handoff ids in a header comment:
-                          collection (4a, 4n), map_tab (4b), journal (4c), record (4d), saved (4e),
+                          collection (4a, 4n), map_tab (4b), journal (4c), record (4d),
                           species (4f, 4g), observation (4h), resolve (4i, 4j, 4k, 5c), tags (4l),
                           settings (4m), edit_plant (5a), move_point (5b), manage_tags (5d), viewer (5e),
                           and with M9 identify (6b, 6c, 6f, 6g, 6j) and identify_compare (6d);

@@ -17,10 +17,12 @@
     (dated and placed by the first photo's EXIF; without an EXIF date, now;
     without an EXIF position, the fix only for a photo taken within 10 min,
     {!Record_plan.when_where}), then each photo's preview and [pending] row
-    ({!App.save_photos}), all local; the controls wait meanwhile. Then 4e
-    replaces 4d. A failure keeps 4d with a message: the observation's, or « n
-    photos non enregistrées » with those photos still in the row, Enregistrer
-    retrying them on the same observation. Releasing the screen stops the
-    camera, even one still opening. *)
+    ({!App.save_photos}), all local; the controls wait meanwhile. Then 4h of the
+    new observation replaces 4d (route [Recorded], [identify] =
+    {!Record_plan.identify_after_save}; 4h decides whether the layer opens,
+    {!Herbier_ui_model.Observation_plan.opens_layer}). A failure keeps 4d with a
+    message: the observation's, or « n photos non enregistrées » with those
+    photos still in the row, Enregistrer retrying them on the same observation.
+    Releasing the screen stops the camera, even one still opening. *)
 
 val v : App.t -> Screen.t

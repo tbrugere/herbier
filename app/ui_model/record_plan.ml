@@ -35,6 +35,10 @@ let of_choice ~plants (c : Choice.t) =
   | None, None ->
       Target (target ~plants ~chosen:None (Choice.new_name c.proposal))
 
+let identify_after_save ~on_photo gate = function
+  | To_identify -> Identify_settings.opens_on_photo ~on_photo gate
+  | Existing (_ : Plant.t) | Free (_ : string) -> false
+
 let seen_here ~here observations plants =
   let here = Places.of_position here in
   let near =

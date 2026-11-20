@@ -328,8 +328,8 @@ let has_drive_photo (photos : Photo.t list) =
       match p.original_target with Drive -> true | App_only -> false)
     photos
 
-let saved_card ~folder access ~online ~wifi_only ~queued (photos : Photo.t list)
-    =
+let observation_card ~folder access ~online ~wifi_only ~queued
+    (photos : Photo.t list) =
   let drive =
     List.filter
       (fun (p : Photo.t) ->
@@ -350,22 +350,18 @@ let saved_card ~folder access ~online ~wifi_only ~queued (photos : Photo.t list)
         && Bool.equal in_queue (List.exists (Photo_id.equal p.id) queued))
       drive
   in
-  match List.length drive with
-  | 0 -> None
-  | n ->
-      let uploaded =
-        List.length
-          (List.filter
-             (fun (p : Photo.t) ->
-               Photo.Upload_state.equal Uploaded p.upload_state)
-             drive)
-      in
+  let n = List.length drive in
+  let uploaded =
+    List.length
+      (List.filter
+         (fun (p : Photo.t) -> Photo.Upload_state.equal Uploaded p.upload_state)
+         drive)
+  in
+  match () with
+  | () when uploaded = n -> None
+  | () ->
       let detail =
         match () with
-        | () when uploaded = n ->
-            (match n with 1 -> "Envoyée" | _ -> "Envoyées")
-            ^ " dans Google Drive. "
-            ^ kept
         | () when has Original_missing ->
             "Original introuvable dans Google Drive : la copie compressée \
              reste."

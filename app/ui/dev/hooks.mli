@@ -20,8 +20,8 @@ val geocode_requests : unit -> Herbier_geo.Geocode.request list
 val install_app : App.t -> unit
 (** Sets [herbierDev.markOriginal(state)], [state] ["uploaded"] or
     ["original_missing"]: {!Drive_check.mark_original} on the newest live
-    Drive-bound photo, its outcome a console line (so 4e and 5e can be checked
-    live while open). Called once, by [Dev_pages.find], with the app.
+    Drive-bound photo, its outcome a console line (so 4h's Drive card and 5e can
+    be checked live while open). Called once, by [Dev_pages.find], with the app.
 
     Also « Toute la France »: [herbierDev.downloadFrance(codes)] ([codes]
     comma-separated, spaces ignored, an invalid code logged and dropped, [""]

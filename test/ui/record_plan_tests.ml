@@ -7,6 +7,7 @@ module Gbif = Herbier_refs.Sources.Gbif
 module Plantnet = Herbier_identify.Plantnet
 module Fixture = Herbier_test_support.Fixture
 module Support_text = Herbier_test_support.Text
+module Is = Herbier_ui_model.Identify_settings
 
 let utc = Fixtures.utc
 let plant_id = Fixtures.plant_id
@@ -240,4 +241,38 @@ let record_plan =
         check_clean "shutter_label" Record_plan.shutter_label;
         check_clean "flip_label" Record_plan.flip_label;
         check_clean "pending_label" Record_plan.pending_label);
+    Alcotest.test_case
+      "identify_after_save: on_photo and Ready and To_identify only" `Quick
+      (fun () ->
+        let key =
+          match Is.Key.of_input "abcdefgh" with
+          | Some k -> k
+          | None -> Alcotest.fail "Key.of_input \"abcdefgh\" should be a key"
+        in
+        let ready = Is.Ready key in
+        Alcotest.(check bool)
+          "on_photo, Ready, To_identify -> true" true
+          (Record_plan.identify_after_save ~on_photo:true ready To_identify);
+        Alcotest.(check bool)
+          "no_photo, Ready, To_identify -> false" false
+          (Record_plan.identify_after_save ~on_photo:false ready To_identify);
+        List.iter
+          (fun (name, gate) ->
+            Alcotest.(check bool)
+              (Printf.sprintf "on_photo, %s, To_identify -> false" name)
+              false
+              (Record_plan.identify_after_save ~on_photo:true gate To_identify))
+          [
+            ("Offline", Is.Offline);
+            ("No_key", Is.No_key);
+            ("Waiting", Is.Waiting);
+          ];
+        let named_plant = plant "Digitale pourpre" [] in
+        Alcotest.(check bool)
+          "on_photo, Ready, Existing p -> false (a name was picked)" false
+          (Record_plan.identify_after_save ~on_photo:true ready
+             (Existing named_plant));
+        Alcotest.(check bool)
+          "on_photo, Ready, Free \"x\" -> false (a name was typed)" false
+          (Record_plan.identify_after_save ~on_photo:true ready (Free "x")));
   ]

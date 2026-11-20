@@ -1,6 +1,11 @@
 module Fr_date = Herbier_ui_model.Fr_date
 module Fr_text = Herbier_ui_model.Fr_text
 module Local_time = Herbier_ui_model.Local_time
+module Drive_text = Herbier_ui_model.Drive_text
+module Observation_plan = Herbier_ui_model.Observation_plan
+module Record_plan = Herbier_ui_model.Record_plan
+module To_identify = Herbier_ui_model.To_identify
+module Choice = Herbier_ui_model.Identify.Choice
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -8,7 +13,9 @@ module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
 module Observation = Herbier_domain.Observation
 module Plant = Herbier_domain.Plant
-module Features = Herbier_geo.Features
+module Photo = Herbier_domain.Photo
+module Photo_id = Herbier_domain.Ids.Photo_id
+module Plant_id = Herbier_domain.Ids.Plant_id
 module W = Widgets
 
 let cls = Html.cls
@@ -90,7 +97,68 @@ let delete_dialog n =
       (W.Button.Secondary, "Garder", Keep);
     ]
 
-let render app (data : data React.signal) =
+(* The Drive card. It follows the access, the network, the queue and the
+   folder without a reload; the photos, and so whether there is a card, come
+   with each reload. *)
+let drive_card app (photos : Photo.t list) =
+  match Drive_text.has_drive_photo photos with
+  | false -> (El.span ~at:[cls "is-hidden"] [], [])
+  | true ->
+      let state = App.state app in
+      let card =
+        React.S.l5
+          ~eq:(Option.equal Drive_text.equal_card)
+          (fun access (n : State.network) (a : State.account)
+               (q : Drive_text.queue) folder ->
+            Drive_text.observation_card ~folder access ~online:n.online
+              ~wifi_only:a.wifi_only ~queued:q.queued photos)
+          (App.drive_access app) (State.network state) (State.account state)
+          (App.upload_queue app) (App.drive_folder app)
+      in
+      let title = El.p ~at:[cls "observation__drive-title"] [] in
+      let detail = El.p ~at:[cls "t-meta"] [] in
+      let text f =
+        React.S.map ~eq:String.equal
+          (function Some c -> f c | None -> "")
+          card
+      in
+      let el =
+        El.div ~at:[cls "observation__drive"] [W.Card.panel [title; detail]]
+      in
+      ( el,
+        [
+          Rb.text title (text (fun (c : Drive_text.card) -> c.title));
+          Rb.text detail (text (fun (c : Drive_text.card) -> c.detail));
+          Rb.class_ el "is-hidden" (React.S.map Option.is_none card);
+        ] )
+
+(* The layer's photos: the observation's first five, each with the organ it
+   was last sent with in a layer opened here. *)
+let layer_photos organs (photos : Photo.t list) =
+  List.map
+    (fun (p : Photo.t) ->
+      {
+        Identify.image = App.Stored p.id;
+        organ =
+          Option.value ~default:Herbier_identify.Organ.Auto
+            (List.find_map
+               (fun (id, organ) ->
+                 match Photo_id.equal id p.id with
+                 | true -> Some organ
+                 | false -> None)
+               organs);
+      })
+    (To_identify.sent photos)
+
+let sent_organs (photos : Identify.photo list) =
+  List.filter_map
+    (fun ({image; organ} : Identify.photo) ->
+      match image with
+      | App.Stored id -> Some (id, organ)
+      | App.Preview _ -> None)
+    photos
+
+let render app arrival (data : data React.signal) =
   let get () = React.S.value data in
   let id = (get ()).observation.id in
   let problem_text, problem = React.S.create ~eq:String.equal "" in
@@ -108,23 +176,29 @@ let render app (data : data React.signal) =
         | true -> ()
         | false -> current := d.observation)
   in
+  (* style: [settled] is determined once the last chosen proposal's save is
+     over: [store] builds on [current] only then, so a note or date written
+     meanwhile carries the plant the choice really left (its optimistic
+     [plant_id], or the one rolled back on failure). Written by [save_choice]. *)
+  let settled = ref (Fut.return ()) in
   (* Saves [f] of the current observation; [false] (and a line on screen)
      when the save failed. *)
   let store f what failure =
-    let next =
-      {(f !current) with Observation.updated_at = Ptime_clock.now ()}
-    in
-    current := next;
-    Fut.map
-      (function
-        | Error e ->
-            log_error what e;
-            problem failure;
-            false
-        | Ok _ ->
-            problem "";
-            true)
-      (App.save app [Observations.upsert next])
+    Fut.bind !settled (fun () ->
+        let next =
+          {(f !current) with Observation.updated_at = Ptime_clock.now ()}
+        in
+        current := next;
+        Fut.map
+          (function
+            | Error e ->
+                log_error what e;
+                problem failure;
+                false
+            | Ok _ ->
+                problem "";
+                true)
+          (App.save app [Observations.upsert next]))
   in
   let back = W.Icon_button.el ~label:"Retour" W.Icon.Arrow_back in
   let back_click, b_back = Rb.click back in
@@ -277,10 +351,7 @@ let render app (data : data React.signal) =
     Html.button ["text-button"; "text-button--moss"; "observation__move"] []
   in
   let move_click, b_move = Rb.click move_el in
-  let open_map () =
-    Option.iter (State.focus_map (App.state app)) (Features.bounds [!current]);
-    Route.go (Route.Tab W.Tab_bar.Map)
-  in
+  let open_move () = Route.go (Route.Modal (Route.Move_point id)) in
   let note =
     W.Inline_text.v ~cls:"t-notes" ~label:"Note de cette rencontre"
       ~placeholder:"Touchez pour ajouter une note."
@@ -299,7 +370,7 @@ let render app (data : data React.signal) =
          (fun d ->
            match d.observation.plant_id with
            | Some _ -> "Changer d'espèce"
-           | None -> "Identifier")
+           | None -> Observation_plan.by_name_label)
          data)
   in
   let journal_el, journal_click, b_journal =
@@ -331,6 +402,167 @@ let render app (data : data React.signal) =
       :: Rb.act c.choice (function Delete -> delete () | Keep -> ())
       :: c.bindings )
   in
+  let gate = App.identify_gate app in
+  let n_sent =
+    React.S.map ~eq:Int.equal
+      (fun d -> List.length (To_identify.sent d.photos))
+      data
+  in
+  let identify = W.Button.v ~kind:W.Button.Primary To_identify.identify_label in
+  El.prepend_children identify.el [W.Identify_glyph.el ~size:22 ()];
+  El.set_class (Jstr.v "observation__identify") true identify.el;
+  let identify_line = El.p ~at:[cls "observation__identify-line"] [] in
+  let identify_block =
+    El.div ~at:[cls "observation__identify-block"] [identify.el; identify_line]
+  in
+  let resolving, set_resolving = React.S.create ~eq:Bool.equal false in
+  let launcher = Identify.launcher ~button:identify.el ~problem in
+  let channel = App.channel () in
+  (* style: [organs] is what the layer last closed with, [choosing] keeps a
+     second choice from saving while one resolves, [left] turns true on
+     release so a late GBIF answer saves nothing; read and written from DOM and
+     future callbacks only. *)
+  let organs = ref [] and choosing = ref false and left = ref false in
+  (* [resolving] stays on until the choice is saved, so the busy button says
+     why a tap does nothing meanwhile. *)
+  let settle () =
+    choosing := false;
+    set_resolving false
+  in
+  let save_choice ~at (o : Observation.t) w =
+    let over, set_over = Fut.create () in
+    settled := over;
+    current :=
+      {o with plant_id = Some (Observation_plan.plant_of w); updated_at = at};
+    Fut.await (Choice_save.save app ~at o w) (fun r ->
+        settle ();
+        (match r with
+        | Error e ->
+            current := o;
+            log_error "identify" e;
+            problem "L'observation n'a pas pu être rattachée."
+        | Ok () -> problem "");
+        set_over ())
+  in
+  let on_resolve p =
+    match !choosing with
+    | true -> ()
+    | false ->
+        choosing := true;
+        set_resolving true;
+        Fut.await
+          (let open Fut.Syntax in
+           let* r = App.resolve_choice p in
+           let+ plants = Db.all (App.db app) Plants.list in
+           (r, plants))
+          (fun (r, plants) ->
+            match (!left, plants) with
+            | true, (Ok _ | Error _) -> settle ()
+            | false, Error e ->
+                settle ();
+                log_error "identify plants" e;
+                problem "L'observation n'a pas pu être rattachée."
+            | false, Ok plants -> (
+                let at = Ptime_clock.now () in
+                match
+                  Observation_plan.chosen ~at ~new_plant:(Plant_id.fresh ())
+                    ~plants
+                    (Choice.resolved (Choice.v p) r)
+                with
+                | None ->
+                    settle ();
+                    problem Observation_plan.no_name
+                | Some w -> save_choice ~at !current w))
+  in
+  (* Not while a choice is saved: the layer would open on an observation
+     about to leave « À identifier ». Whether the layer opened. *)
+  let open_layer host =
+    let photos = (get ()).photos in
+    match
+      ( Identify.is_open launcher,
+        !choosing,
+        To_identify.identify_enabled (React.S.value gate)
+          ~photos:(List.length (To_identify.sent photos)) )
+    with
+    | false, false, true ->
+        Identify.launch launcher ~on_resolve (fun ~problem:deferred ~on_close ->
+            Identify.open_ ~host
+              (Identify.services app channel)
+              ~caller:Herbier_ui_model.Identify.Caller.Observation
+              ~add_photo:(Identify.gallery_adder app !current ~problem:deferred)
+              ~on_close:(fun outcome photos ->
+                organs := sent_organs photos;
+                on_close outcome photos)
+              (layer_photos !organs photos));
+        true
+    | true, (true | false), (true | false)
+    | false, true, (true | false)
+    | false, false, false ->
+        false
+  in
+  let identify_shown =
+    React.S.map ~eq:Bool.equal
+      (fun d -> Observation_plan.identifiable d.observation)
+      data
+  in
+  let identify_text =
+    React.S.l2
+      ~eq:(Option.equal String.equal)
+      (fun g photos -> Observation_plan.identify_line g ~photos)
+      gate n_sent
+  in
+  let identify_bindings host =
+    [
+      Rb.act identify.click (fun () -> ignore (open_layer host : bool));
+      Identify.release launcher;
+      Rb.on_release (fun () -> left := true);
+      Rb.class_ identify_block "is-hidden" (React.S.map not identify_shown);
+      Rb.disabled identify.el
+        (React.S.l2 ~eq:Bool.equal
+           (fun g photos -> not (To_identify.identify_enabled g ~photos))
+           gate n_sent);
+      Rb.attr identify.el "aria-label"
+        (React.S.l2
+           (fun g photos -> Some (To_identify.identify_aria g ~photos))
+           gate n_sent);
+      Rb.attr identify.el "aria-busy"
+        (React.S.map (function true -> Some "true" | false -> None) resolving);
+      Rb.text identify_line
+        (React.S.map (Option.value ~default:"") identify_text);
+      Rb.class_ identify_line "is-hidden"
+        (React.S.map Option.is_none identify_text);
+    ]
+    @ identify.bindings
+  in
+  (* On arrival from Noter: the layer, opened from a future callback (never
+     inside the render, which may run in an update step: [Identify.open_]
+     moves the focus and pushes on [Overlay]), or else the toast, also shown
+     when the layer was due but could no longer open there. *)
+  let arrival_bindings host =
+    let first = get () in
+    let due =
+      Observation_plan.opens_layer arrival first.observation
+        (React.S.value gate) ~photos:(React.S.value n_sent)
+    in
+    (* style: the toast's binding once shown, read and written from future
+       callbacks and the release only. *)
+    let toast = ref None in
+    let show () =
+      match Identify.released launcher with
+      | true -> ()
+      | false -> (
+          let layer = due && open_layer host in
+          match Observation_plan.toast arrival ~layer first.plant with
+          | None -> ()
+          | Some t ->
+              toast := Some (W.Toast.show ~ms:Observation_plan.toast_ms t))
+    in
+    (match arrival with
+    | Observation_plan.Opened -> ()
+    | Recorded _ -> Fut.await (Fut.return ()) show);
+    [Rb.on_release (fun () -> Option.iter (fun b -> Rb.release [b]) !toast)]
+  in
+  let drive_el = El.div ~at:[cls "observation__drive-slot"] [] in
   let el =
     El.div
       ~at:[cls "observation__content"]
@@ -338,6 +570,8 @@ let render app (data : data React.signal) =
         header;
         problem_el;
         mosaic_el;
+        identify_block;
+        drive_el;
         date_card;
         El.div
           ~at:[cls "observation__place"]
@@ -386,8 +620,9 @@ let render app (data : data React.signal) =
                  | Some _ -> "Déplacer"
                  | None -> "Placer sur la carte")
                data);
-          Rb.act move_click (fun () ->
-              Route.go (Route.Modal (Route.Move_point id)));
+          Rb.act move_click open_move;
+          Rb.view drive_el (drive_card app)
+            (React.S.map ~eq:( == ) (fun d -> d.photos) data);
           Rb.act modify.click (fun () ->
               let at = !current.at in
               El.set_prop El.Prop.value
@@ -412,16 +647,30 @@ let render app (data : data React.signal) =
         ];
         (match mini_map with
         | None -> []
-        | Some m -> Rb.act m.tap open_map :: m.bindings);
+        | Some m -> Rb.act m.tap open_move :: m.bindings);
         b_change;
         b_journal;
         b_delete;
         done_.bindings;
         modify.bindings;
         note.bindings;
+        identify_bindings el;
+        arrival_bindings el;
       ] )
 
-let v app id =
+let v ?(arrival = Observation_plan.Opened) app id =
+  (match arrival with
+  | Recorded _ -> Route.canonicalize (Route.Modal (Route.Observation id))
+  | Opened -> ());
+  (* style: the arrival is used by the first rendering only: one made again
+     (the observation gone, then back) is a plain 4h, with no second toast or
+     layer. Written by the rendering. *)
+  let arrival = ref arrival in
+  let render_once data =
+    let a = !arrival in
+    arrival := Observation_plan.Opened;
+    render app a data
+  in
   let el = El.div ~at:[cls "screen"; cls "observation"] [] in
   {
     Screen.el;
@@ -433,5 +682,5 @@ let v app id =
         ~failed:(fun () -> Loaded.notice "L'observation n'a pas pu être lue.")
         el
         (fun () -> load (App.db app) id)
-        (render app);
+        render_once;
   }

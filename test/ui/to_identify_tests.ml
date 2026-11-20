@@ -26,7 +26,7 @@ let t0 = utc 2026 1 1 0 0
 (* ---------- testables ---------- *)
 
 let pp_caller fmt = function
-  | Caller.Noter -> Format.pp_print_string fmt "Noter"
+  | Caller.Observation -> Format.pp_print_string fmt "Observation"
   | Caller.Queue (Some {index; total}) ->
       Format.fprintf fmt "Queue (Some {index = %d; total = %d})" index total
   | Caller.Queue None -> Format.pp_print_string fmt "Queue None"

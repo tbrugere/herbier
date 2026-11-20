@@ -223,7 +223,7 @@ let same_drive_account (a : Herbier_sync_core.Auth.Drive_account.t)
   | Some (_ : string), None | None, Some (_ : string) -> false
 
 (* Every Drive token the app asks for the stored account goes through here,
-   so that its outcome is what 4m and 4e show. A token that resolves after the
+   so that its outcome is what 4m and 4h show. A token that resolves after the
    account changed is not recorded: its outcome was the old account's. The
    setter runs in the token's future callback, outside any update step. *)
 let recorded_drive_token auth state ~set_last ~interactive =

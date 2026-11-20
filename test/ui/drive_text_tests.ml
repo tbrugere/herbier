@@ -1,5 +1,5 @@
 (* Herbier_ui_model.Drive_text (app/ui_model/drive_text.mli): the
-   Drive-related texts of 4e, 4m and 5e. *)
+   Drive-related texts of 4h, 4m and 5e. *)
 
 module Drive_text = Herbier_ui_model.Drive_text
 module Photo = Herbier_domain.Photo
@@ -886,22 +886,22 @@ let pick_error_text_tests =
         "L’autre compte n’a pas pu être utilisé : rien n’a changé.";
     ]
 
-(* ---------- saved_card ---------- *)
+(* ---------- observation_card ---------- *)
 
-let saved_card ?(queued = []) ?(folder = Drive_text.Default) access ~online
-    ~wifi_only photos =
-  Drive_text.saved_card access ~online ~wifi_only ~queued ~folder photos
+let observation_card ?(queued = []) ?(folder = Drive_text.Default) access
+    ~online ~wifi_only photos =
+  Drive_text.observation_card access ~online ~wifi_only ~queued ~folder photos
 
-let saved_card_tests =
+let observation_card_tests =
   [
     ( "no Drive-bound photo: None",
       `Quick,
       fun () ->
-        Alcotest.check card_option_t "saved_card" None
+        Alcotest.check card_option_t "observation_card" None
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
                 [photo ~target:Photo.Original_target.App_only 1])) );
-    ( "2 Uploaded: the title counts them, detail says sent",
+    ( "2 Uploaded, nothing else Drive-bound: None (nothing left to say)",
       `Quick,
       fun () ->
         let photos =
@@ -910,26 +910,18 @@ let saved_card_tests =
             photo ~state:Photo.Upload_state.Uploaded 2;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
-          (Some
-             ( "2 photos \xe2\x86\x92 Google Drive, dossier Herbier",
-               "Envoy\xc3\xa9es dans Google Drive. Copies compress\xc3\xa9es \
-                gard\xc3\xa9es sur le t\xc3\xa9l\xc3\xa9phone." ))
+        Alcotest.check card_option_t "observation_card" None
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
-    );
-    ( "1 Uploaded (singular agreement)",
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
+    ( "1 Uploaded, nothing else Drive-bound: None",
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Uploaded 1] in
-        Alcotest.check card_option_t "saved_card"
-          (Some
-             ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
-               "Envoy\xc3\xa9e dans Google Drive. Copies compress\xc3\xa9es \
-                gard\xc3\xa9es sur le t\xc3\xa9l\xc3\xa9phone." ))
+        Alcotest.check card_option_t "observation_card" None
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
-    );
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
     ( "1 Uploaded + 1 Original_missing: the missing text wins",
       `Quick,
       fun () ->
@@ -939,25 +931,25 @@ let saved_card_tests =
             photo ~state:Photo.Upload_state.Original_missing 2;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Herbier",
                "Original introuvable dans Google Drive : la copie \
                 compress\xc3\xa9e reste." ))
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
-    );
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
     ( "a Failed photo beats a blocking access",
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Failed 1] in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
                "\xc3\x89chec de l\xe2\x80\x99envoi : \xc2\xab Envoyer \
                 maintenant \xc2\xbb dans R\xc3\xa9glages." ))
           (card_opt
-             (saved_card
+             (observation_card
                 ~queued:[photo_id 1]
                 (Drive_text.Denied Drive_text.No_drive_account) ~online:true
                 ~wifi_only:false photos)) );
@@ -965,13 +957,13 @@ let saved_card_tests =
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Failed 1] in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
                "Original non conserv\xc3\xa9 : la copie compress\xc3\xa9e \
                 reste." ))
           (card_opt
-             (saved_card
+             (observation_card
                 ~queued:[photo_id 2]
                 Drive_text.Granted ~online:true ~wifi_only:false photos)) );
     ( "a Failed photo with a row beats one without",
@@ -983,13 +975,13 @@ let saved_card_tests =
             photo ~state:Photo.Upload_state.Failed 2;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Herbier",
                "\xc3\x89chec de l\xe2\x80\x99envoi : \xc2\xab Envoyer \
                 maintenant \xc2\xbb dans R\xc3\xa9glages." ))
           (card_opt
-             (saved_card
+             (observation_card
                 ~queued:[photo_id 2]
                 Drive_text.Granted ~online:true ~wifi_only:false photos)) );
     ( "Original_missing beats Failed",
@@ -1001,13 +993,13 @@ let saved_card_tests =
             photo ~state:Photo.Upload_state.Failed 2;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Herbier",
                "Original introuvable dans Google Drive : la copie \
                 compress\xc3\xa9e reste." ))
           (card_opt
-             (saved_card
+             (observation_card
                 ~queued:[photo_id 2]
                 Drive_text.Granted ~online:true ~wifi_only:false photos)) );
     ( "a blocker beats the fraction",
@@ -1019,12 +1011,12 @@ let saved_card_tests =
             photo ~state:Photo.Upload_state.Pending 2;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Herbier",
                no_drive_account_text ))
           (card_opt
-             (saved_card (Drive_text.Denied Drive_text.No_drive_account)
+             (observation_card (Drive_text.Denied Drive_text.No_drive_account)
                 ~online:true ~wifi_only:false photos)) );
     ( "wifi_only beats the fraction",
       `Quick,
@@ -1036,48 +1028,48 @@ let saved_card_tests =
             photo ~state:Photo.Upload_state.Pending 3;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "3 photos \xe2\x86\x92 Google Drive, dossier Herbier",
                "Envoi en Wi-Fi seulement. Copies compress\xc3\xa9es \
                 gard\xc3\xa9es sur le t\xc3\xa9l\xc3\xa9phone." ))
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:true photos))
-    );
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:true
+                photos)) );
     ( "offline, Pending: the network blocker text",
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Pending 1] in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
                "Envoi d\xc3\xa8s le retour du r\xc3\xa9seau." ))
           (card_opt
-             (saved_card Drive_text.Granted ~online:false ~wifi_only:false
+             (observation_card Drive_text.Granted ~online:false ~wifi_only:false
                 photos)) );
     ( "Denied No_drive_account, nothing failed: points to Dossier Drive",
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Pending 1] in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
                no_drive_account_text ))
           (card_opt
-             (saved_card (Drive_text.Denied Drive_text.No_drive_account)
+             (observation_card (Drive_text.Denied Drive_text.No_drive_account)
                 ~online:true ~wifi_only:false photos)) );
     ( "wifi_only, no blocker, nothing failed or missing",
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Pending 1] in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
                "Envoi en Wi-Fi seulement. Copies compress\xc3\xa9es \
                 gard\xc3\xa9es sur le t\xc3\xa9l\xc3\xa9phone." ))
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:true photos))
-    );
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:true
+                photos)) );
     ( "1 of 3 uploaded: the fraction",
       `Quick,
       fun () ->
@@ -1088,41 +1080,40 @@ let saved_card_tests =
             photo ~state:Photo.Upload_state.Pending 3;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "3 photos \xe2\x86\x92 Google Drive, dossier Herbier",
                "1 sur 3 envoy\xc3\xa9es." ))
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
-    );
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
     ( "nothing uploaded, no blocker, no wifi_only: the default in-progress text",
       `Quick,
       fun () ->
         let photos = [photo ~state:Photo.Upload_state.Pending 1] in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "1 photo \xe2\x86\x92 Google Drive, dossier Herbier",
                "Envoi en cours. Copies compress\xc3\xa9es gard\xc3\xa9es sur \
                 le t\xc3\xa9l\xc3\xa9phone." ))
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
-    );
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
     ( "a picked folder names itself in the title, not \"Herbier\"",
       `Quick,
       fun () ->
         let photos =
           [
             photo ~state:Photo.Upload_state.Uploaded 1;
-            photo ~state:Photo.Upload_state.Uploaded 2;
+            photo ~state:Photo.Upload_state.Pending 2;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Mes plantes",
-               "Envoy\xc3\xa9es dans Google Drive. Copies compress\xc3\xa9es \
-                gard\xc3\xa9es sur le t\xc3\xa9l\xc3\xa9phone." ))
+               "1 sur 2 envoy\xc3\xa9es." ))
           (card_opt
-             (saved_card ~folder:(Drive_text.Picked "Mes plantes")
+             (observation_card ~folder:(Drive_text.Picked "Mes plantes")
                 Drive_text.Granted ~online:true ~wifi_only:false photos)) );
     ( "App_only photos are ignored in the count",
       `Quick,
@@ -1130,19 +1121,33 @@ let saved_card_tests =
         let photos =
           [
             photo ~state:Photo.Upload_state.Uploaded 1;
-            photo ~state:Photo.Upload_state.Uploaded 2;
+            photo ~state:Photo.Upload_state.Pending 2;
             photo ~target:Photo.Original_target.App_only
               ~state:Photo.Upload_state.Uploaded 3;
           ]
         in
-        Alcotest.check card_option_t "saved_card"
+        Alcotest.check card_option_t "observation_card"
           (Some
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Herbier",
-               "Envoy\xc3\xa9es dans Google Drive. Copies compress\xc3\xa9es \
-                gard\xc3\xa9es sur le t\xc3\xa9l\xc3\xa9phone." ))
+               "1 sur 2 envoy\xc3\xa9es." ))
           (card_opt
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
-    );
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
+    ( "every Drive-bound photo Uploaded: None even with an Uploaded App_only \
+       one mixed in",
+      `Quick,
+      fun () ->
+        let photos =
+          [
+            photo ~state:Photo.Upload_state.Uploaded 1;
+            photo ~target:Photo.Original_target.App_only
+              ~state:Photo.Upload_state.Uploaded 2;
+          ]
+        in
+        Alcotest.check card_option_t "observation_card" None
+          (card_opt
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
   ]
 
 (* ---------- has_drive_photo ---------- *)
@@ -1156,10 +1161,10 @@ let has_drive_photo_tests =
           "has_drive_photo" expected
           (Drive_text.has_drive_photo photos);
         Alcotest.(check bool)
-          "saved_card is Some exactly then" expected
+          "observation_card is Some exactly then" expected
           (Option.is_some
-             (saved_card Drive_text.Granted ~online:true ~wifi_only:false photos))
-    )
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) )
   in
   [
     case "no photo: false" [] false;
@@ -1172,6 +1177,19 @@ let has_drive_photo_tests =
         photo ~state:Photo.Upload_state.Failed 2;
       ]
       true;
+    ( "has_drive_photo true but observation_card None: every Drive-bound photo \
+       already Uploaded",
+      `Quick,
+      fun () ->
+        let photos = [photo ~state:Photo.Upload_state.Uploaded 1] in
+        Alcotest.(check bool)
+          "has_drive_photo" true
+          (Drive_text.has_drive_photo photos);
+        Alcotest.(check bool)
+          "observation_card" false
+          (Option.is_some
+             (observation_card Drive_text.Granted ~online:true ~wifi_only:false
+                photos)) );
   ]
 
 (* ---------- viewer_badge ---------- *)
@@ -1437,7 +1455,7 @@ let drive_text =
       folder_button_tests;
       picker_config_tests;
       pick_error_text_tests;
-      saved_card_tests;
+      observation_card_tests;
       has_drive_photo_tests;
       viewer_badge_tests;
       viewer_drive_tests;

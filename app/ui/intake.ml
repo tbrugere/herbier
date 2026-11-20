@@ -29,7 +29,7 @@ let open_sheet = function
             ( Route.Tags | Route.Manage_tags | Route.Plant _
             | Route.Edit_plant _ | Route.New_plant | Route.Observation _
             | Route.Change_species _ | Route.Identify _ | Route.Record
-            | Route.Saved _ | Route.Viewer _ | Route.Link_species _
+            | Route.Recorded _ | Route.Viewer _ | Route.Link_species _
             | Route.Move_point _ | Route.Drive_folder ) ->
             false
       in

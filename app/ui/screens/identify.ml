@@ -450,7 +450,7 @@ let open_ ~host services ~caller ?note ~add_photo ~on_close photos =
   let kicker_cls =
     match caller with
     | Queue _ -> ["identify__kicker"; "identify__kicker--queue"]
-    | Noter | Free_name _ -> ["identify__kicker"]
+    | Observation | Free_name _ -> ["identify__kicker"]
   in
   let header =
     El.div
@@ -680,15 +680,7 @@ let open_ ~host services ~caller ?note ~add_photo ~on_close photos =
     let after_retry : W.Button.kind =
       match Failure.retry f with true -> Secondary | false -> Primary
     in
-    let exits =
-      match Caller.retake caller with
-      | true ->
-          [
-            act ~icon:W.Icon.Photo_camera ~kind:after_retry Text.retake Retake;
-            act ~kind:Secondary (Text.keep_unnamed ~photos:n) Keep_unnamed;
-          ]
-      | false -> [act ~kind:Secondary Text.back_label Back]
-    in
+    let exits = [act ~kind:after_retry Text.back_label Back] in
     let force =
       match f with
       | No_plant {can_force = true} ->
@@ -847,7 +839,7 @@ let open_ ~host services ~caller ?note ~add_photo ~on_close photos =
         Rb.on_release (fun () -> ignore (view_anchor : Rb.anchor));
         Rb.view body render_body phase;
         (* 6d shows the answer it was opened on: a new phase closes it, so
-           that its « Choisir » never picks from another answer. *)
+           that a choice in it never picks from another answer. *)
         Rb.act (React.S.changes phase) (fun (_ : Layer.phase) ->
             Option.iter Identify_compare.close !compare_layer);
         Rb.view footer render_footer phase;

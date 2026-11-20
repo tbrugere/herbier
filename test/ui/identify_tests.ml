@@ -29,7 +29,7 @@ let plant_id_t =
     Plant_id.equal
 
 let pp_caller fmt = function
-  | Caller.Noter -> Format.pp_print_string fmt "Noter"
+  | Caller.Observation -> Format.pp_print_string fmt "Observation"
   | Caller.Queue (Some {index; total}) ->
       Format.fprintf fmt "Queue (Some {index = %d; total = %d})" index total
   | Caller.Queue None -> Format.pp_print_string fmt "Queue None"
@@ -69,8 +69,6 @@ let pp_outcome fmt = function
   | Layer.Chosen (p : Plantnet.proposal) ->
       Format.fprintf fmt "Chosen %s" p.name
   | Layer.None_matches -> Format.pp_print_string fmt "None_matches"
-  | Layer.Retake -> Format.pp_print_string fmt "Retake"
-  | Layer.Keep_unnamed -> Format.pp_print_string fmt "Keep_unnamed"
 
 let outcome_t = Alcotest.testable pp_outcome Layer.equal_outcome
 
@@ -167,7 +165,7 @@ let sample_proposal : Plantnet.proposal =
 let answer_of ~detected ?(proposals = [sample_proposal]) () : Plantnet.answer =
   {proposals; detected; flora = None; remaining = None}
 
-let opened ?(caller = Caller.Noter) ?(flora = None) organs =
+let opened ?(caller = Caller.Observation) ?(flora = None) organs =
   Layer.open_ ~caller ~flora organs
 
 let answered (t : Layer.t) result =
@@ -179,11 +177,11 @@ let answered (t : Layer.t) result =
 
 let caller_action () =
   Alcotest.(check action_t)
-    "Noter, owned" Caller.Choose
-    (Caller.action Caller.Noter ~owned:true);
+    "Observation, owned" Caller.Link
+    (Caller.action Caller.Observation ~owned:true);
   Alcotest.(check action_t)
-    "Noter, not owned" Caller.Choose
-    (Caller.action Caller.Noter ~owned:false);
+    "Observation, not owned" Caller.Create
+    (Caller.action Caller.Observation ~owned:false);
   let queue = Caller.Queue (Some {index = 1; total = 3}) in
   Alcotest.(check action_t)
     "Queue, owned" Caller.Link
@@ -199,33 +197,26 @@ let caller_action () =
     "Free_name, not owned" Caller.Link
     (Caller.action free ~owned:false)
 
-let caller_current_and_retake () =
+let caller_current () =
   let id = Plant_id.fresh () in
   Alcotest.(check (option plant_id_t))
     "Free_name" (Some id)
     (Caller.current (Caller.Free_name id));
   Alcotest.(check (option plant_id_t))
-    "Noter" None
-    (Caller.current Caller.Noter);
+    "Observation" None
+    (Caller.current Caller.Observation);
   Alcotest.(check (option plant_id_t))
     "Queue" None
-    (Caller.current (Caller.Queue (Some {index = 1; total = 1})));
-  Alcotest.(check bool) "retake Noter" true (Caller.retake Caller.Noter);
-  Alcotest.(check bool)
-    "retake Queue" false
-    (Caller.retake (Caller.Queue (Some {index = 1; total = 1})));
-  Alcotest.(check bool)
-    "retake Free_name" false
-    (Caller.retake (Caller.Free_name id))
+    (Caller.current (Caller.Queue (Some {index = 1; total = 1})))
 
 let caller_tests =
   [
     Alcotest.test_case
-      "action: Noter -> Choose, Queue -> Link/Create by owned, Free_name -> \
-       Link both"
+      "action: Observation -> Link/Create by owned, Queue -> Link/Create by \
+       owned, Free_name -> Link both"
       `Quick caller_action;
-    Alcotest.test_case "current: Some id only for Free_name; retake: Noter only"
-      `Quick caller_current_and_retake;
+    Alcotest.test_case "current: Some id only for Free_name" `Quick
+      caller_current;
   ]
 
 (* ============================================================ *)
@@ -1062,46 +1053,6 @@ let retry_tests () =
       (Failure.Plantnet Plantnet.No_plant, false);
     ]
 
-let retake_and_keep_unnamed_tests () =
-  let t, _ = opened [Organ.Auto] in
-  let tf, _ = answered t (Error (Failure.Plantnet Plantnet.Quota_used_up)) in
-  let tr, cmds = Layer.step tf Layer.Retake in
-  Alcotest.(check phase_t)
-    "Noter: Retake -> Closed Retake" (Layer.Closed Layer.Retake) tr.phase;
-  Alcotest.(check commands_t) "[Close Retake]" [Layer.Close Layer.Retake] cmds;
-  let tk, cmds2 = Layer.step tf Layer.Keep_unnamed in
-  Alcotest.(check phase_t)
-    "Noter: Keep_unnamed -> Closed Keep_unnamed"
-    (Layer.Closed Layer.Keep_unnamed) tk.phase;
-  Alcotest.(check commands_t)
-    "[Close Keep_unnamed]"
-    [Layer.Close Layer.Keep_unnamed]
-    cmds2;
-  let tp, _ = answered t (Ok (Lazy.force uncertain)) in
-  let tpr, cmds_p = Layer.step tp Layer.Retake in
-  Alcotest.(check state_t) "Noter: Retake while Proposals unchanged" tp tpr;
-  Alcotest.(check commands_t) "no command" [] cmds_p;
-  let tq, _ =
-    opened ~caller:(Caller.Queue (Some {index = 1; total = 1})) [Organ.Auto]
-  in
-  let tqf, _ = answered tq (Error (Failure.Plantnet Plantnet.Quota_used_up)) in
-  let tqr, cmds3 = Layer.step tqf Layer.Retake in
-  Alcotest.(check state_t) "Queue: Retake unchanged" tqf tqr;
-  Alcotest.(check commands_t) "no command" [] cmds3;
-  let tqk, cmds4 = Layer.step tqf Layer.Keep_unnamed in
-  Alcotest.(check state_t) "Queue: Keep_unnamed unchanged" tqf tqk;
-  Alcotest.(check commands_t) "no command" [] cmds4;
-  let tn, _ =
-    opened ~caller:(Caller.Free_name (Plant_id.fresh ())) [Organ.Auto]
-  in
-  let tnf, _ = answered tn (Error (Failure.Plantnet Plantnet.Quota_used_up)) in
-  List.iter
-    (fun (name, ev) ->
-      let t2, cmds = Layer.step tnf ev in
-      Alcotest.(check state_t) ("Free_name: " ^ name ^ " unchanged") tnf t2;
-      Alcotest.(check commands_t) "no command" [] cmds)
-    [("Retake", Layer.Retake); ("Keep_unnamed", Layer.Keep_unnamed)]
-
 (* No request without a tap: a representative set of reachable states (open,
    Sending, Proposals certain/uncertain, Failed per a few error classes,
    Closed), checked against events that must never emit a [Send], and
@@ -1151,8 +1102,6 @@ let no_request_without_a_tap () =
       ("Back", Layer.Back);
       ("Add", Layer.Add);
       ("Photo_added None", Layer.Photo_added None);
-      ("Retake", Layer.Retake);
-      ("Keep_unnamed", Layer.Keep_unnamed);
     ]
   in
   List.iter
@@ -1256,12 +1205,7 @@ let after_close_tests () =
         (Printf.sprintf "%s -> Stay" name)
         Layer.Stay
         (Layer.after_close outcome))
-    [
-      ("Left", Layer.Left);
-      ("None_matches", Layer.None_matches);
-      ("Retake", Layer.Retake);
-      ("Keep_unnamed", Layer.Keep_unnamed);
-    ]
+    [("Left", Layer.Left); ("None_matches", Layer.None_matches)]
 
 let layer_tests =
   [
@@ -1333,9 +1277,6 @@ let layer_tests =
     Alcotest.test_case "Retry: re-asks only where Failure.retry is true" `Quick
       retry_tests;
     Alcotest.test_case
-      "Retake/Keep_unnamed: close for Noter, unchanged for Queue" `Quick
-      retake_and_keep_unnamed_tests;
-    Alcotest.test_case
       "No request without a tap, over a scripted walk of states" `Quick
       no_request_without_a_tap;
     Alcotest.test_case
@@ -1362,25 +1303,20 @@ let constants_tests () =
     "flora_menu_label" "Flore Pl@ntNet" Text.flora_menu_label;
   Alcotest.(check string) "retry" "Réessayer" Text.retry;
   Alcotest.(check string)
-    "force" "Voir quand même les propositions peu probables" Text.force;
-  Alcotest.(check string) "retake" "Reprendre la photo" Text.retake
+    "force" "Voir quand même les propositions peu probables" Text.force
 
-let not_kept_and_keep_unnamed_tests () =
+let not_kept_tests () =
   Alcotest.(check string)
     "not_kept, 1 photo" "Pl@ntNet ne conserve pas la photo."
     (Text.not_kept ~photos:1);
   Alcotest.(check string)
     "not_kept, 2 photos" "Pl@ntNet ne conserve pas les photos."
-    (Text.not_kept ~photos:2);
-  Alcotest.(check string)
-    "keep_unnamed, 1 photo" "Garder la photo, sans nom"
-    (Text.keep_unnamed ~photos:1);
-  Alcotest.(check string)
-    "keep_unnamed, 2 photos" "Garder les photos, sans nom"
-    (Text.keep_unnamed ~photos:2)
+    (Text.not_kept ~photos:2)
 
 let kicker_tests () =
-  Alcotest.(check string) "Noter" "Pl@ntNet" (Text.kicker Caller.Noter);
+  Alcotest.(check string)
+    "Observation" "Pl@ntNet"
+    (Text.kicker Caller.Observation);
   Alcotest.(check string)
     "Free_name" "Pl@ntNet"
     (Text.kicker (Caller.Free_name (Plant_id.fresh ())));
@@ -1393,11 +1329,11 @@ let kicker_tests () =
 
 let proposals_label_tests () =
   Alcotest.(check string)
-    "Noter, None" "Propositions"
-    (Text.proposals_label Caller.Noter ~count:None);
+    "Observation, None" "Propositions"
+    (Text.proposals_label Caller.Observation ~count:None);
   Alcotest.(check string)
-    "Noter, Some 5" "Propositions · 5"
-    (Text.proposals_label Caller.Noter ~count:(Some 5));
+    "Observation, Some 5" "Propositions · 5"
+    (Text.proposals_label Caller.Observation ~count:(Some 5));
   let queue = Caller.Queue (Some {index = 1; total = 3}) in
   Alcotest.(check string)
     "Queue, None" "Propositions Pl@ntNet"
@@ -1477,11 +1413,11 @@ let owned_and_action_tests () =
     Printf.sprintf "Aussi dans ma collection : %s" p.display_name
   in
   Alcotest.(check string)
-    "owned, Noter, 2 obs."
+    "owned, Observation, 2 obs."
     (Printf.sprintf "Dans ma collection · %s · 2 obs." p.display_name)
-    (Text.owned Caller.Noter o);
+    (Text.owned Caller.Observation o);
   Alcotest.(check string)
-    "owned, Queue: same wording as Noter"
+    "owned, Queue: same wording as Observation"
     (Printf.sprintf "Dans ma collection · %s · 2 obs." p.display_name)
     (Text.owned (Caller.Queue (Some {index = 1; total = 3})) o);
   Alcotest.(check string)
@@ -1489,17 +1425,16 @@ let owned_and_action_tests () =
     free_name_want
     (Text.owned (Caller.Free_name (Plant_id.fresh ())) o);
   Alcotest.(check string)
-    "compare_owned, Noter: no observation count"
+    "compare_owned, Observation: no observation count"
     (Printf.sprintf "Dans ma collection · %s" p.display_name)
-    (Text.compare_owned Caller.Noter o);
+    (Text.compare_owned Caller.Observation o);
   Alcotest.(check string)
-    "compare_owned, Queue: same wording as Noter"
+    "compare_owned, Queue: same wording as Observation"
     (Printf.sprintf "Dans ma collection · %s" p.display_name)
     (Text.compare_owned (Caller.Queue None) o);
   Alcotest.(check string)
     "compare_owned, Free_name: same wording as owned's" free_name_want
     (Text.compare_owned (Caller.Free_name (Plant_id.fresh ())) o);
-  Alcotest.(check string) "action Choose" "Choisir" (Text.action Caller.Choose);
   Alcotest.(check string) "action Link" "Lier" (Text.action Caller.Link);
   Alcotest.(check string) "action Create" "+ Créer" (Text.action Caller.Create)
 
@@ -1622,7 +1557,7 @@ let no_forbidden_wording_tests () =
     failures;
   let callers =
     [
-      Caller.Noter;
+      Caller.Observation;
       Caller.Queue (Some {index = 1; total = 3});
       Caller.Free_name (Plant_id.fresh ());
     ]
@@ -1682,7 +1617,6 @@ let no_forbidden_wording_tests () =
   (match Text.compare_names p0 with
   | None -> ()
   | Some s -> check_text "compare_names" s);
-  check_text "compare_action Choose" (Text.compare_action Caller.Choose);
   check_text "compare_action Link" (Text.compare_action Caller.Link);
   check_text "compare_action Create" (Text.compare_action Caller.Create);
   check_text "compare_previous" Text.compare_previous;
@@ -1700,7 +1634,6 @@ let no_forbidden_wording_tests () =
       ("continue_", Text.continue_);
       ("flora_label None", Text.flora_label None);
       ("organ_badge None", Text.organ_badge None);
-      ("action Choose", Text.action Caller.Choose);
       ("action Link", Text.action Caller.Link);
       ("action Create", Text.action Caller.Create);
       ("none_matches", Text.none_matches);
@@ -1708,9 +1641,6 @@ let no_forbidden_wording_tests () =
       ("flora_menu_label", Text.flora_menu_label);
       ("retry", Text.retry);
       ("force", Text.force);
-      ("retake", Text.retake);
-      ("keep_unnamed 1", Text.keep_unnamed ~photos:1);
-      ("keep_unnamed 2", Text.keep_unnamed ~photos:2);
     ];
   List.iter
     (fun o -> check_text "organ_badge" (Text.organ_badge (Some o)))
@@ -1719,8 +1649,7 @@ let no_forbidden_wording_tests () =
 let text_tests =
   [
     Alcotest.test_case "constant texts" `Quick constants_tests;
-    Alcotest.test_case "not_kept and keep_unnamed: singular/plural" `Quick
-      not_kept_and_keep_unnamed_tests;
+    Alcotest.test_case "not_kept: singular/plural" `Quick not_kept_tests;
     Alcotest.test_case "kicker: Pl@ntNet, or the queue's index / total" `Quick
       kicker_tests;
     Alcotest.test_case "proposals_label: the four Caller × count cases" `Quick

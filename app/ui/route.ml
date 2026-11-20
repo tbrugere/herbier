@@ -15,7 +15,7 @@ type modal =
   | Move_point of Observation_id.t
   | Identify of Observation_id.t
   | Record
-  | Saved of Observation_id.t
+  | Recorded of {observation : Observation_id.t; identify : bool}
   | Viewer of Photo_id.t
   | Search of string
   | Link_species of Plant_id.t
@@ -91,7 +91,12 @@ let of_fragment = function
       | ["observation"; id; "position"] ->
           observation id (fun id -> Move_point id)
       | ["a-identifier"; id] -> observation id (fun id -> Identify id)
-      | ["noter"; "enregistre"; id] -> observation id (fun id -> Saved id)
+      | ["noter"; "enregistre"; id] ->
+          observation id (fun observation ->
+              Recorded {observation; identify = false})
+      | ["noter"; "enregistre"; id; "identifier"] ->
+          observation id (fun observation ->
+              Recorded {observation; identify = true})
       | ["photo"; id] -> (
           match Photo_id.of_string id with
           | Some id -> Modal (Viewer id)
@@ -116,7 +121,10 @@ let to_fragment = function
       "observation/" ^ Observation_id.to_string id ^ "/position"
   | Modal (Identify id) -> "a-identifier/" ^ Observation_id.to_string id
   | Modal Record -> "noter"
-  | Modal (Saved id) -> "noter/enregistre/" ^ Observation_id.to_string id
+  | Modal (Recorded {observation; identify = false}) ->
+      "noter/enregistre/" ^ Observation_id.to_string observation
+  | Modal (Recorded {observation; identify = true}) ->
+      "noter/enregistre/" ^ Observation_id.to_string observation ^ "/identifier"
   | Modal (Viewer id) -> "photo/" ^ Photo_id.to_string id
   | Modal (Search "") -> "chercher"
   | Modal (Search q) -> search_prefix ^ encoded q

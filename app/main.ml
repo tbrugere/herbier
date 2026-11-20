@@ -91,7 +91,10 @@ let modal app = function
       Herbier_ui.Screens.Resolve.v app
         (Herbier_ui.Screens.Resolve.Intercept {text; outside})
   | Herbier_ui.Route.Record -> Herbier_ui.Screens.Record.v app
-  | Herbier_ui.Route.Saved id -> Herbier_ui.Screens.Saved.v app id
+  | Herbier_ui.Route.Recorded {observation; identify} ->
+      Herbier_ui.Screens.Observation.v
+        ~arrival:(Recorded {identify})
+        app observation
   | Herbier_ui.Route.Viewer id -> Herbier_ui.Screens.Viewer.v app id
   | Herbier_ui.Route.New_plant ->
       Herbier_ui.Screens.Edit_plant.v app Herbier_ui.Screens.Edit_plant.New
@@ -178,6 +181,7 @@ let () =
   let root = root () in
   El.set_children root
     [El.p ~at:[At.class' (Jstr.v "screen")] [El.txt' "Chargement…"]];
+  Herbier_ui.Widgets.Toast.mount ();
   Fut.await (start ()) (fun (db, app) ->
       (match app with
       | Ok app -> (

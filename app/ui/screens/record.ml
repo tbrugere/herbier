@@ -30,6 +30,11 @@ type discard = Discard | Continue
 (* A photo of the row and its preview's object URL. *)
 type shot = Capture.shot * Jstr.t
 
+(* The observation written by the first Enregistrer, and whether 4h is asked
+   to open the identification layer: a retry lands where that save would
+   have. *)
+type saved = {observation : Observation.t; identify : bool}
+
 (* A Ready shot is identified by its object URL. *)
 let same_slot : shot Shot_row.slot -> shot Shot_row.slot -> bool =
   Shot_row.equal_slot (fun (_, a) (_, b) -> Jstr.equal a b)
@@ -265,7 +270,7 @@ let v app =
   in
   (* Shots added while saving (a gallery pick resolving late) are saved on the
      next round. *)
-  let rec save_shots (o : Observation.t) =
+  let rec save_shots ({observation = o; identify} as round) =
     let shots = List.map fst (items ()) in
     Fut.await (App.save_photos app ~observation:o shots) (fun failed ->
         let saved (s, _) = List.memq s shots && not (List.memq s failed) in
@@ -276,8 +281,10 @@ let v app =
         | [], [] -> (
             match !released with
             | true -> ()
-            | false -> Route.replace (Route.Modal (Route.Saved o.id)))
-        | [], _ :: _ -> save_shots o
+            | false ->
+                Route.replace
+                  (Route.Modal (Route.Recorded {observation = o.id; identify})))
+        | [], _ :: _ -> save_shots round
         | _ :: _, _ -> fail (photos_not_saved (List.length failed)))
   in
   let observation () =
@@ -309,10 +316,11 @@ let v app =
     let saved edits =
       Fut.map (Result.map (fun (_ : int) -> ())) (App.save app edits)
     in
+    let target =
+      Record_plan.target ~plants ~chosen:!chosen (React.S.value name.value)
+    in
     let o, write =
-      match
-        Record_plan.target ~plants ~chosen:!chosen (React.S.value name.value)
-      with
+      match target with
       | Existing p ->
           let o = observation (Some p.id) in
           (o, saved [Observations.upsert o])
@@ -324,8 +332,14 @@ let v app =
           let o = observation None in
           (o, saved [Observations.upsert o])
     in
+    let identify =
+      Record_plan.identify_after_save
+        ~on_photo:(React.S.value (App.identify_on_photo app))
+        (React.S.value (App.identify_gate app))
+        target
+    in
     let+ () = write in
-    o
+    {observation = o; identify}
   in
   (* The [disabled] attribute is the gate a tap meets; this one covers a
      programmatic click. *)
@@ -336,15 +350,15 @@ let v app =
         set_saving true;
         set_save_error None;
         match !stored with
-        | Some o -> save_shots o
+        | Some saved -> save_shots saved
         | None ->
             Fut.await (observation ()) (function
               | Error e ->
                   log "save" (Db.error_to_string e);
                   fail "Enregistrement impossible. Réessayez."
-              | Ok o ->
-                  stored := Some o;
-                  save_shots o))
+              | Ok saved ->
+                  stored := Some saved;
+                  save_shots saved))
   in
   let idle f () =
     match React.S.value saving with true -> () | false -> f ()

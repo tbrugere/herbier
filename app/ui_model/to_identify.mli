@@ -39,8 +39,8 @@ val no_photo_line : string
 (** ["Cette observation n'a pas de photo à envoyer à Pl@ntNet."] *)
 
 val offline_line : string
-(** ["Hors-ligne : l'identification reviendra avec le réseau."] (4d's line
-    without its second sentence, which is about a save). *)
+(** ["Hors-ligne : l'identification reviendra avec le réseau."] (the line under
+    4k's 6i and 4h's Identifier). *)
 
 val identify_line : Identify_settings.gate -> photos:int -> string option
 (** The 12 px line under the button, first matching: [photos = 0] →

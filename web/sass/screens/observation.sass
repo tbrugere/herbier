@@ -134,3 +134,34 @@
   .mini-map
     margin: (- widgets.$card-padding) (- widgets.$card-padding) 12px
     border-radius: 0
+
+// « Identifier avec Pl@ntNet » while « À identifier » (as 4k's 6i).
+.observation__identify-block
+  display: flex
+  flex-direction: column
+  gap: 6px
+
+.observation__identify
+  gap: 10px
+
+  // Greyed while it cannot run (offline, no photo, no key), as 4k's 6i.
+  &[aria-disabled]
+    opacity: .5
+    cursor: default
+
+  &[aria-busy]
+    opacity: .6
+
+.observation__identify-line
+  +base.ui(12px, 400)
+  line-height: 1.4
+  color: var(--muted)
+
+// The Drive card's slot leaves the card itself as the column's flex item: a
+// hidden card adds no gap.
+.observation__drive-slot
+  display: contents
+
+// The Drive card.
+.observation__drive-title
+  +base.ui(15px, 700)

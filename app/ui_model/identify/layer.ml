@@ -2,19 +2,12 @@ module Organ = Herbier_identify.Organ
 module Plantnet = Herbier_identify.Plantnet
 module Settings = Herbier_store.Settings
 
-type outcome =
-  | Left
-  | Chosen of Plantnet.proposal
-  | None_matches
-  | Retake
-  | Keep_unnamed
+type outcome = Left | Chosen of Plantnet.proposal | None_matches
 [@@deriving eq]
 
 type after = Stay | Resolve of Plantnet.proposal [@@deriving eq]
 
-let after_close = function
-  | Chosen p -> Resolve p
-  | Left | None_matches | Retake | Keep_unnamed -> Stay
+let after_close = function Chosen p -> Resolve p | Left | None_matches -> Stay
 
 type phase =
   | Sending of {slow : bool}
@@ -61,8 +54,6 @@ type event =
   | Set_flora of Settings.flora option
   | Force
   | Retry
-  | Retake
-  | Keep_unnamed
 
 let slow_ms = 600
 
@@ -218,11 +209,6 @@ let on_open t event =
   | Force, (Sending _ | Proposals _ | Failed _ | Closed _) -> same
   | Retry, Failed f when Failure.retry f -> reask t
   | Retry, (Sending _ | Proposals _ | Failed _ | Closed _) -> same
-  | Retake, Failed (_ : Failure.t) when Caller.retake t.caller -> close t Retake
-  | Keep_unnamed, Failed (_ : Failure.t) when Caller.retake t.caller ->
-      close t Keep_unnamed
-  | (Retake | Keep_unnamed), (Sending _ | Proposals _ | Failed _ | Closed _) ->
-      same
 
 let step t event =
   match t.phase with

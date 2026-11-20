@@ -2,7 +2,7 @@ module Organ = Herbier_identify.Organ
 module Plantnet = Herbier_identify.Plantnet
 
 let kicker : Caller.t -> string = function
-  | Noter | Free_name _ -> "Pl@ntNet"
+  | Observation | Free_name _ -> "Pl@ntNet"
   | Queue (Some {index; total}) ->
       Printf.sprintf "À identifier · %d / %d" index total
   | Queue None -> "À identifier"
@@ -23,7 +23,7 @@ let proposals_label (caller : Caller.t) ~count =
   let label =
     match caller with
     | Queue _ -> "Propositions Pl@ntNet"
-    | Noter | Free_name _ -> "Propositions"
+    | Observation | Free_name _ -> "Propositions"
   in
   match count with None -> label | Some n -> Printf.sprintf "%s · %d" label n
 
@@ -71,13 +71,12 @@ let add_hint : Organ.suggestion -> string =
 
 let owned (caller : Caller.t) ({plant; observations} : Owned.t) =
   match caller with
-  | Noter | Queue _ ->
+  | Observation | Queue _ ->
       Printf.sprintf "Dans ma collection · %s · %d obs." plant.display_name
         observations
   | Free_name _ -> Ref_pick.also_owned plant
 
 let action : Caller.action -> string = function
-  | Choose -> "Choisir"
   | Link -> "Lier"
   | Create -> "+ Créer"
 
@@ -113,12 +112,6 @@ let failure_body ~photos : Failure.t -> string = function
 
 let retry = "Réessayer"
 let force = "Voir quand même les propositions peu probables"
-let retake = "Reprendre la photo"
-
-let keep_unnamed ~photos =
-  match photos > 1 with
-  | true -> "Garder les photos, sans nom"
-  | false -> "Garder la photo, sans nom"
 
 let reask_blocked : Identify_settings.gate -> string option = function
   | Ready (_ : Identify_settings.Key.t) | Waiting -> None
@@ -159,13 +152,10 @@ let compare_names (p : Plantnet.proposal) =
 let compare_owned (caller : Caller.t)
     ({plant; observations = (_ : int)} : Owned.t) =
   match caller with
-  | Noter | Queue _ -> "Dans ma collection · " ^ plant.display_name
+  | Observation | Queue _ -> "Dans ma collection · " ^ plant.display_name
   | Free_name _ -> Ref_pick.also_owned plant
 
-let compare_action : Caller.action -> string = function
-  | Choose -> "Choisir cette espèce"
-  | (Link | Create) as a -> action a
-
+let compare_action = action
 let compare_previous = "Proposition précédente"
 let compare_next = "Proposition suivante"
 let compare_no_image = "Pl@ntNet n'a pas envoyé de photo de cette espèce."

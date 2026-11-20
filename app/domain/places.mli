@@ -103,7 +103,7 @@ val label : Observation.t list -> label option
     raises. *)
 
 val place_name : Observation.t -> string option
-(** One observation's place name (4h, 4e, 5b): its [place_label] when non-blank,
+(** One observation's place name (4h, 5b): its [place_label] when non-blank,
     else its [place_derived] when non-blank, else [None]; trimmed with
     [String.trim] as in {!label}. *)
 
@@ -112,9 +112,9 @@ val unknown_name : string
     with no name. Never stored. *)
 
 val display_name : Observation.t -> string option
-(** The name line of 4h and 4e: [place_name o] when [Some _]; else
-    [Some unknown_name] when [o.position = Some _] (whatever its coordinates);
-    else [None]. Never raises. *)
+(** The name line of 4h: [place_name o] when [Some _]; else [Some unknown_name]
+    when [o.position = Some _] (whatever its coordinates); else [None]. Never
+    raises. *)
 
 val point_text : point -> string
 (** The coordinates as the screens print them: ["%.4f, %.4f"] of [lat] and

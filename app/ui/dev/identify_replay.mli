@@ -7,9 +7,10 @@
     or the store.
 
     A checkbox « Appelant : fiche nom libre (6k) » picks the caller of the
-    layers opened next: unticked [Noter], ticked [Free_name] of a synthetic id
-    made once per page (not the collection plant's, which then shows as « Aussi
-    dans ma collection »; « Lier » on every card; 6g with « Retour »).
+    layers opened next: unticked [Observation] (4h), ticked [Free_name] of a
+    synthetic id made once per page (not the collection plant's, which then
+    shows as « Aussi dans ma collection »; « Lier » on every card; 6g with «
+    Retour »).
 
     One button per state, each opening the layer (the caller above, one or two
     {!Kit.test_jpeg} previews, organs [Auto]); « + <organe> » adds a new test
@@ -31,6 +32,6 @@
     Re-asks replay the same scenario. Each request logs Make's line to the
     block's log and the console, prefixed [rejeu: ] (Make's line never holds the
     key nor the URL). Closing logs [fermé : <outcome>] ([Left], [Chosen <name>],
-    [None_matches], [Retake], [Keep_unnamed]) and the photos' count. *)
+    [None_matches]) and the photos' count. *)
 
 val el : unit -> Brr.El.t

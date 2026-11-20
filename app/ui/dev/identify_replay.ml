@@ -138,8 +138,6 @@ let outcome_text : Layer.outcome -> string = function
   | Left -> "Left"
   | Chosen p -> "Chosen " ^ p.name
   | None_matches -> "None_matches"
-  | Retake -> "Retake"
-  | Keep_unnamed -> "Keep_unnamed"
 
 let photo log ~color organ =
   Fut.map
@@ -189,7 +187,7 @@ let el () =
   let caller () =
     match El.prop El.Prop.checked as_free_name with
     | true -> free_name
-    | false -> Caller.Noter
+    | false -> Caller.Observation
   in
   let open_layer ~photos chosen () =
     scenario := chosen;

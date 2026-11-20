@@ -1,8 +1,8 @@
 (** The identification layer (6b, 6c, 6f, 6g; architecture §12): a full-screen
-    layer over its caller (4k, 4g, or a dev page), not a route (a route change
-    would release the caller's state). Mounted inside [host] (the caller's root
-    element), so releasing the caller's element removes it; registered with
-    {!Overlay}, so Android back closes it (outcome [Left]). Runs
+    layer over its caller (4k, 4h, 4g, or a dev page), not a route (a route
+    change would release the caller's state). Mounted inside [host] (the
+    caller's root element), so releasing the caller's element removes it;
+    registered with {!Overlay}, so Android back closes it (outcome [Left]). Runs
     {!Herbier_ui_model.Identify.Layer}: every request through
     [services.identify], one per Send command, never retried. No text names
     CORS, exposing or an origin; the console line of each request is
@@ -65,8 +65,9 @@ val open_ :
     (the photos past {!Herbier_identify.Organ.max_photos} are not shown nor
     sent, and go back unchanged at the end of [on_close]'s list). [note]: the
     observation's note (4k), shown as « « <note> » » at the end of the layer's
-    photo row ([identify__queue-note]); absent or blank → nothing (4d, the dev
-    page). Commands:
+    photo row ([identify__queue-note]); absent or blank → nothing (4h, which
+    shows the note itself, and the dev page). 6g's last button is « Retour » for
+    every caller. Commands:
     - [Send {seq; request}]: with [Failure.of_gate (S.value services.gate)] =
       [Ok k] →
       [services.identify ~key:(Key.to_string k) ~flora:request.flora
@@ -119,7 +120,7 @@ val gallery_adder :
     [problem "La photo n'a pas pu être enregistrée."], [None]. Never raises;
     [problem] is called from a future callback (outside an update step). *)
 
-(** {1 A caller's « Identifier » button (4k's 6i, 4g's 6k)} *)
+(** {1 A caller's « Identifier » button (4k's 6i, 4h, 4g's 6k)} *)
 
 type launcher
 (** One layer at a time over a caller's block: the open layer, whether the block

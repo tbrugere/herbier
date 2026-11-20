@@ -7,6 +7,7 @@ module Plant_link = Herbier_ui_model.Plant_link
 module Plant_version = Herbier_ui_model.Plant_version
 module Ref_pick = Herbier_ui_model.Ref_pick
 module Record_plan = Herbier_ui_model.Record_plan
+module Observation_plan = Herbier_ui_model.Observation_plan
 module Ref_search = Herbier_ui_model.Ref_search
 module To_identify = Herbier_ui_model.To_identify
 open Brr
@@ -287,46 +288,44 @@ let render app mode (d : data) =
         problem "L'observation n'a pas pu être déplacée."
     | Ok _ -> after_move ()
   in
-  (* [extra] goes first: a new plant must exist before the observation's
-     plant_id references it. *)
-  let move_now ?(extra = []) target =
+  let write_now w =
     let at = Ptime_clock.now () in
-    Fut.await
-      (App.save app
-         (extra
-         @ [Observations.upsert {o with plant_id = target; updated_at = at}]))
-      moved
+    Fut.await (Choice_save.save app ~at o w) moved
   in
-  let move ?extra target = guarded (fun () -> move_now ?extra target) in
+  let move_now p = write_now (Observation_plan.Attach p) in
+  let move p = guarded (fun () -> move_now p) in
+  let to_identify () =
+    guarded (fun () ->
+        let at = Ptime_clock.now () in
+        Fut.await
+          (App.save app
+             [Observations.upsert {o with plant_id = None; updated_at = at}])
+          moved)
+  in
   (* 4k / 5c « + » and 6j « + Créer »: the plant, its GBIF link and the move
      in one save. *)
   let create_with ~name taxon =
-    let at = Ptime_clock.now () in
-    let plant = Plant_link.create ~id:(Plant_id.fresh ()) ~at ~name taxon in
-    Fut.await
-      (App.create_linked app
-         ~extra:
-           [
-             Observations.upsert
-               {o with plant_id = Some plant.id; updated_at = at};
-           ]
-         plant taxon)
-      moved
+    let plant =
+      Plant_link.create ~id:(Plant_id.fresh ()) ~at:(Ptime_clock.now ()) ~name
+        taxon
+    in
+    write_now (Observation_plan.Create_linked {plant; taxon})
   in
   let create_free_now name =
-    let plant = Plant.v ~id:(Plant_id.fresh ()) ~at:(Ptime_clock.now ()) name in
-    move_now ~extra:[Plants.upsert plant] (Some plant.id)
+    write_now
+      (Observation_plan.Create_free
+         (Plant.v ~id:(Plant_id.fresh ()) ~at:(Ptime_clock.now ()) name))
   in
   let current = Option.map (fun (p : Plant.t) -> p.id) d.current in
   let pick action (c : Candidate.t) =
     match (action : Ref_pick.action) with
-    | Ref_pick.Attach_to p -> move (Some p.id)
+    | Ref_pick.Attach_to p -> move p.id
     | Ref_pick.Create ->
         guarded (fun () ->
             choose ~while_here ~mode:Ref_pick.Attach ~current ~plants:d.plants
               ~problem ~release c (fun action taxon ->
                 match action with
-                | Ref_pick.Attach_to p -> move_now (Some p.id)
+                | Ref_pick.Attach_to p -> move_now p.id
                 | Ref_pick.Create ->
                     create_with ~name:(Plant_link.display_name c) taxon
                 | Ref_pick.Inert ->
@@ -377,16 +376,16 @@ let render app mode (d : data) =
         Fut.await (App.resolve_choice p) (fun r ->
             set_resolving false;
             while_here (fun () ->
+                let at = Ptime_clock.now () in
                 match
-                  Record_plan.of_choice ~plants:d.plants
+                  Observation_plan.chosen ~at ~new_plant:(Plant_id.fresh ())
+                    ~plants:d.plants
                     (Choice.resolved (Choice.v p) r)
                 with
-                | Target (Existing pl) -> move_now (Some pl.id)
-                | Linked {name; taxon} -> create_with ~name taxon
-                | Target (Free name) -> create_free_now name
-                | Target To_identify ->
+                | Some w -> Fut.await (Choice_save.save app ~at o w) moved
+                | None ->
                     release ();
-                    problem "Cette proposition n'a pas de nom.")))
+                    problem Observation_plan.no_name)))
   in
   (* [guarded] only checks that no save runs: one would leave the screen and
      take the layer with it, after a credit was spent. *)
@@ -507,7 +506,7 @@ let render app mode (d : data) =
     El.set_class (Jstr.v "is-current") (is_current p) r.el;
     ( r.el,
       Rb.act r.click (fun () ->
-          match is_current p with true -> () | false -> move (Some p.id))
+          match is_current p with true -> () | false -> move p.id)
       :: r.bindings )
   in
   let collection_els, collection_bindings =
@@ -580,7 +579,7 @@ let render app mode (d : data) =
                  | n -> Printf.sprintf "« Nom libre » crée la fiche « %s »." n)
                search.value);
           Rb.class_ free.el "is-inactive" blank;
-          Rb.act unlink.click (fun () -> move None);
+          Rb.act unlink.click to_identify;
         ];
         (match left with
         | None -> []

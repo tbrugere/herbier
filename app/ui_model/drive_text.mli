@@ -1,4 +1,4 @@
-(** The Drive-related texts of 4e, 4m and 5e (architecture §5), from the photo
+(** The Drive-related texts of 4h, 4m and 5e (architecture §5), from the photo
     rows, the upload queue's state and the Drive access. Pure: the screens and
     App compute the inputs. *)
 
@@ -263,9 +263,10 @@ type card = {title : string; detail : string}
 val equal_card : card -> card -> bool
 
 val has_drive_photo : Photo.t list -> bool
-(** Some photo has [original_target = Drive]: {!saved_card} is [Some _]. *)
+(** Some photo has [original_target = Drive]: {!observation_card} may be
+    [Some _]. *)
 
-val saved_card :
+val observation_card :
   folder:folder ->
   access ->
   online:bool ->
@@ -273,12 +274,12 @@ val saved_card :
   queued:Photo_id.t list ->
   Photo.t list ->
   card option
-(** 4e's Drive card from the observation's photos: [None] when none has
-    [original_target = Drive]. [queued]: the photos with a queue row ({!queue}'s
-    [queued]). Title: « <n> photo(s) → Google Drive, dossier <folder_name
-    folder> » (n = the Drive-bound photos). Detail, first that applies over
-    them: all [Uploaded] → « Envoyée(s) dans Google Drive. Copies compressées
-    gardées sur le téléphone. »; some [Original_missing] → « Original
+(** 4h's Drive card from the observation's photos: [None] when none has
+    [original_target = Drive], or when every Drive-bound photo is [Uploaded]
+    (nothing left to say: the tiles' ↑ badges are gone too). [queued]: the
+    photos with a queue row ({!queue}'s [queued]). Title: « <n> photo(s) →
+    Google Drive, dossier <folder_name folder> » (n = the Drive-bound photos).
+    Detail, first that applies over them: some [Original_missing] → « Original
     introuvable dans Google Drive : la copie compressée reste. »; some [Failed]
     with a queue row → « Échec de l’envoi : « Envoyer maintenant » dans
     Réglages. »; some [Failed] without one (its original could not be kept when

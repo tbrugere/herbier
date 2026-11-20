@@ -13,7 +13,13 @@ type modal =
   | Move_point of Herbier_domain.Ids.Observation_id.t  (** 5b *)
   | Identify of Herbier_domain.Ids.Observation_id.t  (** 4k *)
   | Record  (** 4d *)
-  | Saved of Herbier_domain.Ids.Observation_id.t  (** 4e *)
+  | Recorded of {
+      observation : Herbier_domain.Ids.Observation_id.t;
+      identify : bool;
+    }
+      (** 4h right after 4d's Enregistrer; [identify]: ask 4h to open the
+          identification layer at arrival. 4h rewrites the URL to
+          [Observation observation]'s at once ({!canonicalize}). *)
   | Viewer of Herbier_domain.Ids.Photo_id.t  (** 5e *)
   | Search of string  (** 4i, prefilled with this query (may be [""]) *)
   | Link_species of Herbier_domain.Ids.Plant_id.t
@@ -34,10 +40,11 @@ val of_fragment : string -> t
     ["observation/<id>/espece"], ["observation/<id>/position"],
     ["a-identifier/<id>"] → [Observation], [Change_species], [Move_point],
     [Identify]; ["noter"] → [Modal Record]; ["noter/enregistre/<id>"] →
-    [Modal (Saved id)]; ["photo/<id>"] → [Modal (Viewer id)]; ["chercher"] →
-    [Modal (Search "")]; ["chercher/<q>"] → [Modal (Search q)], [q]
-    percent-decoded (undecodable: as is); ["plante/<id>/lier"] →
-    [Modal (Link_species id)]; ["lien/<t>"] →
+    [Modal (Recorded {observation = id; identify = false})];
+    ["noter/enregistre/<id>/identifier"] → the same with [identify = true];
+    ["photo/<id>"] → [Modal (Viewer id)]; ["chercher"] → [Modal (Search "")];
+    ["chercher/<q>"] → [Modal (Search q)], [q] percent-decoded (undecodable: as
+    is); ["plante/<id>/lier"] → [Modal (Link_species id)]; ["lien/<t>"] →
     [Modal (Intercepted {text = t; outside = true})], [t] percent-decoded as [q]
     is and taken whole (it may hold ['/']), when it is not blank; ["coller/<t>"]
     → the same with [outside = false]; ["dev/<name>"] → [Dev name]. Anything
