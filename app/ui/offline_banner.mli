@@ -2,7 +2,7 @@
     bandeau discret dans la barre d'état »), outside every screen so it survives
     route changes. *)
 
-val mount : App.t -> route:Route.t React.signal -> unit
+val mount : App.t -> route:Route.t React.signal -> bool React.signal
 (** Once, after the network is watched, with [route] the route shown
     ({!Router.start}'s): appends to [document.body] a [div.offline-banner]
     ([role="status"], [aria-live="polite"]) showing
@@ -11,4 +11,6 @@ val mount : App.t -> route:Route.t React.signal -> unit
     hidden (the [hidden] attribute) when that is [None], on [Modal Record] (4d
     shows the same text as its pill) and on [Dev _] pages; while it shows,
     [document.documentElement] carries [data-offline] (the screens' top
-    padding). Its bindings are held for the app's lifetime. Never raises. *)
+    padding). Its bindings are held for the app's lifetime. Answers whether the
+    strip shows (exactly while [data-offline] is set), for {!System_bars}. Never
+    raises. *)

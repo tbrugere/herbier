@@ -3,7 +3,7 @@
 // with the MapLibre facade (map.js). Importing MapLibre's CSS makes esbuild
 // emit dist/vendor.css next to vendor.js.
 import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite';
-import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
+import { Capacitor, CapacitorHttp, SystemBars, registerPlugin } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { Preferences } from '@capacitor/preferences';
 import { App } from '@capacitor/app';
@@ -39,6 +39,10 @@ globalThis.herbier = {
   // Herbier's own plugin (android/…/UploaderPlugin.java, WorkManager): absent
   // in a browser, so that the binding reports it Unavailable.
   uploader: Capacitor.isNativePlatform() ? registerPlugin('Uploader') : undefined,
+  // Capacitor's core plugin (system-bar icon style): its web implementation
+  // rejects every call, so a browser gets none and the binding reports it
+  // Unavailable.
+  systemBars: Capacitor.isNativePlatform() ? SystemBars : undefined,
   exifr,
   map,
 };

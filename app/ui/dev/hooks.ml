@@ -7,6 +7,14 @@ let geocode_requests () = List.rev !started
    newest first. *)
 let transitions : Transition.record list ref = ref []
 
+(* style: module-level, as [transitions]: the system-bar value last applied,
+   [None] before the first. *)
+let system_bars : Herbier_ui_model.System_bars.t option ref = ref None
+
+let surface_name = function
+  | Herbier_ui_model.System_bars.Light -> "light"
+  | Dark -> "dark"
+
 let install () =
   Herbier_bindings.Dev_hook.export_int "live" Rb.live;
   Herbier_geo_io.Geocoder.observe (fun r -> started := r :: !started);
@@ -14,7 +22,16 @@ let install () =
       List.map Herbier_geo.Geocode.request_to_string (geocode_requests ()));
   Transition.observe (fun r -> transitions := r :: !transitions);
   Herbier_bindings.Dev_hook.export_strings "transitions" (fun () ->
-      List.rev_map Transition.record_to_string !transitions)
+      List.rev_map Transition.record_to_string !transitions);
+  System_bars.observe (fun t -> system_bars := Some t);
+  Herbier_bindings.Dev_hook.export_strings "systemBars" (fun () ->
+      match !system_bars with
+      | None -> []
+      | Some {status; navigation} ->
+          [
+            "status:" ^ surface_name status;
+            "navigation:" ^ surface_name navigation;
+          ])
 
 module France_packs = Herbier_geo.France_packs
 module Code = Herbier_geo.Communes.Code

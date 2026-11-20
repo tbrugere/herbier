@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
@@ -9,10 +9,22 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
-    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <!-- Light whatever the phone's theme (handoff: « pas de mode sombre »):
+         no DayNight, so night mode reaches neither the window background
+         nor the bar icons. -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/herbier_paper</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <!-- Specified, so that Android 15's edge-to-edge does not derive the
+             navigation bar from the light windowBackground: it would force
+             dark buttons (APPEARANCE_FORCE_LIGHT_NAVIGATION_BARS) and ignore
+             SystemBars.setStyle DARK on 4d, 5e and 6d. Transparent is what
+             edge-to-edge draws anyway. -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
 
@@ -22,5 +34,7 @@
         <item name="windowSplashScreenBackground">@color/herbier_paper</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
     </style>
 </resources>

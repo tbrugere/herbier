@@ -202,6 +202,9 @@ let () =
          collection, and the plugins keep it until this listener exists. *)
       match app with
       | Ok app ->
-          Herbier_ui.Offline_banner.mount app ~route;
+          let offline_banner = Herbier_ui.Offline_banner.mount app ~route in
+          Herbier_ui.System_bars.start ~route ~offline_banner;
           Herbier_ui.Intake.start app
-      | Error _ -> ())
+      | Error _ ->
+          Herbier_ui.System_bars.start ~route
+            ~offline_banner:(React.S.const false))

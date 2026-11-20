@@ -871,7 +871,7 @@ let open_ ~host services ~caller ?note ~add_photo ~on_close photos =
   El.append_children host [root];
   El.set_has_focus true back;
   let t = {close = (fun () -> finish Left)} in
-  overlay := Some (Overlay.push ~close:t.close);
+  overlay := Some (Overlay.push ~surface:Light ~close:t.close);
   Fut.await (services.collection ()) (fun c ->
       match !closed with true -> () | false -> set_collection (Some c));
   List.iter run commands;

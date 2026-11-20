@@ -46,4 +46,5 @@ let mount app ~route =
         (React.S.map (function true -> None | false -> Some "") shown);
       Rb.attr (Document.root G.document) "data-offline" flag;
     ];
-  El.append_children (Document.body G.document) [el]
+  El.append_children (Document.body G.document) [el];
+  shown

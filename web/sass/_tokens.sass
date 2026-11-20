@@ -68,8 +68,6 @@ $dark: #1d1a14
   --map-accuracy-fill: #{color.change($moss, $alpha: .18)}
   --map-accuracy-line: #{color.change($moss, $alpha: .6)}
   --map-origin: var(--hint)
-  // Android status bar, behind the screen titles.
-  --status-bar: var(--paper)
 
   --font-ui: Manrope, system-ui, sans-serif
   --font-sci: Newsreader, Georgia, serif
@@ -81,6 +79,9 @@ $dark: #1d1a14
   // insets while it shows (0 otherwise, see _shell.sass).
   --offline-banner-height: 24px
   --offline-inset: 0px
+  // The gesture or button bar's inset under a screen's last line: 0 inside
+  // the tab shell, whose tab bar already covers it (_shell.sass).
+  --screen-end-inset: env(safe-area-inset-bottom)
   --grid-gap: 10px
   --touch-min: 44px
   --button-primary-height: 60px

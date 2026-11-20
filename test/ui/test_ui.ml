@@ -27,6 +27,7 @@ let () =
       ("snap", Snap_tests.snap);
       ("parked_entry", Parked_entry_tests.parked_entry);
       ("motion", Motion_tests.motion);
+      ("system_bars", System_bars_tests.tests);
       ("drive_text", Drive_text_tests.drive_text);
       ("drive_sheet", Drive_sheet_tests.tests);
       ("network_text", Network_text_tests.network_text);

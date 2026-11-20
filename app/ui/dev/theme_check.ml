@@ -121,7 +121,7 @@ let theme_result () =
       El.p
         ~at:[At.id (Jstr.v "theme"); At.v (Jstr.v "data-ok") (Jstr.v "false")]
         [El.txt' ("missing: " ^ String.concat ", " missing)]
-  | Ok {map = m; status_bar} ->
+  | Ok {map = m} ->
       El.ul
         ~at:[At.id (Jstr.v "theme"); At.v (Jstr.v "data-ok") (Jstr.v "true")]
         [
@@ -133,7 +133,6 @@ let theme_result () =
           line "map.accuracy_fill" m.accuracy_fill;
           line "map.accuracy_line" m.accuracy_line;
           line "map.origin" m.origin;
-          line "status_bar" status_bar;
         ]
 
 let section title els =

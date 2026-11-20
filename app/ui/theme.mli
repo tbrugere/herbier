@@ -21,7 +21,8 @@ type map = Herbier_geo.Style.colours = {
 (** Map colours (handoff 4b, 4h): the record {!Herbier_geo.Style} declares,
     filled here from the CSS tokens. *)
 
-type t = {map : map; status_bar : string  (** Android status bar background *)}
+type t = {map : map}
+(** The custom properties OCaml reads once at startup. *)
 
 type error =
   | Missing_tokens of string list

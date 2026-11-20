@@ -122,6 +122,7 @@ app/
     cap_sqlite.ml  cap_filesystem.ml  cap_app.ml  cap_share_target.ml
     cap_social_login.ml  cap_geolocation.ml  cap_camera.ml
     cap_network.ml        @capacitor/network getStatus: connected and Wi-Fi / cellular (4m's mobile-data warning)
+    cap_system_bars.ml    Capacitor's core SystemBars plugin: setStyle (LIGHT/DARK) per bar
     cap_uploader.ml       Herbier's inline Uploader plugin (android/, §4): one WorkManager job per file that
                           PUTs it to a Drive resumable session under a network constraint; jobs, cancel, changes
     cap_google_authorization.ml  Herbier's inline GoogleAuthorization plugin (android/, §4): a drive.file
@@ -416,6 +417,8 @@ app/
     proposal and image shown, ‹ › and swipe, which of my photos is on top, the images to load),
     text.ml (every French text of 6b, 6c, 6d, 6f, 6g); identify.ml re-exports them)
     snap.ml               the sheet's snap points: nearest, clamp, release projection
+    system_bars.ml        what is under Android's status and navigation bars (light paper, dark 4d/5e/6d,
+                          the offline strip) and which bar styles to send on a change (M8.74)
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
@@ -441,7 +444,7 @@ app/
     html.ml               cls, button (type="button", aria-label, classes), enter: the DOM helpers screens share
     map_slot.ml           a screen's MapLibre map through its life (creating, ready, failed, released)
     log.ml                a screen's console errors: « <scope>: <what> » and the reason (Db, Cap_error, text)
-    theme.ml              reads the custom properties OCaml needs (map colours, status bar) once at startup
+    theme.ml              reads the custom properties OCaml needs (map colours) once at startup
     state.ml              global signals: filters, network, account, 4b's camera and selected place,
                           a one-shot framing asked by 4c/4h (handoff « État »), the place-name sources
     location_notice.ml    the one-time dialog of first opening on location use (M5.57), mounted on
@@ -453,7 +456,10 @@ app/
                           through Transition.run; the shell holds the tab bar; Android back closes a
                           shown Google Picker, else the top Overlay, else walks history or exits
     overlay.ml            the overlays without a history entry (M9: the identification layer), a stack
-                          Android back closes from the top before the router walks history
+                          Android back closes from the top before the router walks history, and the
+                          surfaces they draw under the system bars
+    system_bars.ml        the system-bar icons (M8.74): the route's surface (4d, 5e dark), Overlay's,
+                          the offline strip → Cap_system_bars, only what changed; herbierDev.systemBars()
     screen.ml             a screen's root element + its bindings + when its first content shows (ready),
                           as the router takes them
     transition.ml         runs a Motion kind around a route change: View Transitions API, the hero's
@@ -753,8 +759,19 @@ web/
   Class names follow the handoff vocabulary (`.chip`, `.card`, `.sheet`).
 - Design tokens exist once, as custom properties in `_tokens.sass`. OCaml
   never duplicates them: `ui/theme.ml` reads the few values it needs (map
-  point colours, status-bar colour) with `getComputedStyle` on the root
-  element once at startup.
+  point colours) with `getComputedStyle` on the root element once at
+  startup. There is no status-bar colour: the app is edge-to-edge, paper
+  runs under the bars and only their icons' light/dark style is set
+  (`ui/system_bars.ml`, M8.74).
+- Bottom bars pad `base.above-gesture-bar(<handoff px>)`, i.e.
+  `max(<handoff px>, env(safe-area-inset-bottom))`: the handoff's bottom
+  padding is its frame's margin where a phone has its gesture or button
+  bar, so the larger of the two, never their sum (M8.74). The sheet
+  (`_widgets.sass` `.sheet`), which has no handoff margin and extends its
+  own height over the gesture area, uses the inset alone. A screen's last
+  line pads `base.screen-end(<handoff px>)`, the same `max` over
+  `--screen-end-inset`: the inset on a screen shown alone, 0 inside the tab
+  shell, whose tab bar already covers it.
 - `webDir` is `_build/default/web/dist` directly, so `npx cap sync` copies exactly
   what dune built and nothing generated is committed. A symlink at the root was
   tried first: Capacitor's copy step reproduces a symlink as a symlink, which
@@ -803,7 +820,8 @@ edits, all under `android/app/src/main/`:
   the themed icon; `mipmap-anydpi-v26/` adaptive icons on paper;
   `mipmap-anydpi/` layer-lists for Android 7), `values/colors.xml`, the
   launch theme in `values/styles.xml` (the SplashScreen API: paper and the
-  icon), `strings.xml`; `res/xml/backup_rules.xml`
+  icon) and the app theme, Light (no DayNight) with light system bars (dark
+  icons) from the first frame (M8.74), `strings.xml`; `res/xml/backup_rules.xml`
   and `res/xml/data_extraction_rules.xml`, which keep `CapacitorStorage.xml`
   (the session) and `re.bruge.herbier.keepalive.xml` (the keep-alive job's
   KV, its own session) out of backups.
@@ -895,7 +913,8 @@ test/
                 the route transitions' rules (motion); 4m « Identification »'s key mask, flora list
                 and gate (identify_settings, over fixtures/plantnet_projects_*.json); the
                 identification layer: states, failures, texts (identify_tests, over
-                fixtures/plantnet_identify_*.json); 6d (identify_compare_tests)
+                fixtures/plantnet_identify_*.json); 6d (identify_compare_tests); the system
+                bars' surfaces and changes (system_bars_tests)
   store/        native, alcotest: herbier_store (app/store/: codec, schema, tables, stmt,
                 the per-table queries, references included, settings, ref_images, commune_packs, uploads,
                 search, dev_seed, sync_state); schema SQL, queries, FTS triggers and
@@ -936,7 +955,9 @@ test/
   bindings/
     jsoo/       js_of_ocaml build of herbier_bindings' pure-JS helpers run under node:
                 Fut_result.traverse against the sequential folds it replaced; Cap_uploader over
-                uploader_stub.js (enqueue's wire shape, jobs' decoding, the plugin absent)
+                uploader_stub.js (enqueue's wire shape, jobs' decoding, the plugin absent);
+                Cap_system_bars over system_bars_stub.js (setStyle's wire shape, rejections,
+                the plugin absent)
   scripts/      cram: release_env.t, scripts/lib/release-env.sh's loading and checks of the
                 production values (missing, placeholder, paths, no password ever printed)
   version/      native, alcotest: the git describe stamp (herbier_version), apart so that a commit

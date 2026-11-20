@@ -66,3 +66,21 @@
       HERBIER_FIXTURE_READDIR_MISSING
       %{project_root}/test/fixtures/capacitor_filesystem_readdir_missing.json
       (run node -r %{dep:filesystem_stub.js} %{dep:cap_filesystem_smoke.bc.js})))))))
+
+; Herbier_bindings.Cap_system_bars over a stub globalThis.herbier.systemBars
+; (system_bars_stub.js, preloaded with node -r): the exact wire shape
+; set_style sends for each bar/style pair, its two rejection paths and the
+; plugin-absent case.
+
+(executable
+ (name cap_system_bars_smoke)
+ (modes js)
+ (libraries herbier_bindings brr yojson))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run node -r %{dep:system_bars_stub.js} %{dep:cap_system_bars_smoke.bc.js}))))

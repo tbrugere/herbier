@@ -275,7 +275,7 @@ let open_ ~host ~caller ~owned ~choose ~on_close ~photos c =
          | true -> ()
          | false -> scroll_to (Compare.image_index !state)));
   let t = {close = finish} in
-  overlay := Some (Overlay.push ~close:finish);
+  overlay := Some (Overlay.push ~surface:Dark ~close:finish);
   t
 
 let close t = t.close ()

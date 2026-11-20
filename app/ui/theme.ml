@@ -11,7 +11,7 @@ type map = Herbier_geo.Style.colours = {
   origin : string;
 }
 
-type t = {map : map; status_bar : string}
+type t = {map : map}
 type error = Missing_tokens of string list
 
 (* Applicative over [(_, string list) result]: every read runs, and the
@@ -38,8 +38,7 @@ let load () =
    and+ to_identify = get "--map-to-identify"
    and+ accuracy_fill = get "--map-accuracy-fill"
    and+ accuracy_line = get "--map-accuracy-line"
-   and+ origin = get "--map-origin"
-   and+ status_bar = get "--status-bar" in
+   and+ origin = get "--map-origin" in
    {
      map =
        {
@@ -52,6 +51,5 @@ let load () =
          accuracy_line;
          origin;
        };
-     status_bar;
    })
   |> Result.map_error (fun names -> Missing_tokens names)

@@ -14,6 +14,14 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
   },
   plugins: {
+    // Dark icons over paper whatever the phone's night mode, as the app
+    // theme's windowLightStatusBar (styles.xml) for the first frame.
+    // web/index.html always declares viewport-fit=cover: the hint saves a
+    // relayout at start.
+    SystemBars: {
+      style: 'LIGHT',
+      initialViewportFitValueHint: 'cover',
+    },
     // Only CapacitorHttp's plugin methods are called (bindings/cap_http.ml):
     // the global fetch patch stays off.
     CapacitorHttp: {

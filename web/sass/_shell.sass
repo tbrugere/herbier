@@ -12,11 +12,12 @@
   flex: 1
   min-height: 0
   overflow-y: auto
+  --screen-end-inset: 0px
 
-// A screen's own padding: the side margin of the handoff, and the status bar
-// inset at the top.
+// A screen's own padding: the side margin of the handoff, the status bar inset
+// at the top and, on a screen shown alone, the gesture bar's at the bottom.
 .screen
-  padding: calc(16px + env(safe-area-inset-top) + var(--offline-inset)) var(--space-screen) var(--space-screen)
+  padding: calc(16px + env(safe-area-inset-top) + var(--offline-inset)) var(--space-screen) base.screen-end(var(--space-screen))
   display: flex
   flex-direction: column
   gap: 16px

@@ -398,7 +398,9 @@ let v app =
     | Some (_ : taking) -> Fut.return None
     | None ->
         let photo, give = Fut.create () in
-        let entry = Overlay.push ~close:(fun () -> finish_take None) in
+        let entry =
+          Overlay.push ~surface:Dark ~close:(fun () -> finish_take None)
+        in
         taking := Some {organ; give; entry};
         El.set_children taking_pill [El.txt' (Record_plan.taking_label organ)];
         El.set_class (Jstr.v "record--taking") true el;
