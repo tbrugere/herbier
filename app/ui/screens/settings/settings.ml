@@ -167,13 +167,14 @@ type picker =
   | List_failed of string
   | Choosing of Herbier_geo.Communes.departement list
 
-let pack_row app ~deleting ~set_deleting ~set_message (p : App.pack) =
+let pack_row app ~locked ~deleting ~set_deleting ~set_message (p : App.pack) =
   let remove = W.Button.text ~tone:`Danger "Supprimer" in
   let code = p.code in
   let busy =
-    React.S.map ~eq:Bool.equal
-      (List.exists (Herbier_geo.Communes.Code.equal code))
-      deleting
+    React.S.l2 ~eq:Bool.equal
+      (fun deleting locked ->
+        locked || List.exists (Herbier_geo.Communes.Code.equal code) deleting)
+      deleting locked
   in
   let el =
     El.div
@@ -241,9 +242,12 @@ let ign_offline_block app =
   (* style: the list fetched once per screen, kept for a reopened picker. *)
   let fetched = ref None in
   let packs_el = El.div ~at:[cls "packs"] [] in
+  let france = France_block.v app ~set_message in
   let render (packs, on) =
     let rows =
-      List.map (pack_row app ~deleting ~set_deleting ~set_message) packs
+      List.map
+        (pack_row app ~locked:france.locked ~deleting ~set_deleting ~set_message)
+        packs
     in
     let none =
       match (packs, on) with
@@ -259,10 +263,9 @@ let ign_offline_block app =
       List.concat_map snd rows )
   in
   let add = W.Button.text "Ajouter un département" in
-  (* App-wide, so a screen opened again during a download still says so. *)
-  let downloading =
-    React.S.map ~eq:Bool.equal Option.is_some (App.downloading app)
-  in
+  (* App-wide, so a screen opened again during a download or a « Toute la
+     France » run still says so. *)
+  let downloading = france.busy in
   let field =
     W.Text_field.v ~icon:W.Icon.Search ~placeholder:"Département" ()
   in
@@ -370,25 +373,41 @@ let ign_offline_block app =
            text);
     ]
   in
+  (* During a run, its own progress line says it. *)
   let progress =
-    React.S.map
+    React.S.l2
       ~eq:(Option.equal String.equal)
-      (Option.map (fun (d : Herbier_geo.Communes.departement) ->
-           Printf.sprintf "Téléchargement de %s…" d.name))
-      (App.downloading app)
+      (fun d running ->
+        match running with
+        | true -> None
+        | false ->
+            Option.map
+              (fun (d : Herbier_geo.Communes.departement) ->
+                Printf.sprintf "Téléchargement de %s…" d.name)
+              d)
+      (App.downloading app) france.running
   in
   let els =
-    [
-      packs_el;
-      El.div ~at:[cls "settings__row"] [add.el];
-      field.el;
-      list_el;
-      progress_el;
-      message_el;
-      El.p
-        ~at:[cls "t-meta"; cls "settings__intro"]
-        [El.txt' Pack_text.attribution];
-    ]
+    List.concat
+      [
+        france.summary;
+        [
+          packs_el;
+          El.div
+            ~at:[cls "settings__row"; cls "packs__actions"]
+            [add.el; france.button];
+          field.el;
+          list_el;
+        ];
+        france.after;
+        [
+          progress_el;
+          message_el;
+          El.p
+            ~at:[cls "t-meta"; cls "settings__intro"]
+            [El.txt' Pack_text.attribution];
+        ];
+      ]
   in
   El.set_at (Jstr.v "aria-controls") (Some (Jstr.v picker_list_id)) add.el;
   let bindings =
@@ -418,6 +437,7 @@ let ign_offline_block app =
     @ shown_text message_el message
     @ add.bindings
     @ field.bindings
+    @ france.bindings
   in
   (els, bindings)
 

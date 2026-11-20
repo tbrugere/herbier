@@ -50,7 +50,7 @@ let read_body ~non_2xx_body ~failed response =
 (* [describe] gives a [Failed]'s text (see the .mli). Building the headers
    throws on a value fetch refuses: that is an [Error],
    not an exception that would leave the caller's future pending. *)
-let fetch ~describe ~timeout_ms ~non_2xx_body ~meth ~url ~headers ~body =
+let fetch ~cache ~describe ~timeout_ms ~non_2xx_body ~meth ~url ~headers ~body =
   match
     Brr_io.Fetch.Headers.of_assoc
       (List.map (fun (k, v) -> (Jstr.v k, Jstr.v v)) headers)
@@ -72,7 +72,7 @@ let fetch ~describe ~timeout_ms ~non_2xx_body ~meth ~url ~headers ~body =
       let init =
         Brr_io.Fetch.Request.init
           ~method':(Jstr.v (meth_to_string meth))
-          ~headers ?body ~signal:(Brr.Abort.signal abort) ()
+          ~headers ?body ?cache ~signal:(Brr.Abort.signal abort) ()
       in
       let open Fut.Syntax in
       let+ result =
@@ -85,11 +85,13 @@ let fetch ~describe ~timeout_ms ~non_2xx_body ~meth ~url ~headers ~body =
       result
 
 let request ~meth ~url ~headers ~body =
-  fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url ~headers
+  fetch ~cache:None ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url
+    ~headers
     ~body:(Option.map (fun b -> Brr_io.Fetch.Body.of_jstr (Jstr.v b)) body)
 
 let request_blob ?(timeout_ms = timeout_ms) ~meth ~url ~headers blob =
-  fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url ~headers
+  fetch ~cache:None ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth ~url
+    ~headers
     ~body:(Some (Brr_io.Fetch.Body.of_blob blob))
 
 type form_file = {field : string; filename : string; blob : Brr.Blob.t}
@@ -108,10 +110,11 @@ let form_data ~fields files =
   data
 
 let request_form ?(timeout_ms = timeout_ms) ~url ~fields files =
-  fetch ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth:`POST ~url
-    ~headers:[]
+  fetch ~cache:None ~describe:message ~timeout_ms ~non_2xx_body:Read ~meth:`POST
+    ~url ~headers:[]
     ~body:(Some (Brr_io.Fetch.Body.of_form_data (form_data ~fields files)))
 
-let get ?(timeout_ms = timeout_ms) ?(non_2xx_body = Read) ?(headers = []) url =
-  fetch ~describe:Js_error.message ~timeout_ms ~non_2xx_body ~meth:`GET ~url
-    ~headers ~body:None
+let get ?(timeout_ms = timeout_ms) ?(non_2xx_body = Read) ?(headers = []) ?cache
+    url =
+  fetch ~cache ~describe:Js_error.message ~timeout_ms ~non_2xx_body ~meth:`GET
+    ~url ~headers ~body:None

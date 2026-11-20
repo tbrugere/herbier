@@ -45,9 +45,12 @@ records.
 carto): the full département list (`geoplateforme_wfs_departements.json`), the
 101 communes of Territoire de Belfort (`geoplateforme_wfs_communes_90.json`,
 the smallest metropolitan département with real towns, used for the point
-lookups too), and an unknown code's empty answer
-(`geoplateforme_wfs_communes_99.json`). See `test/geo/test_communes.ml` for the
-exact request each file records. Admin Express COG carto is Etalab 2.0
+lookups too), an unknown code's empty answer
+(`geoplateforme_wfs_communes_99.json`), and Mayotte's 17 communes
+(`geoplateforme_wfs_communes_976.json`: the overseas proof — the WFS serves
+971–974 and 976 with the same request as a metropolitan département). See
+`test/geo/test_communes.ml` for the exact request each file records. Admin
+Express COG carto is Etalab 2.0
 (Licence Ouverte), attribution required: « Limites communales : IGN, Admin
 Express COG carto (Licence Ouverte 2.0) ».
 

@@ -19,6 +19,12 @@
       Observation à Belfort » the same at 47.6380, 6.8628 (in pack 90); « Lieu
       nommé + voisine » saves one labelled « Lieu test » at 44.2500, -0.8500
       then, in a second save, an unlabelled one 200 m north (44.2518, -0.8500).
+      « Observations dans toute la France » saves eleven unlabelled ones: Brest
+      48.3904, -4.4861 (29); Lille 50.6292, 3.0573 (59); Strasbourg 48.5734,
+      7.7521 (67); Paris 48.8566, 2.3522 (75); Perpignan 42.6887, 2.8948 (66);
+      Ajaccio 41.9192, 8.7386 (2A); Pointe-à-Pitre 16.2411, -61.5331 (971);
+      Fort-de-France 14.6161, -61.0588 (972); Cayenne 4.9224, -52.3135 (973);
+      Saint-Denis -20.8823, 55.4504 (974); Mamoudzou -12.7806, 45.2279 (976).
       After each tap the page polls every second for 15 s and shows each created
       observation's [place_derived] (« Lieu inconnu » when it has none) and the
       requests started since the tap (provider and URL). *)

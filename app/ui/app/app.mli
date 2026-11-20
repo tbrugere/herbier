@@ -459,22 +459,117 @@ val downloading : t -> Herbier_geo.Communes.departement option React.signal
 
 val download_pack :
   t -> Herbier_geo.Communes.departement -> (unit, pack_error) result Fut.t
-(** [Busy] while {!downloading} is [Some _]. Else {!downloading} is set at once,
-    and once the startup load of the packs has ended (it replaces the index and
-    {!packs} wholesale), {!Herbier_geo_io.Commune_packs.download}; on success,
-    in one step, {!packs} gains the row (usable, replacing one of the same code)
-    and {!downloading} returns to [None], the index gains the pack; then, when «
-    IGN hors-ligne » is off, [set_place_source t Ign_offline true] (which runs
-    {!geocode_pending}), else {!geocode_pending}. An error is logged
+(** [Busy] while {!downloading} is [Some _] or {!france} {!is_busy} (a « Toute
+    la France » run or « Supprimer tout » going). Else {!downloading} is set at
+    once, and once the startup load of the packs has ended (it replaces the
+    index and {!packs} wholesale), {!Herbier_geo_io.Commune_packs.download}; on
+    success, in one step, {!packs} gains the row (usable, replacing one of the
+    same code) and {!downloading} returns to [None], the index gains the pack;
+    then, when « IGN hors-ligne » is off, [set_place_source t Ign_offline true]
+    (which runs {!geocode_pending}), else {!geocode_pending}. An error is logged
     ([communes: download …]). Never raises. *)
 
 val delete_pack :
   t -> Herbier_geo.Communes.Code.t -> (unit, pack_error) result Fut.t
-(** [Busy] while that code is downloading. Else
+(** [Busy] while that code is downloading or {!france} {!is_busy}. Else
     {!Herbier_geo_io.Commune_packs.delete}; on success the index and {!packs}
     drop it. Names already stored stay (a [place_derived] is a snapshot); the
     switch is not touched. An error is logged ([communes: delete …]). Never
     raises. *)
+
+(** {2 « Toute la France »}
+
+    Every département of the WFS list, one after another, through the very path
+    of {!download_pack} (architecture §8). The plan and the run are
+    {!Herbier_geo.France_packs}; this is their Brr side. *)
+
+type france =
+  | France_idle  (** no run yet, or after {!delete_all_packs} *)
+  | France_starting  (** from the tap to the first département's report *)
+  | France_running of {
+      step : pack_error Herbier_geo.France_packs.step;
+      cancelling : bool;  (** a cancel was asked: the run ends after this one *)
+    }
+  | France_finished of pack_error Herbier_geo.France_packs.outcome
+  | France_deleting  (** {!delete_all_packs} going *)
+
+val is_running : france -> bool
+(** [France_starting] or [France_running _]: a run is going. *)
+
+val is_busy : france -> bool
+(** {!is_running} or [France_deleting]: no other download, delete or run may
+    start. *)
+
+val france : t -> france React.signal
+(** App-wide (a 4m opened again during a run shows it). A primitive signal;
+    starts [France_idle]. *)
+
+val france_plan :
+  ?only:Herbier_geo.Communes.Code.t list ->
+  t ->
+  (Herbier_geo.France_packs.plan, pack_error) result Fut.t
+(** [Busy] while {!downloading} is [Some _] or {!france} {!is_busy}; else
+    {!departements} (offline → [Offline], no request), then, once the startup
+    load of the packs has ended, [France_packs.plan ?only ~downloaded] with
+    [downloaded] the codes of the usable {!packs}. One request (the list). *)
+
+val connection : t -> Herbier_bindings.Cap_network.connection Fut.t
+(** {!Herbier_bindings.Cap_network.status}'s connection; an error is logged
+    ([network: …]) and gives [Unknown]. 4m only warns with it, never blocks. *)
+
+val download_france :
+  t ->
+  Herbier_geo.France_packs.plan ->
+  (pack_error Herbier_geo.France_packs.outcome, pack_error) result Fut.t
+(** [Busy] while {!downloading} is [Some _] or {!france} {!is_busy}; [Offline]
+    (per {!State.network}) with nothing sent. Else {!france} :=
+    [France_starting], the cancel flag cleared, and, once the startup load of
+    the packs has ended, the plan computed again over [plan.departements] with
+    the usable codes of {!packs} then (a département downloaded since the plan
+    was shown is skipped), and [France_packs.Make].run over Fut with:
+    - [download d]: offline per {!State.network} → [Error Offline] (nothing
+      sent); else what {!download_pack} does after its [Busy] check (so
+      {!downloading}, {!packs}, the index, the switch and {!geocode_pending}
+      behave as for one département), [Ok row.size_bytes];
+    - [classify]: {!france_failure};
+    - [sleep ~ms]: a timer, ended early by {!cancel_france};
+    - [cancelled]: the cancel flag;
+    - [report step]: {!france} := [France_running {step; cancelling}].
+
+    At the end {!france} := [France_finished outcome] and one console line
+    ([communes: france complete|cancelled|stopped <position>/<total> <bytes>],
+    the error's text after a stop). One Géoplateforme request at a time, with
+    the {!Herbier_geo_io.Geocoder}'s spacing; no extra pause. Never raises. *)
+
+val france_cause : pack_error -> Herbier_geo.France_packs.cause
+(** [Fetch]'s [Network], [Timeout], [Status], [Payload (Not_json _)], other
+    [Payload], [Refused] → the cause of the same name ([Bad_payload] for the
+    other payload); [Offline], [Busy], [File], [Store] → [Local]. *)
+
+val france_failure : pack_error -> Herbier_geo.France_packs.failure
+(** [France_packs.failure_of_cause (france_cause e)]: network, timeout, 429, 5xx
+    and a body that is no JSON at all are retried after 5, 20, 60 s, then the
+    run stops; 401 and 403 stop it, as do [Refused] and [Local] (the next
+    département would fail too); another status or payload skips the département
+    (listed at the end). Only this run retries a non-JSON body: elsewhere
+    ({!download_pack}, {!geocode_pending}) the user or the next trigger asks
+    again. *)
+
+val cancel_france : t -> unit
+(** While a run is going: the cancel flag set, {!france}'s [cancelling] set at
+    once, a sleeping retry woken. The département being downloaded finishes and
+    is kept (a normal pack); the run then ends [Cancelled], or [Complete] if it
+    was the last département. Running « Toute la France » again resumes: present
+    packs are skipped. No-op otherwise. *)
+
+val delete_all_packs : t -> (unit, pack_error) result Fut.t
+(** « Supprimer tout »: [Busy] while {!downloading} is [Some _] or {!france}
+    {!is_busy}. Else {!france} := [France_deleting] (so nothing else starts
+    meanwhile), what {!delete_pack} does after its [Busy] check on every pack of
+    {!packs} (unusable ones included), one after another in code order; the
+    first error stops and is returned (the ones already deleted stay deleted,
+    {!packs} reflects them). The switch is not touched. Then {!france} :=
+    [France_idle]. *)
 
 (** {1 Identification}
 

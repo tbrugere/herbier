@@ -10,6 +10,7 @@ import { App } from '@capacitor/app';
 import { BackgroundRunner } from '@capacitor/background-runner';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
+import { Network } from '@capacitor/network';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { CapacitorShareTarget } from '@capgo/capacitor-share-target';
 import exifr from 'exifr';
@@ -26,6 +27,7 @@ globalThis.herbier = {
   backgroundRunner: Capacitor.isNativePlatform() ? BackgroundRunner : undefined,
   camera: Camera,
   geolocation: Geolocation,
+  network: Network,
   shareTarget: CapacitorShareTarget,
   http: CapacitorHttp,
   socialLogin: SocialLogin,

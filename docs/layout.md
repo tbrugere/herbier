@@ -121,6 +121,7 @@ app/
                           image step (canvas_jpeg, shared by photos and refs_io)
     cap_sqlite.ml  cap_filesystem.ml  cap_app.ml  cap_share_target.ml
     cap_social_login.ml  cap_geolocation.ml  cap_camera.ml
+    cap_network.ml        @capacitor/network getStatus: connected and Wi-Fi / cellular (4m's mobile-data warning)
     cap_uploader.ml       Herbier's inline Uploader plugin (android/, §4): one WorkManager job per file that
                           PUTs it to a Drive resumable session under a network constraint; jobs, cancel, changes
     cap_google_authorization.ml  Herbier's inline GoogleAuthorization plugin (android/, §4): a drive.file
@@ -373,6 +374,10 @@ app/
                           pack_file.ml (the stored pack format), index.ml (the in-memory index:
                           point-in-polygon, nearest edge within 50 m); communes.ml re-exports them; pure,
                           tested in test/geo/
+    france_packs.ml       « Toute la France » (M5.73): the plan (skip present, estimate) and the run (one
+                          département after another, retry with backoff, cancel), a functor over the IO;
+                          pure, tested in test/geo/
+    france_sizes.ml       the stored size of every département's pack, measured once (data)
   geo_io/                 §8 of architecture, Brr part
     tiles.ml              region extract download and storage (v2, with the offline map)
     map.ml                OCaml face of the MapLibre facade (create, set_data, fly_to, …) and the
@@ -414,6 +419,7 @@ app/
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
+    france_text.ml        4m « Toute la France » texts (M5.73) and the mobile-data warning rule
     drive_text.ml         the Drive texts of 4e, 4m and 5e: access, queue title and status, last upload,
                           account meta, the « Dossier Drive » button and prompt, the Drive radio's title,
                           chosen line and disabled reason, the stop dialog, 4e's card,
@@ -479,7 +485,8 @@ app/
                           account chosen)
       geocoding.ml        place names: the background geocoding and the 4m source switches; save
       reference_fetch.ml  a plant's reference fetch, its organ thumbnails, the GBIF link
-      packs.ml            the « IGN hors-ligne » packs' download and delete
+      packs.ml            the « IGN hors-ligne » packs' download and delete; « Toute la France » (M5.73):
+                          its plan, run (France_packs.Make over Fut), cancel, and « Supprimer tout »
       drive_folder.ml     4m « Dossier Drive » sheet's services: the Picker's build config, the account
                           chooser, the token for the sheet's account, the Picker, the pick's files.get check
                           and store with its account (with the Drive radio's pick, storage_target = drive
@@ -593,7 +600,10 @@ app/
                           radio_row.ml (a radio of « Où vont mes photos »), row.ml
                           (a title-and-meta row), identification.ml (M9, 6h: « Identifier dès la photo »,
                           « Flore Pl@ntNet », « Clé API Pl@ntNet » (masked, « Modifier », the
-                          my.plantnet.org link; not in the design), first section under the account card)
+                          my.plantnet.org link; not in the design), first section under the account card),
+                          france_block.ml (M5.73, « IGN hors-ligne »: « Toute la France » with its
+                          confirm panel, progress bar and « Interrompre », the packs' summary and
+                          « Supprimer tout »)
       edit_plant.ml (5a)  move_point.ml (5b)  viewer.ml (5e)
 ```
 

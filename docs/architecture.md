@@ -1100,6 +1100,29 @@ the classifier must accept both a bare URL and text containing one.
     source. A point already tried
     remotely this session still gets the pack lookup. Data: IGN Admin
     Express COG carto, Licence Ouverte 2.0, credited in 4m;
+    « Toute la France » (M5.73) downloads every département of that list
+    (overseas included: the WFS serves 971–974 and 976 with the same
+    request; the 4m panel says so) through the very same per-département
+    path, one after another in the list's code order, skipping those
+    already present (a pack whose file did not load is downloaded again):
+    resuming is just running it again, no run state is stored. The plan and
+    the run are pure (`Geo.France_packs`, a functor over the IO, tested
+    with a fake download). Failures: a transient one (network, timeout,
+    429, 5xx, a body that is not JSON at all: the Géoplateforme answered 3
+    of 101 requests with a 200 and a metrics page while measuring) is
+    retried after 5, 20 then 60 s, then the run stops (only this run
+    retries a non-JSON body: elsewhere the user or the next trigger asks
+    again); a bad answer for one département skips it (listed at the
+    end); 401 or 403 (the service refuses this client), offline, a file or
+    a store error stops the run. One request at a time with the
+    geocoder's spacing, no extra pause. A cancel takes effect between
+    départements or during a wait; the one in flight finishes and is kept.
+    Foreground only (the panel asks to keep Herbier open). The estimate is
+    the sum of a measured per-département size table (`Geo.France_sizes`)
+    over what is left; on mobile data (`@capacitor/network`) a large
+    transfer (the table's gzip column, ≥ 10 Mo) shows a warning, never a
+    block. « Supprimer tout » deletes every pack; while it or a run goes,
+    no other download, delete or run starts;
   - a one-time dialog at first opening (`Ui.Location_notice`, flag
     `location_notice_seen`) says positions stay on the phone, lists each
     source with what it sends to whom, and that the map's background tiles

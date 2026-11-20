@@ -26,6 +26,11 @@ let departements_json =
 let communes_90_json = lazy (json_fixture "geoplateforme_wfs_communes_90.json")
 let communes_99_json = lazy (json_fixture "geoplateforme_wfs_communes_99.json")
 
+(* Mayotte (976): the overseas proof — the WFS serves 971-974 and 976 with
+   the same request as a metropolitan département. *)
+let communes_976_json =
+  lazy (json_fixture "geoplateforme_wfs_communes_976.json")
+
 (* ---------- points (measured by ray casting on the raw payload) ---------- *)
 
 let belfort : Places.point = {lat = 47.6380; lon = 6.8628}
@@ -33,6 +38,11 @@ let giromagny : Places.point = {lat = 47.7420; lon = 6.8280}
 let eloie : Places.point = {lat = 47.6872; lon = 6.8714}
 let landes : Places.point = {lat = 44.25; lon = -0.85}
 let schlucht : Places.point = {lat = 48.0633; lon = 7.0081}
+
+(* Mamoudzou (976): inside its polygon, checked by ray casting on the raw
+   payload (bbox lon <= 45.300, so a point east of it is open sea). *)
+let mamoudzou : Places.point = {lat = -12.7806; lon = 45.2279}
+let mayotte_open_sea : Places.point = {lat = -12.80; lon = 45.60}
 
 (* ---------- testables ---------- *)
 
@@ -171,6 +181,28 @@ let fixture_script_tests =
               Printf.sprintf
                 "fetch geoplateforme_wfs_communes_99.json geoplateforme \"%s\""
                 (communes_99_recorded_url ())
+            in
+            Alcotest.(check bool)
+              "fetch line present" true
+              (Text.contains ~sub:line script) );
+    ( "the recording script fetches the 976 (Mayotte) fixture at \
+       communes_request ~departement:976's exact URL",
+      `Quick,
+      fun () ->
+        let script_path = "../../scripts/record-geo-fixtures.sh" in
+        match
+          try Some (In_channel.with_open_bin script_path In_channel.input_all)
+          with Sys_error _ -> None
+        with
+        | None ->
+            Alcotest.fail
+              "scripts/record-geo-fixtures.sh is missing: cannot check the \
+               fixture URL against it"
+        | Some script ->
+            let line =
+              Printf.sprintf
+                "fetch geoplateforme_wfs_communes_976.json geoplateforme \"%s\""
+                (force_communes_request "976").url
             in
             Alcotest.(check bool)
               "fetch line present" true
@@ -363,6 +395,26 @@ let pack_of_payload_ok () =
   Alcotest.(check bool)
     "fewer vertices than the raw payload (11294)" true (total < 11294);
   Alcotest.(check bool) "at least one vertex" true (total > 0)
+
+(* Mayotte (976): the WFS serves an overseas département exactly like a
+   metropolitan one. *)
+let pack_976 =
+  lazy (force_pack_of_payload ~departement:"976" (Lazy.force communes_976_json))
+
+let pack_of_payload_976_ok () =
+  let p = Lazy.force pack_976 in
+  Alcotest.(check string) "departement" "976" (Code.to_string p.departement);
+  Alcotest.(check int) "communes count" 17 (List.length p.communes);
+  List.iter
+    (fun (c : Communes.commune) ->
+      Alcotest.(check bool)
+        (Printf.sprintf "%s: name non-blank" c.insee)
+        true
+        (String.length (String.trim c.name) > 0))
+    p.communes;
+  Alcotest.(check pack_result)
+    "round trip: of_string (to_string p) = Ok p" (Ok p)
+    (Communes.of_string (Communes.to_string p))
 
 let pack_of_payload_truncated () =
   let j =
@@ -672,6 +724,10 @@ let pack_of_payload_tests =
     ( "an empty collection (unknown code) is Unexpected",
       `Quick,
       pack_of_payload_empty );
+    ( "976 (Mayotte): Ok, 17 communes, departement = 976, names non-blank, \
+       round trip",
+      `Quick,
+      pack_of_payload_976_ok );
   ]
 
 (* ---------- simplify ---------- *)
@@ -1121,6 +1177,17 @@ let index_order_and_absent_remove () =
        (Communes.departements_of
           (Communes.remove (Lazy.force idx_90) (code "68"))))
 
+(* 976 (Mayotte): an overseas pack is named exactly like a
+   metropolitan one; the offline lookup is not limited to a France box. *)
+let index_976_name () =
+  let idx = Communes.add Communes.empty (Lazy.force pack_976) in
+  Alcotest.(check (option string))
+    "Mamoudzou" (Some "Près de Mamoudzou")
+    (Communes.name idx mamoudzou);
+  Alcotest.(check (option string))
+    "open sea east of Mayotte" None
+    (Communes.name idx mayotte_open_sea)
+
 let index_tests =
   [
     ( "find and name on the 90 pack: Belfort, Giromagny, Éloie, outside, nan",
@@ -1133,6 +1200,9 @@ let index_tests =
     ( "departements_of is sorted; removing an absent code changes nothing",
       `Quick,
       index_order_and_absent_remove );
+    ( "976 (Mayotte): named at Mamoudzou, None at the open sea east of it",
+      `Quick,
+      index_976_name );
   ]
 
 (* ---------- holes and edges, on synthetic squares ---------- *)

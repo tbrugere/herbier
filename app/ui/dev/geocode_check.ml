@@ -101,6 +101,23 @@ let observation ?label (p : Places.point) : Observation.t =
     deleted_at = None;
   }
 
+(* Points across metropolitan France and one per overseas département, named
+   offline once « Toute la France » has run. *)
+let france_points =
+  [
+    {Places.lat = 48.3904; lon = -4.4861} (* Brest, 29 *);
+    {Places.lat = 50.6292; lon = 3.0573} (* Lille, 59 *);
+    {Places.lat = 48.5734; lon = 7.7521} (* Strasbourg, 67 *);
+    {Places.lat = 48.8566; lon = 2.3522} (* Paris, 75 *);
+    {Places.lat = 42.6887; lon = 2.8948} (* Perpignan, 66 *);
+    {Places.lat = 41.9192; lon = 8.7386} (* Ajaccio, 2A *);
+    {Places.lat = 16.2411; lon = -61.5331} (* Pointe-à-Pitre, 971 *);
+    {Places.lat = 14.6161; lon = -61.0588} (* Fort-de-France, 972 *);
+    {Places.lat = 4.9224; lon = -52.3135} (* Cayenne, 973 *);
+    {Places.lat = -20.8823; lon = 55.4504} (* Saint-Denis, 974 *);
+    {Places.lat = -12.7806; lon = 45.2279} (* Mamoudzou, 976 *);
+  ]
+
 let poll_seconds = 15
 
 (* Polled rather than bound to [App.saved]: dev pages hand the router no
@@ -179,10 +196,13 @@ let place_names app =
           observation ~label:"Lieu test" {lat = 44.25; lon = -0.85};
           observation {lat = 44.2518; lon = -0.85};
         ]);
+  let france = Kit.button "Observations dans toute la France" in
+  Kit.on_click france (fun () ->
+      save_all app ~out (List.map (fun p -> observation p) france_points));
   [
     El.h2 [El.txt' "Noms de lieux"];
     line;
-    El.p [refresh; single; belfort_button; pair];
+    El.p [refresh; single; belfort_button; pair; france];
     out;
   ]
 

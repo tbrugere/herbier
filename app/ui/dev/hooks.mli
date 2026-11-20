@@ -18,4 +18,17 @@ val install_app : App.t -> unit
 (** Sets [herbierDev.markOriginal(state)], [state] ["uploaded"] or
     ["original_missing"]: {!Drive_check.mark_original} on the newest live
     Drive-bound photo, its outcome a console line (so 4e and 5e can be checked
-    live while open). Called once, by [Dev_pages.find], with the app. *)
+    live while open). Called once, by [Dev_pages.find], with the app.
+
+    Also « Toute la France »: [herbierDev.downloadFrance(codes)] ([codes]
+    comma-separated, spaces ignored, an invalid code logged and dropped, [""]
+    the whole list) runs {!App.france_plan} then {!App.download_france} without
+    confirmation, the outcome one console line [france: …];
+    [herbierDev.cancelFrance()] is {!App.cancel_france};
+    [herbierDev.franceState()] is one string: [idle], [deleting], [starting],
+    [running 37/101 <bytes> <name>], [retrying 2/3 20000],
+    [complete <n> <bytes> failed=<codes>], [cancelled 37/101],
+    [stopped 37/101 <error>] (a cancel asked adds [ cancelling] to the running
+    ones); [herbierDev.packSizes()] is ["<code> <size_bytes>"] per pack in code
+    order (the same measure as {!Herbier_geo.France_sizes.table}: the stored
+    size per pack). *)

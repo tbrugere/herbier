@@ -35,6 +35,17 @@ type flora_list =
   | Received of Herbier_identify.Plantnet.project list
 
 type pack = {code : Code.t; row : Pack_rows.t; usable : bool} [@@deriving eq]
+type pack_error = Busy | Offline | Pack of Herbier_geo_io.Commune_packs.error
+
+type france =
+  | France_idle
+  | France_starting
+  | France_running of {
+      step : pack_error Herbier_geo.France_packs.step;
+      cancelling : bool;
+    }
+  | France_finished of pack_error Herbier_geo.France_packs.outcome
+  | France_deleting
 
 type t = {
   db : Db.t;
@@ -93,6 +104,14 @@ type t = {
   set_packs : ?step:React.step -> pack list -> unit;
   downloading : Communes.departement option React.signal;
   set_downloading : ?step:React.step -> Communes.departement option -> unit;
+  france : france React.signal;
+  set_france : ?step:React.step -> france -> unit;
+  france_cancel : bool ref;
+      (* style: mutable because the run reads it from futures' callbacks
+         between départements: whether a cancel was asked. *)
+  france_wake : (unit -> unit) option ref;
+      (* style: mutable for the same reason: the sleeping retry's wake-up,
+         called by a cancel so that it ends at once. *)
   uploads : Herbier_photos_io.Upload_queue.t;
   upload_watch : Rb.binding option ref;
       (* style: mutable because {!start_uploads} sets it once, after
@@ -133,11 +152,22 @@ let log_error parts = Brr.Console.(error [str (String.concat " " parts)])
 (* The packs' load, started once by [create]: its result fills the index and
    [packs]; a failure leaves them empty. *)
 let load_packs db ~communes ~set_packs =
+  let started = Brr.Performance.now_ms Brr.G.performance in
   Fut.map
     (function
       | Error e -> log_error ["communes:"; Commune_packs.error_to_string e]
       | Ok (l : Commune_packs.loaded) ->
           communes := l.index;
+          (* With every département's pack this is the app's slowest
+             startup step: logged to measure it on the phone. *)
+          Brr.Console.(
+            log
+              [
+                str
+                  (Printf.sprintf "communes: loaded %d %.0f ms"
+                     (List.length l.rows)
+                     (Brr.Performance.now_ms Brr.G.performance -. started));
+              ]);
           set_packs
             (List.map
                (fun (code, row) ->
@@ -226,6 +256,8 @@ let create ~db ~state ~theme ~auth
     React.S.create ~eq:(Option.equal Communes.equal_departement) None
   in
   let set_downloading ?step d = set_downloading ?step d in
+  let france, set_france = React.S.create ~eq:( == ) France_idle in
+  let set_france ?step f = set_france ?step f in
   let communes = ref Communes.empty in
   let drive_last, set_drive_last =
     React.S.create ~eq:Drive_text.equal_access Drive_text.Unknown
@@ -320,6 +352,10 @@ let create ~db ~state ~theme ~auth
     set_packs;
     downloading;
     set_downloading;
+    france;
+    set_france;
+    france_cancel = ref false;
+    france_wake = ref None;
     uploads;
     upload_watch = ref None;
     drive_last;

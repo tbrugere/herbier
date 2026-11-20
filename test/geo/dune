@@ -2,7 +2,7 @@
 ; enforce it).
 
 (tests
- (names test_geo test_geocode test_place_name test_communes)
+ (names test_geo test_geocode test_place_name test_communes test_france_packs)
  (libraries
   herbier_geo
   herbier_net

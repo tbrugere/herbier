@@ -64,7 +64,9 @@ evidence. Open decisions are listed at the end.
   `@capawesome/capacitor-google-sign-in` (Credential Manager +
   AuthorizationClient), `@capacitor-community/sqlite`, `@capacitor/filesystem`,
   `@capacitor/geolocation`, `@capacitor/camera` (gallery pick),
-  `@capacitor/preferences`, and the core `CapacitorHttp` (plugin calls only,
+  `@capacitor/preferences`, `@capacitor/network` (the connection type, for
+  4m's mobile-data warning before « Toute la France »), and the core
+  `CapacitorHttp` (plugin calls only,
   fetch patch off) for reference thumbnails. Camera
   viewfinder via `getUserMedia` in the WebView, with
   `@capacitor-community/camera-preview` as fallback.

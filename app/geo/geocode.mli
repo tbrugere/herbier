@@ -74,6 +74,10 @@ type error =
 val error_to_string : error -> string
 val equal_error : error -> error -> bool
 
+val transient_status : int -> bool
+(** [429] or [500]–[599]: an HTTP status after which the same request may
+    succeed later. *)
+
 val json_of_string : string -> (Yojson.Safe.t, error) result
 (** [Yojson.Safe.from_string], any exception → [Not_json]. *)
 

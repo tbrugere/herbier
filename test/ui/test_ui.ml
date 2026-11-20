@@ -2,6 +2,7 @@ let () =
   Alcotest.run "ui"
     [
       ("pack_text", Pack_text_tests.pack_text);
+      ("france_text", France_text_tests.france_text);
       ("zoom", Zoom_tests.zoom);
       ("cover", Cover_tests.cover);
       ("record_plan", Record_plan_tests.record_plan);

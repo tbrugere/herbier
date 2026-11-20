@@ -19,8 +19,7 @@ let error_to_string = function
 
 let transient = function
   | Network _ | Timeout -> true
-  | Status {status; provider = _} ->
-      Int.equal status 429 || (500 <= status && status <= 599)
+  | Status {status; provider = _} -> Geocode.transient_status status
   | Payload _ | Refused _ -> false
 
 let spacing_ms = 1000
@@ -51,7 +50,7 @@ let delay_ms provider =
 let rec pump () =
   match (!busy, !waiting) with
   | true, _ | false, [] -> ()
-  | false, job :: rest -> (
+  | false, job :: rest ->
       waiting := rest;
       busy := true;
       let go () =
@@ -70,11 +69,17 @@ let rec pump () =
             pump ();
             job.deliver result)
       in
-      match delay_ms job.provider with
-      | 0 -> go ()
-      | ms ->
-          let _timer : Brr.G.timer_id = Brr.G.set_timeout ~ms go in
-          ())
+      (* A WebView timer can fire a few ms before [performance.now] says it
+         is due (measured on the emulator: 997 ms for 1000), so the delay is
+         checked again when it fires. *)
+      let rec when_due () =
+        match delay_ms job.provider with
+        | 0 -> go ()
+        | ms ->
+            let _timer : Brr.G.timer_id = Brr.G.set_timeout ~ms when_due in
+            ()
+      in
+      when_due ()
 
 (* style: the queue guard above mirrors Herbier_refs_io.Http's (layout.md:
    geo_io and refs_io never import each other); a fix to one goes to the other. *)
@@ -87,7 +92,11 @@ let fetch ~timeout_ms provider url =
           match 200 <= status && status <= 299 with
           | true -> Ok body
           | false -> Error (Status {provider; status})))
-    (Timed_fetch.get ~timeout_ms ~non_2xx_body:Timed_fetch.Skip url)
+    (* [no_store]: the Géoplateforme once answered a WFS request with a 200
+       metrics page marked [Cache-Control: private, max-age=1814400]; the
+       WebView kept it and served it to every retry for 21 days. *)
+    (Timed_fetch.get ~timeout_ms ~non_2xx_body:Timed_fetch.Skip
+       ~cache:Brr_io.Fetch.Request.Cache.no_store url)
 
 (* style: module-level, as the queue: every request start goes to them;
    only the dev hook registers one, so a release build keeps nothing. *)

@@ -103,6 +103,9 @@ let error_to_string = function
   | Unexpected {path; expected} ->
       Printf.sprintf "unexpected payload at %S: expected %s" path expected
 
+let transient_status status =
+  Int.equal status 429 || (500 <= status && status <= 599)
+
 let json_of_string s = Result.map_error (fun m -> Not_json m) (Json.parse s)
 
 (* A longer value from a provider is not a place name; it would be synced

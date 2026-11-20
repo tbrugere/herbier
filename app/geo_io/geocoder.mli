@@ -2,7 +2,8 @@
     across both providers, FIFO, and at least {!spacing_ms} between the starts
     of two requests to the same provider (Géoplateforme announces one request
     per second; Photon asks for fair use). No custom header (architecture.md,
-    the WebView's User-Agent).
+    the WebView's User-Agent). The WebView HTTP cache is bypassed ([no-store]):
+    a retry always reaches the server.
 
     [Geocoder] does not read settings: callers gate what they send (App through
     [Place_name.resolve], 5b through [Place_name.can_search]), and pass an

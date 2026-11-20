@@ -74,9 +74,11 @@ val get :
   ?timeout_ms:int ->
   ?non_2xx_body:non_2xx_body ->
   ?headers:(string * string) list ->
+  ?cache:Brr_io.Fetch.Request.Cache.t ->
   string ->
   (response, error) result Fut.t
 (** [get url]: one GET, aborted after [timeout_ms] (default {!timeout_ms}), with
-    [headers] (default none). A non-2xx status is [Ok], its body as
-    [non_2xx_body] says (default [Read], as {!request}). A 2xx body that fails
-    to read is an [Error]. Never raises; the future always resolves. *)
+    [headers] (default none) and the WebView HTTP cache mode [cache] (default
+    the fetch default). A non-2xx status is [Ok], its body as [non_2xx_body]
+    says (default [Read], as {!request}). A 2xx body that fails to read is an
+    [Error]. Never raises; the future always resolves. *)

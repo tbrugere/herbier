@@ -36,6 +36,17 @@ type flora_list =
   | Received of Herbier_identify.Plantnet.project list
 
 type pack = {code : Code.t; row : Pack_rows.t; usable : bool}
+type pack_error = Busy | Offline | Pack of Herbier_geo_io.Commune_packs.error
+
+type france =
+  | France_idle
+  | France_starting
+  | France_running of {
+      step : pack_error Herbier_geo.France_packs.step;
+      cancelling : bool;
+    }
+  | France_finished of pack_error Herbier_geo.France_packs.outcome
+  | France_deleting
 
 val equal_pack : pack -> pack -> bool
 
@@ -96,6 +107,14 @@ type t = {
   set_packs : ?step:React.step -> pack list -> unit;
   downloading : Communes.departement option React.signal;
   set_downloading : ?step:React.step -> Communes.departement option -> unit;
+  france : france React.signal;
+  set_france : ?step:React.step -> france -> unit;
+  france_cancel : bool ref;
+      (* style: mutable because the run reads it from futures' callbacks
+         between départements: whether a cancel was asked. *)
+  france_wake : (unit -> unit) option ref;
+      (* style: mutable for the same reason: the sleeping retry's wake-up,
+         called by a cancel so that it ends at once. *)
   uploads : Herbier_photos_io.Upload_queue.t;
   upload_watch : Rb.binding option ref;
       (* style: mutable because {!start_uploads} sets it once, after
