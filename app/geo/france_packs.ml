@@ -110,6 +110,10 @@ type 'e step =
       error : 'e;
     }
 
+let step_progress = function
+  | Downloading (p, (_ : Communes.departement)) -> p
+  | Retrying {progress; _} -> progress
+
 type 'e outcome =
   | Complete of 'e progress
   | Cancelled of 'e progress

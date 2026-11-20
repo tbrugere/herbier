@@ -458,8 +458,8 @@ last 20 in its KV, shown on `#dev/keepalive`), never a token.
   10 minutes.
 - The job's KV is left out of Android's backups like `auth.session` (a
   refresh token), and the permissions the plugin merges in but the job does
-  not use (background location, notifications, exact alarms) are removed in
-  the app's manifest.
+  not use (background location, exact alarms) are removed in the app's
+  manifest; POST_NOTIFICATIONS stays for ForegroundRunPlugin (§8).
 
 Auth on device: Google sign-in via Credential Manager → Supabase's id-token
 grant (supabase-js's `signInWithIdToken`) → session in Capacitor
@@ -1120,7 +1120,26 @@ the classifier must accept both a bare URL and text containing one.
     a store error stops the run. One request at a time with the
     geocoder's spacing, no extra pause. A cancel takes effect between
     départements or during a wait; the one in flight finishes and is kept.
-    Foreground only (the panel asks to keep Herbier open). The estimate is
+    The run stays in the WebView; while it goes, a foreground service of
+    type dataSync (`ForegroundRunPlugin`, `ForegroundRunService`, M5.78)
+    keeps the process at foreground priority with one ongoing
+    notification, « IGN hors-ligne : n / total départements » and
+    « Interrompre » (the in-app cancel), started after the plan is
+    recomputed (none when nothing is left), updated at each report,
+    stopped at every outcome, at the next app start and when the task is
+    removed; the notification permission is asked at the run's start on
+    Android 13+ and a refusal only hides the notification. A stop that
+    comes before the service went foreground is deferred: the service goes
+    foreground, then stops itself (Android crashes an app whose
+    `startForegroundService` is not followed by `startForeground`); the
+    notification is posted only while the service is foreground, so none
+    outlives it. Without the
+    service Android cuts a background app's network within seconds.
+    Capacitor does not pause the WebView's timers in the background
+    (`KeepRunning` default); the spike's measurements are in
+    `docs/notes/webview-background.md`. On Android 15+ the dataSync
+    budget's timeout cancels the run like « Interrompre ». A single
+    département stays a foreground download. The estimate is
     the sum of a measured per-département size table (`Geo.France_sizes`)
     over what is left; on mobile data (`@capacitor/network`) a large
     transfer (the table's gzip column, ≥ 10 Mo) shows a warning, never a

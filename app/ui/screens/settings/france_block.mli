@@ -8,7 +8,7 @@
     - [button]: « Toute la France ». A tap shows « Chargement… »
       ({!App.france_plan} and {!App.connection}; another tap meanwhile does
       nothing), then an inline panel: the scope (overseas included), the
-      estimate, the keep-open line, the mobile-data warning when
+      estimate, the background note, the mobile-data warning when
       {!Herbier_ui_model.France_text.warn_mobile} says so for the plan's
       transfer size (never a block), « Télécharger » (absent when nothing is
       left) and « Annuler ». A failed plan, or a list with no département, shows

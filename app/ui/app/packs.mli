@@ -50,4 +50,5 @@ val download_france :
 val france_cause : pack_error -> Herbier_geo.France_packs.cause
 val france_failure : pack_error -> Herbier_geo.France_packs.failure
 val cancel_france : Core.t -> unit
+val start_france : Core.t -> unit
 val delete_all_packs : Core.t -> (unit, pack_error) result Fut.t

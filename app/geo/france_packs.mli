@@ -108,6 +108,9 @@ type 'e step =
       error : 'e;
     }  (** reported before the wait *)
 
+val step_progress : 'e step -> 'e progress
+(** The progress a step carries, whichever the step. *)
+
 type 'e outcome =
   | Complete of 'e progress
       (** every [todo] tried; [failed] may be non-empty *)

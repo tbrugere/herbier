@@ -536,6 +536,19 @@ val download_france :
     - [cancelled]: the cancel flag;
     - [report step]: {!france} := [France_running {step; cancelling}].
 
+    While it goes, the foreground service of
+    {!Herbier_bindings.Cap_foreground_run} keeps the process at foreground
+    priority (the app in the background, the screen off): started, not awaited,
+    once the plan is recomputed when its [todo] is not empty, with the notice «
+    IGN hors-ligne : n / total départements »
+    ({!Herbier_ui_model.France_text.notification}, [n] the plan's [present]) and
+    the action « Interrompre »; updated at each [report] (and by
+    {!cancel_france}: the text {!Herbier_ui_model.France_text.cancelling}, no
+    action); stopped at the end, before [France_finished]. A refused
+    notification permission logs [france: notifications denied]; a service error
+    is logged ([france: foreground run …]) and the run goes on in the foreground
+    only; in a browser the plugin is absent and nothing is logged.
+
     At the end {!france} := [France_finished outcome] and one console line
     ([communes: france complete|cancelled|stopped <position>/<total> <bytes>],
     the error's text after a stop). One Géoplateforme request at a time, with
@@ -560,7 +573,21 @@ val cancel_france : t -> unit
     once, a sleeping retry woken. The département being downloaded finishes and
     is kept (a normal pack); the run then ends [Cancelled], or [Complete] if it
     was the last département. Running « Toute la France » again resumes: present
-    packs are skipped. No-op otherwise. *)
+    packs are skipped. A running run's notification shows the cancel at once
+    (its text {!Herbier_ui_model.France_text.cancelling}, no action). No-op
+    otherwise. *)
+
+val start_france : t -> unit
+(** Once, by main, after {!start_uploads}:
+    {!Herbier_bindings.Cap_foreground_run.stop} (a service left by an earlier
+    page of this process, after a WebView reload, is stopped: no run survives a
+    reload), then {!Herbier_bindings.Cap_foreground_run.on_interrupt}: [User]
+    (the notification's « Interrompre ») → {!cancel_france}; [Timeout] (Android
+    15+ ended the service) → a console error
+    [france: foreground service timeout] then {!cancel_france} (the run ends
+    [Cancelled] and resumes on the next run). Failures are console errors; in a
+    browser the plugin is absent and nothing is logged. Called on dev pages too,
+    so a run from the dev hook is interrupted the same way. Never raises. *)
 
 val delete_all_packs : t -> (unit, pack_error) result Fut.t
 (** « Supprimer tout »: [Busy] while {!downloading} is [Some _] or {!france}

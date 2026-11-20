@@ -84,3 +84,26 @@
    NODE_OPTIONS
    ""
    (run node -r %{dep:system_bars_stub.js} %{dep:cap_system_bars_smoke.bc.js}))))
+
+; Herbier_bindings.Cap_foreground_run over a stub globalThis.herbier.foregroundRun
+; (foreground_run_stub.js, preloaded with node -r): start/update's wire
+; shape (present keys only), start's decoding of notifications and its
+; error paths, update/stop's calls, the "interrupt" listener's reason
+; decoding, and the plugin-absent case.
+
+(executable
+ (name cap_foreground_run_smoke)
+ (modes js)
+ (libraries herbier_bindings brr yojson))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run
+    node
+    -r
+    %{dep:foreground_run_stub.js}
+    %{dep:cap_foreground_run_smoke.bc.js}))))

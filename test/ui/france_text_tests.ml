@@ -2,7 +2,10 @@
    rule. Every example of france_text.mli exactly, plus the boundaries
    (estimate ~todo:1, warn_mobile at the threshold, retrying's second
    rounding and each reason, delete_all_question ~count:1,
-   progress ~current:None). *)
+   progress ~current:None). notification: the background service's title,
+   pluralised on total, including total = 0 (singular, as complete's
+   downloaded = 0 case below); notice: what that notification shows, with
+   and without a cancel asked. *)
 
 module France_text = Herbier_ui_model.France_text
 
@@ -10,7 +13,7 @@ module France_text = Herbier_ui_model.France_text
 
 let fixed_strings =
   Alcotest.test_case
-    "button, loading, retry, no_departements, keep_open, start, dismiss, \
+    "button, loading, retry, no_departements, background_note, start, dismiss, \
      interrupt, cancelling, delete_all, delete_all_note are fixed strings"
     `Quick (fun () ->
       Alcotest.(check string) "button" "Toute la France" France_text.button;
@@ -20,10 +23,10 @@ let fixed_strings =
         "no_departements" "Aucun département reçu de l\u{2019}IGN."
         France_text.no_departements;
       Alcotest.(check string)
-        "keep_open"
-        "Gardez Herbier ouvert pendant le téléchargement ; vous pourrez \
+        "background_note"
+        "Le téléchargement continue en arrière-plan ; vous pourrez \
          l\u{2019}interrompre et le reprendre."
-        France_text.keep_open;
+        France_text.background_note;
       Alcotest.(check string) "start" "Télécharger" France_text.start;
       Alcotest.(check string) "dismiss" "Annuler" France_text.dismiss;
       Alcotest.(check string) "interrupt" "Interrompre" France_text.interrupt;
@@ -200,6 +203,51 @@ let delete_all_question =
         "count = 1" "Supprimer le département (89 ko) ?"
         (France_text.delete_all_question ~count:1 ~bytes:89_000))
 
+(* ---------- notification ---------- *)
+
+let notification =
+  Alcotest.test_case
+    "notification: \"IGN hors-ligne : position / total départements\", \
+     pluralised on total, including total = 0"
+    `Quick (fun () ->
+      Alcotest.(check string)
+        "37 / 101" "IGN hors-ligne : 37 / 101 départements"
+        (France_text.notification ~position:37 ~total:101);
+      Alcotest.(check string)
+        "0 / 1 (singular)" "IGN hors-ligne : 0 / 1 département"
+        (France_text.notification ~position:0 ~total:1);
+      Alcotest.(check string)
+        "1 / 1 (singular)" "IGN hors-ligne : 1 / 1 département"
+        (France_text.notification ~position:1 ~total:1);
+      Alcotest.(check string)
+        "101 / 101" "IGN hors-ligne : 101 / 101 départements"
+        (France_text.notification ~position:101 ~total:101);
+      Alcotest.(check string)
+        "0 / 0 keeps the singular plural rule"
+        "IGN hors-ligne : 0 / 0 département"
+        (France_text.notification ~position:0 ~total:0))
+
+let string_of_notice ({title; text; value; max; action} : France_text.notice) =
+  let opt = Option.value ~default:"-" in
+  Printf.sprintf "%s | %s | %d/%d | %s" title (opt text) value max (opt action)
+
+let notice =
+  Alcotest.test_case
+    "notice: progress and « Interrompre »; a cancel asked shows its text and \
+     no action"
+    `Quick (fun () ->
+      Alcotest.(check string)
+        "running"
+        "IGN hors-ligne : 37 / 101 départements | - | 37/101 | Interrompre"
+        (string_of_notice
+           (France_text.notice ~position:37 ~total:101 ~cancelling:false));
+      Alcotest.(check string)
+        "cancelling"
+        "IGN hors-ligne : 38 / 101 départements | Interruption après le \
+         département en cours… | 38/101 | -"
+        (string_of_notice
+           (France_text.notice ~position:38 ~total:101 ~cancelling:true)))
+
 let france_text =
   [
     fixed_strings;
@@ -214,4 +262,6 @@ let france_text =
     stopped;
     summary;
     delete_all_question;
+    notification;
+    notice;
   ]

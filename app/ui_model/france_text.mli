@@ -22,9 +22,14 @@ val estimate : total:int -> todo:int -> bytes:int -> string
     [todo = total] → ["101 départements · environ 52,9 Mo"]; else
     ["96 à télécharger sur 101 · environ 50,4 Mo"]. *)
 
-val keep_open : string
-(** ["Gardez Herbier ouvert pendant le téléchargement ; vous pourrez
-     l’interrompre et le reprendre."] *)
+val background_note : string
+(** ["Le téléchargement continue en arrière-plan ; vous pourrez l’interrompre et
+     le reprendre."] *)
+
+val notification : position:int -> total:int -> string
+(** The notification's title: ["IGN hors-ligne : 37 / 101 départements"]; the
+    noun follows [total] through {!Fr_text.plural}
+    (["IGN hors-ligne : 0 / 1 département"]). *)
 
 val large_bytes : int
 (** [10_000_000] *)
@@ -102,3 +107,18 @@ val delete_all_question : count:int -> bytes:int -> string
 
 val delete_all_note : string
 (** ["Les noms déjà donnés aux observations restent."] *)
+
+type notice = {
+  title : string;
+  text : string option;
+  value : int;
+  max : int;
+  action : string option;
+}
+(** What the background service's notification shows during a run. *)
+
+val notice : position:int -> total:int -> cancelling:bool -> notice
+(** [title = notification ~position ~total], [value = position], [max = total];
+    [cancelling = false] → no [text], [action = Some interrupt];
+    [cancelling = true] → [text = Some cancelling] and no [action], so a cancel
+    cannot be asked twice. *)

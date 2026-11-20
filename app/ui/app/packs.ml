@@ -6,6 +6,9 @@ module Code = Communes.Code
 module Fut_result = Herbier_bindings.Fut_result
 module France_packs = Herbier_geo.France_packs
 module Cap_network = Herbier_bindings.Cap_network
+module Cap_error = Herbier_bindings.Cap_error
+module Cap_foreground_run = Herbier_bindings.Cap_foreground_run
+module France_text = Herbier_ui_model.France_text
 
 let packs (t : Core.t) = t.packs
 let downloading (t : Core.t) = t.downloading
@@ -185,6 +188,40 @@ let sleep (t : Core.t) ~ms =
   let (_ : Brr.G.timer_id) = Brr.G.set_timeout ~ms wake in
   fut
 
+(* The foreground service around a run: its failures never touch the run,
+   which goes on in the foreground only. A browser has no plugin. *)
+let foreground_error = function
+  | Cap_error.Unavailable _ -> ()
+  | e -> Core.log_error ["france: foreground run"; Cap_error.to_string e]
+
+let foreground_logged = function Ok () -> () | Error e -> foreground_error e
+let foreground_await fut = Fut.await fut foreground_logged
+
+let notice ~position ~total ~cancelling : Cap_foreground_run.notice =
+  let {France_text.title; text; value; max; action} =
+    France_text.notice ~position ~total ~cancelling
+  in
+  {title; text; value; max; action}
+
+let update_notice (step : pack_error France_packs.step) ~cancelling =
+  let p = France_packs.step_progress step in
+  foreground_await
+    (Cap_foreground_run.update
+       (notice ~position:(France_packs.position p) ~total:p.plan.total
+          ~cancelling))
+
+(* Fire and forget: the run never waits for the permission dialog nor for the
+   service. *)
+let start_foreground (plan : France_packs.plan) =
+  Fut.await
+    (Cap_foreground_run.start
+       (notice ~position:plan.present ~total:plan.total ~cancelling:false))
+    (function
+      | Ok Cap_foreground_run.Granted -> ()
+      | Ok Cap_foreground_run.Denied ->
+          Core.log ["france: notifications denied"]
+      | Error e -> foreground_error e)
+
 module Run = France_packs.Make (struct
   type 'a io = 'a Fut.t
 
@@ -207,7 +244,9 @@ module Run = France_packs.Make (struct
   let cancelled (t : Core.t) = !(t.france_cancel)
 
   let report (t : Core.t) step =
-    t.set_france (France_running {step; cancelling = !(t.france_cancel)})
+    let cancelling = !(t.france_cancel) in
+    t.set_france (France_running {step; cancelling});
+    update_notice step ~cancelling
 end)
 
 let outcome_log (o : pack_error France_packs.outcome) =
@@ -235,13 +274,19 @@ let download_france (t : Core.t) (plan : France_packs.plan) =
       (* The packs present now: one downloaded since the plan was shown is
          skipped. *)
       Fut.bind t.communes_loaded (fun () ->
+          let now =
+            France_packs.plan ~downloaded:(usable_codes t) plan.departements
+          in
+          (match now.todo with
+          | [] -> ()
+          | (_ : Communes.departement) :: _ -> start_foreground now);
           Fut.map
             (fun outcome ->
+              foreground_await (Cap_foreground_run.stop ());
               t.set_france (France_finished outcome);
               Core.log (outcome_log outcome);
               Ok outcome)
-            (Run.run t
-               (France_packs.plan ~downloaded:(usable_codes t) plan.departements)))
+            (Run.run t now))
 
 let cancel_france (t : Core.t) =
   match React.S.value t.france with
@@ -252,7 +297,20 @@ let cancel_france (t : Core.t) =
   | France_running {step; cancelling = _} ->
       t.france_cancel := true;
       t.set_france (France_running {step; cancelling = true});
+      update_notice step ~cancelling:true;
       Option.iter (fun wake -> wake ()) !(t.france_wake)
+
+let start_france (t : Core.t) =
+  foreground_await (Cap_foreground_run.stop ());
+  Fut.await
+    (Cap_foreground_run.on_interrupt (function
+      | Cap_foreground_run.User -> cancel_france t
+      | Cap_foreground_run.Timeout ->
+          Core.log_error ["france: foreground service timeout"];
+          cancel_france t))
+    (function
+      | Ok (_ : Cap_foreground_run.listener) -> ()
+      | Error e -> foreground_error e)
 
 let delete_all_packs (t : Core.t) =
   match (React.S.value t.downloading, france_busy t) with

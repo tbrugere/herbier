@@ -20,9 +20,12 @@ let estimate ~total ~todo ~bytes =
       Printf.sprintf "%d à télécharger sur %d · environ %s" todo total
         (size bytes)
 
-let keep_open =
-  "Gardez Herbier ouvert pendant le téléchargement ; vous pourrez \
-   l’interrompre et le reprendre."
+let background_note =
+  "Le téléchargement continue en arrière-plan ; vous pourrez l’interrompre et \
+   le reprendre."
+
+let notification ~position ~total =
+  Printf.sprintf "IGN hors-ligne : %d / %s" position (departements total)
 
 let large_bytes = 10_000_000
 let warn_mobile ~cellular ~bytes = cellular && bytes >= large_bytes
@@ -87,3 +90,25 @@ let delete_all_question ~count ~bytes =
       Printf.sprintf "Supprimer les %d départements (%s) ?" count (size bytes)
 
 let delete_all_note = "Les noms déjà donnés aux observations restent."
+
+type notice = {
+  title : string;
+  text : string option;
+  value : int;
+  max : int;
+  action : string option;
+}
+
+let notice ~position ~total ~cancelling:asked =
+  let text, action =
+    match asked with
+    | true -> (Some cancelling, None)
+    | false -> (None, Some interrupt)
+  in
+  {
+    title = notification ~position ~total;
+    text;
+    value = position;
+    max = total;
+    action;
+  }

@@ -74,6 +74,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- ForegroundRunPlugin: keeps the process at foreground priority while
+             the WebView runs « Toute la France ». stopWithTask: the run dies
+             with the task's WebView, so the service goes with it. -->
+        <service
+            android:name=".ForegroundRunService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="true" />
     </application>
 
     <!-- Permissions -->
@@ -87,14 +96,19 @@
          VIDEO_CAPTURE only after the CAMERA runtime permission (4d viewfinder). -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- ForegroundRunPlugin (« Toute la France » in the background):
+         its dataSync service and its notification, asked at the run's start
+         on Android 13+. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- @capacitor/background-runner (the keep-alive job) merges in more
          permissions than the job uses. It keeps ACCESS_NETWORK_STATE
          (WorkManager's network constraint: the keep-alive job and the
          originals' uploads, UploaderPlugin), which @capacitor/network's
          getStatus needs too (4m's mobile-data warning before « Toute la
-         France »). Neither job shows a notification, reads location or sets
-         an exact alarm, so these go. -->
+         France »), and POST_NOTIFICATIONS, which ForegroundRunPlugin uses.
+         Neither job reads location or sets an exact alarm, so these go. -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" tools:node="remove" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
 </manifest>

@@ -125,6 +125,8 @@ app/
     cap_system_bars.ml    Capacitor's core SystemBars plugin: setStyle (LIGHT/DARK) per bar
     cap_uploader.ml       Herbier's inline Uploader plugin (android/, §4): one WorkManager job per file that
                           PUTs it to a Drive resumable session under a network constraint; jobs, cancel, changes
+    cap_foreground_run.ml  Herbier's inline ForegroundRun plugin (android/, §4): a dataSync foreground service
+                          with one progress notification and its interrupt action (« Toute la France »)
     cap_google_authorization.ml  Herbier's inline GoogleAuthorization plugin (android/, §4): a drive.file
                           access token from Play Services' AuthorizationClient for the Drive account,
                           clearToken, and chooseAccount (Credential Manager's « Sign in with Google »
@@ -424,7 +426,8 @@ app/
     motion.ml             which transition a route change gets (instant, fade, modal in/out, shared hero),
                           how it runs (now, CSS fade, View Transition), its <html data-motion> value
     pack_text.ml          4m's texts of an « IGN hors-ligne » pack (size, title, detail)
-    france_text.ml        4m « Toute la France » texts (M5.73) and the mobile-data warning rule
+    france_text.ml        4m « Toute la France » texts (M5.73), its notification (M5.78) and the
+                          mobile-data warning rule
     drive_text.ml         the Drive texts of 4h, 4m and 5e: access, queue title and status, last upload,
                           account meta, the « Dossier Drive » button and prompt, the Drive radio's title,
                           chosen line and disabled reason, the stop dialog, 4h's card,
@@ -799,8 +802,11 @@ edits, all under `android/app/src/main/`:
   both ship in v1. Also its `android:dataExtractionRules` and
   `android:fullBackupContent` attributes (architecture §4), and the
   `tools:node="remove"` lines dropping the permissions
-  `@capacitor/background-runner` merges in but the keep-alive job does not
-  use (background location, notifications, exact alarms).
+  `@capacitor/background-runner` merges in but nothing uses (background
+  location, exact alarms; `POST_NOTIFICATIONS` is kept for
+  `ForegroundRunPlugin`). Also `ForegroundRunService` (type `dataSync`,
+  `stopWithTask`) with `FOREGROUND_SERVICE` and
+  `FOREGROUND_SERVICE_DATA_SYNC`.
 - `java/re/bruge/herbier/GoogleAuthorizationPlugin.java`: the Drive token
   (Play Services' `AuthorizationClient`: `authorize`, `clearToken`) and the
   Drive account's choice (`chooseAccount`: Credential Manager's « Sign in
@@ -817,6 +823,13 @@ edits, all under `android/app/src/main/`:
   session and resuming after an interruption; `jobs`, `cancel` and a
   `jobsChanged` event. Replaces `@capgo/capacitor-uploader` (a foreground
   service with no network constraint).
+- `java/re/bruge/herbier/ForegroundRunPlugin.java` and
+  `ForegroundRunService.java`: « Toute la France » in the background
+  (architecture §8, M5.78): a dataSync foreground service with one ongoing
+  notification whose texts the app gives (`start`, `update`, `stop`), the
+  notification permission asked at `start` on Android 13+, and an
+  `interrupt` event from its action (or Android 15's timeout). It never acts
+  on the run, which stays in the WebView.
 - `java/re/bruge/herbier/`: any further Java as small Capacitor plugin
   classes inline here, bound from `app/bindings/`, until the native side
   grows a package of its own.
@@ -962,7 +975,7 @@ test/
                 Fut_result.traverse against the sequential folds it replaced; Cap_uploader over
                 uploader_stub.js (enqueue's wire shape, jobs' decoding, the plugin absent);
                 Cap_system_bars over system_bars_stub.js (setStyle's wire shape, rejections,
-                the plugin absent)
+                the plugin absent); Cap_foreground_run over foreground_run_stub.js
   scripts/      cram: release_env.t, scripts/lib/release-env.sh's loading and checks of the
                 production values (missing, placeholder, paths, no password ever printed)
   version/      native, alcotest: the git describe stamp (herbier_version), apart so that a commit

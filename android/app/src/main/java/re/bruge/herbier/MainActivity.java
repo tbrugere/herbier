@@ -25,6 +25,7 @@ public class MainActivity extends BridgeActivity {
         // Inline plugins are registered by hand, before the bridge is built.
         registerPlugin(GoogleAuthorizationPlugin.class);
         registerPlugin(UploaderPlugin.class);
+        registerPlugin(ForegroundRunPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

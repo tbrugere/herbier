@@ -4,4 +4,6 @@
     <string name="title_activity_main">Herbier</string>
     <string name="package_name" translatable="false">re.bruge.herbier</string>
     <string name="custom_url_scheme" translatable="false">re.bruge.herbier</string>
+    <!-- ForegroundRunService's notification channel (« Toute la France »). -->
+    <string name="foreground_run_channel">Téléchargements</string>
 </resources>

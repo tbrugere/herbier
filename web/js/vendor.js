@@ -43,6 +43,12 @@ globalThis.herbier = {
   // rejects every call, so a browser gets none and the binding reports it
   // Unavailable.
   systemBars: Capacitor.isNativePlatform() ? SystemBars : undefined,
+  // Herbier's own plugin (android/…/ForegroundRunPlugin.java, a dataSync
+  // foreground service): absent in a browser, so that the binding reports it
+  // Unavailable.
+  foregroundRun: Capacitor.isNativePlatform()
+    ? registerPlugin('ForegroundRun')
+    : undefined,
   exifr,
   map,
 };

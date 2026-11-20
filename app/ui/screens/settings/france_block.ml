@@ -87,8 +87,8 @@ let run_text : App.france -> string option = function
            ~reason:(App.pack_error_to_string e))
 
 let progress_of : App.france -> (int * int) option = function
-  | France_running {step = Downloading (p, _) | Retrying {progress = p; _}; _}
-    ->
+  | France_running {step; _} ->
+      let p = France_packs.step_progress step in
       Some (France_packs.position p, p.plan.total)
   | France_idle | France_starting | France_finished _ | France_deleting -> None
 
@@ -181,7 +181,7 @@ let v app ~set_message =
                line
                  (France_text.estimate ~total:plan.total ~todo
                     ~bytes:plan.estimate_bytes);
-               line France_text.keep_open;
+               line France_text.background_note;
              ]
             @ warning
             @ [El.div ~at:[cls "settings__row"] buttons]),

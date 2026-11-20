@@ -80,8 +80,9 @@ evidence. Open decisions are listed at the end.
   sets sent to PostgREST: it encodes a constructor `Drive` as `["Drive"]`, so
   their `to_json`/`of_json` stay hand-written. Rules: style guide §5.5.
 - A **small native (Java) layer** is expected: the `intent-filter`s in the
-  manifest, the Drive grant's plugin and the originals' upload plugin.
-  Nothing else native.
+  manifest, the Drive grant's plugin, the originals' upload plugin and the
+  foreground service of type `dataSync` that keeps « Toute la France »
+  running in the background (M5.78). Nothing else native.
 - **Background uploads: Herbier's own `Uploader` plugin over WorkManager**
   (M7.52, 2026-11-14), not `@capgo/capacitor-uploader`: its 8.3 Android side
   is a foreground service (`net.gotev:uploadservice`) with no network
