@@ -1,6 +1,12 @@
-// 4l Tags (app/ui/screens/tags.ml).
+// 4l Tags (app/ui/screens/tags/). The cards and chips hold
+// their pencil as a sibling of the main button; neither selects text nor
+// shows Android's menu on a long-press.
 @use '../base'
 @use '../widgets'
+
+// The last chips clear the floating « + ».
+.tags
+  padding-bottom: calc(96px + #{base.above-gesture-bar(0px)})
 
 .tags__grid
   display: grid
@@ -8,12 +14,21 @@
   gap: 10px
 
 .tag-card
-  +widgets.bare-button
   position: relative
   aspect-ratio: 1
   border-radius: 18px
   overflow: hidden
   +widgets.striped
+
+.tag-card__main, .tag-chip__main, .tag-chip__edit
+  -webkit-user-select: none
+  user-select: none
+  -webkit-touch-callout: none
+
+.tag-card__main
+  +widgets.bare-button
+  position: absolute
+  inset: 0
   +widgets.pressed-text(.85)
 
 .tag-card__names
@@ -21,6 +36,7 @@
   left: 14px
   right: 14px
   bottom: 14px
+  text-align: left
 
 .tag-card__name
   +base.ui(20px, 800)
@@ -29,19 +45,60 @@
 .tag-card__count
   +base.meta(13px)
 
+// The pencil on a card: the 44 px icon button as a round on a paper veil,
+// 6 px from the top-right corner.
+.tag-card__edit
+  position: absolute
+  top: 6px
+  right: 6px
+  border-radius: 50%
+  background: var(--paper-veil)
+
 .tags__chips
   display: flex
   flex-wrap: wrap
   gap: 8px
 
 .tag-chip
-  +widgets.bare-button
   +widgets.pill
-  +base.ui(14px, 600)
+  display: inline-flex
+  align-items: center
   min-height: 36px
-  padding: 6px 14px
   border: 1.5px solid var(--ink)
+
+.tag-chip__main
+  +widgets.bare-button
+  +base.ui(14px, 600)
+  align-self: stretch
+  padding: 6px 4px 6px 14px
+  border-radius: 999px 0 0 999px
   +widgets.pressed-bordered
 
 .tag-chip__count
   color: var(--muted)
+
+.tag-chip__edit
+  +widgets.bare-button
+  display: flex
+  align-items: center
+  justify-content: center
+  align-self: stretch
+  min-width: 44px
+  padding: 0 10px 0 6px
+  border-radius: 0 999px 999px 0
+  color: var(--ink-soft)
+  +widgets.pressed-bordered
+
+// The box (a .confirm) around the name field; the delete question is a
+// widgets/dialog.ml of its own.
+.tag-editor__line
+  +base.ui(13px, 700)
+  color: var(--muted)
+  &.tag-editor__line--failure
+    color: var(--danger)
+
+// « Créer » / « Enregistrer » while the name is blank or taken: greyed, as
+// the other disabled buttons of a box (resolve, identify).
+.tag-editor .button[aria-disabled]
+  opacity: .5
+  cursor: default

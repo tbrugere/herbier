@@ -4,7 +4,6 @@
 (** Full-screen modals over the tabs (no tab bar). *)
 type modal =
   | Tags  (** 4l *)
-  | Manage_tags  (** 5d *)
   | Plant of Herbier_domain.Ids.Plant_id.t  (** the fiche, 4f/4g *)
   | Edit_plant of Herbier_domain.Ids.Plant_id.t  (** 5a *)
   | New_plant  (** 5a, creating *)
@@ -33,13 +32,13 @@ type t = Tab of Widgets.Tab_bar.tab | Modal of modal | Dev of string
 
 val of_fragment : string -> t
 (** [""], ["collection"] → [Tab Collection]; ["carte"], ["journal"],
-    ["reglages"]; ["tags"] → [Modal Tags]; ["tags/gerer"] → [Modal Manage_tags];
-    ["reglages/dossier-drive"] → [Modal Drive_folder]; ["plante/<id>"] →
-    [Modal (Plant id)]; ["plante/<id>/modifier"] → [Modal (Edit_plant id)];
-    ["plante/nouvelle"] → [Modal New_plant]; ["observation/<id>"],
-    ["observation/<id>/espece"], ["observation/<id>/position"],
-    ["a-identifier/<id>"] → [Observation], [Change_species], [Move_point],
-    [Identify]; ["noter"] → [Modal Record]; ["noter/enregistre/<id>"] →
+    ["reglages"]; ["tags"] → [Modal Tags]; ["reglages/dossier-drive"] →
+    [Modal Drive_folder]; ["plante/<id>"] → [Modal (Plant id)];
+    ["plante/<id>/modifier"] → [Modal (Edit_plant id)]; ["plante/nouvelle"] →
+    [Modal New_plant]; ["observation/<id>"], ["observation/<id>/espece"],
+    ["observation/<id>/position"], ["a-identifier/<id>"] → [Observation],
+    [Change_species], [Move_point], [Identify]; ["noter"] → [Modal Record];
+    ["noter/enregistre/<id>"] →
     [Modal (Recorded {observation = id; identify = false})];
     ["noter/enregistre/<id>/identifier"] → the same with [identify = true];
     ["photo/<id>"] → [Modal (Viewer id)]; ["chercher"] → [Modal (Search "")];

@@ -6,7 +6,6 @@ module Photo_id = Herbier_domain.Ids.Photo_id
 
 type modal =
   | Tags
-  | Manage_tags
   | Plant of Plant_id.t
   | Edit_plant of Plant_id.t
   | New_plant
@@ -57,7 +56,6 @@ let of_fragment = function
   | "journal" -> Tab Tab_bar.Journal
   | "reglages" -> Tab Tab_bar.Settings
   | "tags" -> Modal Tags
-  | "tags/gerer" -> Modal Manage_tags
   | "reglages/dossier-drive" -> Modal Drive_folder
   | "plante/nouvelle" -> Modal New_plant
   | "noter" -> Modal Record
@@ -109,7 +107,6 @@ let to_fragment = function
   | Tab Tab_bar.Journal -> "journal"
   | Tab Tab_bar.Settings -> "reglages"
   | Modal Tags -> "tags"
-  | Modal Manage_tags -> "tags/gerer"
   | Modal Drive_folder -> "reglages/dossier-drive"
   | Modal (Plant id) -> "plante/" ^ Plant_id.to_string id
   | Modal (Edit_plant id) -> "plante/" ^ Plant_id.to_string id ^ "/modifier"

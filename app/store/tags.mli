@@ -19,8 +19,8 @@ val of_plant : Plant_id.t -> Tag.t Stmt.query
 
 val links : Tag.Plant_tag.t Stmt.query
 (** Every live link between a live tag and a live plant, by [tag_id] then
-    [plant_id]: the tag filters of 4a and 4c and the counts of 4l and 5d, in one
-    query. *)
+    [plant_id]: the tag filters of 4a and 4c and the counts of 4l, in one query.
+*)
 
 val input : Tag.t -> (Tables.Tags.t, [`Full]) Postgrest.Input.t
 (** Every column of [Tables.Tags], in its declaration order. The upsert's

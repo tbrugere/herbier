@@ -7,10 +7,9 @@ let surface_of_route = function
   | Route.Tab _ | Route.Dev _
   | Route.Modal
       Route.(
-        ( Tags | Manage_tags | Plant _ | Edit_plant _ | New_plant
-        | Observation _ | Change_species _ | Move_point _ | Identify _
-        | Recorded _ | Search _ | Link_species _ | Intercepted _ | Drive_folder
-          )) ->
+        ( Tags | Plant _ | Edit_plant _ | New_plant | Observation _
+        | Change_species _ | Move_point _ | Identify _ | Recorded _ | Search _
+        | Link_species _ | Intercepted _ | Drive_folder )) ->
       Bars.Light
 
 (* style: module state, as Transition's observer: set once by the dev hooks. *)

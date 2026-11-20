@@ -16,6 +16,9 @@ val equal : t -> t -> bool
 
 val pp : Format.formatter -> t -> unit
 
+val v : id:id -> at:Ptime.t -> string -> t
+(** A live tag of that name, created and updated [at]. *)
+
 (** Row of [plant_tags]: one tag on one plant. Soft-deleted when the tag is
     removed so the removal syncs; at most one row per [(plant_id, tag_id)], and
     re-adding a removed tag revives its row. *)

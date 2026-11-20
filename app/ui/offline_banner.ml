@@ -7,10 +7,9 @@ let covered = function
   | Route.Tab _
   | Route.Modal
       Route.(
-        ( Tags | Manage_tags | Plant _ | Edit_plant _ | New_plant
-        | Observation _ | Change_species _ | Move_point _ | Identify _
-        | Recorded _ | Viewer _ | Search _ | Link_species _ | Intercepted _
-        | Drive_folder )) ->
+        ( Tags | Plant _ | Edit_plant _ | New_plant | Observation _
+        | Change_species _ | Move_point _ | Identify _ | Recorded _ | Viewer _
+        | Search _ | Link_species _ | Intercepted _ | Drive_folder )) ->
       false
 
 let mount app ~route =

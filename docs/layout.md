@@ -394,7 +394,8 @@ app/
                           + yojson, no Brr, no React, tested natively in test/ui/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
-    collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml,
+    collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml (4l's per-tag edits, M8.77),
+    long_press.ml (the tap / long-press machine of 4l's cards and chips),
     plant_form.ml, local_time.ml, to_identify.ml (4k: the queue position; 6i's button, its
     gate, label and line), free_name.ml (4g's reference block of a free-name plant, 6k: the
     observation sent, Identifier's gate and line, what « Lier » writes), record_plan.ml (4d: the
@@ -478,6 +479,7 @@ app/
                           a second link replaces the first sheet or the 4i it fell back to; keeps the
                           last text for #dev/link
     gps_fix.ml            the one GPS fix a new observation takes (4d, 4j), as a Gps.t signal
+    long_press.ml         ui_model/long_press.ml on an element: pointer listeners, the timer, tap / long events
     filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     choice_save.ml        the store writes of a proposal chosen for an « À identifier » observation
@@ -485,7 +487,7 @@ app/
     zone.ml               the phone's zone offset at an instant, for Fr_date
     loaded.ml             a screen's content from store reads: rendered per load, or once over a signal
                           that each reload sets (4f, 4h); the « Retour » notice of a missing record
-    tag_usage.ml          live tags with their plants (4l, 5d), from Tags.list and Tags.links
+    tag_usage.ml          live tags with their plants (4l), from Tags.list and Tags.links
     locate.ml             the device fix and the world camera shared by 4b and 5b
     app/                  App (app.ml, the group's main module, includes the four below): wires services:
                           after-save → sync engine (local write) + reference fetch; a pull that wrote rows fires
@@ -587,7 +589,7 @@ app/
                           photo_grid, preview_img, icon, viewer_zoom (imperative), mini_map (4h's MapLibre map);
                           month_grid; identify_glyph (M9: the Identifier glyph as inline SVG, not a Material
                           Symbol, its vein cut out by a mask); toast (a short status line in one live region
-                          mounted at startup: 4h's arrival from Noter)
+                          mounted at startup: 4h's arrival from Noter); fab (the floating round « + » of 4l)
     screens/              one file per mockup screen, handoff id in a header comment
       collection.ml (4a, and 4n while there is no plant)  map_tab.ml (4b)
       journal.ml (4c)     record.ml (4d)
@@ -601,7 +603,8 @@ app/
                   « + <organe> »; launcher: 4k's, 4h's and 4g's Identifier button, one layer at a
                   time, a problem deferred while it covers the screen)
       identify_compare.ml (M9: 6d, a layer over 6c)
-      tags.ml (4l)        manage_tags.ml (5d)
+      tags/ (4l)          tags.ml (the screen and its editing; its main module), tag_editor.ml (its
+                          create / edit box over the screen, the delete question in it)
       settings/ (4m)      settings.ml (the screen; its main module), pending.ml (the card under « File
                           d'envoi »: « Serveur en pause », « Réception bloquée », the parked entries),
                           offline_row.ml (« Données hors-ligne »: sizes, « Libérer » and its dialog),
@@ -743,7 +746,7 @@ web/
     screens/              one file per screens/*.ml module, its handoff ids in a header comment:
                           collection (4a, 4n), map_tab (4b), journal (4c), record (4d),
                           species (4f, 4g), observation (4h), resolve (4i, 4j, 4k, 5c), tags (4l),
-                          settings (4m), edit_plant (5a), move_point (5b), manage_tags (5d), viewer (5e),
+                          settings (4m), edit_plant (5a), move_point (5b), viewer (5e),
                           and with M9 identify (6b, 6c, 6f, 6g, 6j) and identify_compare (6d);
                           5f lives in _base.sass and _tokens.sass
   fonts/                  Manrope, Newsreader (variable woff2), Material Symbols subset

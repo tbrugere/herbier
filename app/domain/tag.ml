@@ -9,6 +9,9 @@ type t = {
 }
 [@@deriving eq, show]
 
+let v ~id ~at name =
+  {id; name; created_at = at; updated_at = at; deleted_at = None}
+
 module Plant_tag = struct
   type id = Ids.Plant_tag_id.t [@@deriving eq, show]
 

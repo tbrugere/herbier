@@ -6,16 +6,7 @@ module Tag_id = Herbier_domain.Ids.Tag_id
 
 let of_change ~at ~plant (c : Plant_form.change) =
   let created =
-    List.map
-      (fun name ->
-        {
-          Tag.id = Tag_id.fresh ();
-          name;
-          created_at = at;
-          updated_at = at;
-          deleted_at = None;
-        })
-      c.create_tags
+    List.map (fun name -> Tag.v ~id:(Tag_id.fresh ()) ~at name) c.create_tags
   in
   ( created,
     List.concat

@@ -285,19 +285,33 @@ $card-padding: 16px
 .tab-bar__tab--active
   color: var(--ink)
 
-.tab-bar__record
+// The app's main round « + » (the tab bar's Noter, 4l's Fab).
+@mixin round-add
   +bare-button
   display: flex
   align-items: center
   justify-content: center
   width: 60px
   height: 60px
-  margin: -28px 8px 0
   border-radius: 50%
   background: var(--moss)
   color: var(--paper)
   box-shadow: var(--shadow-note-button)
   +pressed-filled
+
+.tab-bar__record
+  +round-add
+  margin: -28px 8px 0
+
+// A floating « + » at the bottom right of a screen (4l, Widgets.Fab).
+.fab
+  +round-add
+  position: fixed
+  right: 20px
+  bottom: base.above-gesture-bar(20px)
+  z-index: 2
+  &[aria-disabled]
+    opacity: .5
 
 // Text field
 

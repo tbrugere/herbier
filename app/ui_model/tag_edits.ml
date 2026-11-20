@@ -1,113 +1,109 @@
+module Tag = Herbier_domain.Tag
 module Tag_id = Herbier_domain.Ids.Tag_id
 module Plant_id = Herbier_domain.Ids.Plant_id
 
-type fate = Kept | Deleted | Merged_into of Tag_id.t
+type editor = New | Edit of {tag : Tag.t; plants : Plant_id.t list}
+type name_check = Blank | Same | Taken of Tag.t | Free of string
 
-type entry = {
-  id : Tag_id.t;
-  original : string;
-  name : string;
-  plants : Plant_id.t list;
-  fate : fate;
-}
+let edited = function New -> None | Edit {tag; _} -> Some tag
 
-let init =
-  List.map (fun (id, name, plants) ->
-      {id; original = name; name; plants; fate = Kept})
+let is_edited editor (t : Tag.t) =
+  match edited editor with Some e -> Tag_id.equal e.id t.id | None -> false
 
-let visible =
-  List.filter (fun e ->
-      match e.fate with Kept -> true | Deleted | Merged_into _ -> false)
+let check ~tags editor text =
+  let name = String.trim text in
+  let taken () =
+    List.find_opt
+      (fun (t : Tag.t) ->
+        (not (is_edited editor t)) && Plant_form.same_text t.name name)
+      tags
+  in
+  match (name, edited editor) with
+  | "", _ -> Blank
+  | _, Some tag when String.equal tag.name name -> Same
+  | _, (Some _ | None) -> (
+      match taken () with Some t -> Taken t | None -> Free name)
 
-let mem id = List.exists (Tag_id.equal id)
+type primary = {label : string; enabled : bool; line : string option}
 
-let union a b =
-  List.rev
-    (List.fold_left
-       (fun acc p ->
-         match List.exists (Plant_id.equal p) acc with
-         | true -> acc
-         | false -> p :: acc)
-       (List.rev a) b)
+let primary editor check =
+  match (editor, check) with
+  | New, (Blank | Same) -> {label = "Créer"; enabled = false; line = None}
+  | New, Taken t ->
+      {
+        label = "Créer";
+        enabled = false;
+        line = Some (Printf.sprintf "« %s » existe déjà." t.name);
+      }
+  | New, Free _ -> {label = "Créer"; enabled = true; line = None}
+  | Edit _, (Blank | Same) ->
+      {label = "Enregistrer"; enabled = false; line = None}
+  | Edit _, Free _ -> {label = "Enregistrer"; enabled = true; line = None}
+  | Edit {tag; _}, Taken t ->
+      {
+        label = "Fusionner";
+        enabled = true;
+        line =
+          Some
+            (Printf.sprintf "« %s » existe déjà : « %s » y sera fusionné."
+               t.name tag.name);
+      }
 
-let plants model e =
-  List.fold_left
-    (fun acc x ->
-      match x.fate with
-      | Merged_into w when Tag_id.equal w e.id -> union acc x.plants
-      | Merged_into _ | Kept | Deleted -> acc)
-    e.plants model
+let title = function New -> "Nouveau tag" | Edit _ -> "Modifier le tag"
 
-let rename id name model =
-  match String.trim name with
-  | "" -> model
-  | name ->
-      List.map
-        (fun e ->
-          match Tag_id.equal e.id id with true -> {e with name} | false -> e)
-        model
+type change =
+  | Create of string
+  | Rename of {tag : Tag.t; name : string}
+  | Merge of {from : Tag_id.t; into : Tag_id.t; plants : Plant_id.t list}
+  | Delete of Tag_id.t
 
-let delete ids model =
-  List.map
-    (fun e ->
-      match e.fate with
-      | Kept when mem e.id ids -> {e with fate = Deleted}
-      | Merged_into w when mem w ids -> {e with fate = Deleted}
-      | Kept | Deleted | Merged_into _ -> e)
-    model
+let submit ~tags editor text =
+  match (editor, check ~tags editor text) with
+  | New, Free n -> Some (Create n)
+  | Edit {tag; _}, Free name -> Some (Rename {tag; name})
+  | Edit {tag; plants}, Taken t ->
+      Some (Merge {from = tag.id; into = t.id; plants})
+  | New, (Blank | Same | Taken _) | Edit _, (Blank | Same) -> None
 
-let winner ids model =
-  let chosen = List.filter (fun e -> mem e.id ids) (visible model) in
-  match chosen with
-  | [] | [_] -> None
-  | first :: rest ->
-      let count e = List.length (plants model e) in
-      Some
-        (List.fold_left
-           (fun best e ->
-             match count e > count best with true -> e | false -> best)
-           first rest)
+let delete = function New -> None | Edit {tag; _} -> Some (Delete tag.id)
+let delete_title (t : Tag.t) = Printf.sprintf "Supprimer « %s » ?" t.name
 
-let merge ids model =
-  match winner ids model with
-  | None -> model
-  | Some w ->
-      let losers = List.filter (fun id -> not (Tag_id.equal id w.id)) ids in
-      List.map
-        (fun e ->
-          match e.fate with
-          | Kept when mem e.id losers -> {e with fate = Merged_into w.id}
-          | Merged_into l when mem l losers -> {e with fate = Merged_into w.id}
-          | Kept | Deleted | Merged_into _ -> e)
-        model
+let delete_text ~plants =
+  if plants <= 0 then "Aucune plante ne le porte."
+  else
+    Printf.sprintf "Il sera retiré de %s. Les plantes restent."
+      (Fr_text.plural plants "plante" "plantes")
 
-let followed model tags =
-  List.sort_uniq Tag_id.compare
-    (List.filter_map
-       (fun id ->
-         match List.find_opt (fun e -> Tag_id.equal e.id id) model with
-         | Some {fate = Kept; _} | None -> Some id
-         | Some {fate = Deleted; _} -> None
-         | Some {fate = Merged_into w; _} -> Some w)
-       tags)
+let subtitle = function
+  | Error _ -> "Lecture impossible"
+  | Ok 0 -> "Aucun tag pour l’instant. Touchez + pour en créer un."
+  | Ok n ->
+      Fr_text.plural n "tag" "tags" ^ " · touchez pour filtrer la collection"
+
+let edit_label (t : Tag.t) = "Modifier « " ^ t.name ^ " »"
 
 type op =
-  | Rename of Tag_id.t * string
-  | Delete of Tag_id.t
+  | Insert_tag of string
+  | Rename_tag of Tag.t * string
+  | Delete_tag of Tag_id.t
   | Link of {plant : Plant_id.t; tag : Tag_id.t}
   | Unlink of {plant : Plant_id.t; tag : Tag_id.t}
 
-let plan model =
-  List.concat_map
-    (fun e ->
-      match e.fate with
-      | Kept -> (
-          match String.equal e.name e.original with
-          | true -> []
-          | false -> [Rename (e.id, e.name)])
-      | Deleted -> [Delete e.id]
-      | Merged_into w ->
-          List.map (fun plant -> Link {plant; tag = w}) e.plants
-          @ List.map (fun plant -> Unlink {plant; tag = e.id}) e.plants
-          @ [Delete e.id])
-    model
+let plan = function
+  | Create n -> [Insert_tag n]
+  | Rename {tag; name} -> [Rename_tag (tag, name)]
+  | Merge {from; into; plants} ->
+      List.map (fun plant -> Link {plant; tag = into}) plants
+      @ List.map (fun plant -> Unlink {plant; tag = from}) plants
+      @ [Delete_tag from]
+  | Delete id -> [Delete_tag id]
+
+let followed change tags =
+  List.sort_uniq Tag_id.compare
+    (List.filter_map
+       (fun id ->
+         match change with
+         | Delete d when Tag_id.equal d id -> None
+         | Merge {from; into; _} when Tag_id.equal from id -> Some into
+         | Delete _ | Merge _ | Create _ | Rename _ -> Some id)
+       tags)

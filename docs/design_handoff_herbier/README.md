@@ -32,7 +32,7 @@ Identifier (Pl@ntNet)  ──►     ├─ Mes notes, tags
 
 **Navigation** : barre inférieure à 5 emplacements — `Collection · Carte · [+ Noter] · Journal · Réglages`. Le bouton central Noter (60 px, vert mousse, débordant de 28 px vers le haut) ouvre l'appareil photo en modal plein écran. Les tags **ne sont pas** une destination : ce sont des filtres persistants partagés par Collection, Carte et Journal. « À identifier » est aussi un filtre (ocre) qui fait office de file.
 
-**Écrans modaux** (sans barre) : Chercher, Lien intercepté, À identifier → lier, Tags, Fiche espèce, Observation, Modifier la fiche, Déplacer le point, Changer d'espèce, Gérer les tags, Visionneuse photo, Noter, Enregistré (*supprimé par M8.76*). L'identification Pl@ntNet (6b–6g) s'ouvre par-dessus l'Observation (4h, *depuis M8.76* ; plus par-dessus Noter, *supprimé par M8.75/M8.76*), À identifier ou la fiche nom libre, et y revient toujours.
+**Écrans modaux** (sans barre) : Chercher, Lien intercepté, À identifier → lier, Tags, Fiche espèce, Observation, Modifier la fiche, Déplacer le point, Changer d'espèce, Gérer les tags (*supprimé par M8.77*), Visionneuse photo, Noter, Enregistré (*supprimé par M8.76*). L'identification Pl@ntNet (6b–6g) s'ouvre par-dessus l'Observation (4h, *depuis M8.76* ; plus par-dessus Noter, *supprimé par M8.75/M8.76*), À identifier ou la fiche nom libre, et y revient toujours.
 
 ---
 
@@ -222,6 +222,7 @@ Tour 6 : bouton principal « Identifier avec Pl@ntNet » sous la carte, la reche
 
 ### 4l Tags (modal)
 ←, « Gérer » (→ 5d). Titre « Tags » + « 12 tags · touchez pour filtrer la collection ». Grille 2 colonnes de cartes 1:1 rayon 18 (photo de couverture de la plante la plus récente du tag, nom 20/800, « 18 plantes ») pour les 4 tags les plus utilisés ; puis pastilles bordées 1,5 px 14/600 avec compteur `muted` pour le reste. Tap = applique le filtre et revient à Collection.
+*Ajouts des retours de Tristan du 2026-11-19 (plan M8.77) : plus de « Gérer » ; ✎ sur chaque carte et pastille, appui long aussi, ouvre la boîte du tag (renommer, renommer en un nom existant = fusionner, supprimer avec confirmation) ; gros « + » en bas à droite (style du bouton Noter) pour créer un tag. Les tags n'ont pas de couleur.*
 
 ### 4m Réglages (onglet)
 Titre. Carte compte : avatar rond `moss` 44 initiale, « Compte Google connecté / n…@gmail.com · Photos, Drive », « Changer ». Section **Où vont mes photos** (radio, 3 options dans une carte `sand` rayon 16, lignes séparées 1 px `line`) : « Google Photos · album “Herbier” — Originaux dans ma bibliothèque, aperçus gardés sur le téléphone. » / « Google Drive · dossier “Herbier” — Un sous-dossier par espèce. » / « Dans Herbier seulement — Compressées à 1600 px · limité à 200 Mo. ». Section **Sur le téléphone** : interrupteur « Copie compressée hors-ligne » (on), « Envoyer seulement en Wi-Fi » (off), « Données hors-ligne — Aperçus photos 48 Mo · Fiches de référence 12 Mo / **Libérer** ». Section **File d'envoi** : « 3 photos en attente / Dernier envoi : hier, 19:42 / **Envoyer maintenant** ».
@@ -243,6 +244,7 @@ Carte plein écran, **point fixe au centre** (24 px `moss` + tige 2×16 + cercle
 En-tête ← / « CHANGER D'ESPÈCE / Observation du 12 juin ». Carte `sand` « Actuellement **Digitale pourpre** / Les 2 photos et la note suivent l'observation. » Recherche ; « Dans ma collection » (ligne « Choisir › » ; l'espèce actuelle grisée .5) ; « Référence · GBIF » (« + » crée puis déplace). Pied : bouton bordé `ochre` « Remettre “À identifier” ». Si la plante d'origine n'a plus d'observation : dialogue « Garder la fiche / Supprimer la fiche ».
 
 ### 5d Gérer les tags (modal)
+*Remplacé par les retours de Tristan du 2026-11-19 (plan M8.77) : écran supprimé, ses actions sont dans 4l.*
 En-tête « Annuler / Gérer les tags / Terminé ». Lignes : case 22 rayon 6 (vide bordure `hint` ; cochée `moss` avec ✓), nom 700, compteur 13 `muted`, ✎ (renomme en place : le nom devient un champ `sand` rayon 10 avec « OK »). Barre basse `sand` quand ≥ 1 coché : « 2 sélectionnés », « Supprimer » (bordé `danger`), « Fusionner en “tourbière” » (moss ; le nom le plus fréquent gagne ; visible si ≥ 2 cochés).
 
 ### 5e Visionneuse photo (modal sombre)

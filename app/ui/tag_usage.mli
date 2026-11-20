@@ -1,4 +1,4 @@
-(** Every live tag with the live plants carrying it, for 4l and 5d. *)
+(** Every live tag with the live plants carrying it, for 4l. *)
 
 type t = {
   tag : Herbier_domain.Tag.t;

@@ -70,7 +70,6 @@ let tab app = function
 
 let modal app = function
   | Herbier_ui.Route.Tags -> Herbier_ui.Screens.Tags.v app
-  | Herbier_ui.Route.Manage_tags -> Herbier_ui.Screens.Manage_tags.v app
   | Herbier_ui.Route.Drive_folder -> Herbier_ui.Screens.Settings.drive_sheet app
   | Herbier_ui.Route.Plant id -> Herbier_ui.Screens.Species.v app id
   | Herbier_ui.Route.Edit_plant id ->
