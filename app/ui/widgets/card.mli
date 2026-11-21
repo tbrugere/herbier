@@ -15,9 +15,17 @@ type cover =
   | Loading of string
   | No_photo of string
 
-type t = {el : Brr.El.t; click : unit React.event; bindings : Rb.binding list}
+type t = {
+  el : Brr.El.t;
+  click : unit React.event;
+  long : unit React.event;
+  bindings : Rb.binding list;
+}
 
-val plant : name:string -> sci:string option -> cover -> t
-(** [sci] is the scientific name, shown in Newsreader italic when present. *)
+val plant : ?long_press:bool -> name:string -> sci:string option -> cover -> t
+(** [sci] is the scientific name, shown in Newsreader italic when present.
+    [long_press] (default [false]): [click] and [long] are {!Long_press.v}'s
+    [tap] and [long] on the card (a keyboard or assistive activation is a
+    [click]); otherwise [click] is {!Rb.click} and [long] is [React.E.never]. *)
 
 val panel : Brr.El.t list -> Brr.El.t

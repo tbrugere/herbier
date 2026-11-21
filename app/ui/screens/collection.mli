@@ -9,9 +9,10 @@
     observation counts and covers are those read on entry. A failed read shows
     in the counter (on entry) or in a line above the grid (on a filter change).
     With no plant, 4n replaces the search, chips and grid. "Tags ›" opens 4l; a
-    card opens its fiche (4f). A card's cover is its plant's cover photo
-    ({!Cover}), else the "no photo" state; "Coller un lien" does nothing; the
-    first-plant button opens Noter (4d). *)
+    card opens its fiche (4f); a long press on a card asks to delete the plant
+    ({!List_delete}). A card's cover is its plant's cover photo ({!Cover}), else
+    the "no photo" state; "Coller un lien" does nothing; the first-plant button
+    opens Noter (4d). *)
 
 val v : App.t -> Screen.t
 (** Reloads (counter, tags, grid) whenever {!App.saved} fires. *)

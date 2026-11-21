@@ -1,4 +1,5 @@
 module Cover = Herbier_ui_model.Cover
+module Delete_plan = Herbier_ui_model.Delete_plan
 module Fr_date = Herbier_ui_model.Fr_date
 module Fr_text = Herbier_ui_model.Fr_text
 module List_patch = Herbier_ui_model.List_patch
@@ -10,7 +11,6 @@ module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Observations = Herbier_store.Observations
 module Photos = Herbier_store.Photos
-module Cascade = Herbier_store.Cascade
 module References = Herbier_store.References
 module Plant_ref = Herbier_domain.Reference.Plant_ref
 module Source = Herbier_domain.Reference.Source
@@ -68,34 +68,8 @@ let load db mode =
               origin = Stored {observations; photos; plant_refs};
             })
 
-let delete_edits ~at (d : data) ~observations ~photos =
-  Cascade.plant ~at
-    ~photos:(List.map (fun (p : Photo.t) -> p.id) photos)
-    ~observations:(List.map (fun (o : Observation.t) -> o.id) observations)
-    ~tags:(List.map (fun (t : Tag.t) -> t.id) d.tags)
-    d.plant.id
-
 let field_card label children =
   W.Card.panel (El.h2 ~at:[cls "t-card-label"] [El.txt' label] :: children)
-
-let its_observations = function
-  | 1 -> "son observation"
-  | n -> Printf.sprintf "ses %d observations" n
-
-let leaving ~observations ~photos =
-  match (observations, photos) with
-  | 0, _ -> "La fiche quitte l'herbier."
-  | n, 0 ->
-      Printf.sprintf "La fiche et %s quittent l'herbier." (its_observations n)
-  | n, p ->
-      Printf.sprintf
-        "La fiche, %s et %s %s quittent l'herbier. Les originaux envoyés dans \
-         Google Drive y restent."
-        (its_observations n)
-        (match n with 1 -> "ses" | _ -> "leurs")
-        (Fr_text.plural p "photo" "photos")
-
-type delete = Delete | Keep
 
 (* Leaving for 4i with unsaved changes is refused: 5a is read again on
    return, and « Enregistrer » would otherwise write back the plant as it was
@@ -249,30 +223,24 @@ type cover_tile = {
 
 (* Built for a stored plant only. *)
 let delete_part ~problem ~leave app (d : data) ~observations ~photos =
-  let n = List.length observations in
-  let delete =
-    W.Button.text ~tone:`Danger
-      (match n with
-      | 0 -> "Supprimer la plante ›"
-      | n -> Printf.sprintf "Supprimer la plante et %s ›" (its_observations n))
-  in
+  let plan = Delete_plan.plant_of d.plant ~observations ~photos ~tags:d.tags in
+  let delete = W.Button.text ~tone:`Danger (Delete_plan.plant_action plan) in
   let confirm =
     W.Dialog.v
-      ~title:(Printf.sprintf "Supprimer « %s » ?" d.plant.display_name)
-      ~text:(leaving ~observations:n ~photos:(List.length photos))
+      ~title:(Delete_plan.plant_title d.plant)
+      ~text:(Delete_plan.plant_text plan)
       [
-        (W.Button.Danger, "Supprimer", Delete);
-        (W.Button.Secondary, "Garder la plante", Keep);
+        (W.Button.Danger, "Supprimer", Delete_plan.Delete);
+        (W.Button.Secondary, "Garder la plante", Delete_plan.Keep);
       ]
   in
   let do_delete () =
     Fut.await
-      (App.save app
-         (delete_edits ~at:(Ptime_clock.now ()) d ~observations ~photos))
+      (App.save app (Delete_plan.plant_edits ~at:(Ptime_clock.now ()) plan))
       (function
         | Error e ->
             log_error "delete" e;
-            problem "La plante n'a pas pu être supprimée."
+            problem Delete_plan.plant_failure
         | Ok _ ->
             leave (fun () -> Route.replace (Route.Tab W.Tab_bar.Collection)))
   in
@@ -281,7 +249,9 @@ let delete_part ~problem ~leave app (d : data) ~observations ~photos =
       [
         [
           Rb.act delete.click confirm.show;
-          Rb.act confirm.choice (function Delete -> do_delete () | Keep -> ());
+          Rb.act confirm.choice (function
+            | Delete_plan.Delete -> do_delete ()
+            | Delete_plan.Keep -> ());
         ];
         delete.bindings;
         confirm.bindings;

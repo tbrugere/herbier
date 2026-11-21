@@ -2,7 +2,13 @@ open Brr
 
 type thumb = Image of string | Preview of string | Placeholder
 type tone = Normal | To_identify
-type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
+
+type t = {
+  el : El.t;
+  click : unit React.event;
+  long : unit React.event;
+  bindings : Rb.binding list;
+}
 
 let cls = Html.cls
 
@@ -26,7 +32,7 @@ let thumb_el = function
         [Preview_img.v ~cls:["list-row__preview"] path]
   | Placeholder -> El.span ~at:[cls "list-row__thumb"] []
 
-let v ?thumb ?(tone = Normal) ~title ~meta () =
+let v ?(long_press = false) ?thumb ?(tone = Normal) ~title ~meta () =
   let title_cls =
     match tone with
     | Normal -> [cls "list-row__title"]
@@ -51,5 +57,5 @@ let v ?thumb ?(tone = Normal) ~title ~meta () =
     | Some t -> [thumb_el t; text; chevron]
   in
   let el = Html.button ["list-row"] children in
-  let click, b = Rb.click el in
-  {el; click; bindings = [b]}
+  let press = Long_press.optional long_press el in
+  {el; click = press.tap; long = press.long; bindings = press.bindings}

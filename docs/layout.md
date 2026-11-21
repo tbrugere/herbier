@@ -396,7 +396,9 @@ app/
     list_patch.ml         minimal edit script (Remove/Insert/Update) between two keyed lists, to patch an
                           RList without re-rendering unchanged items
     collection_filter.ml, journal_filter.ml, fr_date.ml, fr_text.ml, journal_day.ml, tag_edits.ml (4l's per-tag edits, M8.77),
-    long_press.ml (the tap / long-press machine of 4l's cards and chips),
+    long_press.ml (the tap / long-press machine of 4l's cards and chips, 4a's cards, 4c's rows),
+    delete_plan.ml (what a plant / observation delete takes: 5a, 4h, the long-press of 4a / 4c;
+    texts and Cascade edits),
     plant_form.ml, local_time.ml, to_identify.ml (4k: the queue position; 6i's button, its
     gate, label and line), free_name.ml (4g's reference block of a free-name plant, 6k: the
     observation sent, Identifier's gate and line, what « Lier » writes), record_plan.ml (4d: the
@@ -484,6 +486,9 @@ app/
                           last text for #dev/link
     gps_fix.ml            the one GPS fix a new observation takes (4d, 4j), as a Gps.t signal
     long_press.ml         ui_model/long_press.ml on an element: pointer listeners, the timer, tap / long events
+                          (4l's cards and chips, 4a's cards and 4c's rows through Card / List_row)
+    list_delete.ml        the long-press delete of 4a's cards and 4c's rows: reads what goes, Dialog,
+                          App.save, Overlay
     filter_chips.ml       the year / « À identifier » / tag chips over State.filters, shared by 4c and 4b
     plant_edits.ml        the store edits of a Plant_form change (5a's save, 4f's « + tag »)
     choice_save.ml        the store writes of a proposal chosen for an « À identifier » observation

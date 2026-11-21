@@ -13,3 +13,4 @@ let button ?label ?(at = []) classes children =
     children
 
 let enter ev = Jstr.equal (Ev.Keyboard.key (Ev.as_type ev)) (Jstr.v "Enter")
+let escape ev = Jstr.equal (Ev.Keyboard.key (Ev.as_type ev)) (Jstr.v "Escape")

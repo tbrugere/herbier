@@ -11,3 +11,6 @@ val button :
 
 val enter : Brr.Ev.Keyboard.t Brr.Ev.t -> bool
 (** The key of a [keydown] is Enter. *)
+
+val escape : Brr.Ev.Keyboard.t Brr.Ev.t -> bool
+(** The key of a [keydown] is Escape. *)

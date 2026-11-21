@@ -38,6 +38,13 @@
 @mixin pill
   border-radius: 999px
 
+// Controls that may long-press (cards, rows, 4l's tags): no text selection, no
+// iOS callout.
+@mixin no-callout
+  -webkit-user-select: none
+  user-select: none
+  -webkit-touch-callout: none
+
 // Thumbnail while its image loads.
 @mixin striped($a: var(--sand-deep), $b: var(--sand))
   background: repeating-linear-gradient(135deg, $a 0 8px, $b 8px 16px)
@@ -145,6 +152,7 @@ $card-padding: 16px
 
 .card-plant
   +bare-button
+  +no-callout
   position: relative
   display: block
   width: 100%
@@ -207,6 +215,7 @@ $card-padding: 16px
 
 .list-row
   +bare-button
+  +no-callout
   display: flex
   gap: 12px
   align-items: center
@@ -794,3 +803,8 @@ $card-padding: 16px
 @media (prefers-reduced-motion: reduce)
   .toast
     animation: none
+
+// List_delete's dialog host in 4a / 4c: no box of its own, so the screen's
+// flex gap does not count it (the dialog inside is fixed).
+.list-delete
+  display: contents

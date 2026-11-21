@@ -21,3 +21,7 @@ val v : Brr.El.t -> t
     it onto what the long-press opened. Events are sent from the DOM listeners
     or the timer, outside update steps. Releasing the bindings removes the
     listeners and clears a pending timer. Never raises. *)
+
+val optional : bool -> Brr.El.t -> t
+(** [optional true el] is [v el]; [optional false el] has {!Rb.click}'s click as
+    [tap] and [React.E.never] as [long]. *)

@@ -10,8 +10,22 @@ type thumb = Image of string | Preview of string | Placeholder
 (** [To_identify] writes the title in [ochre] (["À identifier"]). *)
 type tone = Normal | To_identify
 
-type t = {el : Brr.El.t; click : unit React.event; bindings : Rb.binding list}
+type t = {
+  el : Brr.El.t;
+  click : unit React.event;
+  long : unit React.event;
+  bindings : Rb.binding list;
+}
 
-val v : ?thumb:thumb -> ?tone:tone -> title:string -> meta:string -> unit -> t
+val v :
+  ?long_press:bool ->
+  ?thumb:thumb ->
+  ?tone:tone ->
+  title:string ->
+  meta:string ->
+  unit ->
+  t
 (** Without [thumb] the row has no thumbnail column. Default [tone] is [Normal].
-*)
+    [long_press] (default [false]): [click] and [long] are {!Long_press.v}'s
+    [tap] and [long] on the row (a keyboard or assistive activation is a
+    [click]); otherwise [click] is {!Rb.click} and [long] is [React.E.never]. *)

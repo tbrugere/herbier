@@ -6,7 +6,12 @@ type cover =
   | Loading of string
   | No_photo of string
 
-type t = {el : El.t; click : unit React.event; bindings : Rb.binding list}
+type t = {
+  el : El.t;
+  click : unit React.event;
+  long : unit React.event;
+  bindings : Rb.binding list;
+}
 
 let cls = Html.cls
 
@@ -21,7 +26,7 @@ let names ~name ~sci extra =
   span "card-plant__names"
     ((span "card-plant__name" [El.txt' name] :: sci) @ extra)
 
-let plant ~name ~sci cover =
+let plant ?(long_press = false) ~name ~sci cover =
   let modifier, children =
     match cover with
     | Photo url ->
@@ -53,7 +58,7 @@ let plant ~name ~sci cover =
           [names ~name ~sci [span "card-plant__mention" [El.txt' mention]]] )
   in
   let el = Html.button ["card-plant"; modifier] children in
-  let click, b = Rb.click el in
-  {el; click; bindings = [b]}
+  let press = Long_press.optional long_press el in
+  {el; click = press.tap; long = press.long; bindings = press.bindings}
 
 let panel children = El.div ~at:[cls "card"] children

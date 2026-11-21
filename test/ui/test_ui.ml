@@ -13,6 +13,7 @@ let () =
       ("plant_form", Plant_form_tests.plant_form);
       ("tag_edits", Tag_edits_tests.tag_edits);
       ("long_press", Long_press_tests.long_press);
+      ("delete_plan", Delete_plan_tests.delete_plan);
       ("fr_date", Fr_date_tests.fr_date @ Fr_date_tests.ago);
       ("plant_link", Plant_link_tests.plant_link);
       ("ref_search", Ref_search_tests.ref_search);

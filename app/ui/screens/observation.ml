@@ -6,6 +6,7 @@ module Observation_plan = Herbier_ui_model.Observation_plan
 module Record_plan = Herbier_ui_model.Record_plan
 module To_identify = Herbier_ui_model.To_identify
 module Choice = Herbier_ui_model.Identify.Choice
+module Delete_plan = Herbier_ui_model.Delete_plan
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -80,21 +81,12 @@ let action ?(tone = `Plain) label =
 let card label children =
   W.Card.panel (El.h2 ~at:[cls "t-card-label"] [El.txt' label] :: children)
 
-type delete = Delete | Keep
-
-let delete_dialog n =
-  W.Dialog.v ~title:"Supprimer cette observation ?"
-    ~text:
-      (match n with
-      | 0 -> "Elle quitte l'herbier et le journal."
-      | n ->
-          Printf.sprintf
-            "Elle quitte l'herbier avec ses %s. Les originaux envoyés dans \
-             Google Drive y restent."
-            (Fr_text.plural n "photo" "photos"))
+let delete_dialog plan =
+  W.Dialog.v ~title:Delete_plan.observation_title
+    ~text:(Delete_plan.observation_text plan)
     [
-      (W.Button.Danger, "Supprimer", Delete);
-      (W.Button.Secondary, "Garder", Keep);
+      (W.Button.Danger, "Supprimer", Delete_plan.Delete);
+      (W.Button.Secondary, "Garder", Delete_plan.Keep);
     ]
 
 (* The Drive card. It follows the access, the network, the queue and the
@@ -379,27 +371,28 @@ let render app arrival (data : data React.signal) =
   let delete_el, delete_click, b_delete =
     action ~tone:`Danger (React.S.const "Supprimer l'observation")
   in
+  let plan photos = Delete_plan.observation_of id ~photos in
   let delete () =
-    let at = Ptime_clock.now () in
-    let photos =
-      List.map (fun (p : Herbier_domain.Photo.t) -> p.id) (get ()).photos
-    in
     Fut.await
-      (App.save app (Herbier_store.Cascade.observation ~at ~photos id))
+      (App.save app
+         (Delete_plan.observation_edits ~at:(Ptime_clock.now ())
+            (plan (get ()).photos)))
       (function
         | Error e ->
             log_error "delete" e;
-            problem "L'observation n'a pas pu être supprimée."
+            problem Delete_plan.observation_failure
         | Ok _ -> Route.back ())
   in
   (* The dialog's text counts the photos: built again when their number
      changes. *)
   let confirm_el = El.div [] in
-  let confirm n =
-    let c = delete_dialog n in
+  let confirm photos =
+    let c = delete_dialog (plan photos) in
     ( c.el,
       Rb.act delete_click c.show
-      :: Rb.act c.choice (function Delete -> delete () | Keep -> ())
+      :: Rb.act c.choice (function
+        | Delete_plan.Delete -> delete ()
+        | Delete_plan.Keep -> ())
       :: c.bindings )
   in
   let gate = App.identify_gate app in
@@ -640,7 +633,10 @@ let render app arrival (data : data React.signal) =
           Rb.act journal_click (fun () ->
               Route.go (Route.Tab W.Tab_bar.Journal));
           Rb.view confirm_el confirm
-            (React.S.map ~eq:Int.equal (fun d -> List.length d.photos) data);
+            (React.S.map
+               ~eq:(fun a b -> Int.equal (List.length a) (List.length b))
+               (fun d -> d.photos)
+               data);
           Rb.text problem_el problem_text;
           Rb.class_ problem_el "is-hidden"
             (React.S.map (String.equal "") problem_text);

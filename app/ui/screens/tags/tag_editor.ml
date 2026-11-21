@@ -56,7 +56,6 @@ let current db change =
   | Tag_edits.Create _ | Tag_edits.Delete _ -> Fut.return (Ok (Some change))
 
 let failed = "Enregistrement impossible : rien n’a été modifié."
-let escape ev = Jstr.equal (Ev.Keyboard.key (Ev.as_type ev)) (Jstr.v "Escape")
 let title_id = "tag-editor-title"
 
 let v app ~tags =
@@ -184,7 +183,9 @@ let v app ~tags =
                 | true -> ()
                 | false -> Option.iter (save editor) (Tag_edits.delete editor)))
           :: Rb.listen d.el Ev.keydown (fun ev ->
-              match escape ev with true -> back_to_field editor | false -> ())
+              match Html.escape ev with
+              | true -> back_to_field editor
+              | false -> ())
           :: d.bindings;
         show (Asking editor) "";
         d.show ()
@@ -268,7 +269,7 @@ let v app ~tags =
         Rb.listen field.input Ev.keydown (fun ev ->
             match () with
             | () when Html.enter ev -> unless_saving submit ()
-            | () when escape ev -> unless_saving cancel ()
+            | () when Html.escape ev -> unless_saving cancel ()
             | () -> ());
         Rb.on_release (fun () ->
             Option.iter Overlay.remove !overlay;

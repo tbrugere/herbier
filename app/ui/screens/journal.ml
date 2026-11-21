@@ -29,7 +29,7 @@ type data = {
   links : Tag.Plant_tag.t list;
 }
 
-let row names (o : Observation.t) =
+let row (del : List_delete.t) names (o : Observation.t) =
   let time = Fr_date.time ~tz_offset_s:(offset o) o.at in
   let r =
     match o.plant_id with
@@ -38,22 +38,26 @@ let row names (o : Observation.t) =
         let meta =
           match o.note with Some _ -> time ^ " · note" | None -> time
         in
-        W.List_row.v ~thumb:W.List_row.Placeholder ~title ~meta ()
+        W.List_row.v ~long_press:true ~thumb:W.List_row.Placeholder ~title ~meta
+          ()
     | None ->
         let meta =
           match o.note with
           | Some n -> Printf.sprintf "%s · « %s »" time n
           | None -> time
         in
-        W.List_row.v ~thumb:W.List_row.Placeholder ~tone:W.List_row.To_identify
-          ~title:"À identifier" ~meta ()
+        W.List_row.v ~long_press:true ~thumb:W.List_row.Placeholder
+          ~tone:W.List_row.To_identify ~title:"À identifier" ~meta ()
   in
   let target =
     match o.plant_id with
     | Some _ -> Route.Observation o.id
     | None -> Route.Identify o.id
   in
-  (r.el, Rb.act r.click (fun () -> Route.go (Route.Modal target)) :: r.bindings)
+  ( r.el,
+    Rb.act r.click (fun () -> Route.go (Route.Modal target))
+    :: Rb.act r.long (fun () -> del.observation ~from:r.el o.id)
+    :: r.bindings )
 
 let day_place state (d : Observation.t Journal_day.t) =
   match (Journal_day.place d.items, Herbier_geo.Features.bounds d.items) with
@@ -75,9 +79,9 @@ let day_place state (d : Observation.t Journal_day.t) =
               Route.go (Route.Tab W.Tab_bar.Map));
         ] )
 
-let day state ~this_year names (d : Observation.t Journal_day.t) =
+let day state del ~this_year names (d : Observation.t Journal_day.t) =
   let place, place_bindings = day_place state d in
-  let rows = List.map (row names) d.items in
+  let rows = List.map (row del names) d.items in
   let el =
     El.section
       ~at:[cls "journal__day"]
@@ -95,6 +99,7 @@ let log_error e = Log.db "journal" e
 
 let v app =
   let db = App.db app and state = App.state app in
+  let del = List_delete.v app ~scope:"journal" in
   let days, days_handle = RList.create [] in
   let chips, chips_handle = RList.create [] in
   let counter, set_counter = React.S.create "" in
@@ -165,6 +170,7 @@ let v app =
         chips_el;
         list_el;
         empty;
+        del.el;
       ]
   in
   let names () = !data.names in
@@ -177,11 +183,12 @@ let v app =
         Rb.text counter_el counter;
         Rb.rlist chips_el (Filter_chips.el state) chips;
         Rb.rlist list_el
-          (fun d -> day state ~this_year:(this_year ()) (names ()) d)
+          (fun d -> day state del ~this_year:(this_year ()) (names ()) d)
           days;
         Rb.text empty empty_text;
         Rb.class_ empty "is-hidden" (React.S.map (String.equal "") empty_text);
         Rb.act (React.S.changes filters) (fun _ -> render ());
         Rb.act (App.saved app) load;
-      ];
+      ]
+      @ del.bindings;
   }

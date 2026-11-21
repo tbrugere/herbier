@@ -75,3 +75,10 @@ let v el =
         Rb.on_release clear;
       ];
   }
+
+let optional long_press el =
+  match long_press with
+  | true -> v el
+  | false ->
+      let tap, b = Rb.click el in
+      {tap; long = React.E.never; bindings = [b]}

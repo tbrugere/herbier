@@ -26,7 +26,7 @@ let equal a b =
   && Int.equal a.observations b.observations
   && Option.equal String.equal a.cover_preview b.cover_preview
 
-let card item =
+let card (del : List_delete.t) item =
   let mention = Printf.sprintf "sans photo · %d obs." item.observations in
   let cover =
     match item.cover_preview with
@@ -34,15 +34,16 @@ let card item =
     | None -> W.Card.No_photo mention
   in
   let c =
-    W.Card.plant ~name:item.plant.display_name ~sci:item.plant.scientific_name
-      cover
+    W.Card.plant ~long_press:true ~name:item.plant.display_name
+      ~sci:item.plant.scientific_name cover
   in
   let open_ =
     Rb.act c.click (fun () ->
         Route.go (Route.Modal (Route.Plant item.plant.id)))
   in
+  let ask = Rb.act c.long (fun () -> del.plant ~from:c.el item.plant.id) in
   Transition.mark_hero c.el item.plant.id;
-  (c.el, open_ :: c.bindings)
+  (c.el, open_ :: ask :: c.bindings)
 
 let log_error = Log.db ~scope:"collection"
 
@@ -71,6 +72,7 @@ let visible db ~counts ~photos ~text ~tags =
 
 let v app =
   let db = App.db app and state = App.state app in
+  let del = List_delete.v app ~scope:"collection" in
   let grid, grid_handle = RList.create [] in
   let tags, tags_handle = RList.create [] in
   let counter, set_counter = React.S.create "" in
@@ -241,6 +243,7 @@ let v app =
           ];
         filled;
         empty_el;
+        del.el;
       ]
   in
   let changes =
@@ -258,7 +261,7 @@ let v app =
           Rb.text failure_el failure;
           Rb.act loaded on_loaded;
           Rb.rlist chip_list tag_chip tags;
-          Rb.rlist grid_el card grid;
+          Rb.rlist grid_el (card del) grid;
           Rb.act changes refresh;
           Rb.act (App.saved app) load;
           Rb.act all.click (fun () ->
@@ -276,6 +279,7 @@ let v app =
         paste.bindings;
         all.bindings;
         tags_link.bindings;
+        del.bindings;
       ]
   in
   {Screen.el; bindings; ready}
