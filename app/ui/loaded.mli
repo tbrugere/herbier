@@ -1,6 +1,7 @@
 (** A screen's content built from store reads. *)
 
 val v :
+  ?eq:('a -> 'a -> bool) ->
   ?reload:unit React.event ->
   ?failed:(unit -> Brr.El.t * Rb.binding list) ->
   what:string ->
@@ -11,7 +12,9 @@ val v :
 (** [render] of what [load] returns becomes the container's only child, again on
     each [reload] occurrence, and the previous rendering's bindings are
     released. Errors go to the console under [what]; a first load that fails
-    shows [failed] (nothing when absent), a later one keeps what is shown. *)
+    shows [failed] (nothing when absent), a later one keeps what is shown. With
+    [eq], a load equal to the one shown renders nothing anew (what the rendering
+    holds, such as a zoom, stays). *)
 
 val live :
   reload:unit React.event ->

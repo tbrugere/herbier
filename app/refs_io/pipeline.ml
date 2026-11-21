@@ -72,7 +72,14 @@ let branch ~save ~plant ~previous program =
               | Ok (_ : int) -> outcomes rows stored (fun s -> Written s)
               | Error e -> outcomes rows stored (fun _ -> Not_saved e))))
 
-let fetch db ~save ~plant ~gbif_key =
+let notify on_branch entries =
+  match on_branch entries with
+  | () -> ()
+  | exception e ->
+      Brr.Console.(
+        error [str "refs: on_branch raised"; str (Printexc.to_string e)])
+
+let fetch ?(on_branch = fun (_ : report) -> ()) db ~save ~plant ~gbif_key =
   let open Fut.Syntax in
   let* previous = Db.all db (References.of_plant plant) in
   match previous with
@@ -80,7 +87,12 @@ let fetch db ~save ~plant ~gbif_key =
   | Ok previous ->
       let+ results =
         Fut.of_list
-          (List.map (branch ~save ~plant ~previous) (Fanout.branches ~gbif_key))
+          (List.map
+             (fun program ->
+               let+ entries = branch ~save ~plant ~previous program in
+               notify on_branch entries;
+               entries)
+             (Fanout.branches ~gbif_key))
       in
       let answered = List.concat results in
       Ok

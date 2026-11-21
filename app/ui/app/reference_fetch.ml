@@ -4,6 +4,7 @@ module Plants = Herbier_store.Plants
 module References = Herbier_store.References
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Source = Herbier_domain.Reference.Source
+module Fetch_rule = Herbier_refs.Fetch_rule
 
 type link_error = Plant_gone | Store of Db.error
 
@@ -124,50 +125,76 @@ let start_fetch (t : Core.t) id gbif_key =
     | true -> Some (Core.commit t edits)
     | false -> None
   in
-  Fut.await (Herbier_refs_io.Pipeline.fetch t.db ~save ~plant:id ~gbif_key)
+  (* The organ photos need only Pl@ntNet's row: their sync need not wait for
+     the slowest branch. *)
+  let on_branch entries =
+    match List.assoc_opt Source.Plantnet entries with
+    | Some (Herbier_refs_io.Pipeline.Written _) -> sync_thumbs t id
+    | Some Herbier_refs_io.Pipeline.(Kept | Skipped | Not_fetched | Not_saved _)
+    | None ->
+        ()
+  in
+  let settle result =
+    t.running :=
+      List.filter
+        (fun (p, h) -> not (Plant_id.equal p id && Int.equal h g))
+        !(t.running);
+    publish_running t;
+    (match result with
+    | Error e ->
+        Brr.Console.(
+          error [str "refs: read"; str label; str (Db.error_to_string e)])
+    | Ok report -> (
+        let not_saved = function
+          | _, Herbier_refs_io.Pipeline.Not_saved _ -> true
+          | ( _,
+              Herbier_refs_io.Pipeline.(
+                Written _ | Kept | Skipped | Not_fetched) ) ->
+              false
+        in
+        let line = String.concat " " (report_line label report) in
+        match List.exists not_saved report with
+        | true -> Brr.Console.(error [str line])
+        | false -> Core.log [line]));
+    (* Whatever the report: a thumbnail that failed before is retried. *)
+    sync_thumbs t id
+  in
+  (* A raise here would reject the future: the reconnect pass waiting on it
+     would never end, and none would run again this session. *)
+  Fut.map
     (fun result ->
-      t.running :=
-        List.filter
-          (fun (p, h) -> not (Plant_id.equal p id && Int.equal h g))
-          !(t.running);
-      publish_running t;
-      (match result with
-      | Error e ->
-          Brr.Console.(
-            error [str "refs: read"; str label; str (Db.error_to_string e)])
-      | Ok report -> (
-          let not_saved = function
-            | _, Herbier_refs_io.Pipeline.Not_saved _ -> true
-            | ( _,
-                Herbier_refs_io.Pipeline.(
-                  Written _ | Kept | Skipped | Not_fetched) ) ->
-                false
-          in
-          let line = String.concat " " (report_line label report) in
-          match List.exists not_saved report with
-          | true -> Brr.Console.(error [str line])
-          | false -> Core.log [line]));
-      (* Whatever the report: a thumbnail that failed before is retried. *)
-      sync_thumbs t id)
+      match settle result with
+      | () -> ()
+      | exception e ->
+          Core.log_error ["refs: fetch settled"; label; Printexc.to_string e])
+    (Herbier_refs_io.Pipeline.fetch ~on_branch t.db ~save ~plant:id ~gbif_key)
+
+let start (t : Core.t) id key =
+  let (_ : unit Fut.t) = start_fetch t id key in
+  ()
 
 let is_fetching (t : Core.t) id =
   List.exists (Plant_id.equal id) (React.S.value t.fetching)
 
 let read_error = Log.db "refs: read"
 
+let decide (t : Core.t) trigger id =
+  Fetch_rule.decide trigger ~online:(Core.online t) ~running:(is_fetching t id)
+    ~now:(Ptime_clock.now ())
+
 let refresh (t : Core.t) id =
-  match (Core.online t, is_fetching t id) with
-  | false, _ | true, true -> ()
-  | true, false ->
+  match decide t Refresh id with
+  | Nothing | Sync_thumbs -> ()
+  | Fetch ->
       Fut.await
         (Db.find t.db (Plants.get id))
         (function
           | Error e -> read_error e
           | Ok None -> ()
           | Ok (Some (p : Herbier_domain.Plant.t)) -> (
-              match (p.gbif_key, is_fetching t id) with
-              | Some key, false -> start_fetch t id key
-              | None, _ | Some _, true -> ()))
+              match (p.gbif_key, decide t Refresh id) with
+              | Some key, Fetch -> start t id key
+              | None, _ | Some _, (Nothing | Sync_thumbs) -> ()))
 
 (* The plant first: an unlinked one needs no look at its rows. *)
 let refresh_if_due (t : Core.t) id =
@@ -190,17 +217,11 @@ let refresh_if_due (t : Core.t) id =
           | Error e -> read_error e
           | Ok None -> ()
           | Ok (Some (key, rows)) -> (
-              match
-                Herbier_refs.Fanout.due ~now:(Ptime_clock.now ()) rows
-                && (not (is_fetching t id))
-                && Core.online t
-              with
-              | true -> start_fetch t id key
-              | false -> (
-                  (* A running fetch syncs when it ends. *)
-                  match is_fetching t id with
-                  | true -> ()
-                  | false -> sync_thumbs t id)))
+              (* A running fetch syncs when it ends: [Nothing]. *)
+              match decide t (Opened rows) id with
+              | Fetch -> start t id key
+              | Sync_thumbs -> sync_thumbs t id
+              | Nothing -> ()))
 
 let gbif_ref ~plant ~at (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
   References.link ~plant ~source:Source.Gbif
@@ -217,8 +238,12 @@ let pasted_source = function
       | Plantnet )) ->
       true
 
-let fetch_if_online (t : Core.t) id key =
-  match Core.online t with true -> start_fetch t id key | false -> ()
+(* Offline, the reconnect pass fetches it if a source is unfinished (no live
+   row, or a failed one). *)
+let fetch_linked (t : Core.t) id key =
+  match decide t Linked id with
+  | Fetch -> start t id key
+  | Sync_thumbs | Nothing -> ()
 
 let link (t : Core.t) ?name id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
   let open Fut.Syntax in
@@ -256,8 +281,7 @@ let link (t : Core.t) ?name id (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
           (match was_fetching with true -> refresh t id | false -> ());
           Error (Store e)
       | Ok (_ : int) ->
-          (* Offline, the next fiche opening fetches: the plant is due. *)
-          fetch_if_online t id taxon.key;
+          fetch_linked t id taxon.key;
           Ok ())
 
 let create_linked (t : Core.t) ?(extra = []) (plant : Herbier_domain.Plant.t)
@@ -272,8 +296,77 @@ let create_linked (t : Core.t) ?(extra = []) (plant : Herbier_domain.Plant.t)
   match saved with
   | Error e -> Error e
   | Ok (_ : int) ->
-      fetch_if_online t plant.id taxon.key;
+      fetch_linked t plant.id taxon.key;
       Ok ()
+
+(* The plant's fetch states at its turn, [None] when it no longer needs this
+   pass: deleted, unlinked, or linked to another key since the pass began
+   ([link] started the new key's fetch). *)
+let read_turn (t : Core.t) id key =
+  let open Fut.Syntax in
+  let* plant = Db.find t.db (Plants.get id) in
+  match plant with
+  | Error e -> Fut.return (Error e)
+  | Ok (Some ({gbif_key = Some k; _} : Herbier_domain.Plant.t))
+    when Int.equal k key ->
+      Fut.map (Result.map Option.some)
+        (Db.all t.db (References.fetch_states_of_plant id))
+  | Ok (Some _ | None) -> Fut.return (Ok None)
+
+(* One plant after the other, each through the same path as ↻: a burst of
+   fetches would crowd the shared request queue and the user's own ↻. *)
+let rec fetch_each (t : Core.t) ~back_online = function
+  | [] -> Fut.return ()
+  | (id, key) :: rest -> (
+      match Core.online t with
+      | false -> Fut.return ()
+      | true -> (
+          let open Fut.Syntax in
+          let* turn = read_turn t id key in
+          match turn with
+          | Error e ->
+              read_error e;
+              fetch_each t ~back_online rest
+          | Ok None -> fetch_each t ~back_online rest
+          | Ok (Some states) -> (
+              match decide t (Reconnected {states; back_online}) id with
+              | Fetch ->
+                  let* () = start_fetch t id key in
+                  fetch_each t ~back_online rest
+              | Sync_thumbs | Nothing -> fetch_each t ~back_online rest)))
+
+let read_pending (t : Core.t) ~back_online =
+  let open Fut.Result_syntax in
+  let* plants = Db.all t.db Plants.list in
+  let+ states = Db.all t.db References.fetch_states in
+  Fetch_rule.pending ~back_online ~now:(Ptime_clock.now ()) ~plants ~states
+
+(* Only the [online] event asks for a pass while one runs: the rerun is a
+   back-online one. *)
+let rec fetch_pending_references ?(back_online = false) (t : Core.t) =
+  match (Core.online t, !(t.reference_pass)) with
+  | false, _ -> ()
+  | true, Some (Running | Rerun_requested) ->
+      t.reference_pass := Some Rerun_requested
+  | true, None ->
+      t.reference_pass := Some Running;
+      let open Fut.Syntax in
+      Fut.await
+        (let* pending = read_pending t ~back_online in
+         match pending with
+         | Error e ->
+             Core.log_error ["refs: pending"; Db.error_to_string e];
+             Fut.return ()
+         | Ok [] -> Fut.return ()
+         | Ok plants ->
+             Core.log ["refs: pending"; string_of_int (List.length plants)];
+             fetch_each t ~back_online plants)
+        (fun () ->
+          let again = !(t.reference_pass) in
+          t.reference_pass := None;
+          match again with
+          | Some Rerun_requested -> fetch_pending_references ~back_online:true t
+          | Some Running | None -> ())
 
 module Offline_data = Herbier_ui_model.Offline_data
 module Files = Herbier_store_io.Files

@@ -19,7 +19,10 @@ does.
    becomes at least one test.
 4. Read the plan's signatures. Where it leaves a behaviour open, pick the reading the docs
    support and record it at the top of the test file in one comment line starting with
-   `(* plan: ... *)`, so the reconciliation step can find the disagreements.
+   `(* plan: ... *)`, so the reconciliation step can find the disagreements. State the reading
+   only: no plan step or section ids (`M4.80`, `§5.2`, the scratchpad plan's numbering) and no
+   change-log wording ("now", "drops", "pre-M4.80") in it or in any other test comment; these
+   lines are removed once reconciled.
 
 ## Where tests go
 

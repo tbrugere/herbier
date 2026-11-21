@@ -5,6 +5,8 @@ module Source = Herbier_domain.Reference.Source
 module Organ = Herbier_domain.Reference.Organ
 module Projection = Herbier_refs.Projection
 
+let area code name : Projection.area = {code; name}
+
 let ref_text =
   [
     Alcotest.test_case "source_name for every source" `Quick (fun () ->
@@ -171,4 +173,45 @@ let ref_text =
         Alcotest.(check string)
           "Pl@ntNet" "Pl@ntNet ↗"
           (Ref_text.link_label Source.Plantnet));
+    Alcotest.test_case "area_name: a known code, an unknown one, no code" `Quick
+      (fun () ->
+        Alcotest.(check string)
+          "a known WGSRPD code is translated" "Belgique"
+          (Ref_text.area_name (area (Some "BGM") "Belgium"));
+        Alcotest.(check string)
+          "an unknown code falls back to the GBIF (English) name" "Atlantis"
+          (Ref_text.area_name (area (Some "ZZZ") "Atlantis"));
+        Alcotest.(check string)
+          "no code: the name as given" "France"
+          (Ref_text.area_name (area None "France")));
+    Alcotest.test_case "other_languages is the disclosure's fixed label" `Quick
+      (fun () ->
+        Alcotest.(check string)
+          "other_languages" "Autres langues" Ref_text.other_languages);
+    Alcotest.test_case
+      "origin_names: translated, a coded and an uncoded duplicate merged, \
+       French order"
+      `Quick (fun () ->
+        Alcotest.(check (list string))
+          "FRA and the uncoded « france » are one; « Îles Canaries » sorts \
+           under i"
+          ["Allemagne"; "Belgique"; "France"; "Îles Canaries"]
+          (Ref_text.origin_names
+             [
+               area (Some "GER") "Germany";
+               area (Some "BGM") "Belgium";
+               area (Some "FRA") "France";
+               area None "france";
+               area (Some "CNY") "Canary Is.";
+             ]));
+    Alcotest.test_case
+      "origin_names: folded duplicates dropped, first spelling kept" `Quick
+      (fun () ->
+        Alcotest.(check (list string))
+          "accented names folded, a duplicate of \"Ane\" dropped"
+          ["Ane"; "éa"; "Zèbre"]
+          (Ref_text.origin_names
+             (List.map (area None) ["Zèbre"; "Ane"; "Âne"; "éa"]));
+        Alcotest.(check (list string))
+          "[] areas give []" [] (Ref_text.origin_names []));
   ]

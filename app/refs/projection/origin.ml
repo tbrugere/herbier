@@ -1,13 +1,32 @@
 module Source = Herbier_domain.Reference.Source
 module Gbif = Sources.Gbif
 
-type t = {native : string list; introduced : string list}
+type area = {code : string option; name : string} [@@deriving eq]
+type t = {native : area list; introduced : area list}
 
-let dedup_first key items =
+let tdwg = "TDWG:"
+
+let code_of = function
+  | Some id
+    when String.length id > String.length tdwg
+         && String.starts_with ~prefix:tdwg id ->
+      Some
+        (String.sub id (String.length tdwg)
+           (String.length id - String.length tdwg))
+  | Some _ | None -> None
+
+(* Two rows name one area when their codes match; a row without a code (a
+   country name in locationId) can only be matched by its locality. *)
+let same_area a b =
+  match (a.code, b.code) with
+  | Some x, Some y -> String.equal x y
+  | Some _, None | None, Some _ | None, None -> String.equal a.name b.name
+
+let dedup_first items =
   List.rev
     (List.fold_left
        (fun acc x ->
-         match List.exists (fun y -> key y = key x) acc with
+         match List.exists (same_area x) acc with
          | true -> acc
          | false -> x :: acc)
        [] items)
@@ -39,7 +58,7 @@ let origin (page : Gbif.Distribution.t Gbif.page) =
             Some locality,
             true,
             Some m ) ->
-            Some (locality, m)
+            Some ({code = code_of d.location_id; name = locality}, m)
         | _ -> None)
       page.results
   in
@@ -49,8 +68,7 @@ let origin (page : Gbif.Distribution.t Gbif.page) =
       rows
   in
   match
-    ( dedup_first Fun.id (List.map fst native),
-      dedup_first Fun.id (List.map fst introduced) )
+    (dedup_first (List.map fst native), dedup_first (List.map fst introduced))
   with
   | [], [] -> None
   | native, introduced -> Some (Cited.v [Source.Gbif] {native; introduced})

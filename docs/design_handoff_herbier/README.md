@@ -199,6 +199,8 @@ Confirmation `paper` : rond `moss` 64 ✓, « Enregistré » 30/800, « Observat
    - Rangée de liens `paper` rayon 10 13/700 : GBIF ↗, Pl@ntNet ↗, Wikipédia ↗, POWO ↗, INPN ↗, Tela Botanica ↗
    **Une ligne sans donnée disparaît.** Toute donnée cite sa source.
 
+*Ajouts des retours de Tristan du 2026-11-21 (plan M4.80) : **Noms** en français seul (sans code de langue), « Autres langues › » déplie en, de, it (sans nom français, les autres langues s'affichent directement) ; **Origine** en français (noms des aires WGSRPD), triée dans l'ordre français ; **Photos par organe** : toucher une vignette ouvre la visionneuse (5e) en lecture seule (balayage entre les organes, crédit « auteur · licence · Pl@ntNet », ni ⋯ ni pastilles) ; « disponibles hors-ligne » retiré.*
+
 ### 4g Fiche sans référence (nom libre, hors-ligne)
 Comme 4f, mais : badge « local », latin remplacé par « nom libre — espèce non liée » (Newsreader ital 19, opacité .8), bloc Référence réduit à un texte « Aucune espèce de référence liée. Hors-ligne : la recherche de noms reviendra avec le réseau. » + bouton bordé 52 « Lier à une espèce de référence » (opacité .5 tant que hors-ligne).
 Tour 6 : en ligne, deux boutons « Identifier » et « Chercher un nom » (6k).

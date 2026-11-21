@@ -106,6 +106,25 @@ val equal : t -> t -> bool
 
 val pp : Format.formatter -> t -> unit
 
+type reference := t
+
+(** What the fetch rules read of a live row of [reference]: no payload, so a
+    pass over every plant does not parse every source's answer. *)
+module Fetch_state : sig
+  type t = {
+    plant_id : Ids.Plant_id.t;
+    source : Source.t;
+    status : Status.t;
+    fetched_at : Ptime.t;
+  }
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
+
+  val of_reference : reference -> t option
+  (** The row's state; [None] for a soft-deleted row. *)
+end
+
 (** Row of [plant_refs]: the plant's identifier at one source. At most one row
     per [(plant_id, source)]. *)
 module Plant_ref : sig

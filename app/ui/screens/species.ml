@@ -432,14 +432,25 @@ let origin_side label = function
   | None -> []
   | Some names -> [El.div [El.b [El.txt' label]; El.txt' (" " ^ names)]]
 
-let organ_tile (organ, path) =
+(* 5e read-only over the organ photos, at this organ. *)
+let organ_tile id (organ, path) =
   let label = Ref_text.organ_label organ in
-  El.div
-    ~at:[cls "species__organ"]
+  let tile =
+    button
+      ~label:(Printf.sprintf "Voir la photo %s en plein écran" label)
+      ["species__organ"]
+      [
+        W.Preview_img.v ~cls:["species__organ-img"] path;
+        El.span ~at:[cls "species__organ-label"] [El.txt' label];
+      ]
+  in
+  let click, b_click = Rb.click tile in
+  ( tile,
     [
-      W.Preview_img.v ~cls:["species__organ-img"] path;
-      El.span ~at:[cls "species__organ-label"] [El.txt' label];
-    ]
+      b_click;
+      Rb.act click (fun () ->
+          Route.go (Route.Modal (Route.Reference_photo {plant = id; organ})));
+    ] )
 
 let link_anchor (l : Ref_block.link) =
   El.a
@@ -452,63 +463,114 @@ let link_anchor (l : Ref_block.link) =
       ]
     [El.txt' l.label]
 
-let row_el = function
-  | Ref_block.Names {languages; sources} ->
-      let line (v : Projection.vernacular) =
-        El.div
+let names_others_id = "species-names-others"
+
+(* « Noms »: the French names, the other languages behind « Autres langues »;
+   without French names, the others are shown directly. *)
+let names_row ~opened ~set_opened ~french ~others sources =
+  let line (v : Projection.vernacular) =
+    El.div
+      [
+        El.b [El.txt' (Projection.Lang.to_string v.lang)];
+        El.txt' (" " ^ Ref_text.names_line v);
+      ]
+  in
+  match (french, others) with
+  | [], _ -> (ref_row "Noms" (List.map line others) sources, [])
+  | _ :: _, [] ->
+      (ref_row "Noms" [El.div [El.txt' (String.concat ", " french)]] sources, [])
+  | _ :: _, _ :: _ ->
+      let more =
+        button
+          ~at:[At.v (Jstr.v "aria-controls") (Jstr.v names_others_id)]
+          ["species__names-more"]
           [
-            El.b [El.txt' (Projection.Lang.to_string v.lang)];
-            El.txt' (" " ^ Ref_text.names_line v);
+            El.span [El.txt' Ref_text.other_languages];
+            El.span
+              ~at:[cls "species__names-chevron"]
+              [W.Icon.el W.Icon.Chevron_right];
           ]
       in
-      ref_row "Noms" (List.map line languages) sources
-  | Life_form {text; sources} -> ref_row "Type" [El.div [El.txt' text]] sources
-  | Origin {native; introduced; sources} ->
-      ref_row "Origine"
-        (origin_side "Indigène :" native @ origin_side "Introduite :" introduced)
-        sources
-  | Red_list {chip; sources} ->
-      ref_row "Liste rouge"
+      let list =
+        El.div
+          ~at:[cls "species__names-others"; At.id (Jstr.v names_others_id)]
+          (List.map line others)
+      in
+      let click, b_click = Rb.click more in
+      ( ref_row "Noms"
+          [El.div [El.txt' (String.concat ", " french)]; more; list]
+          sources,
         [
-          El.div
-            ~at:[cls "species__ref-chips"]
-            [El.span ~at:[cls "species__ref-chip"] [El.txt' chip]];
-        ]
-        sources
-  | Flowering {months; text; sources} ->
-      ref_row "Floraison" [W.Month_grid.v months; El.div [El.txt' text]] sources
-  | Habitat {phrase; chips; sources} ->
-      ref_row "Habitat"
-        (List.map (fun p -> El.div [El.txt' p]) (Option.to_list phrase)
-        @
-        match chips with
-        | [] -> []
-        | _ :: _ ->
-            [
-              El.div
-                ~at:[cls "species__ref-chips"]
-                (List.map
-                   (fun c ->
-                     El.span ~at:[cls "species__habitat-chip"] [El.txt' c])
-                   chips);
-            ])
-        sources
-  | Toxicity {text; sources} ->
-      ref_row "Toxicité" [El.div [El.txt' text]] sources
+          b_click;
+          Rb.act click (fun () -> set_opened (not (React.S.value opened)));
+          Rb.attr more "aria-expanded"
+            (React.S.map (fun o -> Some (Bool.to_string o)) opened);
+          Rb.class_ list "is-hidden" (React.S.map not opened);
+        ] )
+
+(* Full width, its caption above the grid (handoff 4f): not a key/value
+   row. *)
+let organ_block id ~photos ~credits ~sources =
+  let tiles = List.map (organ_tile id) photos in
+  ( El.div
+      ~at:[cls "species__organ-block"]
+      [
+        El.div
+          ~at:[cls "species__organ-caption"]
+          [El.txt' ("Photos par organe · " ^ sources)];
+        El.div ~at:[cls "species__organs"] (List.map fst tiles);
+        El.div ~at:[cls "species__ref-sources"] [El.txt' credits];
+      ],
+    List.concat_map snd tiles )
+
+let row_el ~opened ~set_opened id = function
+  | Ref_block.Names {french; others; sources} ->
+      names_row ~opened ~set_opened ~french ~others sources
   | Organ_photos {photos; credits; sources} ->
-      (* Full width, its caption above the grid (handoff 4f): not a
-         key/value row. *)
-      El.div
-        ~at:[cls "species__organ-block"]
-        [
-          El.div
-            ~at:[cls "species__organ-caption"]
-            [El.txt' ("Photos par organe · " ^ sources)];
-          El.div ~at:[cls "species__organs"] (List.map organ_tile photos);
-          El.div ~at:[cls "species__ref-sources"] [El.txt' credits];
-        ]
+      organ_block id ~photos ~credits ~sources
+  | Life_form {text; sources} ->
+      (ref_row "Type" [El.div [El.txt' text]] sources, [])
+  | Origin {native; introduced; sources} ->
+      ( ref_row "Origine"
+          (origin_side "Indigène :" native
+          @ origin_side "Introduite :" introduced)
+          sources,
+        [] )
+  | Red_list {chip; sources} ->
+      ( ref_row "Liste rouge"
+          [
+            El.div
+              ~at:[cls "species__ref-chips"]
+              [El.span ~at:[cls "species__ref-chip"] [El.txt' chip]];
+          ]
+          sources,
+        [] )
+  | Flowering {months; text; sources} ->
+      ( ref_row "Floraison"
+          [W.Month_grid.v months; El.div [El.txt' text]]
+          sources,
+        [] )
+  | Habitat {phrase; chips; sources} ->
+      ( ref_row "Habitat"
+          (List.map (fun p -> El.div [El.txt' p]) (Option.to_list phrase)
+          @
+          match chips with
+          | [] -> []
+          | _ :: _ ->
+              [
+                El.div
+                  ~at:[cls "species__ref-chips"]
+                  (List.map
+                     (fun c ->
+                       El.span ~at:[cls "species__habitat-chip"] [El.txt' c])
+                     chips);
+              ])
+          sources,
+        [] )
+  | Toxicity {text; sources} ->
+      (ref_row "Toxicité" [El.div [El.txt' text]] sources, [])
   | Links links ->
-      El.div ~at:[cls "species__ref-links"] (List.map link_anchor links)
+      (El.div ~at:[cls "species__ref-links"] (List.map link_anchor links), [])
 
 (* 4f *)
 let linked app (data : data React.signal) () =
@@ -530,20 +592,27 @@ let linked app (data : data React.signal) () =
   in
   let click, b_click = Rb.click refresh in
   let rows = El.div ~at:[cls "species__ref-slot"] [] in
+  let opened, set_opened = React.S.create ~eq:Bool.equal false in
+  let set_opened o = set_opened o in
   let rows_of ((p, shown), fetching) =
     let content =
       match (Ref_block.rows p ~organ_photos:shown, fetching) with
-      | (_ :: _ as rows), _ -> List.map row_el rows
+      | (_ :: _ as rows), _ -> List.map (row_el ~opened ~set_opened id) rows
       | [], true ->
-          [El.p ~at:[cls "t-meta"] [El.txt' "Récupération de la référence…"]]
+          [
+            ( El.p ~at:[cls "t-meta"] [El.txt' "Récupération de la référence…"],
+              [] );
+          ]
       | [], false ->
           [
-            El.p
-              ~at:[cls "t-meta"]
-              [El.txt' "Référence indisponible pour l'instant."];
+            ( El.p
+                ~at:[cls "t-meta"]
+                [El.txt' "Référence indisponible pour l'instant."],
+              [] );
           ]
     in
-    (El.div ~at:[cls "species__ref-rows"] content, [])
+    ( El.div ~at:[cls "species__ref-rows"] (List.map fst content),
+      List.concat_map snd content )
   in
   ( El.section
       ~at:[cls "species__reference"]

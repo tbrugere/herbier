@@ -30,6 +30,14 @@ val plant_ref_input :
 val of_plant : Plant_id.t -> Reference.t Stmt.query
 (** Live rows of the plant. *)
 
+val fetch_states : Reference.Fetch_state.t Stmt.query
+(** The state of every live reference row of every plant ([deleted_at is null])
+    without its payload, ordered by [plant_id], then [source]: the reconnect
+    pass's read. *)
+
+val fetch_states_of_plant : Plant_id.t -> Reference.Fetch_state.t Stmt.query
+(** The same for one plant's live rows, ordered by [source]. *)
+
 val get : Plant_id.t -> Reference.Source.t -> Reference.t Stmt.query
 (** The live row for [(plant, source)]; 0 or 1 row. *)
 

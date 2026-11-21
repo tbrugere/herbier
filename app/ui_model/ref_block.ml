@@ -4,7 +4,11 @@ module Reference = Herbier_domain.Reference
 type link = {label : string; url : string}
 
 type row =
-  | Names of {languages : Projection.vernacular list; sources : string}
+  | Names of {
+      french : string list;
+      others : Projection.vernacular list;
+      sources : string;
+    }
   | Life_form of {text : string; sources : string}
   | Origin of {
       native : string option;
@@ -51,17 +55,30 @@ let names (p : Projection.t) =
   match (languages, family) with
   | [], None -> None
   | _ ->
+      let french, others =
+        List.partition
+          (fun (v : Projection.vernacular) ->
+            match v.lang with
+            | Projection.Lang.Fr -> true
+            | Projection.Lang.En | Projection.Lang.De | Projection.Lang.It ->
+                false)
+          languages
+      in
       Some
         (Names
            {
-             languages;
+             french =
+               List.concat_map
+                 (fun (v : Projection.vernacular) -> v.names)
+                 french;
+             others;
              sources = Ref_text.names_source_line ~family (names_sources p);
            })
 
 let origin (c : Projection.origin Projection.cited) =
   match
-    ( Ref_text.origin_line c.value.native,
-      Ref_text.origin_line c.value.introduced )
+    ( Ref_text.origin_line (Ref_text.origin_names c.value.native),
+      Ref_text.origin_line (Ref_text.origin_names c.value.introduced) )
   with
   | None, None -> None
   | native, introduced ->
@@ -78,9 +95,7 @@ let organ_photos = function
                  (fun ((i : Reference.Image.t), path) -> (i.organ, path))
                  shown;
              credits = Ref_text.credits (List.map fst shown);
-             sources =
-               Ref_text.source_name Reference.Source.Plantnet
-               ^ " · disponibles hors-ligne";
+             sources = Ref_text.source_name Reference.Source.Plantnet;
            })
 
 let links = function

@@ -54,9 +54,12 @@ val branches : gbif_key:int -> row list Step.t list
 val decide : previous:Reference.t list -> row list -> row list
 (** The rows to store, given the plant's stored rows ([previous]; rows with
     [deleted_at = Some _] are ignored). Per row, in input order:
-    - [Failed] with a live previous row of that source → dropped (the stored row
-      stays as it is: a failing source leaves the others intact, and itself
-      too);
+    - [Failed] with a live previous row of that source that is not [Failed] →
+      dropped (the stored row stays as it is: a failing source leaves the others
+      intact, and itself too);
+    - [Failed] with a live previous [Failed] row → kept, payload merged as for
+      [Partial] below: storing it dates the failure (its [fetched_at]), so the
+      retry rules ({!due}, [Fetch_rule.unfinished]) wait from the last attempt;
     - [Failed] without one → kept as is;
     - [Partial] with a live previous row → payload = this row's members, plus,
       for each part of {!Payload.parts} of the source absent here, the previous

@@ -6,6 +6,7 @@ type link_error = Plant_gone | Store of Herbier_store_io.Db.error
 val fetching : Core.t -> Herbier_domain.Ids.Plant_id.t list React.signal
 val refresh : Core.t -> Herbier_domain.Ids.Plant_id.t -> unit
 val refresh_if_due : Core.t -> Herbier_domain.Ids.Plant_id.t -> unit
+val fetch_pending_references : ?back_online:bool -> Core.t -> unit
 
 val link :
   Core.t ->

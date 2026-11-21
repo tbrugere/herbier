@@ -15,4 +15,6 @@
   ptime
   yojson
   alcotest)
- (deps (glob_files %{project_root}/test/fixtures/*.json)))
+ (deps
+  (glob_files %{project_root}/test/fixtures/*.json)
+  %{project_root}/scripts/wgsrpd-fr-overrides.tsv))

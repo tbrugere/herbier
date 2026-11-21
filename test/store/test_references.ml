@@ -370,6 +370,71 @@ let of_plant_orders_filters_live_and_by_plant () =
   | [] -> ()
   | _ -> Alcotest.fail "get on an absent/soft-deleted row should give 0 rows"
 
+let fetch_states_list_live_rows_by_plant_then_source () =
+  let db = Cli.migrated_db () in
+  let p1 = plant 0x1 "Digitale" and p2 = plant 0x2 "Arnica" in
+  let (_ : int) =
+    Cli.write_bare_ok "seed p1" db (Outbox.without_entry (Plants.upsert p1))
+  in
+  let (_ : int) =
+    Cli.write_bare_ok "seed p2" db (Outbox.without_entry (Plants.upsert p2))
+  in
+  (* p1's wikipedia row written before its gbif row: the order is the
+     query's, not the insertion's. *)
+  check_edit "p1 wikipedia" 1 db
+    [
+      References.put ~plant:p1.id ~source:Source.Wikipedia ~fetched_at:t2
+        ~payload:payload_b ~status:Status.Failed ~at:t2;
+    ];
+  check_edit "p1 gbif" 1 db
+    [
+      References.put ~plant:p1.id ~source:Source.Gbif ~fetched_at:t1
+        ~payload:payload_a ~status:Status.Complete ~at:t1;
+    ];
+  check_edit "p2 wikipedia" 1 db
+    [
+      References.put ~plant:p2.id ~source:Source.Wikipedia ~fetched_at:t1
+        ~payload:payload_b ~status:Status.Complete ~at:t1;
+    ];
+  let soft_deleted : Reference.t =
+    {
+      id = derived_reference_id ~plant:p1.id ~source:Source.Plantnet;
+      plant_id = p1.id;
+      source = Source.Plantnet;
+      fetched_at = t1;
+      payload = `Assoc [];
+      status = Status.Complete;
+      created_at = t1;
+      updated_at = t1;
+      deleted_at = Some t1;
+    }
+  in
+  let (_ : int) =
+    Cli.write_ok "a soft-deleted plantnet row for p1" db
+      (Stmt.upsert ~table:Tables.Reference.table
+         (References.input soft_deleted))
+  in
+  let state plant source status fetched_at =
+    {Reference.Fetch_state.plant_id = plant; source; status; fetched_at}
+  in
+  let fetch_state =
+    Alcotest.testable Reference.Fetch_state.pp Reference.Fetch_state.equal
+  in
+  let p1_states =
+    [
+      state p1.id Source.Gbif Status.Complete t1;
+      state p1.id Source.Wikipedia Status.Failed t2;
+    ]
+  in
+  Alcotest.(check (list fetch_state))
+    "every plant's live rows (the soft-deleted one excluded), by plant_id then \
+     source, without payload"
+    (p1_states @ [state p2.id Source.Wikipedia Status.Complete t1])
+    (Cli.all db References.fetch_states);
+  Alcotest.(check (list fetch_state))
+    "one plant's live rows, by source" p1_states
+    (Cli.all db (References.fetch_states_of_plant p1.id))
+
 let put_for_unknown_plant_fails () =
   let db = Cli.migrated_db () in
   match
@@ -1138,6 +1203,13 @@ let () =
             "of_plant orders by source, excludes soft-deleted and other \
              plants; get on an absent row is 0 rows"
             of_plant_orders_filters_live_and_by_plant;
+        ] );
+      ( "live",
+        [
+          case
+            "fetch_states: live rows' states, by plant_id then source; and of \
+             one plant"
+            fetch_states_list_live_rows_by_plant_then_source;
         ] );
       ( "remove",
         [

@@ -220,6 +220,25 @@
 .species__ref-sources
   +base.meta(12px)
 
+// « Noms »: « Autres langues › » opens the en / de / it lines.
+.species__names-more
+  +widgets.bare-button
+  display: inline-flex
+  align-items: center
+  align-self: flex-start
+  gap: 2px
+  min-height: var(--touch-min)
+  color: var(--moss)
+  +base.ui(14px, 700)
+  &[aria-expanded="true"] .species__names-chevron
+    transform: rotate(90deg)
+
+.species__names-chevron
+  display: inline-flex
+  transition: transform 150ms var(--ease-standard)
+  @media (prefers-reduced-motion: reduce)
+    transition: none
+
 .species__ref-chips
   display: flex
   flex-wrap: wrap
@@ -258,6 +277,8 @@
   gap: 6px
 
 .species__organ
+  +widgets.bare-button
+  display: block
   position: relative
   aspect-ratio: 1
   border-radius: 10px

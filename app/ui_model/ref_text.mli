@@ -15,10 +15,23 @@ val names_source_line :
 val sources_line : Herbier_domain.Reference.Source.t list -> string
 (** [source_name]s joined with [", "]; [""] for []. *)
 
+val other_languages : string
+(** ["Autres langues"]: the label of 4f « Noms »'s disclosure. *)
+
+val area_name : Herbier_refs.Projection.area -> string
+(** [Wgsrpd_fr.name code] when [code = Some code] and it is known; else the
+    area's [name] (GBIF's English). *)
+
+val origin_names : Herbier_refs.Projection.area list -> string list
+(** [area_name] of each, duplicates dropped (equal after
+    [Herbier_domain.Fold.fold]; the first spelling kept), sorted by [Fold.fold]
+    (unique after the dedup; French order: accents and case ignored, « Îles
+    Canaries » between « Hongrie » and « Irlande »). *)
+
 val origin_line : string list -> string option
 (** [None] for []; up to 6 names: all, joined with [", "]; more: the first 5,
     then [" et <n> autres"] ([n] = the rest), e.g.
-    ["Belgium, Corse, Czechia-Slovakia, France, Germany et 7 autres"]. *)
+    ["Allemagne, Belgique, Corse, France, Grande-Bretagne et 7 autres"]. *)
 
 val red_list : string -> string option
 (** GBIF's IUCN category → the chip: ["LEAST_CONCERN"] →

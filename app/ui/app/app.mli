@@ -261,8 +261,11 @@ val link :
     that plant started earlier (its branches not yet saved are dropped; when the
     save fails, a fetch that was running is started again by {!refresh}), then,
     after the commit and when {!State.network} says online, starts the plant's
-    fetch in the background (not awaited), followed by the thumbnail sync of
-    {!refresh}. {!saved} fires for the link and again for each branch saved. *)
+    fetch of every source ([Herbier_refs.Fetch_rule.decide Linked]) in the
+    background (not awaited), followed by the thumbnail sync of {!refresh};
+    offline, {!fetch_pending_references} fetches it when the network returns if
+    a source is unfinished ([Herbier_refs.Fetch_rule.unfinished]). {!saved}
+    fires for the link and again for each branch saved. *)
 
 val create_linked :
   t ->
@@ -275,8 +278,9 @@ val create_linked :
     [References.link ~source:Gbif ~external_id ~url:(Sources.Gbif.species_url
      key)], then [extra] in order (4k/5c: the observation's upsert onto the new
     plant). After the commit and when {!State.network} says online, starts the
-    plant's fetch in the background followed by the thumbnail sync, as {!link}.
-    A save error → [Error e], nothing written, no fetch. *)
+    plant's fetch of every source in the background followed by the thumbnail
+    sync, as {!link} (offline: {!fetch_pending_references}, when the network
+    returns). A save error → [Error e], nothing written, no fetch. *)
 
 val refresh : t -> Herbier_domain.Ids.Plant_id.t -> unit
 (** ↻: fetches the plant's references now when {!State.network} says online, the
@@ -284,20 +288,37 @@ val refresh : t -> Herbier_domain.Ids.Plant_id.t -> unit
     Read errors go to the console ([refs: …]), and so does the per-source
     report, as an error when a branch's save failed.
 
-    After the fetch settles (whatever its report) and while {!State.network}
-    says online, [Organ_thumbs.sync] runs for the plant; {!saved} fires when its
-    report {!Herbier_refs_io.Organ_thumbs.changed}. At most one sync per plant
-    runs at a time: one asked for while another runs starts once it ends. A
-    non-empty report is logged as
+    As soon as the Pl@ntNet branch's row is written, and again after the fetch
+    settles (whatever its report), while {!State.network} says online,
+    [Organ_thumbs.sync] runs for the plant; {!saved} fires when its report
+    {!Herbier_refs_io.Organ_thumbs.changed}. At most one sync per plant runs at
+    a time: one asked for while another runs starts once it ends. A non-empty
+    report is logged as
     [refs: thumbs <plant id> flower downloaded leaf present …], as an error when
     a [Failed] is in it; a store error as [refs: thumbs <plant id> <error>]. *)
 
 val refresh_if_due : t -> Herbier_domain.Ids.Plant_id.t -> unit
 (** On opening the fiche: when {!State.network} says online and the plant has a
     gbif_key, starts its fetch as {!refresh} does if {!Herbier_refs.Fanout.due}
-    [~now] holds for its rows. When the plant is not due and no fetch of it is
-    running, [Organ_thumbs.sync] still runs (as after a fetch, see {!refresh}),
-    so a thumbnail that failed earlier is retried on the next entry. *)
+    [~now] or [Herbier_refs.Fetch_rule.unfinished] holds for its rows (a failed
+    source is retried after a few minutes). When the plant is not due and no
+    fetch of it is running, [Organ_thumbs.sync] still runs (as after a fetch,
+    see {!refresh}), so a thumbnail that failed earlier is retried on the next
+    entry. Decided by [Herbier_refs.Fetch_rule.decide Opened]. *)
+
+val fetch_pending_references : ?back_online:bool -> t -> unit
+(** The reconnect pass, [back_online] (default [false]) when the network came
+    back, at startup without it: when {!State.network} says online and no pass
+    is running, reads [Plants.list] and [References.fetch_states] (no payload),
+    and fetches each plant of [Herbier_refs.Fetch_rule.pending ~back_online] one
+    after the other (each as {!refresh} does, thumbnail sync included). At its
+    turn the plant is read again: one deleted, unlinked or linked to another key
+    since the pass began is skipped, and so is one whose
+    [Fetch_rule.decide Reconnected] is not [Fetch] (running, finished
+    meanwhile); the pass stops at the first plant found offline. A pass asked
+    for while one runs runs once more after it (as a [back_online] one). Read
+    errors are a console line ([refs: pending], [refs: read]). Logs
+    [refs: pending <n>] when n > 0. Never raises. *)
 
 val fetching : t -> Herbier_domain.Ids.Plant_id.t list React.signal
 (** The plants with a fetch running (4f's « mise à jour… »), each once; set

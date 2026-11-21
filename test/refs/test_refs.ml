@@ -11,4 +11,5 @@ let () =
       Test_step.suite;
       Test_fanout.suite;
       Test_resolve.suite;
+      Test_fetch_rule.suite;
     ]

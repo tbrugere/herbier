@@ -167,8 +167,11 @@ let decide ~previous rows =
   List.filter_map
     (fun row ->
       match (row.status, live_row previous row.source) with
-      | Status.Failed, Some _ -> None
-      | Status.Partial, Some (p : Reference.t) ->
+      | ( Status.Failed,
+          Some {status = Status.Complete | Status.Partial | Status.Missing; _} )
+        ->
+          None
+      | (Status.Failed | Status.Partial), Some (p : Reference.t) ->
           Some {row with payload = merge ~previous:p.payload row}
       | (Status.Failed | Status.Partial | Status.Complete | Status.Missing), _
         ->

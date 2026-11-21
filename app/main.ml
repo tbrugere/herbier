@@ -95,6 +95,8 @@ let modal app = function
         ~arrival:(Recorded {identify})
         app observation
   | Herbier_ui.Route.Viewer id -> Herbier_ui.Screens.Viewer.v app id
+  | Herbier_ui.Route.Reference_photo {plant; organ} ->
+      Herbier_ui.Screens.Viewer.reference app plant organ
   | Herbier_ui.Route.New_plant ->
       Herbier_ui.Screens.Edit_plant.v app Herbier_ui.Screens.Edit_plant.New
 
@@ -114,7 +116,8 @@ let create_app db {storage; drive; wifi_only; place_sources; identification} =
 (* The window's online and offline events update [State.network]; coming
    back online asks the enabled place-name sources for what was saved
    meanwhile (architecture §8), runs the originals' queue and the Drive health
-   check when it is due (architecture §5). The window holds
+   check when it is due (architecture §5), and fetches the references of the
+   plants whose fetch never completed (architecture §6). The window holds
    the listeners for the app's lifetime. *)
 let watch_network app =
   let state = Herbier_ui.App.state app in
@@ -124,7 +127,8 @@ let watch_network app =
     | true ->
         Herbier_ui.App.geocode_pending app;
         Herbier_ui.App.upload_pending app;
-        Herbier_ui.App.check_originals app
+        Herbier_ui.App.check_originals app;
+        Herbier_ui.App.fetch_pending_references ~back_online:true app
     | false -> ()
   in
   let listen name online =
@@ -191,6 +195,9 @@ let () =
           Herbier_ui.App.start_uploads app;
           Herbier_ui.App.start_france app;
           Herbier_ui.App.geocode_pending app;
+          (* The network may have come back between two sessions; offline,
+             the pass returns at once. *)
+          Herbier_ui.App.fetch_pending_references app;
           Fut.await (Herbier_ui.App.load_plantnet_key app) Fun.id;
           (* A veil over a dev page would cover the emulator's checks; the
              notice shows at the next start on an app route. *)

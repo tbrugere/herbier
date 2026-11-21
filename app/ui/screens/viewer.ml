@@ -12,6 +12,10 @@ module Photo_id = Herbier_domain.Ids.Photo_id
 module Plant = Herbier_domain.Plant
 module Observation = Herbier_domain.Observation
 module Observation_id = Herbier_domain.Ids.Observation_id
+module References = Herbier_store.References
+module Ref_images = Herbier_store.Ref_images
+module Projection = Herbier_refs.Projection
+module Ref_photos = Herbier_ui_model.Ref_photos
 module W = Widgets
 
 let cls = Html.cls
@@ -69,23 +73,12 @@ let chip label = Html.button ["viewer__chip"] [El.txt' label]
 type remove = Remove | Keep
 type menu = Cover | Move | Cancel
 
-let render app focus (d : data) =
-  let n = List.length d.photos in
-  let photos = Array.of_list d.photos in
-  let start =
-    List.find_index (fun (ph : Photo.t) -> Photo_id.equal ph.id !focus) d.photos
-    |> Option.value ~default:0
-  in
-  focus := photos.(start).id;
-  let zooms =
-    List.mapi
-      (fun i (ph : Photo.t) ->
-        W.Viewer_zoom.v
-          (W.Preview_img.v ~cls:["viewer__img"]
-             ~alt:(Printf.sprintf "Photo %d sur %d" (i + 1) n)
-             ph.preview_path))
-      d.photos
-  in
+(* The part both modes share: the track of slides (swipe, pinch), « i / n »
+   and ✕. [on_show i] runs for the slide in view, first for [start]. *)
+type frame = {track : El.t; top : El.t; bindings : Rb.binding list}
+
+let frame ~n ~start ~slide ~on_show ~right =
+  let zooms = List.init n (fun i -> W.Viewer_zoom.v (slide i)) in
   let track =
     El.div
       ~at:[cls "viewer__track"]
@@ -94,6 +87,52 @@ let render app focus (d : data) =
          zooms)
   in
   let counter = El.span ~at:[cls "viewer__counter"] [] in
+  (* style: the slide in view, written by [show] from the scroll listener. *)
+  let index = ref start in
+  let show i =
+    index := i;
+    El.set_children counter [El.txt' (Printf.sprintf "%d / %d" (i + 1) n)];
+    on_show i;
+    List.iteri (fun j (z : W.Viewer_zoom.t) -> if j <> i then z.reset ()) zooms
+  in
+  show start;
+  let b_scroll =
+    Rb.listen track Ev.scroll (fun _ ->
+        let w = El.bound_w track in
+        match w > 0. with
+        | false -> ()
+        | true ->
+            let i = Float.to_int (Float.round (El.scroll_x track /. w)) in
+            let i = max 0 (min (n - 1) i) in
+            if i <> !index then show i)
+  in
+  (* Once laid out, the track starts at the focused photo. *)
+  ignore
+    (G.request_animation_frame (fun _ ->
+         El.set_prop
+           (El.Prop.float (Jstr.v "scrollLeft"))
+           (Float.of_int start *. El.bound_w track)
+           track));
+  let close = round ~label:"Fermer" W.Icon.Close in
+  let close_click, b_close = Rb.click close in
+  {
+    track;
+    top = El.div ~at:[cls "viewer__top"] [close; counter; right];
+    bindings =
+      b_scroll
+      :: b_close
+      :: Rb.act close_click Route.back
+      :: List.concat_map (fun (z : W.Viewer_zoom.t) -> z.bindings) zooms;
+  }
+
+let render app focus (d : data) =
+  let n = List.length d.photos in
+  let photos = Array.of_list d.photos in
+  let start =
+    List.find_index (fun (ph : Photo.t) -> Photo_id.equal ph.id !focus) d.photos
+    |> Option.value ~default:0
+  in
+  focus := photos.(start).id;
   let badge = El.span ~at:[cls "viewer__badge"] [] in
   let cover_badge =
     El.span
@@ -128,8 +167,8 @@ let render app focus (d : data) =
           | None -> "À identifier");
       ]
   in
-  (* style: the slide in view, written by [show] (from the scroll listener)
-     and read by the actions on the current photo. *)
+  (* style: the slide in view, written by [show] (the frame's [on_show]) and
+     read by the actions on the current photo. *)
   let index = ref start in
   let cover =
     Option.bind d.plant (fun p -> Cover.choose p.cover_photo_id d.photos)
@@ -142,7 +181,6 @@ let render app focus (d : data) =
     index := i;
     let ph = photos.(i) in
     focus := ph.id;
-    El.set_children counter [El.txt' (Printf.sprintf "%d / %d" (i + 1) n)];
     El.set_children badge [El.txt' (Drive_text.viewer_badge ph)];
     let show_drive href ~missing:is_missing =
       El.set_at At.Name.href (Option.map Jstr.v href) drive;
@@ -158,30 +196,9 @@ let render app focus (d : data) =
     | Hidden -> show_drive None ~missing:false);
     El.set_class (Jstr.v "is-hidden") (not (is_cover ph)) cover_badge;
     El.set_children when_el
-      [El.txt' (match obs_of d ph with Some o -> when_where o | None -> "")];
-    List.iteri (fun j (z : W.Viewer_zoom.t) -> if j <> i then z.reset ()) zooms
+      [El.txt' (match obs_of d ph with Some o -> when_where o | None -> "")]
   in
-  show start;
-  let b_scroll =
-    Rb.listen track Ev.scroll (fun _ ->
-        let w = El.bound_w track in
-        match w > 0. with
-        | false -> ()
-        | true ->
-            let i = Float.to_int (Float.round (El.scroll_x track /. w)) in
-            let i = max 0 (min (n - 1) i) in
-            if i <> !index then show i)
-  in
-  (* Once laid out, the track starts at the focused photo. *)
-  ignore
-    (G.request_animation_frame (fun _ ->
-         El.set_prop
-           (El.Prop.float (Jstr.v "scrollLeft"))
-           (Float.of_int start *. El.bound_w track)
-           track));
-  let close = round ~label:"Fermer" W.Icon.Close in
   let see = chip "Voir l'observation" and remove = chip "Retirer d'Herbier" in
-  let close_click, b_close = Rb.click close in
   let see_click, b_see = Rb.click see in
   let remove_click, b_remove = Rb.click remove in
   let confirm =
@@ -217,6 +234,14 @@ let render app focus (d : data) =
         let b = round ~label:"Plus d'actions" W.Icon.More_horiz in
         let click, b_click = Rb.click b in
         (b, [b_click; Rb.act click menu.show])
+  in
+  let frame =
+    frame ~n ~start
+      ~slide:(fun i ->
+        W.Preview_img.v ~cls:["viewer__img"]
+          ~alt:(Printf.sprintf "Photo %d sur %d" (i + 1) n)
+          photos.(i).preview_path)
+      ~on_show:show ~right:more
   in
   let current () = photos.(!index) in
   (* Built once with every observation of the plant; [show_only] leaves out
@@ -288,8 +313,8 @@ let render app focus (d : data) =
     El.div
       ~at:[cls "viewer__content"]
       [
-        track;
-        El.div ~at:[cls "viewer__top"] [close; counter; more];
+        frame.track;
+        frame.top;
         El.div
           ~at:[cls "viewer__bottom"]
           [
@@ -307,12 +332,10 @@ let render app focus (d : data) =
   ( el,
     List.concat
       [
+        frame.bindings;
         [
-          b_scroll;
-          b_close;
           b_see;
           b_remove;
-          Rb.act close_click Route.back;
           Rb.act see_click (fun () ->
               Route.go
                 (Route.Modal (Route.Observation (current ()).observation_id)));
@@ -332,7 +355,6 @@ let render app focus (d : data) =
           Rb.act mover.choice (function Some o -> move_to o | None -> ());
         ];
         b_more;
-        List.concat_map (fun (z : W.Viewer_zoom.t) -> z.bindings) zooms;
         confirm.bindings;
         menu.bindings;
         mover.bindings;
@@ -365,5 +387,106 @@ let v app id =
     bindings =
       Loaded.v ~reload:(App.saved app) ~what:"visionneuse" el
         (fun () -> load (App.db app) !focus)
+        item;
+  }
+
+(* 5e read-only: the reference photos of 4f, no owner action. *)
+
+let load_reference db plant =
+  let open Fut.Result_syntax in
+  let* p = Db.find db (Plants.get plant) in
+  match p with
+  | None -> Fut.ok []
+  | Some (_ : Plant.t) ->
+      let* references = Db.all db (References.of_plant plant) in
+      let+ stored = Db.all db (Ref_images.of_plant plant) in
+      Ref_photos.slides (Projection.project ~references ~plant_refs:[]) ~stored
+
+(* The thumbnail at once (offline too); online, the full image over it once
+   it has loaded, an error leaving the thumbnail. [full_url] is a checked
+   bs.plantnet.org URL ({!Herbier_refs.Organ_photos.downloadable}). *)
+let reference_slide ~online (s : Ref_photos.slide) =
+  let thumb = W.Preview_img.v ~cls:["viewer__img"] ~alt:s.alt s.thumb_path in
+  match online with
+  | false -> (El.div ~at:[cls "viewer__ref"] [thumb], [])
+  | true ->
+      let full =
+        El.img
+          ~at:
+            [
+              cls "viewer__full";
+              At.src (Jstr.v s.full_url);
+              (* the thumbnail under it carries the text alternative *)
+              At.v (Jstr.v "alt") Jstr.empty;
+              At.v (Jstr.v "referrerpolicy") (Jstr.v "no-referrer");
+            ]
+          ()
+      in
+      ( El.div ~at:[cls "viewer__ref"] [thumb; full],
+        [
+          Rb.listen full Ev.load (fun _ ->
+              El.set_class (Jstr.v "is-loaded") true full);
+        ] )
+
+let render_reference focus (online, (slides : Ref_photos.slide list)) =
+  let n = List.length slides in
+  let start = Ref_photos.start slides !focus in
+  let slides = Array.of_list slides in
+  let built = Array.map (reference_slide ~online) slides in
+  let label = El.h2 ~at:[cls "viewer__name"] [] in
+  let credit = El.p ~at:[cls "viewer__credit"] [] in
+  let show i =
+    let s = slides.(i) in
+    focus := s.organ;
+    El.set_children label [El.txt' s.label];
+    El.set_children credit [El.txt' s.credit]
+  in
+  let frame =
+    frame ~n ~start
+      ~slide:(fun i -> fst built.(i))
+      ~on_show:show
+      ~right:(El.span ~at:[cls "viewer__spacer"] [])
+  in
+  ( El.div
+      ~at:[cls "viewer__content"]
+      [
+        frame.track; frame.top; El.div ~at:[cls "viewer__bottom"] [label; credit];
+      ],
+    frame.bindings @ List.concat_map snd (Array.to_list built) )
+
+let reference app plant organ =
+  (* style: the organ in view, kept across reloads (a thumbnail sync). *)
+  let focus = ref organ in
+  let el = El.div ~at:[cls "viewer"] [] in
+  let item = function
+    | _, [] -> gone ()
+    | shown -> render_reference focus shown
+  in
+  let network = State.network (App.state app) in
+  let online () = (React.S.value network).online in
+  (* Online again: the full images can load now. *)
+  let back_online =
+    React.S.changes
+      (React.S.map ~eq:Bool.equal (fun (n : State.network) -> n.online) network)
+    |> React.E.fmap (function true -> Some () | false -> None)
+  in
+  (* A save that changes none of the slides (another plant's fetch) keeps the
+     rendering, its zoom and its loaded images; so does going offline (what
+     has loaded stays). Only coming back online renders the full images. *)
+  let eq (shown_online, shown) (online, slides) =
+    (shown_online || not online)
+    && List.equal Ref_photos.equal_slide shown slides
+  in
+  {
+    Screen.el;
+    ready = Screen.now;
+    bindings =
+      Loaded.v ~eq
+        ~reload:(React.E.select [App.saved app; back_online])
+        ~failed:gone ~what:"visionneuse" el
+        (fun () ->
+          Fut.map
+            (Result.map (fun slides -> (online (), slides)))
+            (load_reference (App.db app) plant))
         item;
   }

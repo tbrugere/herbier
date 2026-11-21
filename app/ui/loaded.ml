@@ -2,9 +2,14 @@ open Brr
 
 let log = Log.db
 
-let v ?reload ?failed ~what el load render =
+let v ?eq ?reload ?failed ~what el load render =
   (* One item, replaced on each load: [Rb.rlist] owns its bindings. *)
   let content, handle = ReactiveData.RList.create [] in
+  let unchanged v =
+    match (eq, ReactiveData.RList.value content) with
+    | Some eq, [Ok shown] -> eq shown v
+    | Some _, ([] | Error () :: _ | Ok _ :: _ :: _) | None, _ -> false
+  in
   let item = function
     | Ok v -> render v
     | Error () -> (
@@ -18,7 +23,10 @@ let v ?reload ?failed ~what el load render =
           match ReactiveData.RList.value content with
           | [] -> ReactiveData.RList.set handle [Error ()]
           | _ :: _ -> ())
-      | Ok v -> ReactiveData.RList.set handle [Ok v])
+      | Ok v -> (
+          match unchanged v with
+          | true -> ()
+          | false -> ReactiveData.RList.set handle [Ok v]))
   in
   run ();
   Rb.rlist el item content

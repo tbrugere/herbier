@@ -9,8 +9,14 @@ type link = {label : string; url : string}
 (** One anchor of the links row: [label = Ref_text.link_label source]. *)
 
 type row =
-  | Names of {languages : Projection.vernacular list; sources : string}
-      (** [sources] = [Ref_text.names_source_line ~family]. *)
+  | Names of {
+      french : string list;
+          (** The fr names (1 to 3), in vote order; [[]] when none. *)
+      others : Projection.vernacular list;
+          (** The other languages with names, in [Projection.Lang.all] order
+              (en, de, it). *)
+      sources : string;  (** [Ref_text.names_source_line ~family]. *)
+    }
   | Life_form of {text : string; sources : string}  (** « Type » *)
   | Origin of {
       native : string option;  (** [Ref_text.origin_line], « Indigène : » *)
@@ -25,7 +31,7 @@ type row =
   | Organ_photos of {
       photos : (Reference.Organ.t * string) list;  (** organ, thumb path *)
       credits : string;  (** [Ref_text.credits] of the shown rows *)
-      sources : string;  (** ["Pl@ntNet · disponibles hors-ligne"] *)
+      sources : string;  (** ["Pl@ntNet"] *)
     }
   | Links of link list
 
@@ -34,7 +40,9 @@ val rows :
 (** In this order, each only when present:
     - [Names]: some vernacular language or a taxon family;
     - [Life_form]: [life_form = Some _];
-    - [Origin]: native or introduced non-empty (a side that is empty is [None]);
+    - [Origin]: native or introduced non-empty (a side that is empty is [None]),
+      each side [Ref_text.origin_line (Ref_text.origin_names areas)]: French
+      names, in French order;
     - [Red_list]: [red_list = Some c] and [Ref_text.red_list c = Some chip];
     - [Flowering]: [flowering_months = Some _];
     - [Habitat]: [habitat = Some _];

@@ -24,6 +24,29 @@ let names_source_line ~family sources =
   String.concat " · " (Option.to_list family @ sources)
 
 let sources_line sources = String.concat ", " (List.map source_name sources)
+let other_languages = "Autres langues"
+
+let area_name (a : Herbier_refs.Projection.area) =
+  match Option.bind a.code Wgsrpd_fr.name with
+  | Some french -> french
+  | None -> a.name
+
+let origin_names areas =
+  let fold = Herbier_domain.Fold.fold in
+  let named =
+    List.map
+      (fun a ->
+        let name = area_name a in
+        (fold name, name))
+      areas
+  in
+  let unique =
+    List.fold_left
+      (fun acc ((key, _) as x) ->
+        match List.mem_assoc key acc with true -> acc | false -> x :: acc)
+      [] named
+  in
+  List.map snd (List.sort (fun (k1, _) (k2, _) -> String.compare k1 k2) unique)
 
 let origin_line names =
   match (names, List.length names) with

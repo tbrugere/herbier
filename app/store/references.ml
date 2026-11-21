@@ -94,6 +94,28 @@ let of_plant plant =
      by source"
     [Codec.param R.plant_id plant]
 
+let fetch_state_row =
+  let open Row.Syntax in
+  let+ plant_id = Row.col R.plant_id
+  and+ source = Row.col R.source
+  and+ status = Row.col R.status
+  and+ fetched_at = Row.col R.fetched_at in
+  {Reference.Fetch_state.plant_id; source; status; fetched_at}
+
+let fetch_state_select =
+  "select plant_id, source, status, fetched_at from reference where deleted_at \
+   is null"
+
+let fetch_states =
+  Stmt.query ~json:[] fetch_state_row
+    (fetch_state_select ^ " order by plant_id, source")
+    []
+
+let fetch_states_of_plant plant =
+  Stmt.query ~json:[] fetch_state_row
+    (fetch_state_select ^ " and plant_id = ? order by source")
+    [Codec.param R.plant_id plant]
+
 let live_by_key =
   "select * from reference where plant_id = ? and source = ? and deleted_at is \
    null"

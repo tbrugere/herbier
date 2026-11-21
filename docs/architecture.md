@@ -800,7 +800,21 @@ species page when online and the plant's rows are due (`refs/fanout.ml`): a
 fetched source without a live row, a row older than 90 days, or a
 `failed`/`partial` row older than one day (so one bad connection does not
 leave the fiche empty for three months). The due check runs once per entry
-into the fiche, never on the reloads the fetch itself causes.
+into the fiche, never on the reloads the fetch itself causes. Also when the
+network comes back, or at startup online: every linked plant with a fetched
+source without a live row, or with a `failed` row, is fetched, one plant at
+a time, newest first (the reconnect pass; it reads the rows' states, not
+their payloads, and reads each plant again at its turn, so one relinked or
+deleted meanwhile is skipped). On an `online` event every `failed` row
+counts, whatever its age: a fetch cut by the network's loss is retried as
+soon as it returns. At startup a `failed` row counts once older than ten
+minutes, and opening the fiche retries such a row too, so a fetch cut by a
+flaky network that never went offline is not left until the next day. The
+ten minutes keep a source that keeps failing from being asked at every
+start; network changes are rare enough to retry on each.
+`refs/fetch_rule.ml` is the one place that decides, per trigger (link, ↻,
+opening, reconnection), whether to fetch, only sync the thumbnails, or do
+nothing.
 
 ```
 gbif_key
@@ -829,9 +843,11 @@ gbif_key
   no Wikidata item, no Pl@ntNet image, no sitelink or summary 404);
   `failed` = no call of the row gave a decodable answer; `partial` = some
   did; `complete` = all did. Keep rule (`Fanout.decide`): a `failed` row is
-  never written over a live stored row (a timeout must not blank data that
-  was right; it is written only when nothing was stored, so the due rule
-  retries it); a `partial` row keeps the stored members of its failed parts.
+  never written over a live stored row that is not `failed` (a timeout must
+  not blank data that was right; it is written when nothing was stored, so
+  the retry rules retry it, and over a stored `failed` row, so the retries
+  wait from the last attempt); a `partial` row keeps the stored members of its
+  failed parts.
   When the Wikidata entity could not be read (Wikidata `failed`, or
   `partial` with only the search), Wikipedia counts as `failed`: a stored
   row stays, and without one a `failed` row is written, so the one-day
@@ -845,8 +861,9 @@ gbif_key
   pasted in 5a « Liens de référence ») are soft-deleted in the same
   transaction: they named the old taxon, and 4f falls back to the links
   derived from the new one.
-- The fetch starts only online, like ↻; offline, a just-linked plant is due
-  and the next opening of its fiche fetches it.
+- The fetch starts only online, like ↻; offline, a just-linked plant has no
+  row: the reconnect pass fetches it when the network returns (or the next
+  opening of its fiche, which finds it due).
 - Each source writes its own `reference` row (source, payload, status), so a
   failing source never blanks the others and every row in the UI cites its
   source (handoff 4f: "Une ligne sans donnée disparaît. Toute donnée cite sa
@@ -867,9 +884,13 @@ gbif_key
   status, and a part that fails to decode degrades its fields only. Rules:
   vernacular names from GBIF rows and Wikidata P1843 in fr, en, de, it, top
   three by votes (case-insensitive); native/introduced ranges from the WCVP
-  rows of GBIF distributions; red list from the global IUCN row only
-  (national lists are the regional layer); toxicity is the first sentence of
-  the Wikipedia summary naming toxicity; organ photos one per organ; links are
+  rows of GBIF distributions, each area keeping its WGSRPD code (`TDWG:BGM`
+  → `BGM`), which 4f shows in French through `ui_model/wgsrpd_fr.ml`
+  (generated from Wikidata's French labels of P11897, plus hand overrides;
+  GBIF's English name when the code is unknown), sorted in French order; red
+  list from the global IUCN row only (national lists are the regional layer);
+  toxicity is the first sentence of the Wikipedia summary naming toxicity;
+  organ photos one per organ; links are
   the plant's `plant_refs` URLs when they are https and point at their source
   (else ignored), else URLs derived from the GBIF key, the
   summary page and the Wikidata ids (POWO, INPN, Tela, iNat, EPPO).
@@ -877,8 +898,9 @@ gbif_key
   GBIF Pl@ntNet dataset media by `title` suffix, downloaded to `refthumbs/`
   with licence and attribution kept for display. `ref_images` is a cache of
   the live Pl@ntNet reference row (`refs_io/organ_thumbs.ml`, rules in
-  `refs/organ_photos.ml`): after each fetch and on each fiche entry, while
-  online, the rows follow the projection's organ photos (only
+  `refs/organ_photos.ml`): as soon as the Pl@ntNet branch is stored, after
+  each fetch and on each fiche entry, while online, the rows follow the
+  projection's organ photos (only
   `https://bs.plantnet.org/` URLs), then the missing thumbnails are
   downloaded one at a time per plant; a failed one is tried again on the next
   sync. The image host sends no CORS headers, so the bytes come through

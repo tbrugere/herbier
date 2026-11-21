@@ -146,3 +146,27 @@ a.viewer__chip
 .viewer__missing
   color: inherit
   opacity: .9
+
+// 5e read-only over 4f's organ photos: the thumbnail, then the
+// full image over it once loaded; the organ and its credit at the bottom.
+.viewer__ref
+  position: relative
+  width: 100%
+  height: 100%
+
+.viewer__full
+  position: absolute
+  inset: 0
+  width: 100%
+  height: 100%
+  object-fit: contain
+  opacity: 0
+  transition: opacity 150ms var(--ease-standard)
+  &.is-loaded
+    opacity: 1
+  @media (prefers-reduced-motion: reduce)
+    transition: none
+
+.viewer__credit
+  +base.ui(12px, 500)
+  opacity: .8

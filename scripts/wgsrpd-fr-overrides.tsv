@@ -1,0 +1,63 @@
+# French names of WGSRPD level-3 areas (code<TAB>name), read by
+# scripts/wgsrpd-fr.py; they win over Wikidata's labels.
+# Translations of the English WGSRPD names, by hand, for the codes without a
+# Wikidata French label on 2026-11-21, or whose label is English (WIN).
+AGE	Argentine du Nord-Est
+AGS	Argentine du Sud
+AGW	Argentine du Nord-Ouest
+ALT	Altaï
+ARI	Arizona
+ASP	Îles Amsterdam et Saint-Paul
+ASS	Assam
+BZC	Brésil du Centre-Ouest
+BZE	Brésil du Nord-Est
+BZL	Brésil du Sud-Est
+BZN	Brésil du Nord
+BZS	Brésil du Sud
+CHC	Chine du Centre-Sud
+CHN	Chine du Centre-Nord
+CHS	Chine du Sud-Est
+CLC	Chili central
+CLN	Chili du Nord
+CLS	Chili du Sud
+CPI	Îles du Pacifique centraméricain
+CPP	Provinces du Cap
+EAI	Îles de l'Égée orientale
+EHM	Himalaya oriental
+GGI	Îles du golfe de Guinée
+GST	États du Golfe
+HBI	Îles Howland et Baker
+IND	Inde
+KRY	Crimée
+LBS	Liban-Syrie
+MCI	Îles du canal du Mozambique
+MCS	Île Marcus
+MLY	Malaisie péninsulaire
+MXC	Mexique central
+MXE	Mexique du Nord-Est
+MXG	Mexique du Golfe
+MXI	Îles mexicaines du Pacifique
+MXN	Mexique du Nord-Ouest
+MXS	Mexique du Sud-Ouest
+MXT	Mexique du Sud-Est
+NFL	Terre-Neuve
+OFS	État-Libre
+PAL	Palestine
+RUC	Russie européenne centrale
+RUE	Russie européenne orientale
+RUN	Russie européenne du Nord
+RUS	Russie européenne du Sud
+RUW	Russie européenne du Nord-Ouest
+SGE	Géorgie du Sud
+SOL	Îles Salomon
+SWC	Caraïbes du Sud-Ouest
+TCS	Transcaucasie
+TOK	Tokelau-Manihiki
+TUB	Îles Australes
+TUE	Turquie d'Europe
+TVL	Provinces du Nord
+VNA	Antilles vénézuéliennes
+WHM	Himalaya occidental
+WIN	Îles du Vent
+WSB	Sibérie occidentale
+YAK	Iakoutie

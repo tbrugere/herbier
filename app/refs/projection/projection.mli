@@ -23,7 +23,12 @@ end
 type vernacular = {lang : Lang.t; names : string list}
 (** [names] has 1 to 3 names. *)
 
-type origin = {native : string list; introduced : string list}
+type area = Origin.area = {code : string option; name : string}
+(** See {!Origin.area}. *)
+
+val equal_area : area -> area -> bool
+
+type origin = {native : area list; introduced : area list}
 
 type habitat = {phrase : string option; chips : string list}
 (** At least one of the two is non-empty. *)
@@ -89,7 +94,9 @@ val project :
       [None], ["PRESENT"], ["COMMON"], ["RARE"] or ["IRREGULAR"]; native when
       [establishment_means] is [None] or ["NATIVE"], introduced when it is
       ["INTRODUCED"], ["NATURALISED"], ["INVASIVE"] or ["MANAGED"], else
-      neither; payload order, duplicates dropped;
+      neither; payload order; duplicates dropped (the first kept): two rows are
+      duplicates when both have a [code] and the codes are equal, or when either
+      has none and the [name]s are equal;
     - red list: the first IUCN Red List row without a [country] with a
       [threat_status];
     - toxicity: from a [Standard] summary only, the first sentence of [extract]

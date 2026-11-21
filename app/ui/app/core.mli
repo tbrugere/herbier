@@ -18,9 +18,8 @@ type geocode_run =
   | Geocoding
   | Geocoding_again (* a trigger came during the run: read the list again *)
 
-(* A plant's running thumbnail sync, and whether another was asked for
-   meanwhile. *)
-type thumb_sync = Running | Rerun_requested
+(* Whether another run was asked for meanwhile. *)
+type job = Running | Rerun_requested
 
 (* The session's flora list (Identification): not asked yet (or the last
    request failed), the request in flight (shared by concurrent callers), or
@@ -91,12 +90,16 @@ type t = {
   place_error_source : Place_name.source option ref;
       (* style: mutable for the same reason: the source whose failure
          {!place_error} shows, so another source's success keeps it. *)
-  thumbs : (Plant_id.t * thumb_sync) list ref;
+  thumbs : (Plant_id.t * job) list ref;
       (* style: mutable for the same reason: a thumbnail sync settles in a
          future's callback. The plants with a sync running. *)
   freeing : bool ref;
       (* style: mutable for the same reason: « Libérer » settles in a
          future's callback; thumbnail syncs asked meanwhile are skipped. *)
+  reference_pass : job option ref;
+      (* style: mutable for the same reason: the reconnect pass settles in
+         futures' callbacks. [None]: no pass running; [Some Rerun_requested]:
+         one was asked for during the running one. *)
   communes : Communes.t ref;
       (* style: mutable because the packs load and download in futures'
          callbacks; a geocode run reads it at each observation. *)

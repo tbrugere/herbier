@@ -142,6 +142,12 @@ let link source url : Projection.link = {source; url}
 let link_json (l : Projection.link) =
   `Assoc [("source", source_json l.source); ("url", `String l.url)]
 
+let area code name : Projection.area = {code; name}
+
+let area_json (a : Projection.area) =
+  `Assoc [("code", opt (fun s -> `String s) a.code); ("name", `String a.name)]
+
+let areas_json l = `List (List.map area_json l)
 let links_json l = `List (List.map link_json l)
 let field_json (f : Projection.Field.t) = `String (Projection.Field.to_string f)
 let fields_json l = `List (List.map field_json l)
@@ -225,23 +231,35 @@ let digitalis_tests =
               (sources_json sources)
         | None -> Alcotest.fail "vernacular is None" );
     ( "origin: 12 native starting as recorded, 80 introduced starting as \
-       recorded",
+       recorded, codes kept",
       `Quick,
       fun () ->
         match proj.origin with
         | Some {value; sources = _} ->
             Alcotest.(check int) "native count" 12 (List.length value.native);
-            Alcotest.(check (list string))
+            Alcotest.(check Testable.yojson)
               "native, first five"
-              ["Belgium"; "Corse"; "Czechia-Slovakia"; "France"; "Germany"]
-              (List.filteri (fun i _ -> i < 5) value.native);
+              (areas_json
+                 [
+                   area (Some "BGM") "Belgium";
+                   area (Some "COR") "Corse";
+                   area (Some "CZE") "Czechia-Slovakia";
+                   area (Some "FRA") "France";
+                   area (Some "GER") "Germany";
+                 ])
+              (areas_json (List.filteri (fun i _ -> i < 5) value.native));
             Alcotest.(check int)
               "introduced count" 80
               (List.length value.introduced);
-            Alcotest.(check (list string))
+            Alcotest.(check Testable.yojson)
               "introduced, first three"
-              ["Argentina Northeast"; "Argentina Northwest"; "Argentina South"]
-              (List.filteri (fun i _ -> i < 3) value.introduced)
+              (areas_json
+                 [
+                   area (Some "AGE") "Argentina Northeast";
+                   area (Some "AGW") "Argentina Northwest";
+                   area (Some "AGS") "Argentina South";
+                 ])
+              (areas_json (List.filteri (fun i _ -> i < 3) value.introduced))
         | None -> Alcotest.fail "origin is None" );
     ( "red_list is None (no global IUCN assessment)",
       `Quick,
@@ -365,18 +383,26 @@ let arnica_tests =
             Alcotest.(check (option (list string)))
               "it" (Some ["Arnica"]) (names_of It value)
         | None -> Alcotest.fail "vernacular is None" );
-    ( "origin: 21 native starting as recorded, introduced is West Himalaya",
+    ( "origin: 21 native starting as recorded, introduced is West Himalaya, \
+       codes kept",
       `Quick,
       fun () ->
         match proj.origin with
         | Some {value; sources = _} ->
             Alcotest.(check int) "native count" 21 (List.length value.native);
-            Alcotest.(check (list string))
+            Alcotest.(check Testable.yojson)
               "native, first three"
-              ["Austria"; "Baltic States"; "Belarus"]
-              (List.filteri (fun i _ -> i < 3) value.native);
-            Alcotest.(check (list string))
-              "introduced" ["West Himalaya"] value.introduced
+              (areas_json
+                 [
+                   area (Some "AUT") "Austria";
+                   area (Some "BLT") "Baltic States";
+                   area (Some "BLR") "Belarus";
+                 ])
+              (areas_json (List.filteri (fun i _ -> i < 3) value.native));
+            Alcotest.(check Testable.yojson)
+              "introduced"
+              (areas_json [area (Some "WHM") "West Himalaya"])
+              (areas_json value.introduced)
         | None -> Alcotest.fail "origin is None" );
     ( "red_list is LEAST_CONCERN, sources [Gbif]",
       `Quick,
@@ -861,11 +887,13 @@ let vernacular_by_count () =
 let wcvp = "The World Checklist of Vascular Plants (WCVP)"
 let iucn = "The IUCN Red List of Threatened Species"
 
-let distribution ?locality ?country ?status ?means ?threat source =
+(* without ~location_id: no locationId member, read as code = None *)
+let distribution ?location_id ?locality ?country ?status ?means ?threat source =
   `Assoc
     (List.filter_map
        (fun (k, v) -> Option.map (fun v -> (k, `String v)) v)
        [
+         ("locationId", location_id);
          ("locality", locality);
          ("country", country);
          ("status", status);
@@ -881,10 +909,7 @@ let gbif_row ?species ?distributions () =
 
 let origin_json (o : Projection.origin) =
   `Assoc
-    [
-      ("native", `List (List.map (fun s -> `String s) o.native));
-      ("introduced", `List (List.map (fun s -> `String s) o.introduced));
-    ]
+    [("native", areas_json o.native); ("introduced", areas_json o.introduced)]
 
 let origin_and_red_list_rules () =
   let page =
@@ -909,18 +934,106 @@ let origin_and_red_list_rules () =
   in
   let proj = project [gbif_row ~distributions:page ()] in
   Alcotest.(check Testable.yojson)
-    "origin: present WCVP rows, deduplicated, UNCERTAIN in neither list"
+    "origin: present WCVP rows, deduplicated, UNCERTAIN in neither list, no \
+     locationId so no code"
     (cited_json origin_json
        (Some
           {
             Projection.value =
-              {native = ["France"; "Norway"]; introduced = ["Chile"; "Peru"]};
+              {
+                native = [area None "France"; area None "Norway"];
+                introduced = [area None "Chile"; area None "Peru"];
+              };
             sources = [Source.Gbif];
           }))
     (cited_json origin_json proj.origin);
   Alcotest.(check (option string))
     "red_list: the global row of the IUCN source" (Some "NEAR_THREATENED")
     (Option.map (fun (c : string Projection.cited) -> c.value) proj.red_list)
+
+let origin_area_code_rules () =
+  let native_of distributions =
+    match (project [gbif_row ~distributions ()]).origin with
+    | Some {value; _} -> value.native
+    | None -> Alcotest.fail "origin is None"
+  in
+  Alcotest.(check Testable.yojson)
+    "a TDWG-prefixed locationId gives its suffix as the code"
+    (areas_json [area (Some "FRA") "France"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [distribution ~location_id:"TDWG:FRA" ~locality:"France" wcvp])));
+  Alcotest.(check Testable.yojson)
+    "a locationId without the TDWG: prefix gives no code"
+    (areas_json [area None "France"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [distribution ~location_id:"France" ~locality:"France" wcvp])));
+  Alcotest.(check Testable.yojson)
+    "a locationId of exactly \"TDWG:\" (nothing after the prefix) gives no code"
+    (areas_json [area None "France"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [distribution ~location_id:"TDWG:" ~locality:"France" wcvp])));
+  Alcotest.(check Testable.yojson)
+    "two rows with the same code and different localities: one area, the first \
+     kept"
+    (areas_json [area (Some "FRA") "France"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [
+               distribution ~location_id:"TDWG:FRA" ~locality:"France" wcvp;
+               distribution ~location_id:"TDWG:FRA" ~locality:"Francia" wcvp;
+             ])));
+  Alcotest.(check Testable.yojson)
+    "two rows without a code and the same locality: one area"
+    (areas_json [area None "France"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [
+               distribution ~locality:"France" wcvp;
+               distribution ~locality:"France" wcvp;
+             ])));
+  Alcotest.(check Testable.yojson)
+    "a coded row, then an uncoded one of the same locality: one area, the \
+     coded one"
+    (areas_json [area (Some "FRA") "France"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [
+               distribution ~location_id:"TDWG:FRA" ~locality:"France" wcvp;
+               distribution ~locality:"France" wcvp;
+             ])));
+  Alcotest.(check Testable.yojson)
+    "an uncoded row, then a coded one of the same locality: one area, the \
+     uncoded one"
+    (areas_json [area None "France"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [
+               distribution ~locality:"France" wcvp;
+               distribution ~location_id:"TDWG:FRA" ~locality:"France" wcvp;
+             ])));
+  Alcotest.(check Testable.yojson)
+    "two codes, the same locality: two areas"
+    (areas_json
+       [area (Some "CZE") "Czechoslovakia"; area (Some "SVK") "Czechoslovakia"])
+    (areas_json
+       (native_of
+          (vernacular_page
+             [
+               distribution ~location_id:"TDWG:CZE" ~locality:"Czechoslovakia"
+                 wcvp;
+               distribution ~location_id:"TDWG:SVK" ~locality:"Czechoslovakia"
+                 wcvp;
+             ])))
 
 let filled_family_and_ranges () =
   let species = `Assoc [("key", `Int 1); ("scientificName", `String "X y")] in
@@ -1265,6 +1378,10 @@ let rules_tests =
       "origin: present WCVP rows only, deduplicated, by establishment means; \
        red_list: the global IUCN row"
       origin_and_red_list_rules;
+    case
+      "origin area code: TDWG: prefix kept as code, absent prefix or empty \
+       suffix gives None, dedup by code then by name"
+      origin_area_code_rules;
     case "filled: family and each range on their own" filled_family_and_ranges;
     case
       "filled: life_form/flowering_months/habitat read a hand-built value; \

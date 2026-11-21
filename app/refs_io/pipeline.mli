@@ -26,6 +26,7 @@ val outcome_to_string : outcome -> string
     ["kept"], ["skipped"], ["not fetched"], ["not saved: <error>"]. *)
 
 val fetch :
+  ?on_branch:(report -> unit) ->
   Db.t ->
   save:(Herbier_store.Outbox.edit list -> (int, Db.error) result Fut.t option) ->
   plant:Herbier_domain.Ids.Plant_id.t ->
@@ -40,4 +41,10 @@ val fetch :
     "superseded, do not write": those sources are [Skipped]. A branch with
     nothing to store calls no [save]. Resolves once every branch settled, even
     when a program or [decide] raises (that branch's sources are [Not_fetched]).
-    Never raises. *)
+
+    [on_branch] (default: nothing) is called once per branch, after its save
+    settled (or was skipped, or was not needed), with that branch's entries only
+    (in its sources' order; [[]] for a branch that raised), before the final
+    result: the caller can act on Pl@ntNet's row without waiting for the slowest
+    branch. An exception it raises is caught and logged to the console
+    ([refs: on_branch raised]), never propagated. Never raises. *)

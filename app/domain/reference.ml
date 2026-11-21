@@ -91,6 +91,30 @@ type t = {
 }
 [@@deriving eq, show]
 
+type reference = t
+
+module Fetch_state = struct
+  type t = {
+    plant_id : Ids.Plant_id.t;
+    source : Source.t;
+    status : Status.t;
+    fetched_at : Ptime.t;
+  }
+  [@@deriving eq, show]
+
+  let of_reference (r : reference) =
+    match r.deleted_at with
+    | Some _ -> None
+    | None ->
+        Some
+          {
+            plant_id = r.plant_id;
+            source = r.source;
+            status = r.status;
+            fetched_at = r.fetched_at;
+          }
+end
+
 module Plant_ref = struct
   type id = Ids.Plant_ref_id.t [@@deriving eq, show]
 

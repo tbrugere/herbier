@@ -42,4 +42,6 @@ let () =
       ("identify_choice", Identify_choice_tests.identify_choice);
       ("identify_queue", To_identify_tests.identify_queue);
       ("free_name", Free_name_tests.free_name);
+      ("wgsrpd_fr", Wgsrpd_fr_tests.wgsrpd_fr);
+      ("ref_photos", Ref_photos_tests.ref_photos);
     ]

@@ -545,6 +545,29 @@ let decide_failed_no_previous_kept () =
   | [r] -> Alcotest.check status "failed" Status.Failed r.status
   | rs -> Alcotest.failf "expected 1 row, got %d" (List.length rs)
 
+let decide_failed_over_failed_replaces_it () =
+  let species = `Assoc [("k", `Int 1)] in
+  let failed_row : Fanout.row =
+    {Fanout.source = Source.Gbif; status = Status.Failed; payload = `Assoc []}
+  in
+  let previous =
+    [
+      reference_row ~status:Status.Failed ~source:Source.Gbif
+        ~fetched_at:(time "2026-10-01T00:00:00Z")
+        (Payload.gbif ~species:(Some species) ~vernacular_names:None
+           ~distributions:None ~occurrence_count:None);
+    ]
+  in
+  match Fanout.decide ~previous [failed_row] with
+  | [r] ->
+      Alcotest.check status "failed" Status.Failed r.status;
+      Alcotest.(check bool)
+        "the stored members are kept" true
+        (Yojson.Safe.equal r.payload
+           (Payload.gbif ~species:(Some species) ~vernacular_names:None
+              ~distributions:None ~occurrence_count:None))
+  | rs -> Alcotest.failf "expected 1 row, got %d" (List.length rs)
+
 let decide_partial_merges_previous_distributions () =
   let previous_payload =
     Payload.gbif
@@ -1102,6 +1125,10 @@ let decide_tests =
       decide_failed_soft_deleted_previous_kept;
     case "Failed with no previous row is kept as is"
       decide_failed_no_previous_kept;
+    case
+      "Failed over a live Failed row replaces it, its stored members kept (the \
+       failure is dated anew)"
+      decide_failed_over_failed_replaces_it;
     case
       "Partial with a live previous row merges the previous row's missing \
        members, in Payload.all order"

@@ -3,7 +3,8 @@ module Bars = Herbier_ui_model.System_bars
 module Cap = Herbier_bindings.Cap_system_bars
 
 let surface_of_route = function
-  | Route.Modal (Route.Record | Route.Viewer _) -> Bars.Dark
+  | Route.Modal (Route.Record | Route.Viewer _ | Route.Reference_photo _) ->
+      Bars.Dark
   | Route.Tab _ | Route.Dev _
   | Route.Modal
       Route.(

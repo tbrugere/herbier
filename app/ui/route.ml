@@ -3,6 +3,7 @@ module Tab_bar = Widgets.Tab_bar
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Photo_id = Herbier_domain.Ids.Photo_id
+module Organ = Herbier_domain.Reference.Organ
 
 type modal =
   | Tags
@@ -16,6 +17,7 @@ type modal =
   | Record
   | Recorded of {observation : Observation_id.t; identify : bool}
   | Viewer of Photo_id.t
+  | Reference_photo of {plant : Plant_id.t; organ : Organ.t}
   | Search of string
   | Link_species of Plant_id.t
   | Intercepted of {text : string; outside : bool}
@@ -83,6 +85,10 @@ let of_fragment = function
       | ["plante"; id] -> plant id (fun id -> Plant id)
       | ["plante"; id; "modifier"] -> plant id (fun id -> Edit_plant id)
       | ["plante"; id; "lier"] -> plant id (fun id -> Link_species id)
+      | ["plante"; id; "reference"; organ] -> (
+          match Organ.of_string organ with
+          | Some organ -> plant id (fun plant -> Reference_photo {plant; organ})
+          | None -> Tab Tab_bar.Collection)
       | ["observation"; id] -> observation id (fun id -> Observation id)
       | ["observation"; id; "espece"] ->
           observation id (fun id -> Change_species id)
@@ -123,6 +129,11 @@ let to_fragment = function
   | Modal (Recorded {observation; identify = true}) ->
       "noter/enregistre/" ^ Observation_id.to_string observation ^ "/identifier"
   | Modal (Viewer id) -> "photo/" ^ Photo_id.to_string id
+  | Modal (Reference_photo {plant; organ}) ->
+      "plante/"
+      ^ Plant_id.to_string plant
+      ^ "/reference/"
+      ^ Organ.to_string organ
   | Modal (Search "") -> "chercher"
   | Modal (Search q) -> search_prefix ^ encoded q
   | Modal (Link_species id) -> "plante/" ^ Plant_id.to_string id ^ "/lier"

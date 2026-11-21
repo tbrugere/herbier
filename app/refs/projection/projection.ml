@@ -7,7 +7,11 @@ module Lang = Vernacular.Lang
 
 type 'a cited = 'a Cited.t = {value : 'a; sources : Source.t list}
 type vernacular = Vernacular.t = {lang : Lang.t; names : string list}
-type origin = Origin.t = {native : string list; introduced : string list}
+type area = Origin.area = {code : string option; name : string}
+
+let equal_area = Origin.equal_area
+
+type origin = Origin.t = {native : area list; introduced : area list}
 type habitat = {phrase : string option; chips : string list}
 type link = Links.t = {source : Source.t; url : string}
 type problem = {part : Payload.part; error : Decode.error}

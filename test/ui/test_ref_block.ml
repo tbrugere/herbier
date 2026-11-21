@@ -13,6 +13,7 @@ module Projection = Herbier_refs.Projection
 module Gbif = Herbier_refs.Sources.Gbif
 module Fixture = Herbier_test_support.Fixture
 module Value = Herbier_test_support.Value
+module Text = Herbier_test_support.Text
 
 let json name =
   match Decode.json_of_string (Fixture.read name) with
@@ -128,15 +129,16 @@ let fake_organ_photos (proj : Projection.t) : (Reference.Image.t * string) list
 (* ---------- testables ---------- *)
 
 let show_row = function
-  | Ref_block.Names {languages; sources} ->
-      Printf.sprintf "Names [%s] / %s"
+  | Ref_block.Names {french; others; sources} ->
+      Printf.sprintf "Names french=[%s] others=[%s] / %s"
+        (String.concat "," french)
         (String.concat "; "
            (List.map
               (fun (v : Projection.vernacular) ->
                 Projection.Lang.to_string v.lang
                 ^ ":"
                 ^ String.concat "," v.names)
-              languages))
+              others))
         sources
   | Ref_block.Life_form {text; sources} ->
       Printf.sprintf "Life_form %s / %s" text sources
@@ -228,7 +230,7 @@ let digitalis_renders () =
         ]
         (List.map snd photos);
       Alcotest.(check string)
-        "sources line" "Pl@ntNet · disponibles hors-ligne" sources;
+        "sources line (no \"hors-ligne\" mention)" "Pl@ntNet" sources;
       Alcotest.(check string)
         "credits: the three shown images' holders and licences, in tile order"
         "Photos : laurencechabalier (cc-by-sa), Iris Selcho (cc-by-sa), Else \
@@ -279,6 +281,27 @@ let arnica_renders () =
       Alcotest.(check int) "4 tiles" 4 (List.length photos)
   | _ -> Alcotest.fail "no Organ_photos row"
 
+let digitalis_origin_in_french () =
+  let proj = project_species digitalis in
+  let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
+  (match
+     List.find_opt (function Ref_block.Origin _ -> true | _ -> false) rows
+   with
+  | Some (Ref_block.Origin {native; introduced}) ->
+      Alcotest.(check (option string))
+        "native: the first five in French order, then the count"
+        (Some "Allemagne, Belgique, Corse, Espagne, France et 7 autres") native;
+      Alcotest.(check (option string))
+        "introduced: in French, in French order"
+        (Some
+           "Açores, Argentine du Nord-Est, Argentine du Nord-Ouest, Argentine \
+            du Sud, Arkansas et 75 autres")
+        introduced
+  | _ -> Alcotest.fail "no Origin row");
+  Alcotest.(check bool)
+    "no row's text mentions « hors-ligne »" false
+    (List.exists (fun r -> Text.contains ~sub:"hors-ligne" (show_row r)) rows)
+
 let digitalis_offline_before_any_download () =
   let proj = project_species digitalis in
   let rows = Ref_block.rows proj ~organ_photos:[] in
@@ -291,6 +314,7 @@ let digitalis_offline_before_any_download () =
 
 let empty_t = Projection.project ~references:[] ~plant_refs:[]
 let cited value : _ Projection.cited = {value; sources = []}
+let area code name : Projection.area = {code; name}
 
 let no_rows_no_photos () =
   Alcotest.(check (list string))
@@ -326,7 +350,7 @@ let origin_only_introduced_has_no_native () =
     {
       empty_t with
       Projection.origin =
-        Some (cited {Projection.native = []; introduced = ["Chile"]});
+        Some (cited {Projection.native = []; introduced = [area None "Chile"]});
     }
   in
   match Ref_block.rows t ~organ_photos:[] with
@@ -369,7 +393,10 @@ let every_constructor_present_and_in_order () =
       origin =
         Some
           (cited_by [Source.Gbif]
-             {Projection.native = ["France"]; introduced = ["Chile"]});
+             {
+               Projection.native = [area None "France"];
+               introduced = [area None "Chile"];
+             });
       red_list = Some (cited_by [Source.Gbif] "LEAST_CONCERN");
       flowering_months = Some (cited_by [Source.Tela] [6; 7; 8]);
       habitat =
@@ -420,15 +447,14 @@ let every_constructor_present_and_in_order () =
   Alcotest.(check (list string))
     "every payload, sources lines included"
     [
-      "Names [] / Plantaginaceae · GBIF";
+      "Names french=[] others=[] / Plantaginaceae · GBIF";
       "Life_form Herbacée / Wikipédia";
       "Origin France | Chile / GBIF";
       "Red_list LC · préoccupation mineure / GBIF";
       "Flowering 6,7,8 juin – août / Tela Botanica";
       "Habitat Prairies [mi-ombre] / Tela Botanica";
       "Toxicity Toxique. / Wikipédia";
-      "Organ_photos [flower=p] Photos : A (cc-by-sa) / Pl@ntNet · disponibles \
-       hors-ligne";
+      "Organ_photos [flower=p] Photos : A (cc-by-sa) / Pl@ntNet";
       "Links GBIF ↗ https://www.gbif.org/species/1";
     ]
     (List.map show_row (Ref_block.rows t ~organ_photos:fake_photos))
@@ -445,6 +471,63 @@ let habitat_chips_alone () =
     "a Habitat row with no phrase"
     ["Habitat - [mi-ombre,humide] / "]
     (List.map show_row (Ref_block.rows t ~organ_photos:[]))
+
+let digitalis_names_french_and_others () =
+  let proj = project_species digitalis in
+  let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
+  match
+    List.find_opt (function Ref_block.Names _ -> true | _ -> false) rows
+  with
+  | Some (Ref_block.Names {french; others; _}) ->
+      Alcotest.(check (list string))
+        "french: the fr vernacular names"
+        ["Digitale pourpre"; "Digitale pourprée"; "grande digitale"]
+        french;
+      Alcotest.(check (list string))
+        "others: en, de, it in order, no fr entry" ["en"; "de"; "it"]
+        (List.map
+           (fun (v : Projection.vernacular) -> Projection.Lang.to_string v.lang)
+           others)
+  | _ -> Alcotest.fail "no Names row"
+
+let names_only_en_has_no_french_others_holds_it () =
+  let t =
+    {
+      empty_t with
+      Projection.vernacular =
+        Some
+          (cited [{Projection.lang = Projection.Lang.En; names = ["Foxglove"]}]);
+    }
+  in
+  match Ref_block.rows t ~organ_photos:[] with
+  | [Ref_block.Names {french; others; _}] ->
+      Alcotest.(check (list string)) "french is []" [] french;
+      Alcotest.(check (list string))
+        "others holds en, shown directly (no fr to hide it behind)" ["en"]
+        (List.map
+           (fun (v : Projection.vernacular) -> Projection.Lang.to_string v.lang)
+           others)
+  | rows ->
+      Alcotest.failf "expected one Names row, got %s"
+        (String.concat ", " (ctors rows))
+
+let names_only_fr_has_no_others () =
+  let t =
+    {
+      empty_t with
+      Projection.vernacular =
+        Some
+          (cited [{Projection.lang = Projection.Lang.Fr; names = ["Digitale"]}]);
+    }
+  in
+  match Ref_block.rows t ~organ_photos:[] with
+  | [Ref_block.Names {french; others; _}] ->
+      Alcotest.(check (list string))
+        "french holds the fr names" ["Digitale"] french;
+      Alcotest.(check int) "others is []" 0 (List.length others)
+  | rows ->
+      Alcotest.failf "expected one Names row, got %s"
+        (String.concat ", " (ctors rows))
 
 let names_sources_deduplicated_in_source_order () =
   let t =
@@ -472,8 +555,8 @@ let names_sources_deduplicated_in_source_order () =
     }
   in
   Alcotest.(check (list string))
-    "GBIF once, before Wikidata"
-    ["Names [fr:Digitale] / F · GBIF, Wikidata"]
+    "GBIF once, before Wikidata; the fr vernacular goes to french, not others"
+    ["Names french=[Digitale] others=[] / F · GBIF, Wikidata"]
     (List.map show_row (Ref_block.rows t ~organ_photos:[]))
 
 (* ---------- run ---------- *)
@@ -512,5 +595,21 @@ let () =
           case "a habitat of chips alone" habitat_chips_alone;
           case "Names sources: deduplicated, in Source.all order"
             names_sources_deduplicated_in_source_order;
+        ] );
+      ( "Names: french first, other languages behind a tap",
+        [
+          case
+            "Digitalis fixture: french holds the fr vernacular names, others \
+             holds en/de/it, no fr entry among others"
+            digitalis_names_french_and_others;
+          case
+            "no French name: the other languages (en here) are shown directly, \
+             french = []"
+            names_only_en_has_no_french_others_holds_it;
+          case "only a French name: others = []" names_only_fr_has_no_others;
+          case
+            "Digitalis fixture: Origin's lines in French, in French order; no \
+             row mentions « hors-ligne »"
+            digitalis_origin_in_french;
         ] );
     ]

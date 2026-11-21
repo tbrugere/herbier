@@ -15,7 +15,8 @@
   test_organ_photos
   test_step
   test_fanout
-  test_resolve)
+  test_resolve
+  test_fetch_rule)
  (libraries
   herbier_refs
   herbier_net

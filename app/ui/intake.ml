@@ -29,8 +29,8 @@ let open_sheet = function
             ( Route.Tags | Route.Plant _ | Route.Edit_plant _ | Route.New_plant
             | Route.Observation _ | Route.Change_species _ | Route.Identify _
             | Route.Record | Route.Recorded _ | Route.Viewer _
-            | Route.Link_species _ | Route.Move_point _ | Route.Drive_folder )
-          ->
+            | Route.Reference_photo _ | Route.Link_species _
+            | Route.Move_point _ | Route.Drive_folder ) ->
             false
       in
       fallback := None;
