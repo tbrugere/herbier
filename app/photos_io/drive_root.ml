@@ -19,104 +19,119 @@ let lenient_find db key ~what =
     (Db.find db (Settings.get key))
 
 let stored db = lenient_find db Drive_root_folder ~what:"root folder"
+let name db = lenient_find db Drive_root_folder_name ~what:"folder name"
+
+let root_of ~id ~name : Api.root =
+  {
+    id;
+    name =
+      Option.value
+        (Option.bind name Api.folder_name)
+        ~default:Api.default_folder_name;
+  }
+
+let read db =
+  let open Fut.Result_syntax in
+  let* id = stored db in
+  let+ name = name db in
+  (id, name)
+
+let root db =
+  Fut.map (Result.map (fun (id, name) -> root_of ~id ~name)) (read db)
+
 let forget db = Db.write db (Settings.unset Drive_root_folder)
 
-let written done_ =
-  Fut.map (function
-    | Ok (_ : int) -> log done_
-    | Error e -> log_error ("not written: " ^ Db.error_to_string e))
+let transaction db stmts =
+  Db.bare_transaction db (fun tx ->
+      List.fold_left
+        (fun acc stmt ->
+          let open Fut.Result_syntax in
+          let* () = acc in
+          let+ (_ : int) = Db.Tx.write_local tx stmt in
+          ())
+        (Fut.return (Ok ())) stmts)
 
-let apply db : Api.root_change -> unit Fut.t = function
-  | Keep -> Fut.return ()
-  | Store id ->
-      written "stored" (Db.write db (Settings.set Drive_root_folder id))
-  | Forget -> written "forgotten" (forget db)
+let apply db ~stored_name (rooted : _ Api.rooted) =
+  let root_stmts, root_done =
+    match rooted.root with
+    | Keep -> ([], None)
+    | Store id -> ([Settings.set Drive_root_folder id], Some "stored")
+    | Forget -> ([Settings.unset Drive_root_folder], Some "forgotten")
+  in
+  let name = Api.name_to_store ~stored_name rooted.name in
+  let name_stmts =
+    Option.to_list
+      (Option.map
+         (fun (n : Api.folder_name) ->
+           Settings.set Drive_root_folder_name (n :> string))
+         name)
+  in
+  match root_stmts @ name_stmts with
+  | [] -> Fut.return ()
+  | stmts ->
+      Fut.map
+        (function
+          | Ok () ->
+              Option.iter log root_done;
+              Option.iter
+                (fun (_ : Api.folder_name) ->
+                  Brr.Console.(log [str "drive: folder name stored"]))
+                name
+          | Error e -> log_error ("not written: " ^ Db.error_to_string e))
+        (transaction db stmts)
 
 let run db program =
   let open Fut.Syntax in
-  let* stored = stored db in
-  match stored with
+  let* read = read db in
+  match read with
   | Error e -> Fut.return (Error e)
-  | Ok root ->
-      let* (rooted : _ Api.rooted) = program ~root in
-      let+ () = apply db rooted.root in
+  | Ok (id, stored_name) ->
+      let* (rooted : _ Api.rooted) =
+        program ~root:(root_of ~id ~name:stored_name)
+      in
+      let+ () = apply db ~stored_name rooted in
       Ok rooted
-
-let picked db = lenient_find db Drive_root_folder_picked ~what:"picked folder"
-
-let read_choice db =
-  let open Fut.Result_syntax in
-  let* root = stored db in
-  let+ folder = picked db in
-  (root, folder)
-
-let read_ids db =
-  let open Fut.Result_syntax in
-  let* root, folder = read_choice db in
-  let+ default =
-    lenient_find db Drive_root_folder_default ~what:"default folder"
-  in
-  let picked = Option.map (fun (f : Settings.drive_folder) -> f.id) folder in
-  ({Api.root; picked; default} : Api.root_ids)
 
 let account db = lenient_find db Drive_account ~what:"account"
 
-(* The account, the three keys and, when given, the storage target in one
-   transaction: a half-written choice could name one folder in 4m while
-   uploads go into another, keep an old account's folder ids for the new
-   account, or leave the storage on Drive without its folder. *)
-let write db ({account; ids} : Api.account_choice) ~picked ~storage ~done_ =
-  let open Fut.Result_syntax in
-  Fut.map
-    (function
-      | Ok () ->
-          (match account with
-          | Some (_ : string) ->
-              Brr.Console.(
-                log [str "drive: account changed, root folder forgotten"])
-          | None -> ());
-          (match storage with
-          | Some (_ : Herbier_domain.Photo.Original_target.t) ->
-              Brr.Console.(log [str "drive: storage set with the pick"])
-          | None -> ());
-          Ok (log done_)
-      | Error e ->
-          log_error ("not written: " ^ Db.error_to_string e);
-          Error e)
-    (Db.bare_transaction db (fun tx ->
-         List.fold_left
-           (fun acc stmt ->
-             let* () = acc in
-             let+ (_ : int) = Db.Tx.write_local tx stmt in
-             ())
-           (Fut.return (Ok ()))
-           (Settings.drive_choice ~account ~at:(Ptime_clock.now ())
-              ~root:ids.root ~picked ~default:ids.default ~storage)))
+let not_written what e =
+  Brr.Console.(
+    error [str ("drive: " ^ what ^ " not written: " ^ Db.error_to_string e)])
 
-let read_all db =
-  let open Fut.Result_syntax in
-  let* ids = read_ids db in
-  let+ stored = account db in
-  (ids, stored)
-
-let choose db ~account ~storage (folder : Settings.drive_folder) =
-  let open Fut.Result_syntax in
-  let* ids, stored = read_all db in
-  write db
-    (Api.choose_for_account ids ~stored ~account ~folder:(Some folder.id))
-    ~picked:(Some folder) ~storage ~done_:"picked"
-
-let reset db ~account =
-  let open Fut.Result_syntax in
-  let* ids, stored = read_all db in
-  write db
-    (Api.choose_for_account ids ~stored ~account ~folder:None)
-    ~picked:None ~storage:None ~done_:"reset"
+let store_account db ~account:chosen ~storage =
+  let open Fut.Syntax in
+  let* stored = account db in
+  match stored with
+  | Error e ->
+      not_written "account" e;
+      Fut.return (Error e)
+  | Ok stored -> (
+      let account = Api.account_to_store ~stored ~account:chosen in
+      match
+        Settings.drive_choice ~account ~at:(Ptime_clock.now ()) ~storage
+      with
+      | [] -> Fut.return (Ok ())
+      | stmts ->
+          let+ written = transaction db stmts in
+          (match written with
+          | Ok () ->
+              Option.iter
+                (fun (_ : string) ->
+                  Brr.Console.(
+                    log [str "drive: account changed, root folder forgotten"]))
+                account;
+              Option.iter
+                (fun (_ : Herbier_domain.Photo.Original_target.t) ->
+                  Brr.Console.(log [str "drive: storage set with the account"]))
+                storage
+          | Error e -> not_written "account" e);
+          written)
 
 let seed db ~session_email =
   let open Fut.Result_syntax in
-  let* ids, stored = read_all db in
-  match Api.seed_account ~stored ids ~session_email with
+  let* root = stored db in
+  let* stored = account db in
+  match Api.seed_account ~stored ~root ~session_email with
   | None -> Fut.return (Ok None)
   | Some email ->
       let+ (_ : int) = Db.write db (Settings.set Drive_account email) in
@@ -132,14 +147,5 @@ let forget_account db =
       | Error e ->
           log_error ("not written: " ^ Db.error_to_string e);
           Error e)
-    (Db.bare_transaction db (fun tx ->
-         List.fold_left
-           (fun acc stmt ->
-             let open Fut.Result_syntax in
-             let* () = acc in
-             let+ (_ : int) = Db.Tx.write_local tx stmt in
-             ())
-           (Fut.return (Ok ()))
-           (Settings.unset Drive_account
-           :: Settings.drive_choice ~account:None ~at:(Ptime_clock.now ())
-                ~root:None ~picked:None ~default:None ~storage:None)))
+    (transaction db
+       [Settings.unset Drive_account; Settings.unset Drive_root_folder])

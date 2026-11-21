@@ -1,13 +1,10 @@
 module Db = Herbier_store_io.Db
 module Drive_text = Herbier_ui_model.Drive_text
-module Drive_sheet = Herbier_ui_model.Drive_sheet
-module Picker = Herbier_bindings.Google_picker
+module Api = Herbier_photos.Drive
 module Drive = Herbier_photos_io.Drive
 module Drive_root = Herbier_photos_io.Drive_root
 module Upload_queue = Herbier_photos_io.Upload_queue
 
-let project_number = Herbier_sync.Backend.google_cloud_project_number
-let picker_config = Drive_text.picker_config_of_project_number project_number
 let choose_account () = Herbier_sync.Auth.choose_drive_account ()
 
 let folder_token (t : Core.t) ~email =
@@ -15,63 +12,8 @@ let folder_token (t : Core.t) ~email =
     (Result.map_error Core.denial)
     (Core.drive_token_for t ~email ~interactive:true)
 
-let open_picker (t : Core.t) ticket ~account ~token =
-  let config =
-    {
-      Picker.app_id = project_number;
-      developer_key = None;
-      origin = Herbier_bindings.Location.origin ();
-    }
-  in
-  Fut.map
-    (function
-      | Ok outcome -> Ok outcome
-      | Error e -> (
-          Core.log_error ["drive: picker:"; Picker.error_to_string e];
-          match (e, Core.online t) with
-          | Load_failed (_ : string), false -> Error Drive_text.Offline
-          | Load_failed (_ : string), true | (Picker_failed _ | Busy), _ ->
-              Error Drive_text.Picker_unavailable))
-    (Picker.pick_folder
-       ~title:(Drive_sheet.picker_title account)
-       ticket config ~token)
-
-(* Checked with files.get before it is stored, with the sheet's account (not
-   stored yet when it changes): the pick must be a folder this token can reach
-   (Picker's setAppId adds it to the app's drive.file grant), and the name
-   shown is Drive's. *)
-let check_and_store (t : Core.t) ~account ~storage
-    (p : Herbier_store.Settings.drive_folder) =
-  let open Fut.Syntax in
-  let* info =
-    Drive.folder_info
-      ~token:(fun () ->
-        Core.drive_token_for t ~email:account ~interactive:false)
-      ~drop_token:(Herbier_sync.Auth.drop_drive_token t.auth)
-      ~file_id:p.id
-  in
-  match info with
-  | Ok (Usable {id; name}) ->
-      Fut.map
-        (Result.map_error (fun (_ : Db.error) -> Drive_text.Not_saved))
-        (Drive_root.choose t.db ~account ~storage {id; name})
-  | Ok Not_a_folder -> Fut.return (Error Drive_text.Not_a_folder)
-  | Ok Folder_trashed -> Fut.return (Error Drive_text.Trashed)
-  | Ok No_access -> Fut.return (Error Drive_text.No_access)
-  | Error (Token e) -> Fut.return (Error (Drive_text.Token (Core.denial e)))
-  | Error (Drive (Network (_ : string))) ->
-      Fut.return (Error Drive_text.Offline)
-  | Error (Drive e) ->
-      Core.log_error
-        ["drive: picked folder:"; Herbier_photos.Drive.error_to_string e];
-      Fut.return (Error Drive_text.Drive_failed)
-
-(* After a write: the account into State (and the last token outcome forgotten
-   when it changed), then the folder read, then the storage, then a pass and
-   the health check: rows not started yet go to the new root. The storage
-   waits for the folder so that 4m's Drive radio never shows the new account
-   with the previous folder; it follows the account, so the access check it
-   runs is for that account. *)
+(* The storage follows the account: the access check it runs is for that
+   account. *)
 let stored (t : Core.t) ~account ~storage result =
   let open Fut.Syntax in
   (match result with
@@ -79,7 +21,7 @@ let stored (t : Core.t) ~account ~storage result =
       Core.set_drive_account t
         (Herbier_sync_core.Auth.Drive_account.Chosen
            {email = String.trim account})
-  | Error (_ : Drive_text.pick_error) -> ());
+  | Error (_ : Drive_text.sheet_error) -> ());
   let+ () = Core.refresh_folder t in
   (match result with
   | Ok () ->
@@ -88,10 +30,10 @@ let stored (t : Core.t) ~account ~storage result =
       | None -> ());
       Core.upload_pending t;
       Core.check_originals t
-  | Error (_ : Drive_text.pick_error) -> ());
+  | Error (_ : Drive_text.sheet_error) -> ());
   result
 
-let store_pick (t : Core.t) ~account ~turn_on folder =
+let store_account (t : Core.t) ~account ~turn_on =
   let storage =
     match turn_on with
     | true -> Some Herbier_domain.Photo.Original_target.Drive
@@ -99,19 +41,54 @@ let store_pick (t : Core.t) ~account ~turn_on folder =
   in
   Fut.bind
     (Upload_queue.exclusive t.uploads
-       ~on_raise:(fun (_ : string) -> Error Drive_text.Drive_failed)
-       (fun () -> check_and_store t ~account ~storage folder))
-    (stored t ~account ~storage)
-
-let store_default (t : Core.t) ~account =
-  Fut.bind
-    (Upload_queue.exclusive t.uploads
        ~on_raise:(fun (_ : string) -> Error Drive_text.Not_saved)
        (fun () ->
          Fut.map
            (Result.map_error (fun (_ : Db.error) -> Drive_text.Not_saved))
-           (Drive_root.reset t.db ~account)))
-    (stored t ~account ~storage:None)
+           (Drive_root.store_account t.db ~account ~storage)))
+    (stored t ~account ~storage)
+
+let rename (t : Core.t) ~account name =
+  Fut.map
+    (function
+      | Error e ->
+          Core.log_error ["drive: rename:"; Db.error_to_string e];
+          Error Drive_text.Not_saved
+      | Ok ({result = Ok n; _} : _ Api.rooted) ->
+          Ok ((n : Api.folder_name) :> string)
+      | Ok {result = Error (Drive.Token e); _} ->
+          Error (Drive_text.Token (Core.denial e))
+      | Ok {result = Error (Drive.Drive (Network (_ : string))); _} ->
+          Error Drive_text.Offline
+      | Ok {result = Error (Drive.Drive e); _} ->
+          Core.log_error ["drive: rename:"; Api.error_to_string e];
+          Error Drive_text.Drive_failed)
+    (Drive_root.run t.db (fun ~root ->
+         Drive.rename_root
+           ~token:(fun () ->
+             Core.drive_token_for t ~email:account ~interactive:true)
+           ~drop_token:(Herbier_sync.Auth.drop_drive_token t.auth)
+           ~root ~name))
+
+(* A blank name never reaches Drive. Inside the queue's lock: no pass reads or
+   writes the root meanwhile. A name Drive took but the settings did not keep
+   is [Not_saved]: the sheet then shows what 4m shows. *)
+let rename_folder (t : Core.t) ~account ~name =
+  match Api.folder_name name with
+  | None -> Fut.return (Error Drive_text.Blank_name)
+  | Some name -> (
+      let open Fut.Syntax in
+      let* result =
+        Upload_queue.exclusive t.uploads
+          ~on_raise:(fun (_ : string) -> Error Drive_text.Drive_failed)
+          (fun () -> rename t ~account name)
+      in
+      let+ () = Core.refresh_folder t in
+      match result with
+      | Ok n when not (String.equal n (React.S.value t.drive_folder)) ->
+          Core.log_error ["drive: rename: the new name was not stored"];
+          Error Drive_text.Not_saved
+      | Ok _ | Error _ -> result)
 
 let forget_account (t : Core.t) =
   let open Fut.Syntax in

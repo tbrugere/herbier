@@ -16,7 +16,11 @@ let fixture name = Fixture.read ("drive_" ^ name ^ ".json")
 (* ---------- testables ---------- *)
 
 let error_t = Alcotest.testable Drive.pp_error Drive.equal_error
-let meth_to_string = function `GET -> "GET" | `POST -> "POST"
+
+let meth_to_string = function
+  | `GET -> "GET"
+  | `POST -> "POST"
+  | `PATCH -> "PATCH"
 
 let pp_request ppf (r : Drive.request) =
   Format.fprintf ppf "%s %s %s" (meth_to_string r.meth) r.url
@@ -53,6 +57,9 @@ let put_result = Alcotest.(result put_t error_t)
 let presence_result = Alcotest.(result presence_t error_t)
 let file_list_result = Alcotest.(result (list file_t) error_t)
 let file_result = Alcotest.(result file_t error_t)
+
+(* The "nothing stored" root. *)
+let no_root : Drive.root = {Drive.id = None; name = Drive.default_folder_name}
 
 (* ---------- id and time helpers ---------- *)
 
@@ -261,9 +268,7 @@ let request_builder_tests =
         let r =
           Drive.find_folder ~name:"Digitalis purpurea" ~parent:Drive.Root
         in
-        Alcotest.(check string)
-          "meth" "GET"
-          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string) "meth" "GET" (meth_to_string r.meth);
         (match r.body with
         | Drive.Empty -> ()
         | _ -> Alcotest.fail "find_folder body is not Empty");
@@ -291,9 +296,7 @@ let request_builder_tests =
         let r =
           Drive.create_folder ~name:"Digitalis purpurea" ~parent:Drive.Root
         in
-        Alcotest.(check string)
-          "meth" "POST"
-          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string) "meth" "POST" (meth_to_string r.meth);
         Alcotest.(check string) "url" (Drive.api ^ "?fields=id") r.url;
         (match r.body with
         | Drive.Json s ->
@@ -315,9 +318,7 @@ let request_builder_tests =
       fun () ->
         let id = photo_id 2 in
         let r = Drive.find_original ~id in
-        Alcotest.(check string)
-          "meth" "GET"
-          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string) "meth" "GET" (meth_to_string r.meth);
         Alcotest.(check string)
           "url"
           (list_url (find_original_q id) "files(id,webViewLink)")
@@ -409,9 +410,7 @@ let create_original_tests =
       fun () ->
         let boundary = "herbier-000102030405060708090a0b0c0d0e0f" in
         let r = Drive.create_original metadata ~boundary in
-        Alcotest.(check string)
-          "meth" "POST"
-          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string) "meth" "POST" (meth_to_string r.meth);
         Alcotest.(check string)
           "url"
           (Drive.upload_api ^ "?uploadType=multipart&fields=id,webViewLink")
@@ -794,7 +793,7 @@ let put_original_tests =
        create_original; parents is the species folder",
       `Quick,
       fun () ->
-        let prog = Drive.put_original ~root:None original in
+        let prog = Drive.put_original ~root:no_root original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -827,7 +826,7 @@ let put_original_tests =
        create_original",
       `Quick,
       fun () ->
-        let prog = Drive.put_original ~root:None original in
+        let prog = Drive.put_original ~root:no_root original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -854,7 +853,7 @@ let put_original_tests =
     ( "already there: a single find_original, the oldest entry, nothing uploaded",
       `Quick,
       fun () ->
-        let prog = Drive.put_original ~root:None original in
+        let prog = Drive.put_original ~root:no_root original in
         let responses =
           [
             answer
@@ -873,7 +872,7 @@ let put_original_tests =
     ( "a 401 finding root stops the program at once",
       `Quick,
       fun () ->
-        let prog = Drive.put_original ~root:None original in
+        let prog = Drive.put_original ~root:no_root original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -889,7 +888,7 @@ let put_original_tests =
     ( "an unreachable create_original surfaces as Network",
       `Quick,
       fun () ->
-        let prog = Drive.put_original ~root:None original in
+        let prog = Drive.put_original ~root:no_root original in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -912,7 +911,7 @@ let put_original_tests =
     ( "a malformed create_folder answer stops before the upload",
       `Quick,
       fun () ->
-        let prog = Drive.put_original ~root:None original in
+        let prog = Drive.put_original ~root:no_root original in
         let responses =
           [answer {|{"files":[]}|}; answer {|{"files":[]}|}; answer "{}"]
         in
@@ -986,9 +985,7 @@ let get_folder_tests =
       `Quick,
       fun () ->
         let r = Drive.get_folder ~file_id:"F1" in
-        Alcotest.(check string)
-          "meth" "GET"
-          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string) "meth" "GET" (meth_to_string r.meth);
         match r.body with
         | Drive.Empty -> ()
         | _ -> Alcotest.fail "get_folder body is not Empty" );
@@ -1191,9 +1188,7 @@ let create_session_tests =
       `Quick,
       fun () ->
         let r = Drive.create_session nil_metadata in
-        Alcotest.(check string)
-          "meth" "POST"
-          (match r.meth with `GET -> "GET" | `POST -> "POST");
+        Alcotest.(check string) "meth" "POST" (meth_to_string r.meth);
         (* Copied verbatim from scripts/record-drive-fixtures.sh's
            create_session_url. *)
         Alcotest.(check string)
@@ -1272,7 +1267,7 @@ let start_session_tests =
     ( "a file already there: Already_there (the oldest), exactly 1 request",
       `Quick,
       fun () ->
-        let prog = Drive.start_session ~root:None target in
+        let prog = Drive.start_session ~root:no_root target in
         let resp =
           answer
             {|{"files":[{"id":"FILE0","webViewLink":"https://drive.test/FILE0"},{"id":"FILE9","webViewLink":"https://drive.test/FILE9"}]}|}
@@ -1292,7 +1287,7 @@ let start_session_tests =
        Session url",
       `Quick,
       fun () ->
-        let prog = Drive.start_session ~root:None target in
+        let prog = Drive.start_session ~root:no_root target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1329,7 +1324,7 @@ let start_session_tests =
        Session url",
       `Quick,
       fun () ->
-        let prog = Drive.start_session ~root:None target in
+        let prog = Drive.start_session ~root:no_root target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1367,7 +1362,7 @@ let start_session_tests =
     ( "a 503 on the species lookup is Server 503, the requests end there",
       `Quick,
       fun () ->
-        let prog = Drive.start_session ~root:None target in
+        let prog = Drive.start_session ~root:no_root target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1392,7 +1387,7 @@ let start_session_tests =
     ( "a session 200 without a location header is Malformed \"location\"",
       `Quick,
       fun () ->
-        let prog = Drive.start_session ~root:None target in
+        let prog = Drive.start_session ~root:no_root target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1410,7 +1405,7 @@ let start_session_tests =
     ( "the session's 401 (invalid token), recorded, is Unauthorized",
       `Quick,
       fun () ->
-        let prog = Drive.start_session ~root:None target in
+        let prog = Drive.start_session ~root:no_root target in
         let responses =
           [
             answer {|{"files":[]}|};
@@ -1433,7 +1428,7 @@ let start_session_tests =
     ( "an unreachable lookup is Network, exactly 1 request",
       `Quick,
       fun () ->
-        let prog = Drive.start_session ~root:None target in
+        let prog = Drive.start_session ~root:no_root target in
         let net = seq_net [Drive.Unreachable "timeout"] in
         let reqs = Drive.requests net prog in
         check_requests "find_original alone"
@@ -1485,4 +1480,160 @@ let view_url_tests =
                 | Some (`String _), _ -> Alcotest.fail "no webViewLink"
                 | _, _ -> Alcotest.fail "no id")
             | _ -> Alcotest.failf "%s: not a JSON object" file) );
+  ]
+
+(* ---------- folder_name, default_folder_name ---------- *)
+
+(* [Drive.folder_name] returns a private [folder_name]: compared here through
+   its coercion to [string], never reconstructed. *)
+let folder_name_to_string = function
+  | None -> None
+  | Some (n : Drive.folder_name) -> Some (n :> string)
+
+(* A trusted, known-non-blank name, for building requests below. Failing
+   through [Drive.folder_name] itself (rather than an unsafe cast) keeps this
+   helper exercising the same validation as the tests. *)
+let fname s =
+  match Drive.folder_name s with
+  | Some n -> n
+  | None -> Alcotest.failf "fname: %S is blank" s
+
+let folder_name_tests =
+  [
+    ( "empty string: None",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "folder_name" None
+          (folder_name_to_string (Drive.folder_name "")) );
+    ( "spaces only: None",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "folder_name" None
+          (folder_name_to_string (Drive.folder_name "   ")) );
+    ( "a tab and a newline only: None",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "folder_name" None
+          (folder_name_to_string (Drive.folder_name "\t\n")) );
+    ( "padded: trimmed",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "folder_name" (Some "Plantes")
+          (folder_name_to_string (Drive.folder_name " Plantes ")) );
+    ( "an apostrophe survives untouched",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "folder_name" (Some "Herbe d'or")
+          (folder_name_to_string (Drive.folder_name "Herbe d'or")) );
+    ( "a slash is kept: Drive accepts any non-empty name",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "folder_name" (Some "a/b")
+          (folder_name_to_string (Drive.folder_name "a/b")) );
+    ( "default_folder_name is Herbier",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "default_folder_name" "Herbier"
+          (Drive.default_folder_name :> string) );
+  ]
+
+(* ---------- update_name ---------- *)
+
+let update_name_tests =
+  [
+    ( "update_name: PATCH, the exact URL and compact JSON body, JSON \
+       content_type",
+      `Quick,
+      fun () ->
+        let r = Drive.update_name ~file_id:"F1" ~name:(fname "Plantes") in
+        Alcotest.(check string) "meth" "PATCH" (meth_to_string r.meth);
+        Alcotest.(check string)
+          "url"
+          "https://www.googleapis.com/drive/v3/files/F1?fields=id,name,mimeType,trashed"
+          r.url;
+        (match r.body with
+        | Drive.Json s ->
+            Alcotest.(check string) "body" {|{"name":"Plantes"}|} s
+        | _ -> Alcotest.fail "update_name body is not Json");
+        Alcotest.(check (option string))
+          "content_type" (Some "application/json; charset=UTF-8")
+          (Drive.content_type r.body) );
+    ( "a file id with a slash and a space is percent-encoded in the path",
+      `Quick,
+      fun () ->
+        let r = Drive.update_name ~file_id:"a b/c" ~name:(fname "x") in
+        Alcotest.(check string)
+          "url"
+          (Drive.api ^ "/a%20b%2Fc?fields=id,name,mimeType,trashed")
+          r.url );
+    ( "a name with a quote, a backslash and an accent gives valid JSON whose \
+       name round-trips",
+      `Quick,
+      fun () ->
+        let name = {|Herbe "d'or" é|} in
+        let r = Drive.update_name ~file_id:"F1" ~name:(fname name) in
+        match r.body with
+        | Drive.Json s -> (
+            match Yojson.Safe.from_string s with
+            | `Assoc [("name", `String n)] ->
+                Alcotest.(check string) "name round-trips" name n
+            | _ -> Alcotest.fail "body is not {\"name\": <string>}")
+        | _ -> Alcotest.fail "update_name body is not Json" );
+    ( "the rename's recorded 401 (invalid token) is Unauthorized",
+      `Quick,
+      fun () ->
+        Alcotest.check error_t "error" Drive.Unauthorized
+          (Drive.error_of_answer ~status:401
+             ~body:(fixture "files_update_name_invalid_token_401")) );
+  ]
+
+(* ---------- update_name success/trashed/unknown (recorded) ----------
+
+   Recorded with HERBIER_DRIVE_TOKEN (scripts/record-drive-fixtures.sh);
+   skipped while the file is absent. *)
+
+let update_name_fixture_tests =
+  [
+    ( "drive_files_update_name_200: decode_folder is Usable {name = \
+       \"Herbier-fixtures-renamed\"}",
+      `Quick,
+      fun () ->
+        let file = "drive_files_update_name_200.json" in
+        match Fixture.exists file with
+        | false -> print_endline ("not recorded yet, skipped: " ^ file)
+        | true -> (
+            match Drive.decode_folder (fixture "files_update_name_200") with
+            | Ok (Drive.Usable {name; _}) ->
+                Alcotest.(check string) "name" "Herbier-fixtures-renamed" name
+            | r ->
+                Alcotest.failf "expected Ok (Usable _), got %a"
+                  (Alcotest.pp folder_info_result)
+                  r) );
+    ( "drive_files_update_name_trashed_200: decode_folder is Folder_trashed",
+      `Quick,
+      fun () ->
+        let file = "drive_files_update_name_trashed_200.json" in
+        match Fixture.exists file with
+        | false -> print_endline ("not recorded yet, skipped: " ^ file)
+        | true ->
+            Alcotest.check folder_info_result "decode_folder"
+              (Ok Drive.Folder_trashed)
+              (Drive.decode_folder (fixture "files_update_name_trashed_200")) );
+    ( "drive_files_update_name_unknown_404: error_of_answer 404 is Not_found",
+      `Quick,
+      fun () ->
+        let file = "drive_files_update_name_unknown_404.json" in
+        match Fixture.exists file with
+        | false -> print_endline ("not recorded yet, skipped: " ^ file)
+        | true ->
+            Alcotest.check error_t "error" Drive.Not_found
+              (Drive.error_of_answer ~status:404
+                 ~body:(fixture "files_update_name_unknown_404")) );
   ]

@@ -26,11 +26,11 @@
   (pps ppx_deriving.eq ppx_deriving.show ppx_deriving_yojson)))
 
 ; backend.ml: this build's backend and Google values (Supabase URL,
-; publishable key, Google web client id, Google Cloud project number), from
+; publishable key, Google web client id), from
 ; the environment at build time. Outside the release profile, the URL and key default to
 ; the local stack (`supabase start`, reached from the emulator through
 ; `adb reverse tcp:54321 tcp:54321`; the key is the CLI's fixed local
-; publishable key); the client id and project number have no default.
+; publishable key); the client id has no default.
 ; Values sit inside {|…|}, so a value containing |} is not supported.
 (rule
  (target backend.ml)
@@ -45,9 +45,7 @@
     (echo
      "let publishable_key = {|%{env:HERBIER_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH}|}\n")
     (echo
-     "let google_web_client_id = {|%{env:HERBIER_GOOGLE_WEB_CLIENT_ID=}|}\n")
-    (echo
-     "let google_cloud_project_number = {|%{env:HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER=}|}\n")))))
+     "let google_web_client_id = {|%{env:HERBIER_GOOGLE_WEB_CLIENT_ID=}|}\n")))))
 
 (rule
  (target backend.ml)
@@ -60,6 +58,4 @@
     (echo "let supabase_url = {|%{env:HERBIER_SUPABASE_URL=}|}\n")
     (echo "let publishable_key = {|%{env:HERBIER_SUPABASE_PUBLISHABLE_KEY=}|}\n")
     (echo
-     "let google_web_client_id = {|%{env:HERBIER_GOOGLE_WEB_CLIENT_ID=}|}\n")
-    (echo
-     "let google_cloud_project_number = {|%{env:HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER=}|}\n")))))
+     "let google_web_client_id = {|%{env:HERBIER_GOOGLE_WEB_CLIENT_ID=}|}\n")))))

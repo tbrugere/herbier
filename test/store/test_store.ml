@@ -250,7 +250,7 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  Alcotest.(check int) "latest is 5" 5 Schema.latest;
+  Alcotest.(check int) "latest is 6" 6 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -270,18 +270,24 @@ let pending_at_latest () =
 
 let pending_from_one () =
   Alcotest.(check string)
-    "pending from 1 is migrations 2, 3, 4 and 5" "Ok [2; 3; 4; 5]"
+    "pending from 1 is migrations 2, 3, 4, 5 and 6" "Ok [2; 3; 4; 5; 6]"
     (string_of_pending (Schema.pending ~current:1))
 
 let pending_from_two () =
   Alcotest.(check string)
-    "pending from 2 is migrations 3, 4 and 5" "Ok [3; 4; 5]"
+    "pending from 2 is migrations 3, 4, 5 and 6" "Ok [3; 4; 5; 6]"
     (string_of_pending (Schema.pending ~current:2))
 
 let pending_from_three () =
   Alcotest.(check string)
-    "pending from 3 is migrations 4 and 5" "Ok [4; 5]"
+    "pending from 3 is migrations 4, 5 and 6" "Ok [4; 5; 6]"
     (string_of_pending (Schema.pending ~current:3))
+
+(* A device at version 5 has exactly one pending migration, 6. *)
+let pending_from_five () =
+  Alcotest.(check string)
+    "pending from 5 is migration 6 alone" "Ok [6]"
+    (string_of_pending (Schema.pending ~current:5))
 
 let pending_above_latest () =
   Alcotest.(check string)
@@ -521,6 +527,159 @@ let upgrade_from_version_2_keeps_rows () =
   Alcotest.(check int)
     "the plant survives the migration to 3" 1
     (Cli.count db "select count(*) as n from plants;\n")
+
+(* ---------- migration 6: the picked folder's settings ----------
+
+   A picked folder in force (its id, trimmed, equal to
+   drive_root_folder's) stays the root and its picked name becomes
+   drive_root_folder_name; drive_root_folder_picked and
+   drive_root_folder_default are deleted whatever their value;
+   drive_root_folder is never touched; an invalid picked value never fails
+   the migration. Settings values are stored as raw text (Codec.text). *)
+
+let quote s = "'" ^ replace_all ~sub:"'" ~by:"''" s ^ "'"
+
+let db_at_version_5 () =
+  let db = fresh_db () in
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Schema.migration) -> m.version <= 5)
+       Schema.migrations);
+  Alcotest.(check int)
+    "before migration 6, user_version is 5" 5 (user_version db);
+  db
+
+let settings_rows db =
+  List.map
+    (fun row -> (string_field "key" row, string_field "value" row))
+    (rows db "select key, value from settings order by key;\n")
+
+(* The settings rows after migration 6 run on a version 5 database holding
+   [before]. *)
+let after_v6 before =
+  let db = db_at_version_5 () in
+  exec_ok "seed settings" db
+    (String.concat ""
+       (List.map
+          (fun (k, v) ->
+            Printf.sprintf
+              "insert into settings (key, value) values (%s, %s);\n" (quote k)
+              (quote v))
+          before));
+  migrate db ~current:5;
+  Alcotest.(check int)
+    "after migration 6, user_version is 6" 6 (user_version db);
+  settings_rows db
+
+let check_v6 what ~before expected =
+  Alcotest.(check (list (pair string string))) what expected (after_v6 before)
+
+let v6_pick_in_force () =
+  check_v6 "the pick stays the root, its name kept, picked and default gone"
+    ~before:
+      [
+        ("drive_root_folder", "F1");
+        ("drive_root_folder_picked", {|{"id":"F1","name":"Mes plantes"}|});
+        ("drive_root_folder_default", "D0");
+        ("storage_target", "drive");
+      ]
+    [
+      ("drive_root_folder", "F1");
+      ("drive_root_folder_name", "Mes plantes");
+      ("storage_target", "drive");
+    ]
+
+let v6_padded () =
+  check_v6 "a padded picked id matches, the name is trimmed"
+    ~before:
+      [
+        ("drive_root_folder", "F1");
+        ("drive_root_folder_picked", {|{"id":" F1 ","name":"\tMes plantes \n"}|});
+      ]
+    [("drive_root_folder", "F1"); ("drive_root_folder_name", "Mes plantes")]
+
+let v6_padded_root () =
+  check_v6 "a padded stored root still matches, its row unchanged"
+    ~before:
+      [
+        ("drive_root_folder", " F1 ");
+        ("drive_root_folder_picked", {|{"id":"F1","name":"Mes plantes"}|});
+      ]
+    [("drive_root_folder", " F1 "); ("drive_root_folder_name", "Mes plantes")]
+
+let v6_escaped_name () =
+  check_v6 "a picked name with JSON escapes is decoded"
+    ~before:
+      [
+        ("drive_root_folder", "F1");
+        ("drive_root_folder_picked", {|{"id":"F1","name":"a \"b\" \\ c"}|});
+      ]
+    [("drive_root_folder", "F1"); ("drive_root_folder_name", {|a "b" \ c|})]
+
+let v6_stale_pick () =
+  check_v6 "a pick no longer in force gives no name"
+    ~before:
+      [
+        ("drive_root_folder", "F2");
+        ("drive_root_folder_picked", {|{"id":"F1","name":"Mes plantes"}|});
+        ("drive_root_folder_default", "D0");
+      ]
+    [("drive_root_folder", "F2")]
+
+let v6_not_json () =
+  check_v6 "a picked value that is not JSON: no name, the migration succeeds"
+    ~before:
+      [("drive_root_folder", "F1"); ("drive_root_folder_picked", "not json")]
+    [("drive_root_folder", "F1")]
+
+let v6_bad_name what picked =
+  ( what,
+    `Quick,
+    fun () ->
+      check_v6 what
+        ~before:
+          [("drive_root_folder", "F1"); ("drive_root_folder_picked", picked)]
+        [("drive_root_folder", "F1")] )
+
+let v6_no_root () =
+  check_v6 "no root stored: no name, the pick deleted"
+    ~before:[("drive_root_folder_picked", {|{"id":"F1","name":"Mes plantes"}|})]
+    []
+
+let v6_nothing () =
+  check_v6 "none of the Drive keys: settings unchanged"
+    ~before:[("storage_target", "local"); ("wifi_only", "true")]
+    [("storage_target", "local"); ("wifi_only", "true")]
+
+let v6_name_already_set () =
+  check_v6 "a name row already there is kept (on conflict do nothing)"
+    ~before:
+      [
+        ("drive_root_folder", "F1");
+        ("drive_root_folder_name", "Autre");
+        ("drive_root_folder_picked", {|{"id":"F1","name":"Mes plantes"}|});
+      ]
+    [("drive_root_folder", "F1"); ("drive_root_folder_name", "Autre")]
+
+let migration_6_tests =
+  [
+    ("a pick in force: root kept, name from the pick", `Quick, v6_pick_in_force);
+    ("a padded id still matches, the name trimmed", `Quick, v6_padded);
+    ("a padded stored root still matches", `Quick, v6_padded_root);
+    ("a picked name with JSON escapes", `Quick, v6_escaped_name);
+    ("a stale pick: no name, root untouched", `Quick, v6_stale_pick);
+    ("a picked value that is not JSON: no name", `Quick, v6_not_json);
+    v6_bad_name "a blank picked name: no name" {|{"id":"F1","name":"  "}|};
+    v6_bad_name "a picked name that is a number: no name"
+      {|{"id":"F1","name":42}|};
+    v6_bad_name "a pick without a name: no name" {|{"id":"F1"}|};
+    v6_bad_name "a picked id that is a number: no name"
+      {|{"id":42,"name":"Mes plantes"}|};
+    v6_bad_name "a picked JSON array: no name" {|["F1","Mes plantes"]|};
+    ("no root stored: no name, pick gone", `Quick, v6_no_root);
+    ("none of the keys: unchanged", `Quick, v6_nothing);
+    ("a name already stored is kept", `Quick, v6_name_already_set);
+  ]
 
 let observation_sql ?(plant = "NULL") ?(lat = "NULL") ?(lon = "NULL")
     ?(accuracy = "NULL") id =
@@ -1258,9 +1417,10 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
-          case "pending from 1 is migrations 2, 3, 4 and 5" pending_from_one;
-          case "pending from 2 is migrations 3, 4 and 5" pending_from_two;
-          case "pending from 3 is migrations 4 and 5" pending_from_three;
+          case "pending from 1 is migrations 2 to 6" pending_from_one;
+          case "pending from 2 is migrations 3 to 6" pending_from_two;
+          case "pending from 3 is migrations 4, 5 and 6" pending_from_three;
+          case "pending from 5 is migration 6 alone" pending_from_five;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
@@ -1298,6 +1458,7 @@ let () =
           case "outbox seq is assigned and attempts defaults to 0"
             outbox_defaults;
         ] );
+      ("Migration 6 (Picker removed) in sqlite3", migration_6_tests);
       ( "Lookup tables in sqlite3",
         [
           case "each lookup table holds every constructor's to_string"

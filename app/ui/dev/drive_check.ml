@@ -154,14 +154,23 @@ let page app =
           | Unchosen -> "aucun"
           | Unconfigured -> "indisponible");
       ];
-    Fut.await (Drive_root.stored db) (fun stored ->
+    Fut.await
+      (Fut.pair (Drive_root.stored db) (Drive_root.name db))
+      (fun (stored, name) ->
         let shown =
           match stored with
           | Ok (Some id) -> id
           | Ok None -> "aucun"
           | Error e -> "illisible : " ^ Db.error_to_string e
         in
-        El.set_children root_line [El.txt' ("Dossier racine : " ^ shown)])
+        let name =
+          match name with
+          | Ok (Some n) -> n
+          | Ok None -> (Api.default_folder_name :> string) ^ " (par défaut)"
+          | Error e -> "illisible : " ^ Db.error_to_string e
+        in
+        El.set_children root_line
+          [El.txt' ("Dossier racine : " ^ shown ^ " · Nom : " ^ name)])
   in
   render ();
   let species =
@@ -248,7 +257,8 @@ let page app =
                    ~drop_token:(fun (_ : string) ->
                      incr drops;
                      Fut.return ())
-                   ~root:None original blob)
+                   ~root:{id = None; name = Api.default_folder_name}
+                   original blob)
             in
             step "invalid"
               ~detail:(fun p -> Some (put_detail p))
@@ -257,6 +267,34 @@ let page app =
                   (Drive.error_to_string (fun (_ : unit) -> "") e)
                   !drops)
               upload))
+  in
+  (* Proves the PATCH leaves the WebView and Google's CORS answers it, on a
+     device with no Google account: two 401s, one drop, nothing stored. *)
+  let rename_invalid =
+    Kit.action "Renommer (jeton invalide)" (fun () ->
+        (* style: a local counter, read once the run has ended. *)
+        let drops = ref 0 in
+        let name =
+          Option.value
+            (Api.folder_name "Herbier-dev")
+            ~default:Api.default_folder_name
+        in
+        Fut.await
+          (Drive.rename_root
+             ~token:(fun () -> Fut.return (Ok "ya29.invalid"))
+             ~drop_token:(fun (_ : string) ->
+               incr drops;
+               Fut.return ())
+             ~root:
+               {id = Some "herbier-dev-root"; name = Api.default_folder_name}
+             ~name)
+          (fun ({result; _} : _ Api.rooted) ->
+            let shown =
+              match result with
+              | Ok n -> "ok " ^ (n :> string)
+              | Error e -> Drive.error_to_string (fun (_ : unit) -> "") e
+            in
+            Kit.append log (Printf.sprintf "rename: %s drops=%d" shown !drops)))
   in
   let forget =
     Kit.action "Oublier le dossier" (fun () ->
@@ -274,8 +312,9 @@ let page app =
         ]
       ()
   in
-  (* The sheet's « Par défaut » for that address, with no chooser: on a device
-     with no Google account, a new address forgets the root folder. *)
+  (* The sheet's account store for that address, with no chooser and no token:
+     on a device with no Google account, a new address forgets the root
+     folder's id. *)
   let force =
     Kit.action "Forcer le compte" (fun () ->
         match
@@ -286,8 +325,8 @@ let page app =
         | Some account ->
             step "force account"
               ~detail:(fun () -> None)
-              ~error:Drive_text.pick_error_text
-              (App.store_default app ~account))
+              ~error:Drive_text.sheet_error_text
+              (App.store_account app ~account ~turn_on:false))
   and unset =
     Kit.action "Oublier le compte" (fun () ->
         step "forget account"
@@ -327,7 +366,7 @@ let page app =
       El.div [authorize; silent; plugin];
       El.div [species; upload; again; check; invalid];
       root_line;
-      El.div [forget];
+      El.div [forget; rename_invalid];
       El.div
         [
           originals;

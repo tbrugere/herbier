@@ -103,12 +103,6 @@ let card_opt (c : Drive_text.card option) =
 
 let card_option_t = Alcotest.(option (pair string string))
 
-let pp_folder ppf = function
-  | Drive_text.Default -> Format.pp_print_string ppf "Default"
-  | Drive_text.Picked n -> Format.fprintf ppf "Picked %S" n
-
-let folder_t = Alcotest.testable pp_folder Drive_text.equal_folder
-
 let pp_folder_button ppf (b : Drive_text.folder_button) =
   Format.fprintf ppf "{detail = %S; choose = %s}" b.detail
     (match b.choose with
@@ -118,21 +112,20 @@ let pp_folder_button ppf (b : Drive_text.folder_button) =
 let folder_button_t =
   Alcotest.testable pp_folder_button Drive_text.equal_folder_button
 
-let pick_error_to_string = function
-  | Drive_text.Not_a_folder -> "Not_a_folder"
-  | Drive_text.Trashed -> "Trashed"
-  | Drive_text.No_access -> "No_access"
+let sheet_error_to_string = function
   | Drive_text.Offline -> "Offline"
   | Drive_text.Token d -> "Token " ^ denial_to_string d
-  | Drive_text.Picker_unavailable -> "Picker_unavailable"
   | Drive_text.Not_saved -> "Not_saved"
   | Drive_text.Drive_failed -> "Drive_failed"
   | Drive_text.Chooser_no_account -> "Chooser_no_account"
   | Drive_text.Chooser_failed -> "Chooser_failed"
   | Drive_text.Other_account d -> "Other_account " ^ denial_to_string d
+  | Drive_text.Blank_name -> "Blank_name"
 
-let pp_pick_error ppf e = Format.pp_print_string ppf (pick_error_to_string e)
-let pick_error_t = Alcotest.testable pp_pick_error Drive_text.equal_pick_error
+let pp_sheet_error ppf e = Format.pp_print_string ppf (sheet_error_to_string e)
+
+let sheet_error_t =
+  Alcotest.testable pp_sheet_error Drive_text.equal_sheet_error
 
 (* ---------- access ---------- *)
 
@@ -618,7 +611,7 @@ let drive_prompt_tests =
   let no_drive_account_prompt =
     Some
       ( "Les photos attendent sur le t\xc3\xa9l\xc3\xa9phone : choisissez le \
-         compte et le dossier dans \xc2\xab Dossier Drive \xc2\xbb.",
+         compte dans \xc2\xab Dossier Drive \xc2\xbb.",
         None )
   in
   let case ?(pending = 0) name storage access expected =
@@ -693,69 +686,25 @@ let stop_dialog_tests =
           (dialog (Drive_text.stop_dialog 3)) );
   ]
 
-(* ---------- folder, folder_name ---------- *)
+(* ---------- folder_help ---------- *)
 
-let drive_folder ~id ~name : Herbier_store.Settings.drive_folder = {id; name}
-
-let folder_tests =
-  let case name ~root ~picked expected =
-    ( name,
-      `Quick,
-      fun () ->
-        Alcotest.check folder_t "folder" expected
-          (Drive_text.folder ~root ~picked) )
-  in
+let folder_help_tests =
   [
-    case "picked id = root: Picked, the picked name" ~root:(Some "F1")
-      ~picked:(Some (drive_folder ~id:"F1" ~name:"Mes plantes"))
-      (Drive_text.Picked "Mes plantes");
-    case "picked id <> root (a pass replaced it): Default" ~root:(Some "OTHER")
-      ~picked:(Some (drive_folder ~id:"F1" ~name:"Mes plantes"))
-      Drive_text.Default;
-    case "root None, picked present: Default" ~root:None
-      ~picked:(Some (drive_folder ~id:"F1" ~name:"Mes plantes"))
-      Drive_text.Default;
-    case "root present, no picked value: Default" ~root:(Some "F1") ~picked:None
-      Drive_text.Default;
-    case "neither root nor picked: Default" ~root:None ~picked:None
-      Drive_text.Default;
-  ]
-
-let folder_name_tests =
-  [
-    ( "Default: \"Herbier\"",
+    ( "folder_help: the move hint, exact text",
       `Quick,
       fun () ->
         Alcotest.(check string)
-          "folder_name" "Herbier"
-          (Drive_text.folder_name Drive_text.Default) );
-    ( "Picked n: n verbatim",
-      `Quick,
-      fun () ->
-        Alcotest.(check string)
-          "folder_name" "Mes plantes"
-          (Drive_text.folder_name (Drive_text.Picked "Mes plantes")) );
-    ( "Picked \"\" (blank): \"(sans nom)\"",
-      `Quick,
-      fun () ->
-        Alcotest.(check string)
-          "folder_name" "(sans nom)"
-          (Drive_text.folder_name (Drive_text.Picked "")) );
-    ( "Picked \"  \" (whitespace only): \"(sans nom)\"",
-      `Quick,
-      fun () ->
-        Alcotest.(check string)
-          "folder_name" "(sans nom)"
-          (Drive_text.folder_name (Drive_text.Picked "  ")) );
+          "folder_help"
+          "Pour le ranger ailleurs, d\xc3\xa9placez ce dossier dans Google \
+           Drive : Herbier le suit."
+          Drive_text.folder_help );
   ]
 
 (* ---------- folder_button ---------- *)
 
-(* folder_button is the single « Dossier Drive » button. The Picker's
-   availability never disables it (the sheet still chooses the account
-   without it): only the Drive account's state does. *)
+(* folder_button is the single « Dossier Drive » button: only the Drive
+   account's state disables it; the detail shows the stored name. *)
 let unconfigured_reason = "Envoi vers Drive indisponible dans cette version."
-let herbier_detail = "Herbier \xc2\xb7 cr\xc3\xa9\xc3\xa9 par l\xe2\x80\x99app"
 let chosen_a = Drive_account.Chosen {email = "a@x.fr"}
 
 let folder_button_tests =
@@ -768,78 +717,37 @@ let folder_button_tests =
   in
   Drive_text.
     [
-      case
-        "Unconfigured, Default: disabled, the build reason, detail \xc2\xab \
-         Herbier \xc2\xbb alone (no email, no account known)"
-        Drive_account.Unconfigured Default
+      case "Unconfigured: disabled, the build reason, the folder name alone"
+        Drive_account.Unconfigured "Plantes"
+        {detail = "Plantes"; choose = Disabled unconfigured_reason};
+      case "Unconfigured, the default name: Herbier alone"
+        Drive_account.Unconfigured "Herbier"
         {detail = "Herbier"; choose = Disabled unconfigured_reason};
-      case
-        "Unconfigured, Picked: still \xc2\xab Herbier \xc2\xbb alone - the \
-         folder is irrelevant without a usable build"
-        Drive_account.Unconfigured (Picked "Mes plantes")
-        {detail = "Herbier"; choose = Disabled unconfigured_reason};
-      case "Unchosen, Default: enabled, no account chosen yet, no reason"
-        Drive_account.Unchosen Default
+      case "Unchosen: enabled, no account chosen yet" Drive_account.Unchosen
+        "Plantes"
         {detail = "Aucun compte choisi"; choose = Enabled};
-      case
-        "Unchosen, Picked: still \xc2\xab Aucun compte choisi \xc2\xbb - the \
-         folder belongs to no account yet"
-        Drive_account.Unchosen (Picked "Mes plantes")
-        {detail = "Aucun compte choisi"; choose = Enabled};
-      case
-        "Chosen, Default: Herbier, created by the app, then this account's \
-         email"
-        chosen_a Default
-        {detail = herbier_detail ^ " \xc2\xb7 a@x.fr"; choose = Enabled};
-      case "Chosen, Picked: the picked name, then this account's email" chosen_a
-        (Picked "Mes plantes")
-        {detail = "Mes plantes \xc2\xb7 a@x.fr"; choose = Enabled};
-      case "Chosen, Picked \"\": the blank-name fallback, then the email"
-        chosen_a (Picked "")
-        {detail = "(sans nom) \xc2\xb7 a@x.fr"; choose = Enabled};
+      case "Chosen: the folder name, then this account's email" chosen_a
+        "Plantes"
+        {detail = "Plantes \xc2\xb7 a@x.fr"; choose = Enabled};
+      case "Chosen, the default name: Herbier, then the email" chosen_a
+        "Herbier"
+        {detail = "Herbier \xc2\xb7 a@x.fr"; choose = Enabled};
     ]
 
-(* ---------- picker_config_of_project_number ---------- *)
+(* ---------- sheet_error_text ---------- *)
 
-let picker_config_tests =
-  let case name number ready =
-    ( name,
-      `Quick,
-      fun () ->
-        Alcotest.(check bool)
-          "Picker_ready" ready
-          (Drive_text.equal_picker_config
-             (Drive_text.picker_config_of_project_number number)
-             Picker_ready) )
-  in
-  [
-    case "\"\": unconfigured" "" false;
-    case "all digits: ready" "123456789012" true;
-    case "a leading space: unconfigured (not trimmed)" " 123" false;
-    case "a trailing newline: unconfigured (not trimmed)" "123\n" false;
-    case "letters: unconfigured" "abc" false;
-    case "a placeholder: unconfigured" "<project-number>" false;
-  ]
-
-(* ---------- pick_error_text ---------- *)
-
-let pick_error_text_tests =
+let sheet_error_text_tests =
   let case name e expected =
     ( name,
       `Quick,
       fun () ->
         Alcotest.(check string)
-          "pick_error_text" expected
-          (Drive_text.pick_error_text e) )
+          "sheet_error_text" expected
+          (Drive_text.sheet_error_text e) )
   in
   Drive_text.
     [
-      case "Not_a_folder" Not_a_folder "Ce n\xe2\x80\x99est pas un dossier.";
-      case "Trashed" Trashed "Ce dossier est dans la corbeille.";
-      case "No_access" No_access
-        "Herbier n\xe2\x80\x99a pas acc\xc3\xa8s \xc3\xa0 ce dossier.";
-      case "Offline" Offline
-        "Pas de r\xc3\xa9seau : r\xc3\xa9essayez plus tard.";
+      case "Offline" Offline "Pas de r\xc3\xa9seau : r\xc3\xa9essayez plus tard.";
       case "Token Unconfigured" (Token Unconfigured)
         "Envoi vers Drive indisponible dans cette version.";
       case "Token No_drive_account (blocker (Denied d) ~online:true)"
@@ -862,8 +770,6 @@ let pick_error_text_tests =
         (Token Failed)
         "Google Drive n’a pas répondu pour ce compte : réessayez, ou utilisez \
          un autre compte.";
-      case "Picker_unavailable" Picker_unavailable
-        "Google Picker n\xe2\x80\x99a pas pu s\xe2\x80\x99ouvrir.";
       case "Not_saved" Not_saved
         "Le r\xc3\xa9glage n\xe2\x80\x99a pas pu \xc3\xaatre enregistr\xc3\xa9.";
       case "Drive_failed" Drive_failed
@@ -884,12 +790,20 @@ let pick_error_text_tests =
         "L’autre compte n’a pas pu être utilisé : rien n’a changé.";
       case "Other_account Failed" (Other_account Failed)
         "L’autre compte n’a pas pu être utilisé : rien n’a changé.";
+      case "Blank_name" Blank_name "Le nom du dossier ne peut pas être vide.";
+      ( "the printer names the constructor",
+        `Quick,
+        fun () ->
+          Alcotest.check sheet_error_t "equal_sheet_error" Blank_name Blank_name;
+          Alcotest.(check bool)
+            "Blank_name differs from Not_saved" false
+            (equal_sheet_error Blank_name Not_saved) );
     ]
 
 (* ---------- observation_card ---------- *)
 
-let observation_card ?(queued = []) ?(folder = Drive_text.Default) access
-    ~online ~wifi_only photos =
+let observation_card ?(queued = []) ?(folder = "Herbier") access ~online
+    ~wifi_only photos =
   Drive_text.observation_card access ~online ~wifi_only ~queued ~folder photos
 
 let observation_card_tests =
@@ -1113,8 +1027,8 @@ let observation_card_tests =
              ( "2 photos \xe2\x86\x92 Google Drive, dossier Mes plantes",
                "1 sur 2 envoy\xc3\xa9es." ))
           (card_opt
-             (observation_card ~folder:(Drive_text.Picked "Mes plantes")
-                Drive_text.Granted ~online:true ~wifi_only:false photos)) );
+             (observation_card ~folder:"Mes plantes" Drive_text.Granted
+                ~online:true ~wifi_only:false photos)) );
     ( "App_only photos are ignored in the count",
       `Quick,
       fun () ->
@@ -1276,20 +1190,17 @@ let choose_t =
       | Disabled a, Disabled b -> String.equal a b
       | (Enabled | Disabled _), _ -> false)
 
-let picker_unconfigured_option_reason =
-  "Choix du dossier indisponible dans cette version."
-
 (* title = "Google Drive" always, and never mentions the old wording ("…
-   dossier « Herbier »"), over a representative spread of drive/picker/storage
-   /folder combinations. *)
+   dossier « Herbier »"), over a representative spread of drive/storage/folder
+   combinations. *)
 let drive_option_title_tests =
   let module D = Drive_account in
   let module O = Photo.Original_target in
-  let case name ~drive ~picker ~storage folder =
+  let case name ~drive ~storage folder =
     ( name,
       `Quick,
       fun () ->
-        let o = Drive_text.drive_option ~drive ~picker ~storage folder in
+        let o = Drive_text.drive_option ~drive ~storage folder in
         Alcotest.(check string) "title" "Google Drive" o.title;
         Alcotest.(check string)
           "detail, fixed"
@@ -1303,17 +1214,13 @@ let drive_option_title_tests =
           "no \xc2\xab Herbier \xc2\xbb in the title" false
           (Text.contains ~sub:"Herbier" o.title) )
   in
-  Drive_text.
-    [
-      case "Unconfigured, Default, App_only, Picker_ready" ~drive:D.Unconfigured
-        ~picker:Picker_ready ~storage:O.App_only Default;
-      case "Unchosen, Default, App_only, Picker_ready" ~drive:D.Unchosen
-        ~picker:Picker_ready ~storage:O.App_only Default;
-      case "Chosen, Picked, Drive, Picker_ready" ~drive:chosen_a
-        ~picker:Picker_ready ~storage:O.Drive (Picked "Plantes");
-      case "Chosen, Default, Drive, Picker_unconfigured" ~drive:chosen_a
-        ~picker:Picker_unconfigured ~storage:O.Drive Default;
-    ]
+  [
+    case "Unconfigured, App_only, Herbier" ~drive:D.Unconfigured
+      ~storage:O.App_only "Herbier";
+    case "Unchosen, App_only, Herbier" ~drive:D.Unchosen ~storage:O.App_only
+      "Herbier";
+    case "Chosen, Drive, Plantes" ~drive:chosen_a ~storage:O.Drive "Plantes";
+  ]
 
 (* chosen: the folder (and account) once the storage is actually Drive and an
    account is known; None otherwise (App_only, or the legacy Drive/Unchosen
@@ -1321,43 +1228,30 @@ let drive_option_title_tests =
 let drive_option_chosen_tests =
   let module D = Drive_account in
   let module O = Photo.Original_target in
-  let case ?(picker = Drive_text.Picker_ready) name ~drive ~storage folder
-      expected =
+  let case name ~drive ~storage folder expected =
     ( name,
       `Quick,
       fun () ->
         Alcotest.(check (option string))
           "chosen" expected
-          (chosen_of (Drive_text.drive_option ~drive ~picker ~storage folder))
-    )
+          (chosen_of (Drive_text.drive_option ~drive ~storage folder)) )
   in
   [
-    case "Drive, Chosen, Picked: the folder name \xc2\xb7 the email"
-      ~drive:chosen_a ~storage:O.Drive (Picked "Plantes")
-      (Some "Plantes \xc2\xb7 a@x.fr");
-    case
-      "Drive, Chosen, Default: \xc2\xab Herbier \xc2\xbb, created by the app, \
-       then the email"
-      ~drive:chosen_a ~storage:O.Drive Default
-      (Some (herbier_detail ^ " \xc2\xb7 a@x.fr"));
-    case
-      "Drive, Chosen, Picked \" \" (blank): the blank-name fallback, then the \
-       email"
-      ~drive:chosen_a ~storage:O.Drive (Picked " ")
-      (Some "(sans nom) \xc2\xb7 a@x.fr");
+    case "Drive, Chosen: the folder name \xc2\xb7 the email" ~drive:chosen_a
+      ~storage:O.Drive "Plantes" (Some "Plantes \xc2\xb7 a@x.fr");
+    case "Drive, Chosen, the default name: Herbier \xc2\xb7 the email"
+      ~drive:chosen_a ~storage:O.Drive "Herbier"
+      (Some "Herbier \xc2\xb7 a@x.fr");
     case "App_only, Chosen: None - an old choice is not where photos go"
-      ~drive:chosen_a ~storage:O.App_only Default None;
+      ~drive:chosen_a ~storage:O.App_only "Herbier" None;
     case
       "Drive, Unchosen: None - the legacy state, \xc2\xab Dossier Drive \
        \xc2\xbb prompts instead"
-      ~drive:D.Unchosen ~storage:O.Drive Default None;
+      ~drive:D.Unchosen ~storage:O.Drive "Herbier" None;
     case "Drive, Unconfigured: None" ~drive:D.Unconfigured ~storage:O.Drive
-      Default None;
+      "Herbier" None;
     case "App_only, Unchosen: None" ~drive:D.Unchosen ~storage:O.App_only
-      Default None;
-    case "Drive, Chosen, Picked, without the Picker: the same line"
-      ~picker:Drive_text.Picker_unconfigured ~drive:chosen_a ~storage:O.Drive
-      (Picked "Plantes") (Some "Plantes \xc2\xb7 a@x.fr");
+      "Herbier" None;
   ]
 
 (* A tap starts a choice only from App_only, enabled, with none running. *)
@@ -1396,44 +1290,30 @@ let drive_option_starts_tests =
         Drive_text.[Enabled; Disabled "no"])
     [O.App_only; O.Drive]
 
-(* choose: Unconfigured (no Drive at all) before Picker_unconfigured (the
-   Picker's own build reason), else Enabled, whatever the storage. *)
+(* choose: only a build without a Google web client id (Unconfigured)
+   disables the radio, whatever the storage. *)
 let drive_option_choose_tests =
   let module D = Drive_account in
   let module O = Photo.Original_target in
-  let case name ~drive ~picker ~storage folder expected =
+  let case name ~drive ~storage expected =
     ( name,
       `Quick,
       fun () ->
         Alcotest.check choose_t "choose" expected
-          (choose_of (Drive_text.drive_option ~drive ~picker ~storage folder))
-    )
+          (choose_of (Drive_text.drive_option ~drive ~storage "Herbier")) )
   in
   Drive_text.
     [
-      case "Unconfigured, App_only, Picker_ready: disabled, the build reason"
-        ~drive:D.Unconfigured ~picker:Picker_ready ~storage:O.App_only Default
-        (Disabled unconfigured_reason);
-      case "Unconfigured, Picker_unconfigured too: the build reason wins"
-        ~drive:D.Unconfigured ~picker:Picker_unconfigured ~storage:O.Drive
-        Default (Disabled unconfigured_reason);
-      case
-        "Unchosen, App_only, Picker_unconfigured: disabled, the Picker reason"
-        ~drive:D.Unchosen ~picker:Picker_unconfigured ~storage:O.App_only
-        Default (Disabled picker_unconfigured_option_reason);
-      case
-        "Unchosen, Drive, Picker_unconfigured: disabled, the Picker reason too"
-        ~drive:D.Unchosen ~picker:Picker_unconfigured ~storage:O.Drive Default
-        (Disabled picker_unconfigured_option_reason);
-      case
-        "Chosen, Drive, Picker_unconfigured: disabled, the Picker reason (a \
-         legacy install sees the radio checked but disabled)"
-        ~drive:chosen_a ~picker:Picker_unconfigured ~storage:O.Drive
-        (Picked "Plantes") (Disabled picker_unconfigured_option_reason);
-      case "Unchosen, App_only, Picker_ready: enabled" ~drive:D.Unchosen
-        ~picker:Picker_ready ~storage:O.App_only Default Enabled;
-      case "Chosen, Drive, Picker_ready: enabled" ~drive:chosen_a
-        ~picker:Picker_ready ~storage:O.Drive Default Enabled;
+      case "Unconfigured, App_only: disabled, the build reason"
+        ~drive:D.Unconfigured ~storage:O.App_only (Disabled unconfigured_reason);
+      case "Unconfigured, Drive: disabled, the build reason"
+        ~drive:D.Unconfigured ~storage:O.Drive (Disabled unconfigured_reason);
+      case "Unchosen, App_only: enabled" ~drive:D.Unchosen ~storage:O.App_only
+        Enabled;
+      case "Unchosen, Drive: enabled" ~drive:D.Unchosen ~storage:O.Drive Enabled;
+      case "Chosen, App_only: enabled" ~drive:chosen_a ~storage:O.App_only
+        Enabled;
+      case "Chosen, Drive: enabled" ~drive:chosen_a ~storage:O.Drive Enabled;
     ]
 
 let drive_text =
@@ -1450,11 +1330,9 @@ let drive_text =
       account_meta_tests;
       drive_prompt_tests;
       stop_dialog_tests;
-      folder_tests;
-      folder_name_tests;
+      folder_help_tests;
       folder_button_tests;
-      picker_config_tests;
-      pick_error_text_tests;
+      sheet_error_text_tests;
       observation_card_tests;
       has_drive_photo_tests;
       viewer_badge_tests;

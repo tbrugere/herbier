@@ -11,17 +11,25 @@ type t = {
 
 let cls = Html.cls
 
-let v ?icon ?action ?(value = "") ~placeholder () =
+let v ?icon ?action ?action_enabled ?label ?enterkeyhint ?(value = "")
+    ~placeholder () =
+  let label = Option.value label ~default:placeholder in
+  let hint =
+    match enterkeyhint with
+    | None -> []
+    | Some h -> [At.v (Jstr.v "enterkeyhint") (Jstr.v h)]
+  in
   let input =
     El.input
       ~at:
-        [
-          cls "text-field__input";
-          At.type' (Jstr.v "text");
-          At.value (Jstr.v value);
-          At.v (Jstr.v "placeholder") (Jstr.v placeholder);
-          At.v (Jstr.v "aria-label") (Jstr.v placeholder);
-        ]
+        ([
+           cls "text-field__input";
+           At.type' (Jstr.v "text");
+           At.value (Jstr.v value);
+           At.v (Jstr.v "placeholder") (Jstr.v placeholder);
+           At.v (Jstr.v "aria-label") (Jstr.v label);
+         ]
+        @ hint)
       ()
   in
   let inputs, bi = Rb.ev input Ev.input in
@@ -42,7 +50,19 @@ let v ?icon ?action ?(value = "") ~placeholder () =
     | Some label ->
         let b = Html.button ["text-field__action"] [El.txt' label] in
         let e, ba = Rb.click b in
-        (e, [b], [ba])
+        let enabled =
+          match action_enabled with
+          | None -> []
+          | Some on ->
+              [
+                Rb.attr b "aria-disabled"
+                  (React.S.map
+                     ~eq:(Option.equal String.equal)
+                     (function true -> None | false -> Some "true")
+                     on);
+              ]
+        in
+        (e, [b], ba :: enabled)
   in
   {
     el = El.div ~at:[cls "text-field"] (lead @ (input :: trail));

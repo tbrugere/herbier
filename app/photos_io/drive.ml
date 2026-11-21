@@ -113,9 +113,9 @@ let run ~token ~drop_token ?media program =
 let run_rooted ~token ~drop_token ?media program =
   Fut.map
     (function
-      | Ok ({result; root} : _ Api.rooted) ->
-          {Api.result = Result.map_error (fun e -> Drive e) result; root}
-      | Error e -> {Api.result = Error e; root = Keep})
+      | Ok ({result; root; name} : _ Api.rooted) ->
+          {Api.result = Result.map_error (fun e -> Drive e) result; root; name}
+      | Error e -> {Api.result = Error e; root = Keep; name = None})
     (exec ~token ~drop_token ?media program)
 
 let put_original ~token ~drop_token ~root original media =
@@ -124,11 +124,11 @@ let put_original ~token ~drop_token ~root original media =
 let start_session ~token ~drop_token ~root target =
   run_rooted ~token ~drop_token (Api.start_session ~root target)
 
+let rename_root ~token ~drop_token ~root ~name =
+  run_rooted ~token ~drop_token (Api.rename_root root ~name)
+
 let presence ~token ~drop_token ~file_id =
   run ~token ~drop_token (Api.presence ~file_id)
-
-let folder_info ~token ~drop_token ~file_id =
-  run ~token ~drop_token (Api.folder_info ~file_id)
 
 let health ~token ~drop_token items =
   exec ~token ~drop_token (Herbier_photos.Health.program items)

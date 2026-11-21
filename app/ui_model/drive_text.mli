@@ -99,36 +99,9 @@ val account_meta : email:string option -> string
 
 (** {1 The Drive folder (4m « Dossier Drive »)} *)
 
-(** Where originals go: the app's « Herbier », or a folder the user picked. *)
-type folder = Default | Picked of string  (** its name *)
-
-val equal_folder : folder -> folder -> bool
-val pp_folder : Format.formatter -> folder -> unit
-val show_folder : folder -> string
-
-val folder :
-  root:string option ->
-  picked:Herbier_store.Settings.drive_folder option ->
-  folder
-(** [Picked p.name] iff [picked = Some p] and [root = Some p.id]; else [Default]
-    (no pick, or an upload replaced the picked root). *)
-
-val folder_name : folder -> string
-(** [Default] → « Herbier »; [Picked n] → [n], or « (sans nom) » when blank. *)
-
-(** Whether this build can open Google Picker (its Cloud project number set). *)
-type picker_config = Picker_unconfigured | Picker_ready
-
-val equal_picker_config : picker_config -> picker_config -> bool
-val pp_picker_config : Format.formatter -> picker_config -> unit
-val show_picker_config : picker_config -> string
-
-val picker_config_of_project_number : string -> picker_config
-(** [Picker_ready] iff the Cloud project number is non-empty and all ASCII
-    digits (not trimmed: the release script refuses anything else). *)
-
-val app_folder : string
-(** « Herbier · créé par l’app »: the app's folder, as 4m names it. *)
+val folder_help : string
+(** « Pour le ranger ailleurs, déplacez ce dossier dans Google Drive : Herbier
+    le suit. » *)
 
 (** Whether the « Dossier Drive » button opens the sheet. *)
 type choose = Enabled | Disabled of string  (** the muted line saying why *)
@@ -145,16 +118,13 @@ type folder_button = {
 val equal_folder_button : folder_button -> folder_button -> bool
 
 val folder_button :
-  drive:Herbier_sync_core.Auth.Drive_account.t -> folder -> folder_button
-(** - [Unconfigured] → detail « Herbier », [Disabled] « Envoi vers Drive
+  drive:Herbier_sync_core.Auth.Drive_account.t -> string -> folder_button
+(** The folder name given (the stored one, else « Herbier »):
+    - [Unconfigured] → detail the name, [Disabled] « Envoi vers Drive
       indisponible dans cette version. »
     - [Unchosen] → detail « Aucun compte choisi », [Enabled].
-    - [Chosen {email}] → detail « <where> · <email> », where [where] is
-      {!app_folder} for [Default] and {!folder_name} for [Picked]; [Enabled].
-      The Picker's availability does not disable the button: without it, the
-      sheet still chooses the account, and for a legacy install (storage Drive,
-      no account) it makes the first choice, whose only folder is then the app's
-      « Herbier » (« Par défaut »). *)
+    - [Chosen {email}] → detail « <name> · <email> », [Enabled]. For a legacy
+      install (storage Drive, no account) the sheet makes the first choice. *)
 
 type drive_option = {
   title : string;  (** « Google Drive » *)
@@ -169,21 +139,18 @@ val equal_drive_option : drive_option -> drive_option -> bool
 
 val drive_option :
   drive:Herbier_sync_core.Auth.Drive_account.t ->
-  picker:picker_config ->
   storage:Photo.Original_target.t ->
-  folder ->
+  string ->
   drive_option
-(** [title] and [detail] fixed (no folder name in the title). [chosen]:
-    [storage = Drive] and [drive = Chosen {email}] → [Some "<where> · <email>"],
-    [where] as in {!folder_button}; else [None] (under [App_only] an older
-    choice is not where photos go, and choosing Drive picks again; [Drive] with
-    no account is the legacy state, which the « Dossier Drive » row prompts).
-    [choose], first that applies: [drive = Unconfigured] →
-    [Disabled "Envoi vers Drive indisponible dans cette version."];
-    [picker = Picker_unconfigured] →
-    [Disabled "Choix du dossier indisponible dans cette version."]; else
-    [Enabled]. The reason is given whatever [storage] (a legacy Drive install in
-    such a build sees the radio checked but disabled). *)
+(** [title] and [detail] fixed (no folder name in the title); the string is the
+    folder name. [chosen]: [storage = Drive] and [drive = Chosen {email}] →
+    [Some "<name> · <email>"]; else [None] (under [App_only] an older choice is
+    not where photos go, and choosing Drive asks for the account again; [Drive]
+    with no account is the legacy state, which the « Dossier Drive » row
+    prompts). [choose]: [drive = Unconfigured] (a build without a Google web
+    client id) → [Disabled "Envoi vers Drive indisponible dans cette version."],
+    whatever [storage] (a legacy Drive install in such a build sees the radio
+    checked but disabled); else [Enabled]. *)
 
 val drive_option_starts :
   storage:Photo.Original_target.t -> running:bool -> drive_option -> bool
@@ -191,14 +158,11 @@ val drive_option_starts :
     [choose = Enabled] and no choice [running]. Already Drive, disabled, or a
     choice running: the tap is ignored. *)
 
-(** Why the « Dossier Drive » sheet did not change the account or folder. *)
-type pick_error =
-  | Not_a_folder
-  | Trashed
-  | No_access
+(** Why the « Dossier Drive » sheet (or the Drive radio) did not change the
+    account or the folder's name. *)
+type sheet_error =
   | Offline
   | Token of denial
-  | Picker_unavailable  (** Google Picker did not load or could not open *)
   | Not_saved  (** the settings write failed *)
   | Drive_failed  (** any other Drive error *)
   | Chooser_no_account  (** the account chooser had no account to offer *)
@@ -206,29 +170,29 @@ type pick_error =
   | Other_account of denial
       (** no token for an account chosen in the sheet: the sheet went back to
           the stored account *)
+  | Blank_name  (** « Renommer » with a blank field *)
 
-val equal_pick_error : pick_error -> pick_error -> bool
-val pp_pick_error : Format.formatter -> pick_error -> unit
-val show_pick_error : pick_error -> string
+val equal_sheet_error : sheet_error -> sheet_error -> bool
+val pp_sheet_error : Format.formatter -> sheet_error -> unit
+val show_sheet_error : sheet_error -> string
 
-val pick_error_text : pick_error -> string
-(** « Ce n’est pas un dossier. »; « Ce dossier est dans la corbeille. »; «
-    Herbier n’a pas accès à ce dossier. »; « Pas de réseau : réessayez plus
-    tard. »; [Token No_account] → « Ce compte Google n’est plus sur le téléphone
-    : utilisez un autre compte. »; [Token (Consent_needed | Consent_refused)] →
-    « Google Drive n’est pas autorisé pour ce compte. »; [Token Failed] → «
-    Google Drive n’a pas répondu pour ce compte : réessayez, ou utilisez un
-    autre compte. » (not the queue's « Envoi dès le retour du réseau. »: the
-    sheet is open, and the emulator answers an account missing from the device
-    with such a failure); any other [Token d] → {!blocker}
-    [(Denied d) ~online:true]; « Google Picker n’a pas pu s’ouvrir. »; « Le
-    réglage n’a pas pu être enregistré. »; « Drive n’a pas répondu : réessayez.
-    »; « Aucun compte Google sur le téléphone : ajoutez-en un dans les réglages
-    d’Android. »; « Le choix du compte n’a pas pu s’ouvrir. Réessayez. »;
-    [Other_account Offline] → « Pas de réseau : rien n’a changé. »;
+val sheet_error_text : sheet_error -> string
+(** « Pas de réseau : réessayez plus tard. »; [Token No_account] → « Ce compte
+    Google n’est plus sur le téléphone : utilisez un autre compte. »;
+    [Token (Consent_needed | Consent_refused)] → « Google Drive n’est pas
+    autorisé pour ce compte. »; [Token Failed] → « Google Drive n’a pas répondu
+    pour ce compte : réessayez, ou utilisez un autre compte. » (not the queue's
+    « Envoi dès le retour du réseau. »: the sheet is open, and the emulator
+    answers an account missing from the device with such a failure); any other
+    [Token d] → {!blocker} [(Denied d) ~online:true]; « Le réglage n’a pas pu
+    être enregistré. »; « Drive n’a pas répondu : réessayez. »; « Aucun compte
+    Google sur le téléphone : ajoutez-en un dans les réglages d’Android. »; « Le
+    choix du compte n’a pas pu s’ouvrir. Réessayez. »; [Other_account Offline] →
+    « Pas de réseau : rien n’a changé. »;
     [Other_account (Consent_needed | Consent_refused)] → « L’autre compte n’a
     pas autorisé Google Drive : rien n’a changé. »; any other [Other_account _]
-    → « L’autre compte n’a pas pu être utilisé : rien n’a changé. ». *)
+    → « L’autre compte n’a pas pu être utilisé : rien n’a changé. »;
+    [Blank_name] → « Le nom du dossier ne peut pas être vide. ». *)
 
 type prompt = {text : string; action : string option  (** a button label *)}
 
@@ -243,10 +207,9 @@ val drive_prompt :
     n’est pas autorisé pour ce compte : les photos attendent sur le téléphone.
     Autorisez-le, ou changez de compte dans « Dossier Drive ». »,
     [Some "Autoriser"]; [Denied No_drive_account] → « Les photos attendent sur
-    le téléphone : choisissez le compte et le dossier dans « Dossier Drive ». »,
-    no action (the button is the action); [Denied No_account] /
-    [Denied Misconfigured] → their {!blocker} text, no action; any other →
-    [None]. *)
+    le téléphone : choisissez le compte dans « Dossier Drive ». », no action
+    (the button is the action); [Denied No_account] / [Denied Misconfigured] →
+    their {!blocker} text, no action; any other → [None]. *)
 
 type dialog = {title : string; text : string}
 
@@ -267,7 +230,7 @@ val has_drive_photo : Photo.t list -> bool
     [Some _]. *)
 
 val observation_card :
-  folder:folder ->
+  folder:string ->
   access ->
   online:bool ->
   wifi_only:bool ->
@@ -278,10 +241,10 @@ val observation_card :
     [original_target = Drive], or when every Drive-bound photo is [Uploaded]
     (nothing left to say: the tiles' ↑ badges are gone too). [queued]: the
     photos with a queue row ({!queue}'s [queued]). Title: « <n> photo(s) →
-    Google Drive, dossier <folder_name folder> » (n = the Drive-bound photos).
-    Detail, first that applies over them: some [Original_missing] → « Original
-    introuvable dans Google Drive : la copie compressée reste. »; some [Failed]
-    with a queue row → « Échec de l’envoi : « Envoyer maintenant » dans
+    Google Drive, dossier <folder> » (the name verbatim) (n = the Drive-bound
+    photos). Detail, first that applies over them: some [Original_missing] → «
+    Original introuvable dans Google Drive : la copie compressée reste. »; some
+    [Failed] with a queue row → « Échec de l’envoi : « Envoyer maintenant » dans
     Réglages. »; some [Failed] without one (its original could not be kept when
     it was saved) → « Original non conservé : la copie compressée reste. »;
     {!blocker}; [wifi_only] → « Envoi en Wi-Fi seulement. Copies compressées

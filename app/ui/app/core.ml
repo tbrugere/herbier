@@ -122,8 +122,8 @@ type t = {
   drive_access : Drive_text.access React.signal;
   upload_queue : Drive_text.queue React.signal;
   set_upload_queue : ?step:React.step -> Drive_text.queue -> unit;
-  drive_folder : Drive_text.folder React.signal;
-  set_drive_folder : ?step:React.step -> Drive_text.folder -> unit;
+  drive_folder : string React.signal;
+  set_drive_folder : ?step:React.step -> string -> unit;
   health : Health.t;
   floras : flora_list ref;
       (* style: mutable because a flora request settles in a future's
@@ -273,7 +273,8 @@ let create ~db ~state ~theme ~auth
   in
   let set_upload_queue ?step q = set_upload_queue ?step q in
   let drive_folder, set_drive_folder =
-    React.S.create ~eq:Drive_text.equal_folder Drive_text.Default
+    React.S.create ~eq:String.equal
+      (Herbier_photos.Drive.default_folder_name :> string)
   in
   let set_drive_folder ?step f = set_drive_folder ?step f in
   let commit =
@@ -442,10 +443,10 @@ let refresh_queue t =
 let refresh_folder t =
   Fut.map
     (function
-      | Ok (root, picked) ->
-          t.set_drive_folder (Drive_text.folder ~root ~picked)
+      | Ok (root : Herbier_photos.Drive.root) ->
+          t.set_drive_folder (root.name :> string)
       | Error e -> log_error ["drive: folder:"; Db.error_to_string e])
-    (Herbier_photos_io.Drive_root.read_choice t.db)
+    (Herbier_photos_io.Drive_root.root t.db)
 
 let after_pass t pass =
   Fut.await

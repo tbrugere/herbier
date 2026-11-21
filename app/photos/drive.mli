@@ -1,10 +1,11 @@
 (** Google Drive v3 for the originals (architecture §5), without IO: the
     requests, the multipart frame, the answers decoded, and the programs the app
     runs — put an original into [<root>/<species>/] (the root folder by its
-    stored id, else « Herbier » at My Drive's root), and check one is still
-    there. Run on the device by [Herbier_photos_io.Drive], in tests by {!run}
-    over a function standing for the network. Requests carry no Authorization
-    header: the runner adds the token. Nothing here raises. *)
+    stored id, else the stored name, « Herbier » by default, at My Drive's
+    root), rename the root folder, and check an original is still there. Run on
+    the device by [Herbier_photos_io.Drive], in tests by {!run} over a function
+    standing for the network. Requests carry no Authorization header: the runner
+    adds the token. Nothing here raises. *)
 
 module Photo_id := Herbier_domain.Ids.Photo_id
 
@@ -17,7 +18,7 @@ type body =
       (** [multipart/related]: [prefix] (the metadata part and the media part's
           headers), then the media bytes the runner holds, then [suffix] *)
 
-type request = {meth : [`GET | `POST]; url : string; body : body}
+type request = {meth : [`GET | `PATCH | `POST]; url : string; body : body}
 
 val equal_request : request -> request -> bool
 
@@ -92,8 +93,21 @@ val error_of_answer : status:int -> body:string -> error
 (** {1 Names} *)
 
 val root_folder : string
-(** ["Herbier"]: the name of the folder the app looks up, else creates, in My
-    Drive's root when it has no usable stored root folder ({!resolve_root}). *)
+(** ["Herbier"]: the default name of the root folder, used when no name is
+    stored ({!root}'s [name]). *)
+
+(** {2 The root folder's name} *)
+
+type folder_name = private string
+(** A folder name as Drive gets it: trimmed, never blank. *)
+
+val folder_name : string -> folder_name option
+(** [String.trim s] when it is non-empty ({!Herbier_domain.Text.non_blank}),
+    else [None]. No other rule: the Drive v3 Files reference states none for a
+    name. *)
+
+val default_folder_name : folder_name
+(** {!root_folder} as a {!folder_name}. *)
 
 val unidentified_folder : string
 (** ["À identifier"]: the folder of an observation without a plant. *)
@@ -195,6 +209,14 @@ val decode_session : (string * string) list -> (string, error) result
     compared case-insensitively; the first one) when it starts with
     [upload_api ^ "?"]; absent, or another URL → [Malformed "location"]. *)
 
+val update_name : file_id:string -> name:folder_name -> request
+(** files.update: PATCH
+    {!api}[/<file_id, Url.encode>?fields=id,name,mimeType,trashed], [Json] of
+    [{"name": <name>}]. Exact URL for id ["F1"]:
+    ["https://www.googleapis.com/drive/v3/files/F1?fields=id,name,mimeType,trashed"],
+    exact body for the name ["Plantes"]: [{"name":"Plantes"}]. No [addParents] /
+    [removeParents]: the folder stays where the user put it. *)
+
 val get_trashed : file_id:string -> request
 (** GET {!api}[/<file_id, Url.encode>?fields=id,trashed]. *)
 
@@ -239,7 +261,7 @@ type presence =
 
 val equal_presence : presence -> presence -> bool
 
-(** A folder the user picked (4m « Dossier Drive »), as this token sees it. *)
+(** The root folder (by its stored id), as this token sees it. *)
 type folder_info =
   | Usable of {id : string; name : string}
       (** a folder, not trashed, readable with this token *)
@@ -283,95 +305,108 @@ val equal_root_change : root_change -> root_change -> bool
 val pp_root_change : Format.formatter -> root_change -> unit
 (** ["keep"], ["store <id>"], ["forget"] (tests' printer). *)
 
-type 'a rooted = {result : 'a; root : root_change}
+type 'a rooted = {
+  result : 'a;
+  root : root_change;
+  name : folder_name option;
+      (** the root folder's name as Drive gave it in this run ([files.get] of
+          the stored id, the rename's answer) when not blank, or the name it was
+          found or created under; [None]: nothing learnt (an error before, a
+          blank name, or a run that never touched the root, such as
+          [Already_there]) *)
+}
 (** A program's answer and what it learnt about the root folder. Carried even
     when [result] is an error: a root created before a later failure is still
-    stored. *)
+    stored, with its name. *)
 
 val equal_rooted : ('a -> 'a -> bool) -> 'a rooted -> 'a rooted -> bool
 
-val resolve_root : stored:string option -> (string, error) result rooted t
+type root = {
+  id : string option;  (** the stored root folder id ([Drive_root_folder]) *)
+  name : folder_name;
+      (** the stored name ([Drive_root_folder_name]), else
+          {!default_folder_name}: the name the root is looked up by, and created
+          under, when [id] is [None] or unusable *)
+}
+(** The root folder as settings know it. *)
+
+val equal_root : root -> root -> bool
+
+val name_to_store :
+  stored_name:string option -> folder_name option -> folder_name option
+(** The name a run's [rooted.name] makes the caller store: [Some n] when it
+    learnt [n] and the stored name, trimmed, is not [n] (or none is stored);
+    [None] when nothing was learnt or it is the stored one. *)
+
+val resolve_root : root -> (string, error) result rooted t
 (** The root folder's id, by id first:
-    - [stored = Some id]: {!presence} [~file_id:id] (one {!get_trashed}):
-      [Ok Present] → [{result = Ok id; root = Keep}], wherever the folder now is
-      and whatever its name; [Ok (Trashed | Missing)] → the folder is forgotten
-      and the [None] case runs: its [Ok id'] →
-      [{result = Ok id'; root = Store id'}], its [Error e] →
-      [{result = Error e; root = Forget}]; a 403 [appNotAuthorizedToFile] (the
-      app is not on the folder's ACL, a lasting state) → as [Missing]; any other
+    - [root.id = Some id]: one {!get_folder} classified as {!folder_info}:
+      [Ok (Usable {name; _})] →
+      [{result = Ok id; root = Keep; name = folder_name name}], wherever the
+      folder now is and whatever its name;
+      [Ok (Folder_trashed | No_access | Not_a_folder)] (No_access: 404, or a 403
+      [appNotAuthorizedToFile], a lasting state) → the folder is forgotten and
+      the [None] case runs with [root.name]: its [Ok id'] →
+      [{result = Ok id'; root = Store id'; name = Some root.name}], its
+      [Error e] → [{result = Error e; root = Forget; name = None}]; any other
       [Error e] (401, 5xx, network, malformed, …) →
-      [{result = Error e; root = Keep}], nothing else sent.
-    - [stored = None]: {!folder} [~name:root_folder ~parent:Root] (oldest found
+      [{result = Error e; root = Keep; name = None}], nothing else sent.
+    - [root.id = None]: {!folder} [~name:root.name ~parent:Root] (oldest found
       at My Drive's root, else created): [Ok id] →
-      [{result = Ok id; root = Store id}]; [Error e] →
-      [{result = Error e; root = Keep}].
+      [{result = Ok id; root = Store id; name = Some root.name}]; [Error e] →
+      [{result = Error e; root = Keep; name = None}].
 
     Every [Error e] whose {!error_scope} is [This_file] comes out as
     [Root_folder e] ([Account]): a root folder that fails fails every file. The
     caller passes a non-blank id (the settings codec refuses blanks). *)
 
-type root_ids = {
-  root : string option;  (** the stored root ([Drive_root_folder]) *)
-  picked : string option;  (** the picked folder's id *)
-  default : string option;
-      (** the root that was in force before the current pick *)
-}
-(** The three root folder ids kept in settings (4m « Dossier Drive »). A pick is
-    in force while [picked = root]. *)
+val rename_root :
+  root -> name:folder_name -> (folder_name, error) result rooted t
+(** 4m « Renommer »: the root folder takes [name]; [Ok n] is the name Drive now
+    has (normally [name]; [name] if Drive answers a blank one).
+    - The folder to rename: [root.id = Some id] → [id], kept as is ([Keep]);
+      [root.id = None] and [root.name ≠ name] → one {!find_folder}
+      [~name:root.name ~parent:Root] (the app's folder under its current name,
+      no id stored after an account change or a reinstall): the oldest found is
+      renamed and stored ([Store id] whatever the PATCH gives, gone excepted);
+      none found → as when gone, with [Keep] on error; the lookup's error →
+      [Error e], [Keep], [None]. [root.id = None] and [root.name = name] →
+      {!folder} [~name ~parent:Root] as when gone, with [Keep] on error (no
+      PATCH).
+    - The rename: one {!update_name} classified as {!folder_info}:
+      [Usable {name = n; _}] → [{result = Ok n; name = Some n}];
+      [Folder_trashed], [Not_a_folder] or [No_access] (404, 403
+      [appNotAuthorizedToFile]) → gone; any other error (non-2xx through
+      {!error_of_answer}, [Network], [Malformed]) → [Error e], [name = None].
+    - Gone: {!folder} [~name ~parent:Root] (an app-made folder already named
+      [name] at the root is adopted, else one is created): [Ok id'] →
+      [{result = Ok name; root = Store id'; name = Some name}]; [Error e] →
+      [{result = Error e; root = Forget; name = None}] for a stored id.
 
-val equal_root_ids : root_ids -> root_ids -> bool
-
-val pick_root : root_ids -> id:string -> root_ids
-(** « Choisir » of the folder [id]: [root] and [picked] become [id]; [default]
-    is kept while a pick is in force, else it becomes the current [root] (so a
-    second pick does not lose the app's folder). *)
-
-val default_root : root_ids -> root_ids
-(** « Par défaut »: while a pick is in force, [root] goes back to [default]
-    ([None]: the next upload finds or creates « Herbier » at My Drive's root);
-    else [root] is kept. [picked] and [default] become [None]. *)
+    A failed rename never stores the new name: the old one stays shown and the
+    user retries. Errors are never wrapped in [Root_folder] (the root is this
+    request's subject, not a precondition). No {!get_folder} before the PATCH:
+    one request when the folder is there. *)
 
 val same_account : stored:string option -> string -> bool
 (** [stored = Some s] and {!Herbier_domain.Text.same_email} [s email]. [None] →
     [false]. *)
 
-type account_choice = {
-  account : string option;
-      (** [Some e] (trimmed): write [Drive_account] = [e]; [None]: the same
-          account, not written *)
-  ids : root_ids;  (** the three root keys to write *)
-}
-(** What the 4m « Dossier Drive » sheet stores, in one write. *)
-
-val equal_account_choice : account_choice -> account_choice -> bool
-
-val choose_for_account :
-  root_ids ->
-  stored:string option ->
-  account:string ->
-  folder:string option ->
-  account_choice
-(** The sheet's choice of [account] and [folder] ([None] = « Par défaut »),
-    given the stored ids and the stored account.
-    - The same account ({!same_account}): [account = None]; [folder = Some id] →
-      [ids = pick_root ids ~id], [None] → [ids = default_root ids].
-    - Another account, or none stored: [account = Some (String.trim account)],
-      and the old ids are dropped first, as they belong to the old account:
-      [folder = Some id] → [{root = Some id; picked = Some id; default = None}];
-      [None] → all three [None] (the next upload finds or creates « Herbier » in
-      the new Drive). Callers never pass a blank [account]. *)
+val account_to_store : stored:string option -> account:string -> string option
+(** The account a choice writes: [None] when {!same_account} [~stored account]
+    (nothing to write), else [Some (String.trim account)]. Callers never pass a
+    blank [account]. *)
 
 val seed_account :
   stored:string option ->
-  root_ids ->
+  root:string option ->
   session_email:string option ->
   string option
 (** The account to store once for an install that used Drive before it had its
-    own account (its tokens then named the signed-in account, so the stored
-    folder ids are that account's): no account stored, at least one of the three
-    ids set, and a non-blank [session_email] → [Some (trim email)]; anything
-    else → [None]. Storing it keeps the ids, where a first choice in the sheet
-    ({!choose_for_account} with [stored = None]) would drop them. *)
+    own account (its tokens then named the signed-in account, so the stored root
+    folder id is that account's): no account stored, [root = Some _], and a
+    non-blank [session_email] → [Some (trim email)]; anything else → [None].
+    Storing it keeps the id, where a first account choice drops it. *)
 
 type target = {
   species : string;  (** folder name, from {!species_folder} *)
@@ -393,17 +428,17 @@ type put =
 
 val equal_put : put -> put -> bool
 
-val put_original :
-  root:string option -> original -> (put, error) result rooted t
+val put_original : root:root -> original -> (put, error) result rooted t
 (** {!find_original}: an entry →
-    [{result = Ok (Already_there oldest); root = Keep}], nothing else sent. None
-    → {!resolve_root} [~stored:root] (its [Error] ends the program with its
-    [root]), then [folder ~name:o.target.species ~parent:(Folder <root id>)],
-    then {!create_original} into the species folder → [Created]. Stops at the
-    first error; an error after {!resolve_root} keeps the [root] it gave
+    [{result = Ok (Already_there oldest); root = Keep; name = None}], nothing
+    else sent. None → {!resolve_root} [root] (its [Error] ends the program with
+    its [root]), then
+    [folder ~name:o.target.species ~parent:(Folder <root id>)], then
+    {!create_original} into the species folder → [Created]. Stops at the first
+    error; an error after {!resolve_root} keeps the [root] and [name] it gave
     ([Store id] stays [Store id]). These requests in this order, nothing else:
-    never [find_folder ~name:root_folder] when the stored root is present. Two
-    runs for one account must not overlap (two first uploads of one species
+    never a {!find_folder} of the root's name when the stored root is usable.
+    Two runs for one account must not overlap (two first uploads of one species
     would create two folders). A create whose answer was lost (a timeout) is
     found by the next run's search; should Drive's search lag behind the create,
     that run uploads a second copy. *)
@@ -415,8 +450,7 @@ type start =
 
 val equal_start : start -> start -> bool
 
-val start_session :
-  root:string option -> target -> (start, error) result rooted t
+val start_session : root:root -> target -> (start, error) result rooted t
 (** As {!put_original}, ending with {!create_session} ([folder_id] the species
     folder) → 2xx → {!decode_session} of its headers → [Session url] (a non-2xx
     → {!error_of_answer}; [Unreachable m] → [Network m]). Same overlap rule: two

@@ -1,19 +1,18 @@
 (** 4m « Dossier Drive » sheet and 4m's Drive radio: chooses the Drive account
-    and the folder together (architecture §5, "Drive account"). A pure machine:
-    the screen runs the {!command}s and feeds back the {!event}s. Google Picker
-    is Google's modal overlay, so the screen is underneath it: [Browsing] means
-    the Picker is shown. Nothing is stored before a pick or « Par défaut »: the
-    account chosen lives in the phase until then.
+    and renames the app's root folder (architecture §5, "Drive account"). A pure
+    machine: the screen runs the {!command}s and feeds back the {!event}s. The
+    folder is the app's own: it is created at the first upload or by a rename.
 
     With [purpose = Turn_on] (the radio) the only store command ever emitted is
-    [Store_pick], and only from [Browsing] on [Picker_picked]; every other end
-    is [[Close]] with nothing stored. The runner sets the storage to Drive with
-    a [Turn_on] pick, never with a [Change] one. *)
+    [Store_account], and only from [Authorizing] on [Token (Ok _)]; every other
+    end is [[Close]] with nothing stored. The runner sets the storage to Drive
+    with a [Turn_on] store, never with a [Change] one. *)
 
-(** Why the machine runs: the « Dossier Drive » sheet ([Change]: change the
-    existing choice, its controls shown), or the 4m Drive radio ([Turn_on]: a
-    straight line chooser → token → Picker → store, no controls; any end other
-    than a stored pick closes with nothing stored, the storage unchanged). *)
+(** Why the machine runs: the « Dossier Drive » sheet ([Change]: the account
+    line and the folder name, with their controls), or the 4m Drive radio
+    ([Turn_on]: a straight line chooser → token → store of the account and the
+    storage, no controls; any other end closes with nothing stored, the storage
+    unchanged). *)
 type purpose = Change | Turn_on [@@deriving eq, show]
 
 (** What the sheet is doing, with the account it works with. *)
@@ -22,11 +21,12 @@ type phase =
       (** the account chooser is showing; [previous]: the sheet's account before
           it, kept when the choice is cancelled *)
   | Authorizing of string
-      (** an interactive drive.file token for that account is asked *)
-  | Browsing of string  (** Google Picker is shown for that account *)
+      (** an interactive drive.file token for that account is asked (the
+          consent) *)
   | Storing of string
-      (** a pick (checked with files.get) or « Par défaut » for that account is
-          stored *)
+      (** that account (with [Turn_on]: and the storage) is written *)
+  | Renaming of {account : string; name : string}
+      (** the root folder is renamed [name] with [account]'s token *)
   | Idle of string option
       (** nothing runs: the sheet's own controls; [None] when no account was
           chosen yet *)
@@ -35,11 +35,13 @@ type phase =
 
 type t = {
   purpose : purpose;
-  stored : string option;  (** the Drive account in settings at open *)
-  folder : Drive_text.folder;  (** the stored folder at open *)
-  picker : Drive_text.picker_config;
+  stored : string option;
+      (** the Drive account in settings: read at open, updated when a
+          [Store_account] succeeds *)
+  folder : string;
+      (** the folder name shown: read at open, updated when a rename succeeds *)
   phase : phase;
-  error : Drive_text.pick_error option;
+  error : Drive_text.sheet_error option;
       (** [Change]: shown under the sheet's controls, cleared by the next tap
           acted on. [Turn_on]: the stored account's refusal while the chooser
           runs after it, and the error the flow closed on, for the screen to
@@ -47,34 +49,29 @@ type t = {
 }
 [@@deriving eq, show]
 
-(** The printers show a Drive access token as [<token>]. *)
 type command =
   | Run_chooser
   | Ask_token of string  (** interactive, for that email *)
-  | Open_picker of {account : string; token : string}
-  | Store_pick of {account : string; folder_id : string; folder_name : string}
-      (** check the folder with files.get under [account]'s token, then
-          [Drive_root.choose ~account]; with [purpose = Turn_on], the storage
-          set to Drive in the same write *)
-  | Store_default of string  (** [Drive_root.reset ~account] *)
+  | Store_account of string
+      (** [App.store_account]; with [purpose = Turn_on], the storage set to
+          Drive in the same write *)
+  | Rename of {account : string; name : string}  (** [App.rename_folder] *)
   | Close
       (** the flow ends: [Change] → [Route.back]; [Turn_on] → the screen shows
           [error], if any *)
 [@@deriving eq, show]
 
+(** The printers show a Drive access token as [<token>]. *)
 type event =
   | Tap_other_account
-  | Tap_browse
-  | Tap_default
+  | Tap_rename of string  (** the name field's text, raw *)
   | Tap_close
   | Chosen of string
   | Choose_failed of Herbier_sync_core.Auth.Drive_account.choose_error
   | Token of (string, Drive_text.denial) result
-  | Picker_picked of {id : string; name : string}
-  | Picker_cancelled
-  | Picker_failed of Drive_text.pick_error
-      (** [Picker_unavailable] / [Offline] *)
-  | Stored of (unit, Drive_text.pick_error) result
+  | Stored of (unit, Drive_text.sheet_error) result
+  | Renamed of (string, Drive_text.sheet_error) result
+      (** [Ok n]: the name Drive now has *)
 [@@deriving eq, show]
 
 val account : t -> string option
@@ -82,26 +79,22 @@ val account : t -> string option
     [Closed] → [None]. *)
 
 val open_ :
-  purpose:purpose ->
-  stored:string option ->
-  folder:Drive_text.folder ->
-  picker:Drive_text.picker_config ->
-  t * command list
-(** [error = None] unless stated.
-    - [Turn_on] with [Picker_unconfigured] → [Closed],
-      [error = Some Picker_unavailable], [[Close]] (the radio is disabled in
-      such a build; the machine's own guard: never a chooser or a token).
-    - Else [stored = None] (or blank) → [Choosing {previous = None}],
+  purpose:purpose -> stored:string option -> folder:string -> t * command list
+(** [error = None]; [stored] trimmed, [folder] kept verbatim.
+    - [Change]: [stored = None] (or blank) → [Choosing {previous = None}],
+      [[Run_chooser]]; [Some e] → [Idle (Some (trim e))], [[]] (no token at
+      open: only a rename needs one).
+    - [Turn_on]: [stored = None] (or blank) → [Choosing {previous = None}],
       [[Run_chooser]]; [Some e] → [Authorizing (trim e)],
       [[Ask_token (trim e)]]. *)
 
 val step : t -> event -> t * command list
 (** [purpose = Change], first rule that applies; "stored" below means the same
-    address as [stored] ({!Herbier_domain.Text.same_email}). [error] is cleared
-    by every [Tap_*] acted on.
+    address as [t.stored] ({!Herbier_domain.Text.same_email}). [error] is
+    cleared by every [Tap_*] acted on.
     - [Closed], any event → unchanged, [[]].
-    - Any other phase, [Tap_close] → [Closed], [[Close]]. A store already
-      running completes; its [Stored] is then ignored.
+    - Any other phase, [Tap_close] → [Closed], [[Close]]. A store or a rename
+      already running completes; its result is then ignored.
     - [Choosing], [Chosen e] → [Authorizing (trim e)], [[Ask_token (trim e)]];
       [e] blank → [Idle previous], [error = Some Chooser_failed].
     - [Choosing {previous = None}], [Choose_failed Cancelled] → [Closed],
@@ -109,36 +102,36 @@ val step : t -> event -> t * command list
     - [Choosing {previous = Some _}], [Choose_failed Cancelled] →
       [Idle previous], [[]].
     - [Choosing], [Choose_failed No_google_account] → [Idle previous],
-      [error = Some Chooser_no_account].
-    - [Choosing], [Choose_failed Choose_failed] → [Idle previous],
-      [error = Some Chooser_failed].
-    - [Authorizing a], [Token (Ok tok)] with [Picker_ready] → [Browsing a],
-      [[Open_picker {account = a; token = tok}]]; with [Picker_unconfigured] →
-      [Idle (Some a)], [[]].
+      [error = Some Chooser_no_account]; [Choose_failed Choose_failed] →
+      [Idle previous], [error = Some Chooser_failed].
+    - [Authorizing a], [Token (Ok _)]: [a] stored → [Idle (Some a)], [[]]
+      (nothing changes); else → [Storing a], [[Store_account a]].
     - [Authorizing a], [Token (Error d)], [a] stored → [Idle (Some a)],
       [error = Some (Token d)]; [a] not stored → back to the stored account:
-      [Idle stored], [error = Some (Other_account d)] ([Some (Token d)] when
+      [Idle t.stored], [error = Some (Other_account d)] ([Some (Token d)] when
       nothing is stored).
-    - [Browsing a], [Picker_picked {id; name}] → [Storing a],
-      [[Store_pick {account = a; folder_id = id; folder_name = name}]].
-    - [Browsing a], [Picker_cancelled] → [Idle (Some a)], [[]].
-    - [Browsing a], [Picker_failed e] → [Idle (Some a)], [error = Some e].
-    - [Storing _], [Stored (Ok ())] → [Closed], [[Close]].
-    - [Storing a], [Stored (Error e)] → [Idle (Some a)], [error = Some e].
+    - [Storing a], [Stored (Ok ())] → [Idle (Some a)], [stored = Some a], [[]]
+      (the sheet stays open).
+    - [Storing _], [Stored (Error e)] → [Idle t.stored], [error = Some e].
     - [Idle a], [Tap_other_account] → [Choosing {previous = a}],
       [[Run_chooser]].
-    - [Idle (Some a)], [Tap_browse] when {!can_browse} → [Authorizing a],
-      [[Ask_token a]].
-    - [Idle (Some a)], [Tap_default] when {!can_default} → [Storing a],
-      [[Store_default a]].
+    - [Idle (Some a)], [Tap_rename s]: [s] blank → [error = Some Blank_name],
+      [[]]; else → [Renaming {account = a; name = trim s}], even when
+      [trim s = folder] (the name shown may be stale; Drive's answer brings its
+      own back), [[Rename {account = a; name = trim s}]].
+    - [Renaming {account; _}], [Renamed (Ok n)] → [Idle (Some account)],
+      [folder = n], [[]].
+    - [Renaming {account; _}], [Renamed (Error e)] → [Idle (Some account)],
+      [error = Some e] ([folder] unchanged).
     - Every other (phase, event) pair: unchanged, [[]] (a late or stray result,
-      a tap while something runs).
+      a tap while something runs, [Tap_rename] with no account).
 
-    [purpose = Turn_on], first rule that applies (every close is [[Close]]):
+    [purpose = Turn_on], first rule that applies (every close is [[Close]];
+    [t.stored] never changes):
     - [Closed], any event → unchanged, [[]].
     - Any other phase, [Tap_close] → [Closed], [error = None].
-    - [Tap_other_account], [Tap_browse], [Tap_default] → unchanged, [[]] (no
-      controls in this purpose; never a [Store_default]).
+    - [Tap_other_account], [Tap_rename _] → unchanged, [[]] (no controls in this
+      purpose; never a [Rename]).
     - [Choosing _], [Chosen e] → [Authorizing (trim e)], [[Ask_token (trim e)]];
       [e] blank → [Closed], [error = Some Chooser_failed].
     - [Choosing _], [Choose_failed Cancelled] → [Closed], [error] kept ([None],
@@ -146,18 +139,12 @@ val step : t -> event -> t * command list
     - [Choosing _], [Choose_failed No_google_account] → [Closed],
       [error = Some Chooser_no_account]; [Choose_failed Choose_failed] →
       [Closed], [error = Some Chooser_failed].
-    - [Authorizing a], [Token (Ok tok)] with [Picker_ready] → [Browsing a],
-      [[Open_picker {account = a; token = tok}]]; with [Picker_unconfigured] →
-      [Closed], [error = Some Picker_unavailable].
+    - [Authorizing a], [Token (Ok _)] → [Storing a], [[Store_account a]] (also
+      for the stored account: the storage must be written).
     - [Authorizing a], [Token (Error d)], [a] stored and [error = None] →
       [Choosing {previous = None}], [error = Some (Token d)], [[Run_chooser]]
       (the radio's only way to another account: the « Dossier Drive » sheet is
-      hidden under [App_only]); else → [Closed], [error = Some (Token d)]
-      (nothing was stored, nothing to go back to).
-    - [Browsing a], [Picker_picked {id; name}] → [Storing a],
-      [[Store_pick {account = a; folder_id = id; folder_name = name}]].
-    - [Browsing _], [Picker_cancelled] → [Closed], [error = None].
-    - [Browsing _], [Picker_failed e] → [Closed], [error = Some e].
+      hidden under [App_only]); else → [Closed], [error = Some (Token d)].
     - [Storing _], [Stored (Ok ())] → [Closed], [error = None];
       [Stored (Error e)] → [Closed], [error = Some e].
     - Every other (phase, event) pair: unchanged, [[]]. *)
@@ -169,32 +156,13 @@ val other_account_label : t -> string
 (** « Utiliser un autre compte » when {!account} is [Some _], else « Choisir un
     compte ». *)
 
-val folder_line : t -> string option
-(** Where originals go for {!account}: [None] without an account; the stored
-    account with [Picked _] → « Dossier : <{!Drive_text.folder_name}> »; the
-    stored account with [Default], or another account (whose « Herbier » a pick
-    or the next upload makes) → « Dossier : {!Drive_text.app_folder} ». *)
+val can_rename : t -> bool
+(** [purpose = Change] and [Idle (Some _)]. *)
+
+val busy : t -> bool
+(** [Choosing | Authorizing | Storing | Renaming]. *)
 
 val status_line : t -> string option
 (** What runs, while the sheet's controls are inert: [Authorizing] → « Connexion
-    à Google Drive… »; [Browsing] → « Ouverture de Google Drive… » (until
-    Google's overlay covers the sheet); [Storing] → « Enregistrement… »; else
-    [None] ([Choosing] shows the system's chooser). *)
-
-val can_browse : t -> bool
-(** [purpose = Change], [Idle (Some _)] and [Picker_ready]. *)
-
-val can_default : t -> bool
-(** [purpose = Change], [Idle (Some a)], and [a] is not the stored account or
-    [folder <> Default]: « Par défaut » is offered when it changes something. *)
-
-val busy : t -> bool
-(** [Choosing | Authorizing | Browsing | Storing]. *)
-
-val picker_note : t -> string option
-(** [purpose = Change] and [Picker_unconfigured] → « Choix du dossier
-    indisponible dans cette version : les photos vont dans « Herbier ». »; else
-    [None]. *)
-
-val picker_title : string -> string
-(** The Picker's [setTitle] for that account: « Dossier Drive · <email> ». *)
+    à Google Drive… »; [Storing] → « Enregistrement… »; [Renaming] → « Renommage
+    du dossier… »; else [None] ([Choosing] shows the system's chooser). *)

@@ -24,11 +24,10 @@ val start :
 
     A tab press replaces the current history entry, so Android back leaves the
     app from any tab instead of walking the tabs visited. [start] registers the
-    [backButton] listener that does so: back closes a Google Picker that is
-    shown, else the top {!Overlay} (the identification layer), else goes back in
-    the WebView history when it can, and exits the app otherwise. Leaving a dev
-    page reloads the page on the new fragment, since dev pages do not hand their
-    bindings to the router.
+    [backButton] listener that does so: back closes the top {!Overlay} (the
+    identification layer), else goes back in the WebView history when it can,
+    and exits the app otherwise. Leaving a dev page reloads the page on the new
+    fragment, since dev pages do not hand their bindings to the router.
 
     A route change runs through {!Transition.run} with
     [Herbier_ui_model.Motion.kind ~from ~to_ direction]: [from] is the place of

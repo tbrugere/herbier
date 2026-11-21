@@ -13,25 +13,26 @@
     write changes. The Drive radio is
     {!Herbier_ui_model.Drive_text.drive_option} (title « Google Drive », its
     detail, the chosen « <folder> · <email> » once the storage is Drive, and, in
-    a build without a Google web client id or without a Cloud project number,
-    [aria-disabled], inert, with its reason). Choosing it runs {!Drive_flow}
-    with [purpose = Turn_on]: the account chooser when no Drive account is
-    stored, then Google Picker; a pick stores account, folder and storage =
-    Drive in one write ({!App.store_pick} [~turn_on:true]); a cancel stores
+    a build without a Google web client id, [aria-disabled], inert, with its
+    reason). Choosing it runs {!Drive_flow} with [purpose = Turn_on]: the
+    account chooser when no Drive account is stored, then the account's
+    drive.file token (no folder is chosen: the app's folder is created at the
+    first upload or by a rename); a granted token stores account and storage =
+    Drive in one write ({!App.store_account} [~turn_on:true]); a cancel stores
     nothing (and shows only the stored account's refusal when that is what
     opened the chooser), an error stores nothing and leaves its
-    {!Herbier_ui_model.Drive_text.pick_error_text} under the radios; while it
+    {!Herbier_ui_model.Drive_text.sheet_error_text} under the radios; while it
     runs, a [role="status"] line under the radios
     ({!Herbier_ui_model.Drive_sheet.status_line}), the radio [aria-busy], and
     further taps on it are ignored. Leaving the screen releases a running choice
-    (a shown Picker dismissed, later results ignored; a store already running
-    completes, as a whole pick). An install whose storage is Drive with no Drive
-    account (an older install, or #dev/drive) keeps Drive checked: nothing
-    switches it; « Dossier Drive » shows « Aucun compte choisi » and its prompt,
-    and its sheet makes the first choice. Choosing « Dans Herbier seulement »
-    goes through {!App.set_storage}; choosing it while originals wait on this
-    phone ({!Herbier_ui_model.Drive_text.pending_count} of {!App.upload_queue} >
-    0) first asks, in a dialog built at the tap for that count
+    (later results ignored; a store already running completes). An install whose
+    storage is Drive with no Drive account (an older install, or #dev/drive)
+    keeps Drive checked: nothing switches it; « Dossier Drive » shows « Aucun
+    compte choisi » and its prompt, and its sheet makes the first choice.
+    Choosing « Dans Herbier seulement » goes through {!App.set_storage};
+    choosing it while originals wait on this phone
+    ({!Herbier_ui_model.Drive_text.pending_count} of {!App.upload_queue} > 0)
+    first asks, in a dialog built at the tap for that count
     ({!Herbier_ui_model.Drive_text.stop_dialog}): « Les envoyer quand même »
     (the setting only), « Ne pas les envoyer » ({!App.stop_drive_uploads}, then
     the setting only when it succeeded) or « Annuler ». A failed write leaves

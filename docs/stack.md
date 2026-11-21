@@ -238,12 +238,10 @@ blocked: nothing.
 ### Photos: Google Drive first, previews everywhere, Photos deferred
 
 - **Originals → Google Drive**, scope `drive.file`, folder
-  `Herbier/<species>/` (or a folder the user picks with Google Picker,
-  M7.61: the web Picker, `https://apis.google.com/js/api.js`, the only
-  script not bundled, loaded on « Choisir » only; it is given the OAuth
-  token and the Cloud project number, `HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER`
-  at build time, and no API key is passed (whether Google accepts that is
-  the phone check: `notes/google-picker-webview.md`)), one file per original
+  `Herbier/<species>/`, the root being the app's own folder whose name the
+  user can change in 4m and which the user moves in Drive (M7.79; Google
+  Picker removed after the phone check, `notes/google-picker-webview.md`),
+  one file per original
   with `appProperties` carrying the Herbier photo id and content hash. Deletion on the Drive side shows as
   `trashed:true` then 404 → `original_missing`. Thumbnails via
   `thumbnailLink` (`=s1600` variant, community-documented). Counts against

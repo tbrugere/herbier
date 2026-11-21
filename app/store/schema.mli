@@ -31,7 +31,11 @@ val migrations : migration list
     [Reference.Organ.all] labels) and the device-only table [ref_images] of
     {!Ref_images}. Version 4 creates the device-only table [commune_packs] of
     {!Commune_packs}. Version 5 creates the device-only table [uploads] of
-    {!Uploads}. *)
+    {!Uploads}. Version 6 keeps a picked Drive folder in force as the root, its
+    picked name becoming [drive_root_folder_name], and deletes the settings rows
+    [drive_root_folder_picked] and [drive_root_folder_default]; it reads their
+    JSON only through [json_valid]-guarded calls, so a bad value never fails it.
+*)
 
 val latest : int
 (** Version of the last migration. *)

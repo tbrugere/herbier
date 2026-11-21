@@ -3,13 +3,13 @@
     indisponible> » ({!State.account}'s [drive]) and
     {!Herbier_sync_core.Auth.Drive_consent.scope}. « Forcer le compte » stores
     the address typed in its field (default « x@example.com ») as the Drive
-    account, with no chooser ({!App.store_default}: a new address forgets the
-    root, picked and default folders); « Oublier le compte » is
-    {!App.forget_account} (the account and its folders); « Stockage Drive
-    (ancien état) » is {!App.set_storage} [Drive] alone: with « Oublier le
-    compte », the state of an older install (Drive with no Drive account), which
-    4m's radio cannot reach. Each button logs [ok …] or the error string (never
-    a token, only its length): « Autoriser Drive »
+    account, with no chooser and no token ({!App.store_account}
+    [~turn_on:false]: a new address forgets the root folder's id); « Oublier le
+    compte » is {!App.forget_account} (the account and its root folder id); «
+    Stockage Drive (ancien état) » is {!App.set_storage} [Drive] alone: with «
+    Oublier le compte », the state of an older install (Drive with no Drive
+    account), which 4m's radio cannot reach. Each button logs [ok …] or the
+    error string (never a token, only its length): « Autoriser Drive »
     ([Auth.drive_token ~interactive:true] for that account); « Jeton silencieux
     » ([~interactive:false]); « Plugin seul »
     ([Cap_google_authorization.authorize ~account:None ~interactive:false], past
@@ -25,12 +25,18 @@
     with the file id and webViewLink (each request is a « drive: … » console
     line); « Renvoyer le même » (same photo id and bytes: must log
     [Already_there]); « Vérifier » ([Photos_io.Drive.presence] of the last file
-    id); « Jeton invalide »: [put_original ~root:None] with a token source that
-    always answers ["ya29.invalid"] and a counting [drop_token]: two 401s, one
-    drop, then [Drive Unauthorized] (its root change ignored). A line « Dossier
-    racine : <id> » (« aucun » when unset or blank, « illisible : <error> » when
-    the read fails), re-read after each step; « Oublier le dossier » runs
-    [Drive_root.forget] (« forget root: ok »).
+    id); « Jeton invalide »: [put_original] with no root id and a token source
+    that always answers ["ya29.invalid"] and a counting [drop_token]: two 401s,
+    one drop, then [Drive Unauthorized] (its root change ignored). A line «
+    Dossier racine : <id> · Nom : <name> » (« aucun » when unset or blank, «
+    Herbier (par défaut) » for no name, « illisible : <error> » when a read
+    fails), re-read after each step; « Oublier le dossier » runs
+    [Drive_root.forget] (« forget root: ok »); « Renommer (jeton invalide) »
+    runs [Photos_io.Drive.rename_root] of the root id ["herbier-dev-root"] to «
+    Herbier-dev » with a token source that always answers ["ya29.invalid"] and a
+    counting [drop_token], and logs « rename: <error> drops=<n> » (expected «
+    rename: drive: unauthorized drops=1 »; nothing stored): it proves the PATCH
+    leaves the WebView and Google's CORS answers it.
 
     The health check and 5e's Drive rows: « Vérifier les originaux »
     ([Photos_io.Health.run ~force:true] on {!App.health}, then the stored

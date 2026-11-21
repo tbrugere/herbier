@@ -1,8 +1,7 @@
 (** Overlays that have no history entry of their own (the identification layer,
     6d, 4d's viewfinder taking a photo for it), closed by Android back before
-    the router walks history, with what each draws under the system bars. Google
-    Picker is not one of them: the router dismisses it first. Not thread-safe
-    (single JS thread). *)
+    the router walks history, with what each draws under the system bars. Not
+    thread-safe (single JS thread). *)
 
 type t
 

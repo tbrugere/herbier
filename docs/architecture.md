@@ -131,8 +131,9 @@ the mean of the positions. Details in `app/domain/places.mli`.
     Drive bookkeeping (`last_upload_at` and `drive_health_checked_at`,
     `Codec.timestamp` text; `drive_health_cursor`, a photo id;
     `drive_root_folder`, the Drive id of the photo root folder, non-blank
-    text; `drive_root_folder_picked`, the folder picked in 4m, compact JSON
-    `{"id","name"}`; `drive_root_folder_default`, the root a pick replaced).
+    text; `drive_root_folder_name`, that folder's name, non-blank text,
+    « Herbier » when unset; local migration 6 (M7.79) turned a picked folder
+    in force into that name and deleted the Picker's two keys).
     A value that does not parse is a decode error, not a silent default.
 - Local column types (`store/schema.ml`, migration 1): ids, lookup values
   and text are `text`; timestamps are `text` in one fixed-width UTC format with
@@ -652,11 +653,13 @@ capture / pick
   `drive_account` (never synced; in Android's backup like the root folder
   ids, as it is not a credential: Play Services holds the grant). A build
   without a Google web client id has no Drive (`Unconfigured`). The sheet
-  stores the account and the folder together, in one transaction inside
-  `Upload_queue.exclusive`, only on a pick or « Par défaut »; cancelling it
-  changes nothing. A new account forgets `drive_root_folder`,
-  `drive_root_folder_picked` and `drive_root_folder_default` (they are the
-  old Drive's); the queue keeps its waiting rows, and a resumable session
+  shows « Compte : <email> » with « Utiliser un autre compte », and the
+  folder's name (M7.79, below). Another account is stored once its
+  drive.file token is granted, in one transaction inside
+  `Upload_queue.exclusive` (`Drive_root.store_account`); cancelling changes
+  nothing. A new account forgets `drive_root_folder` (the old Drive's id)
+  and keeps `drive_root_folder_name` (the user's choice, found or created in
+  the new Drive at its first upload); the queue keeps its waiting rows, and a resumable session
   already started finishes in the Drive it began in (its URL is the
   credential). A new account also stores the time of the change
   (`drive_account_changed_at`, local): after a switch the health check's
@@ -665,52 +668,48 @@ capture / pick
   present answer still counts: the token reaches that file). A stopgap: such
   a photo deleted for good in Drive is not flagged; the clean fix is the
   account per photo (a schema change), left for later. An install that used
-  Drive before this account existed kept the folder ids of the signed-in
-  account its tokens named: at the next sign-in with no Drive account
-  stored and an id set, the session's email is stored once as the Drive
-  account (`Drive_root.seed`), so the folders are kept. A removed account or
+  Drive before this account existed kept the root folder id of the
+  signed-in account its tokens named: at the next sign-in with no Drive
+  account stored and the id set, the session's email is stored once as the
+  Drive account (`Drive_root.seed`), so the folder is kept. A removed account or
   revoked consent shows the `No_account` / `Consent_needed` texts, which
   point to « Dossier Drive ».
-- Choosing Drive storage (M7.72): the first choice happens from 4m's
+- Choosing Drive storage (M7.72, M7.79): the first choice happens from 4m's
   « Google Drive » radio, not from the sheet. It runs the sheet's machine
   with `purpose = Turn_on` (`ui_model/drive_sheet.ml`, through the runner
   `ui/screens/settings/drive_flow.ml` the sheet also uses): the account
-  chooser when no Drive account is stored, then an interactive token and
-  Google Picker, every time (an account already stored skips the chooser,
-  not the Picker: the user sees where photos go; when Drive refuses the
+  chooser when no Drive account is stored, then an interactive drive.file
+  token (consent asked while the user is choosing; when Drive refuses the
   stored account's token, e.g. the account was removed from the phone, the
   chooser opens once, since the sheet's « Utiliser un autre compte » is
-  hidden under « Dans Herbier seulement »). The pick writes
-  `storage_target = drive` in the same transaction as the account and the
-  folder (`Settings.drive_choice ~storage`, `Drive_root.choose`). A cancel
-  or an error (chooser, token, Picker, `files.get` check, write) stores
-  nothing; the radios read the stored value only, so they never left the
-  previous one: "Drive without account or folder" is not reachable from the
-  UI. An install already in that state (an upgrade from before M7.72) keeps
-  Drive checked and is not switched: « Dossier Drive » shows « Aucun compte
-  choisi » and its prompt, and its sheet makes the first choice. A build
-  without a web client id or without a Cloud project number has the radio
-  disabled with its reason (no « Herbier »-only path from the radio, the
-  user's decision); the sheet (« Utiliser un autre compte », « Parcourir mes
-  dossiers », « Par défaut ») changes an existing choice. One exception to
-  "no « Herbier »-only path": a legacy install (storage Drive, no account)
-  on a build without the Picker still makes its first choice from the
-  « Dossier Drive » sheet, and there the only folder it can choose is the
-  app's « Herbier » (« Par défaut »); the alternative is switching to « Dans
-  Herbier seulement ». The app-made « Herbier » root counts as a chosen
-  folder: an account stored with no pick (« Par défaut ») is not prompted.
-  Under the radio, once the storage is Drive with an account: « <folder> ·
-  <email> ».
+  hidden under « Dans Herbier seulement »). A granted token writes the
+  account and `storage_target = drive` in one transaction
+  (`Settings.drive_choice ~storage`, `Drive_root.store_account`). No folder
+  is chosen: the app's folder is found or created under the stored name at
+  the first upload, or by a rename in the sheet. A cancel or an error
+  (chooser, token, write) stores nothing; the radios read the stored value
+  only, so they never left the previous one: "Drive without account" is not
+  reachable from the UI. An install already in that state (an upgrade from
+  before M7.72) keeps Drive checked and is not switched: « Dossier Drive »
+  shows « Aucun compte choisi » and its prompt, and its sheet makes the
+  first choice. A build without a web client id has the radio disabled with
+  its reason; the Cloud project number gate of M7.72 is gone with the Picker
+  (M7.79). Under the radio, once the storage is Drive with an account:
+  « <folder name> · <email> ».
 - Drive layout: the root folder's id is kept in the local setting
   `drive_root_folder`. Each session start that has a file to create (the
   lookup by `appProperties` found none) checks it
-  (`files.get?fields=id,trashed`): present, it is used wherever it was moved
-  and whatever its name; trashed, 404 or 403 `appNotAuthorizedToFile` (the
-  app is off its ACL, a lasting state), it is forgotten, then « Herbier » is
-  found by name in My Drive's root (oldest wins, `trashed = false`) or
-  created, and its id stored. With nothing stored, an app-made « Herbier »
-  already at the root (an earlier install) is adopted rather than
-  duplicated. Any other error on the root folder (an unlisted 403, a
+  (`files.get?fields=id,name,mimeType,trashed`, one request): a folder, not
+  trashed, it is used wherever it was moved and whatever its name, and the
+  name Drive gave is stored as `drive_root_folder_name` when it changed (a
+  rename done in Drive's own UI shows in the sheet after the next upload);
+  trashed, not a folder, 404 or 403 `appNotAuthorizedToFile` (the app is off
+  its ACL, a lasting state), it is forgotten, then the stored name
+  (« Herbier » by default) is found in My Drive's root (oldest wins,
+  `trashed = false`) or created, and its id stored with that name, in one
+  transaction (`Drive_root.apply`). With nothing stored, an app-made folder
+  of that name already at the root (an earlier install) is adopted rather
+  than duplicated. Any other error on the root folder (an unlisted 403, a
   malformed answer) is `Root_folder`, an `Account` error: the queue stops the
   pass and keeps every photo's attempts, the id is kept. A settings read that
   fails (not a blank value) sends nothing: the start waits for the next pass
@@ -718,32 +717,32 @@ capture / pick
   folders it created, so a user's own "Herbier" folder is never taken for its
   own. A different Google account answers 404 (or 403
   `appNotAuthorizedToFile`) for the old id, so the root is found again for
-  the new account. 4m « Dossier Drive » can replace the root with a folder
-  the user picks in Google Picker (M7.61; `setAppId` with the Cloud project
-  number puts the pick in the app's `drive.file` grant, no API key): the
-  pick is checked with `files.get?fields=id,name,mimeType,trashed` (a
-  folder, not trashed, reachable with the token), then stored as
-  `drive_root_folder` (the source of truth for uploads), its name in
-  `drive_root_folder_picked` (shown while the two ids match; the name is the
-  one read at pick time, not refreshed after a rename in Drive), and the
-  root it replaced in `drive_root_folder_default` (kept across later picks).
-  The three keys are written in one transaction, which waits for the upload
-  pass running and holds off the next (`Upload_queue.exclusive`), so a pass
-  cannot store « Herbier » over it; the `files.get` check runs inside that
-  hold too. An upload whose resumable session already started finishes in
-  the folder it began in. From then on the root rules above apply
-  unchanged: a picked folder that is trashed or lost falls back to
-  « Herbier » at the root. « Par défaut » restores the saved default (the
-  app's « Herbier », wherever it was moved), or unsets the root when none was
-  saved; for a newly chosen account, it is that account's « Herbier »,
-  found or created by the next upload. The pick and « Par défaut » are in
-  the « Dossier Drive » sheet (M7.62): Google Picker has no container option
-  and no account switcher on the OAuth path (it shows the token's account;
-  the PickerBuilder reference lists only `setSize`, `setTitle` and
-  `hideTitleBar` for its layout, and the guide calls it « an inline, modal
-  window »), so it opens as Google's overlay over the sheet, titled
-  « Dossier Drive · <email> »; another account means a new token and a new
-  Picker (docs/notes/google-picker-webview.md). Species folders are still
+  the new account. The root is always the app's own folder (M7.79): 4m
+  « Dossier Drive » shows its name in a field with « Renommer », which sends
+  `files.update` (PATCH `files/<id>?fields=id,name,mimeType,trashed`, body
+  `{"name": …}`; the app created the folder, so drive.file lets it rename
+  it; a folder picked before the upgrade and kept by migration 6 is renamed
+  through the grant the Picker gave, so « Renommer » then renames that
+  user folder) with the account's interactive token, inside
+  `Upload_queue.exclusive`, and stores the name Drive answers only on
+  success (offline: nothing changes; a name Drive took but the settings
+  write lost is reported « non enregistré », the next upload learns it).
+  A blank name is refused before any request. With no id stored (another
+  account in between, a reinstall) the app's folder is first looked up at
+  My Drive's root under its current name and renamed, so no second root is
+  made. A root gone (404, 403 `appNotAuthorizedToFile`, or answered
+  trashed) or none found: a folder with the new name at My Drive's root is
+  adopted, else created, and stored. To put the folder elsewhere the user
+  moves it in Google Drive (the help line « Pour le ranger ailleurs,
+  déplacez ce dossier dans Google Drive : Herbier le suit. »): the app
+  follows it by id. Google Picker (M7.61/M7.62) was removed after the phone
+  test of 2026-11-21: inside the WebView its frame asks to sign in to a
+  Google web session the WebView does not have, and it cannot create a
+  folder; a Custom Tab round-trip, an in-app folder browser (drive.file
+  cannot list the user's folders; broader scopes are restricted) and SAF
+  were rejected (docs/notes/google-picker-webview.md). A folder picked
+  before the upgrade stays the root while it answers (local migration 6
+  keeps its picked name), else it is forgotten as above. Species folders are still
   found or created by name inside the root (no species ids cached). The health check and « Ouvrir dans Google
   Drive » go by file id and are unaffected by moves. The species folder is the
   plant's scientific name, else its display name, else « À identifier »;
@@ -1405,7 +1404,7 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
 - **Screens.** The identification screens (6b, 6c, 6f, 6g, and 6d over 6c)
   are a layer over their caller, not a route: 4d's shots live in its screen,
   and a route change releases a screen. Android back closes 6d first, then the
-  layer, as it closes a shown Google Picker (the back listener of
+  layer (the back listener of
   `ui/router.ml`); 6d makes no API request. 6b never
   blocks: « Continuer sans attendre » and ← return to Noter with the photos
   (the Noter entry, superseded 2026-11-19 by M8.75: the layer is over 4k or
@@ -1475,8 +1474,8 @@ photos of one plant: previews, at most 5 (4d in memory; 4k, 4g previews/<id>.jpg
     bills; the key is regenerated in the account and pasted again).
   - Without a key, every Identifier button (6i, 6k; 6a left Noter, M8.75) is
     disabled with one
-    line pointing to Réglages, as 4m's « Dossier Drive » row is in a build
-    without the Picker's project number, and « Identifier dès la photo » does
+    line pointing to Réglages, as 4m's « Google Drive » radio is in a build
+    without a web client id, and « Identifier dès la photo » does
     nothing. A 401 (key refused) says to check the key in Réglages.
 
   The options set aside (A, the key built into the APK; B, a Supabase Edge

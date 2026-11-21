@@ -10,7 +10,7 @@ type body =
   | Multipart of {boundary : string; prefix : string; suffix : string}
 [@@deriving eq]
 
-type request = {meth : [`GET | `POST]; url : string; body : body}
+type request = {meth : [`GET | `PATCH | `POST]; url : string; body : body}
 [@@deriving eq]
 
 let json_type = "application/json; charset=UTF-8"
@@ -131,6 +131,11 @@ let error_of_answer ~status ~body =
 
 let root_folder = "Herbier"
 let unidentified_folder = "À identifier"
+
+type folder_name = string [@@deriving eq]
+
+let folder_name = Text.non_blank
+let default_folder_name = root_folder
 
 let species_folder = function
   | None -> unidentified_folder
@@ -304,6 +309,13 @@ let decode_session headers =
       Ok url
   | Some _ | None -> Error (Malformed "location")
 
+let update_name ~file_id ~name =
+  {
+    meth = `PATCH;
+    url = api ^ "/" ^ Url.encode file_id ^ "?fields=id,name,mimeType,trashed";
+    body = Json (Yojson.Safe.to_string (`Assoc [("name", `String name)]));
+  }
+
 let get_trashed ~file_id =
   {
     meth = `GET;
@@ -445,13 +457,15 @@ let lost_access = function
   | Root_folder _ ->
       false
 
-let folder_info ~file_id =
-  bind
-    (send (get_folder ~file_id) decode_folder)
-    (function
-      | Error Not_found -> Done (Ok No_access)
-      | Error e when lost_access e -> Done (Ok No_access)
-      | r -> Done r)
+(* A folder's metadata answer; a lasting loss of the folder reads as
+   [No_access]. *)
+let classify_folder request =
+  bind (send request decode_folder) (function
+    | Error Not_found -> Done (Ok No_access)
+    | Error e when lost_access e -> Done (Ok No_access)
+    | r -> Done r)
+
+let folder_info ~file_id = classify_folder (get_folder ~file_id)
 
 type root_change = Keep | Store of string | Forget [@@deriving eq]
 
@@ -460,95 +474,107 @@ let pp_root_change ppf = function
   | Store id -> Format.fprintf ppf "store %s" id
   | Forget -> Format.pp_print_string ppf "forget"
 
-type 'a rooted = {result : 'a; root : root_change} [@@deriving eq]
-
-let with_root root t = bind t (fun result -> Done {result; root})
-
-(* Continues a rooted program with a plain one; the root learnt so far is kept
-   whatever the continuation gives. *)
-let and_then t f =
-  bind t (function
-    | {result = Error e; root} -> Done {result = Error e; root}
-    | {result = Ok x; root} -> with_root root (f x))
-
-(* [on_error]: the root change when the lookup or create fails. *)
-let at_root ~on_error =
-  bind (folder ~name:root_folder ~parent:Root) (function
-    | Ok id -> Done {result = Ok id; root = Store id}
-    | Error e -> Done {result = Error (root_error e); root = on_error})
-
-let resolve_root ~stored =
-  match stored with
-  | None -> at_root ~on_error:Keep
-  | Some id ->
-      bind (presence ~file_id:id) (function
-        | Ok Present -> Done {result = Ok id; root = Keep}
-        | Ok (Trashed | Missing) -> at_root ~on_error:Forget
-        | Error e when lost_access e -> at_root ~on_error:Forget
-        | Error e -> Done {result = Error (root_error e); root = Keep})
-
-type root_ids = {
-  root : string option;
-  picked : string option;
-  default : string option;
-}
+type 'a rooted = {result : 'a; root : root_change; name : folder_name option}
 [@@deriving eq]
 
-let pick_in_force ids =
-  match (ids.root, ids.picked) with
-  | Some root, Some picked -> String.equal root picked
-  | (Some _ | None), (Some _ | None) -> false
+type root = {id : string option; name : folder_name} [@@deriving eq]
 
-let pick_root ids ~id =
-  let default =
-    match pick_in_force ids with true -> ids.default | false -> ids.root
-  in
-  {root = Some id; picked = Some id; default}
+let name_to_store ~stored_name learnt =
+  match learnt with
+  | None -> None
+  | Some n -> (
+      match Option.map String.trim stored_name with
+      | Some s when String.equal s n -> None
+      | Some _ | None -> Some n)
 
-let default_root ids =
-  let root =
-    match pick_in_force ids with true -> ids.default | false -> ids.root
+let with_root root ~name t = bind t (fun result -> Done {result; root; name})
+
+(* Continues a rooted program with a plain one; the root and name learnt so
+   far are kept whatever the continuation gives. *)
+let and_then t f =
+  bind t (function
+    | {result = Error e; root; name} -> Done {result = Error e; root; name}
+    | {result = Ok x; root; name} -> with_root root ~name (f x))
+
+let map_result f t = bind t (fun r -> Done {r with result = f r.result})
+
+(* The folder found or created at My Drive's root under [name], stored as the
+   root; [on_error]: the root change when the lookup or create fails. *)
+let at_root ~name ~on_error =
+  bind (folder ~name ~parent:Root) (function
+    | Ok id -> Done {result = Ok id; root = Store id; name = Some name}
+    | Error e -> Done {result = Error e; root = on_error; name = None})
+
+let resolve_root ({id; name} : root) =
+  let at_root ~on_error =
+    map_result (Result.map_error root_error) (at_root ~name ~on_error)
   in
-  {root; picked = None; default = None}
+  match id with
+  | None -> at_root ~on_error:Keep
+  | Some id ->
+      bind (folder_info ~file_id:id) (function
+        | Ok (Usable {name; _}) ->
+            Done {result = Ok id; root = Keep; name = folder_name name}
+        | Ok (Folder_trashed | No_access | Not_a_folder) ->
+            at_root ~on_error:Forget
+        | Error e ->
+            Done {result = Error (root_error e); root = Keep; name = None})
+
+(* The rename's program once the folder to rename is known: [kept] is the root
+   change when the folder answers (renamed or not); gone → a folder under
+   [name] at My Drive's root, [on_gone] when that fails too. *)
+let rename_folder ~file_id ~name ~kept ~on_gone =
+  bind
+    (classify_folder (update_name ~file_id ~name))
+    (function
+      | Ok (Usable {name = answered; _}) ->
+          let n = Option.value (folder_name answered) ~default:name in
+          Done {result = Ok n; root = kept; name = Some n}
+      | Ok (Folder_trashed | Not_a_folder | No_access) ->
+          map_result
+            (Result.map (fun (_ : string) -> name))
+            (at_root ~name ~on_error:on_gone)
+      | Error e -> Done {result = Error e; root = kept; name = None})
+
+let rename_root ({id; name = current} : root) ~name =
+  match id with
+  | Some file_id -> rename_folder ~file_id ~name ~kept:Keep ~on_gone:Forget
+  | None when equal_folder_name current name ->
+      map_result
+        (Result.map (fun (_ : string) -> name))
+        (at_root ~name ~on_error:Keep)
+  | None ->
+      (* The app's folder may be there under its current name with no id
+         stored (another account in between, a reinstall): it is the one
+         renamed, not a new one. *)
+      bind
+        (send (find_folder ~name:current ~parent:Root) decode_files)
+        (function
+          | Error e -> Done {result = Error e; root = Keep; name = None}
+          | Ok (first :: _) ->
+              rename_folder ~file_id:first.id ~name ~kept:(Store first.id)
+                ~on_gone:Keep
+          | Ok [] ->
+              map_result
+                (Result.map (fun (_ : string) -> name))
+                (at_root ~name ~on_error:Keep))
 
 let same_account ~stored email =
   match stored with
   | None -> false
   | Some s -> Herbier_domain.Text.same_email s email
 
-type account_choice = {account : string option; ids : root_ids} [@@deriving eq]
-
-(* The old account's folders are not in the new Drive: the new account
-   starts from its own pick, or from nothing (« Herbier » found or created
-   there by the next upload). *)
-let choose_for_account ids ~stored ~account ~folder =
-  match (same_account ~stored account, folder) with
-  | true, Some id -> {account = None; ids = pick_root ids ~id}
-  | true, None -> {account = None; ids = default_root ids}
-  | false, Some id ->
-      {
-        account = Some (String.trim account);
-        ids = {root = Some id; picked = Some id; default = None};
-      }
-  | false, None ->
-      {
-        account = Some (String.trim account);
-        ids = {root = None; picked = None; default = None};
-      }
+let account_to_store ~stored ~account =
+  match same_account ~stored account with
+  | true -> None
+  | false -> Some (String.trim account)
 
 (* Before the Drive account existed, Drive tokens named the signed-in
-   account: the folder ids an install kept are that account's. *)
-let seed_account ~stored ids ~session_email =
-  let has_ids =
-    match ids with
-    | {root = None; picked = None; default = None} -> false
-    | {root = Some _; _} | {picked = Some _; _} | {default = Some _; _} -> true
-  in
-  match
-    (stored, has_ids, Option.bind session_email Herbier_domain.Text.non_blank)
-  with
-  | None, true, Some email -> Some email
-  | Some (_ : string), _, _ | None, false, _ | None, true, None -> None
+   account: the root folder id an install kept is that account's. *)
+let seed_account ~stored ~root ~session_email =
+  match (stored, root, Option.bind session_email Text.non_blank) with
+  | None, Some (_ : string), Some email -> Some email
+  | Some (_ : string), _, _ | None, None, _ | None, Some _, None -> None
 
 type target = {
   species : string;
@@ -570,10 +596,11 @@ let locate ~root (t : target) =
   bind
     (send (find_original ~id:t.photo_id) decode_files)
     (function
-      | Error e -> Done {result = Error e; root = Keep}
-      | Ok (first :: _) -> Done {result = Ok (Found first); root = Keep}
+      | Error e -> Done {result = Error e; root = Keep; name = None}
+      | Ok (first :: _) ->
+          Done {result = Ok (Found first); root = Keep; name = None}
       | Ok [] ->
-          and_then (resolve_root ~stored:root) (fun root_id ->
+          and_then (resolve_root root) (fun root_id ->
               let open Result_syntax in
               let+ species = folder ~name:t.species ~parent:(Folder root_id) in
               New

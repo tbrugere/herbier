@@ -20,34 +20,34 @@ val upload_timeout_ms : int
 val put_original :
   token:(unit -> (string, 'e) result Fut.t) ->
   drop_token:(string -> unit Fut.t) ->
-  root:string option ->
+  root:Api.root ->
   Api.original ->
   Brr.Blob.t ->
   (Api.put, 'e error) result Api.rooted Fut.t
-(** Runs {!Api.put_original} [~root] (the stored root folder id), the original's
-    bytes as the multipart media. Asks [token] once ([Error e] →
-    [{result = Error (Token e); root = Keep}], no request sent), then sends the
-    program's requests one after another, adding [Authorization: Bearer <token>]
-    and {!Api.content_type}. A [Multipart] body is sent as a Blob of [prefix]
-    (UTF-8 text), the media, [suffix] through
+(** Runs {!Api.put_original} [~root] (the stored root folder id and name), the
+    original's bytes as the multipart media. Asks [token] once ([Error e] →
+    [{result = Error (Token e); root = Keep; name = None}], no request sent),
+    then sends the program's requests one after another, adding
+    [Authorization: Bearer <token>] and {!Api.content_type}. A [Multipart] body
+    is sent as a Blob of [prefix] (UTF-8 text), the media, [suffix] through
     [Timed_fetch.request_blob ~timeout_ms:upload_timeout_ms]; other bodies
     through [Timed_fetch.request]. A 401: [drop_token] that token, ask [token]
-    again ([Error e] → [{result = Error (Token e); root = Keep}]: what the
-    program learnt so far is dropped), resend that same request once with the
-    new token (kept for the requests after it); a second 401 goes to the program
-    (→ [Drive Unauthorized]). A fetch [Error Timeout | Failed m] is answered to
-    the program as [Unreachable m] (["timeout"] for [Timeout]). The program's
-    [{result; root}] →
-    [{result = Result.map_error (fun x -> Drive x) result; root}]: the caller
-    stores [root] whatever [result] is. Each request is one console line «
-    drive: <METH> <URL path, no query> → <status or failure> » (never the token,
-    never the query: it holds species names). Never raises; the future always
-    resolves. *)
+    again ([Error e] → [{result = Error (Token e); root = Keep; name = None}]:
+    what the program learnt so far is dropped), resend that same request once
+    with the new token (kept for the requests after it); a second 401 goes to
+    the program (→ [Drive Unauthorized]). A fetch [Error Timeout | Failed m] is
+    answered to the program as [Unreachable m] (["timeout"] for [Timeout]). The
+    program's [{result; root; name}] →
+    [{result = Result.map_error (fun x -> Drive x) result; root; name}]: the
+    caller stores [root] and [name] whatever [result] is. Each request is one
+    console line « drive: <METH> <URL path, no query> → <status or failure> »
+    (never the token, never the query: it holds species names). Never raises;
+    the future always resolves. *)
 
 val start_session :
   token:(unit -> (string, 'e) result Fut.t) ->
   drop_token:(string -> unit Fut.t) ->
-  root:string option ->
+  root:Api.root ->
   Api.target ->
   (Api.start, 'e error) result Api.rooted Fut.t
 (** Runs {!Api.start_session} [~root] as {!put_original} runs its program (token
@@ -56,20 +56,26 @@ val start_session :
     request: never the token, the query or the session URL, which is only in the
     last answer's headers; the same [root] rules). Never raises. *)
 
+val rename_root :
+  token:(unit -> (string, 'e) result Fut.t) ->
+  drop_token:(string -> unit Fut.t) ->
+  root:Api.root ->
+  name:Api.folder_name ->
+  (Api.folder_name, 'e error) result Api.rooted Fut.t
+(** Runs {!Api.rename_root} as {!start_session} runs its program (token asked
+    once, [Error e] → [{result = Error (Token e); root = Keep; name = None}]
+    with no request; one renewal on a 401; JSON bodies through
+    [Timed_fetch.request] with the default timeout, the PATCH included; the same
+    console line per request, « drive: PATCH /drive/v3/files/<id> → <status> »,
+    never the token, the query or the body: the name is the user's). Never
+    raises. *)
+
 val presence :
   token:(unit -> (string, 'e) result Fut.t) ->
   drop_token:(string -> unit Fut.t) ->
   file_id:string ->
   (Api.presence, 'e error) result Fut.t
 (** Runs {!Api.presence} the same way as {!put_original} (one request). *)
-
-val folder_info :
-  token:(unit -> (string, 'e) result Fut.t) ->
-  drop_token:(string -> unit Fut.t) ->
-  file_id:string ->
-  (Api.folder_info, 'e error) result Fut.t
-(** Runs {!Api.folder_info} as {!presence} runs its program (token asked once,
-    one renewal on a 401, the same console line). Never raises. *)
 
 val health :
   token:(unit -> (string, 'e) result Fut.t) ->

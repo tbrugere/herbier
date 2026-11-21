@@ -459,26 +459,23 @@ let () =
       ("drive decode_session", Test_drive.decode_session_tests);
       ("drive start_session program", Test_drive.start_session_tests);
       ("drive view_url", Test_drive.view_url_tests);
+      ("drive folder_name", Test_drive.folder_name_tests);
+      ("drive update_name", Test_drive.update_name_tests);
+      ( "drive update_name (recorded fixtures)",
+        Test_drive.update_name_fixture_tests );
       ("drive resolve_root program", Test_drive_root.resolve_root_tests);
       ( "drive already there, with and without a stored root",
         Test_drive_root.already_there_tests );
       ("drive start_session ~root", Test_drive_root.start_session_root_tests);
       ("drive put_original ~root", Test_drive_root.put_original_root_tests);
-      ( "drive root folder: moved, renamed, trashed, deleted",
-        Test_drive_root.move_rename_trash_tests );
-      ( "drive picked folder as root, outside My Drive's root",
-        Test_drive_root.picked_folder_tests );
-      ("drive pick_root, default_root", Test_drive_root.root_ids_tests);
+      ("drive rename_root program", Test_drive_root.rename_root_tests);
+      ("drive name_to_store", Test_drive_root.name_to_store_tests);
+      ( "drive rename keeps uploads going into the folder (Fake_drive)",
+        Test_drive_root.rename_scenario_tests );
       ("drive same_account", Test_drive_root.same_account_tests);
-      ("drive choose_for_account", Test_drive_root.choose_for_account_tests);
+      ("drive account_to_store", Test_drive_root.account_to_store_tests);
       ("drive seed_account", Test_drive_root.seed_account_tests);
-      ( "drive seed then the same account",
-        [
-          ( "the seeded account keeps its ids",
-            `Quick,
-            Test_drive_root.seeded_then_same_account );
-        ] );
-      ( "drive resolve_root (recorded fixtures)",
+      ( "drive resolve_root / folder_info (recorded fixtures)",
         Test_drive_root.fixture_root_tests );
       ("drive pp_root_change", Test_drive_root.root_change_pp_tests);
       ("upload_queue constants", Test_upload_queue.constants_tests);

@@ -1645,92 +1645,34 @@ let settings_root_folder () =
     "an untrimmed value is trimmed on read" (Some "F1")
     (find db (Settings.get key))
 
-let drive_folder_t =
-  Alcotest.testable
-    (fun ppf (f : Settings.drive_folder) ->
-      Format.fprintf ppf "{id = %S; name = %S}" f.id f.name)
-    Settings.equal_drive_folder
-
-let settings_drive_root_folder_picked () =
+(* Settings.Drive_root_folder_name: the root folder's name, trimmed
+   on read, a blank value refused, unset = « Herbier » (decided by the
+   caller). *)
+let settings_drive_root_folder_name () =
   let db = Cli.migrated_db () in
-  let key = Settings.Drive_root_folder_picked in
+  let key = Settings.Drive_root_folder_name in
   Alcotest.(check string)
-    "named drive_root_folder_picked" "drive_root_folder_picked"
-    (Settings.name key);
-  Alcotest.(check (option drive_folder_t))
+    "named drive_root_folder_name" "drive_root_folder_name" (Settings.name key);
+  Alcotest.(check (option string))
     "never set is None" None
     (find db (Settings.get key));
-  let value : Settings.drive_folder =
-    {id = "F1"; name = "Herbe d'or \xc2\xab x \xc2\xbb"}
-  in
-  check_changes "set changes 1 row" 1 db (Settings.set key value);
-  Alcotest.(check (option drive_folder_t))
-    "get gives the value back" (Some value)
+  check_changes "set changes 1 row" 1 db (Settings.set key "Herbe d'or");
+  Alcotest.(check (option string))
+    "get gives the name back" (Some "Herbe d'or")
     (find db (Settings.get key));
   Alcotest.(check (option string))
-    "stored as compact JSON, id then name"
-    (Some (Printf.sprintf {|{"id":"F1","name":"%s"}|} value.name))
-    (stored_value db "drive_root_folder_picked");
+    "stored as the name's text" (Some "Herbe d'or")
+    (stored_value db "drive_root_folder_name");
+  check_changes "set a padded name" 1 db (Settings.set key " Plantes ");
+  Alcotest.(check (option string))
+    "a padded name is trimmed on read" (Some "Plantes")
+    (find db (Settings.get key));
   check_changes "unset changes 1 row" 1 db (Settings.unset key);
-  Alcotest.(check (option drive_folder_t))
+  Alcotest.(check (option string))
     "unset: None again" None
     (find db (Settings.get key));
-  check_changes "unset again changes nothing" 0 db (Settings.unset key);
-  Cli.exec_ok "not JSON" db
-    "insert into settings (key, value) values ('drive_root_folder_picked', \
-     'nope');\n";
-  Alcotest.(check (result (option drive_folder_t) Cli.codec_error))
-    "a stored value that is not JSON is Row WrongType" (Error (Row `WrongType))
-    (Cli.find_result db (Settings.get key));
-  Cli.exec_ok "blank id" db
-    "update settings set value = '{\"id\":\" \",\"name\":\"x\"}' where key = \
-     'drive_root_folder_picked';\n";
-  Alcotest.(check (result (option drive_folder_t) Cli.codec_error))
-    "a blank id is Row WrongType" (Error (Row `WrongType))
-    (Cli.find_result db (Settings.get key));
-  Cli.exec_ok "no name" db
-    "update settings set value = '{\"id\":\"F1\"}' where key = \
-     'drive_root_folder_picked';\n";
-  Alcotest.(check (result (option drive_folder_t) Cli.codec_error))
-    "a missing name is Row WrongType" (Error (Row `WrongType))
-    (Cli.find_result db (Settings.get key));
-  Cli.exec_ok "padded id" db
-    "update settings set value = '{\"id\":\" F1 \",\"name\":\"x\"}' where key \
-     = 'drive_root_folder_picked';\n";
-  Alcotest.(check (option drive_folder_t))
-    "an untrimmed id is trimmed on read"
-    (Some {Settings.id = "F1"; name = "x"})
-    (find db (Settings.get key));
-  let quoted : Settings.drive_folder = {id = "F2"; name = {|a "b" \ c|}} in
-  check_changes "set a name with a quote and a backslash" 1 db
-    (Settings.set key quoted);
-  Alcotest.(check (option string))
-    "stored escaped" (Some {|{"id":"F2","name":"a \"b\" \\ c"}|})
-    (stored_value db "drive_root_folder_picked");
-  Alcotest.(check (option drive_folder_t))
-    "a quote and a backslash round-trip" (Some quoted)
-    (find db (Settings.get key))
-
-let settings_drive_root_folder_default () =
-  let db = Cli.migrated_db () in
-  let key = Settings.Drive_root_folder_default in
-  Alcotest.(check string)
-    "named drive_root_folder_default" "drive_root_folder_default"
-    (Settings.name key);
-  Alcotest.(check (option string))
-    "never set is None" None
-    (find db (Settings.get key));
-  check_changes "set changes 1 row" 1 db (Settings.set key "H1");
-  Alcotest.(check (option string))
-    "get gives the id back" (Some "H1")
-    (find db (Settings.get key));
-  Alcotest.(check (option string))
-    "stored as the id's text" (Some "H1")
-    (stored_value db "drive_root_folder_default");
-  check_changes "unset changes 1 row" 1 db (Settings.unset key);
-  Cli.exec_ok "blank default row" db
-    "insert into settings (key, value) values ('drive_root_folder_default', ' \
-     ');\n";
+  Cli.exec_ok "blank name row" db
+    "insert into settings (key, value) values ('drive_root_folder_name', '   ');\n";
   Alcotest.(check (result (option string) Cli.codec_error))
     "a blank value is Row WrongType" (Error (Row `WrongType))
     (Cli.find_result db (Settings.get key))
@@ -1764,8 +1706,9 @@ let settings_drive_account () =
     (Cli.find_result db (Settings.get key))
 
 (* A switch of Drive account runs Settings.drive_choice's statements in one
-   transaction (as Drive_root.write does): the account is set, the old
-   account's three root-folder keys are forgotten, and nothing else changes:
+   transaction (as Drive_root.store_account does): the account is set, the
+   old account's root folder id is forgotten, its name kept, and nothing else
+   changes:
    not the other settings, not the device-only [uploads] table, whose waiting
    rows the queue keeps across the switch. *)
 let settings_drive_account_transaction_leaves_other_rows_alone () =
@@ -1780,14 +1723,12 @@ let settings_drive_account_transaction_leaves_other_rows_alone () =
   let uploaded_at = time "2026-10-01T00:00:00Z" in
   check_changes "seed Last_upload_at" 1 db
     (Settings.set Settings.Last_upload_at uploaded_at);
-  (* the previous account's folders, which the switch below forgets. *)
+  (* the previous account's root folder, which the switch below forgets,
+     and the folder name, which it keeps. *)
   check_changes "seed the previous account's root folder" 1 db
     (Settings.set Settings.Drive_root_folder "OLD1");
-  check_changes "seed the previous account's picked folder" 1 db
-    (Settings.set Settings.Drive_root_folder_picked
-       {Settings.id = "OLD1"; name = "Ancien"});
-  check_changes "seed the previous account's default folder" 1 db
-    (Settings.set Settings.Drive_root_folder_default "H0");
+  check_changes "seed the folder name" 1 db
+    (Settings.set Settings.Drive_root_folder_name "Plantes");
   (* an observation, one of its photos, and an upload row with a session in
      progress: the row the queue keeps waiting across the switch. *)
   let (_ : int) =
@@ -1824,14 +1765,11 @@ let settings_drive_account_transaction_leaves_other_rows_alone () =
   in
   let before = upload_row_json db in
   let module Drive = Herbier_photos.Drive in
-  let ({account; ids} : Drive.account_choice) =
-    Drive.choose_for_account
-      {Drive.root = Some "OLD1"; picked = Some "OLD1"; default = Some "H0"}
-      ~stored:(Some "old@x.fr") ~account:"new@x.fr" ~folder:None
-  in
   let switch_stmts =
-    Settings.drive_choice ~account ~at:t0 ~root:ids.root ~picked:None
-      ~default:ids.default ~storage:None
+    Settings.drive_choice
+      ~account:
+        (Drive.account_to_store ~stored:(Some "old@x.fr") ~account:"new@x.fr")
+      ~at:t0 ~storage:None
   in
   Cli.exec_ok "drive account switch, one transaction" db
     ("begin;\n"
@@ -1847,13 +1785,8 @@ let settings_drive_account_transaction_leaves_other_rows_alone () =
     "the previous account's root folder is forgotten" None
     (find db (Settings.get Settings.Drive_root_folder));
   Alcotest.(check (option string))
-    "the previous account's picked folder is forgotten" None
-    (Option.map
-       (fun (f : Settings.drive_folder) -> f.id)
-       (find db (Settings.get Settings.Drive_root_folder_picked)));
-  Alcotest.(check (option string))
-    "the previous account's default folder is forgotten" None
-    (find db (Settings.get Settings.Drive_root_folder_default));
+    "the folder name is kept across the account change" (Some "Plantes")
+    (find db (Settings.get Settings.Drive_root_folder_name));
   Alcotest.(check (option string))
     "Storage_target untouched" (Some "drive")
     (stored_value db "storage_target");
@@ -1873,44 +1806,66 @@ let settings_drive_account_transaction_leaves_other_rows_alone () =
 
 (* ---------- Settings.drive_choice ~storage ---------- *)
 
-(* The 4m Drive radio's pick: account + folder + storage = Drive in the one
-   transaction Drive_root.write runs. *)
+let run_in_transaction what db stmts =
+  Cli.exec_ok what db
+    ("begin;\n" ^ String.concat "" (List.map Cli.inline stmts) ^ "commit;\n")
+
+(* The 4m Drive radio: account + storage = Drive in the one transaction
+   Drive_root.store_account runs; the old root id forgotten, the name kept. *)
 let settings_drive_choice_storage_writes_together () =
   let db = Cli.migrated_db () in
   check_changes "seed Storage_target App_only" 1 db
     (Settings.set Settings.Storage_target Photo.Original_target.App_only);
-  let picked : Settings.drive_folder = {id = "F1"; name = "Plantes"} in
-  let stmts =
-    Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0 ~root:(Some "F1")
-      ~picked:(Some picked) ~default:None
-      ~storage:(Some Photo.Original_target.Drive)
-  in
-  Cli.exec_ok "drive_choice ~storage:(Some Drive), one transaction" db
-    ("begin;\n" ^ String.concat "" (List.map Cli.inline stmts) ^ "commit;\n");
+  check_changes "seed the root folder" 1 db
+    (Settings.set Settings.Drive_root_folder "R1");
+  check_changes "seed the folder name" 1 db
+    (Settings.set Settings.Drive_root_folder_name "Plantes");
+  run_in_transaction "drive_choice ~storage:(Some Drive), one transaction" db
+    (Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0
+       ~storage:(Some Photo.Original_target.Drive));
   Alcotest.(check (option string))
     "Drive_account is set" (Some "a@x.fr")
     (find db (Settings.get Settings.Drive_account));
+  Alcotest.(check (option Cli.ptime))
+    "Drive_account_changed_at is set" (Some t0)
+    (find db (Settings.get Settings.Drive_account_changed_at));
   Alcotest.(check (option string))
-    "Drive_root_folder is set" (Some "F1")
+    "Drive_root_folder is forgotten" None
     (find db (Settings.get Settings.Drive_root_folder));
-  Alcotest.(check (option drive_folder_t))
-    "Drive_root_folder_picked is set" (Some picked)
-    (find db (Settings.get Settings.Drive_root_folder_picked));
+  Alcotest.(check (option string))
+    "Drive_root_folder_name is kept" (Some "Plantes")
+    (find db (Settings.get Settings.Drive_root_folder_name));
   Alcotest.(check (option string))
     "Storage_target is now drive, in the same write" (Some "drive")
     (stored_value db "storage_target")
 
-(* ~storage:None: the existing transaction above already shows a previously
-   set Storage_target untouched; here the row is unset before and after. *)
+(* ~account:None (the stored account chosen again from the radio): only the
+   storage is written, the root kept. *)
+let settings_drive_choice_storage_only () =
+  let db = Cli.migrated_db () in
+  check_changes "seed the root folder" 1 db
+    (Settings.set Settings.Drive_root_folder "R1");
+  run_in_transaction "drive_choice ~account:None, one transaction" db
+    (Settings.drive_choice ~account:None ~at:t0
+       ~storage:(Some Photo.Original_target.Drive));
+  Alcotest.(check (option string))
+    "Drive_account untouched (absent)" None
+    (find db (Settings.get Settings.Drive_account));
+  Alcotest.(check (option Cli.ptime))
+    "Drive_account_changed_at untouched (absent)" None
+    (find db (Settings.get Settings.Drive_account_changed_at));
+  Alcotest.(check (option string))
+    "Drive_root_folder kept" (Some "R1")
+    (find db (Settings.get Settings.Drive_root_folder));
+  Alcotest.(check (option string))
+    "Storage_target is drive" (Some "drive")
+    (stored_value db "storage_target")
+
+(* ~storage:None: the row is unset before and after. *)
 let settings_drive_choice_storage_none_leaves_an_unset_row_unset () =
   let db = Cli.migrated_db () in
-  let stmts =
-    Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0 ~root:(Some "F1")
-      ~picked:(Some {Settings.id = "F1"; name = "Plantes"})
-      ~default:None ~storage:None
-  in
-  Cli.exec_ok "drive_choice ~storage:None, one transaction" db
-    ("begin;\n" ^ String.concat "" (List.map Cli.inline stmts) ^ "commit;\n");
+  run_in_transaction "drive_choice ~storage:None, one transaction" db
+    (Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0 ~storage:None);
   Alcotest.(check (option string))
     "Drive_account is still set (storage is simply not part of this write)"
     (Some "a@x.fr")
@@ -1919,28 +1874,31 @@ let settings_drive_choice_storage_none_leaves_an_unset_row_unset () =
     "storage_target row still absent, neither set nor unset" None
     (stored_value db "storage_target")
 
-(* Statement shape: ~storage:(Some _) adds exactly one statement, Settings.set
-   Storage_target, last. *)
-let settings_drive_choice_storage_adds_one_statement_last () =
-  let args ~storage =
-    Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0 ~root:(Some "F1")
-      ~picked:(Some {Settings.id = "F1"; name = "Plantes"})
-      ~default:None ~storage
-  in
-  let without_storage = args ~storage:None in
-  let with_storage = args ~storage:(Some Photo.Original_target.Drive) in
+(* Statement shape, by hand: account, changed_at, unset root,
+   then storage last; [None, None] is no statement. *)
+let settings_drive_choice_statements () =
+  let inline = List.map Cli.inline in
+  Alcotest.(check (list string))
+    "account then storage, in that order"
+    (inline
+       [
+         Settings.set Settings.Drive_account "a@x.fr";
+         Settings.set Settings.Drive_account_changed_at t0;
+         Settings.unset Settings.Drive_root_folder;
+         Settings.set Settings.Storage_target Photo.Original_target.Drive;
+       ])
+    (inline
+       (Settings.drive_choice ~account:(Some "a@x.fr") ~at:t0
+          ~storage:(Some Photo.Original_target.Drive)));
+  Alcotest.(check (list string))
+    "storage alone"
+    (inline [Settings.set Settings.Storage_target Photo.Original_target.Drive])
+    (inline
+       (Settings.drive_choice ~account:None ~at:t0
+          ~storage:(Some Photo.Original_target.Drive)));
   Alcotest.(check int)
-    "one statement more with ~storage:(Some _)"
-    (List.length without_storage + 1)
-    (List.length with_storage);
-  match List.rev with_storage with
-  | last :: _ ->
-      Alcotest.(check string)
-        "the last statement sets Storage_target Drive"
-        (Cli.inline
-           (Settings.set Settings.Storage_target Photo.Original_target.Drive))
-        (Cli.inline last)
-  | [] -> Alcotest.fail "drive_choice returned no statements"
+    "nothing to write: no statement" 0
+    (List.length (Settings.drive_choice ~account:None ~at:t0 ~storage:None))
 
 let settings_unset_keeps_others () =
   let db = Cli.migrated_db () in
@@ -2832,21 +2790,16 @@ let () =
              stored value is Row WrongType"
             settings_root_folder;
           case
-            "the picked-folder key round-trips {id; name} as compact JSON, id \
-             then name; invalid JSON, a blank id or a missing name is Row \
-             WrongType"
-            settings_drive_root_folder_picked;
-          case
-            "the default-folder key round-trips the id's text; a blank value \
-             is Row WrongType"
-            settings_drive_root_folder_default;
+            "the folder-name key round-trips the name, trimmed; a blank stored \
+             value is Row WrongType"
+            settings_drive_root_folder_name;
           case
             "the drive account key round-trips the email, trimmed; a blank \
              stored value is Row WrongType"
             settings_drive_account;
           case
-            "a drive account switch (account set, the three root keys \
-             set/unset) in one transaction leaves other settings and a waiting \
+            "a drive account switch (account set, the root id unset, the name \
+             kept) in one transaction leaves other settings and a waiting \
              upload row untouched"
             settings_drive_account_transaction_leaves_other_rows_alone;
           case
@@ -2867,17 +2820,21 @@ let () =
              missing id/title is Row WrongType"
             settings_plantnet_project_bad_value;
           case
-            "drive_choice ~storage:(Some Drive) writes account, folder and \
-             storage together"
+            "drive_choice ~storage:(Some Drive) writes account and storage \
+             together, forgets the root id, keeps the name"
             settings_drive_choice_storage_writes_together;
           case
             "drive_choice ~storage:None leaves an unset storage_target row \
              unset"
             settings_drive_choice_storage_none_leaves_an_unset_row_unset;
           case
-            "~storage:(Some _) adds exactly one statement, Settings.set \
-             Storage_target, last"
-            settings_drive_choice_storage_adds_one_statement_last;
+            "drive_choice ~account:None ~storage:(Some Drive) writes the \
+             storage alone, the root kept"
+            settings_drive_choice_storage_only;
+          case
+            "drive_choice's statements: account, time, unset root, storage \
+             last; none for None, None"
+            settings_drive_choice_statements;
         ] );
       ( "Search.match_expression",
         [

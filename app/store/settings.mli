@@ -1,12 +1,6 @@
 (** The local [settings(key, value)] table (architecture §3): typed keys, values
     stored as text. Not synced. *)
 
-type drive_folder = {id : string; name : string}
-(** A Drive folder the user picked (4m « Dossier Drive »): its id and the name
-    Drive gave when it was picked. *)
-
-val equal_drive_folder : drive_folder -> drive_folder -> bool
-
 type flora = {id : string; title : string}
 (** A Pl@ntNet flora as the list gave it: its id and French title. It mirrors
     [Herbier_identify.Plantnet.project], as store does not depend on identify.
@@ -38,32 +32,25 @@ type _ key =
           skipped, Health.report.reached); stored as the id's text; unset = the
           next round starts from the first photo. *)
   | Drive_root_folder : string key
-      (** The Drive id of the root folder originals go into: either « Herbier »,
-          found or created by the app ([Herbier_photos.Drive.resolve_root]), or
-          the folder picked in 4m ({!Drive_root_folder_picked}); stored as the
-          id's text, trimmed on read, a blank value refused ([Row `WrongType],
-          read as unset); unset = find or create « Herbier » in My Drive's root
-          at the next upload. *)
-  | Drive_root_folder_picked : drive_folder key
-      (** 4m « Dossier Drive »: the folder last picked with « Choisir ». Stored
-          as compact JSON [{"id","name"}]. It is the root only while its [id]
-          equals {!Drive_root_folder}'s value: an upload that replaced the root
-          (picked folder trashed or gone) makes it stale without writing it. The
-          [id] is trimmed on read; invalid JSON, a blank [id] or a missing
-          [name] → [Row `WrongType] (read as unset). *)
-  | Drive_root_folder_default : string key
-      (** The {!Drive_root_folder} value that was in force before the current
-          pick (the app's « Herbier », wherever the user moved it), restored by
-          4m « Par défaut »; as {!Drive_root_folder}'s text; unset = none (« Par
-          défaut » then finds or creates « Herbier » at My Drive's root). *)
+      (** The Drive id of the root folder originals go into, found or created by
+          the app under {!Drive_root_folder_name}
+          ([Herbier_photos.Drive.resolve_root]), followed by id wherever the
+          user moves it; stored as the id's text, trimmed on read, a blank value
+          refused ([Row `WrongType], read as unset); unset = find or create the
+          folder by name in My Drive's root at the next upload. *)
+  | Drive_root_folder_name : string key
+      (** 4m « Dossier Drive »: the name of the app's root folder, as last
+          renamed in the app or read from Drive. Trimmed on read, a blank value
+          refused ([Row `WrongType], read as unset). Unset = « Herbier ». Local
+          only. Kept across a change of account. *)
   | Drive_account : string key
       (** 4m « Dossier Drive »: the email of the Google account Drive tokens are
           asked for. Trimmed on read; a blank value is refused
           ([Row `WrongType], read as unset). Unset = none chosen. Local only,
-          never synced. Written with the root folder keys, in one transaction
+          never synced. Written with the root folder id, in one transaction
           ({!drive_choice}, [Drive_root.forget_account]), or alone by
-          [Drive_root.seed], which keeps the ids it finds (they are that
-          account's). *)
+          [Drive_root.seed], which keeps the id it finds (it is that account's).
+      *)
   | Drive_account_changed_at : Ptime.t key
       (** When a choice in 4m « Dossier Drive » last stored a new
           {!Drive_account} (written with it by {!drive_choice}); as
@@ -86,8 +73,7 @@ val name : _ key -> string
     ["place_source_ign_offline"], ["place_source_ign_online"],
     ["place_source_photon_online"], ["location_notice_seen"],
     ["drive_health_checked_at"], ["last_upload_at"], ["drive_health_cursor"],
-    ["drive_root_folder"], ["drive_root_folder_picked"],
-    ["drive_root_folder_default"], ["drive_account"],
+    ["drive_root_folder"], ["drive_root_folder_name"], ["drive_account"],
     ["drive_account_changed_at"], ["identify_on_photo"], ["plantnet_project"].
 *)
 
@@ -109,16 +95,11 @@ val unset : _ key -> Stmt.t
 val drive_choice :
   account:string option ->
   at:Ptime.t ->
-  root:string option ->
-  picked:drive_folder option ->
-  default:string option ->
   storage:Herbier_domain.Photo.Original_target.t option ->
   Stmt.t list
-(** One 4m « Dossier Drive » choice, to run in one transaction:
-    [account = Some e] → {!set} [Drive_account e] and
-    [Drive_account_changed_at at] first ([None]: neither is written); then
-    {!Drive_root_folder}, {!Drive_root_folder_picked} and
-    {!Drive_root_folder_default}, each {!set} when [Some], {!unset} when [None];
-    then, when [storage = Some s], {!set} [Storage_target s] last ([None]: the
-    storage row is not touched). The 4m Drive radio passes [Some Drive] with a
-    pick: account, folder and storage in one write. *)
+(** One Drive account choice (4m « Dossier Drive » or the Drive radio), to run
+    in one transaction: [account = Some e] → {!set} [Drive_account e],
+    [Drive_account_changed_at at], then {!unset} [Drive_root_folder] (the old
+    Drive's id; {!Drive_root_folder_name} is kept); [None]: none of the three is
+    touched. Then, when [storage = Some s], {!set} [Storage_target s] last.
+    [None, None] → [[]]. *)

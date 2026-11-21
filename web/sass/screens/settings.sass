@@ -96,7 +96,7 @@
   .radio-row--on &
     border: 7px solid var(--moss)
 
-// 4m's Drive radio in a build without Drive or without the Picker: inert,
+// 4m's Drive radio in a build without Drive: inert,
 // its dot and title faded; the reason line stays readable.
 .radio-row--disabled
   cursor: default
@@ -281,8 +281,8 @@
   padding: 10px 16px
 
 // The « Dossier Drive » sheet (app/ui/screens/settings/drive_sheet.ml): the
-// account in a sand card with its link, then the folder actions. Google
-// Picker opens over it (its own overlay).
+// account in a sand card with its link, then the folder name with « Renommer »
+// and the help line.
 .drive-sheet
   min-height: 100%
   background: var(--paper)
@@ -308,22 +308,24 @@
   +base.ui(15px, 700)
   overflow-wrap: anywhere
 
-.drive-sheet__folder, .drive-sheet__detail, .drive-sheet__note,
-.drive-sheet__status
-  margin: 0
-  padding: 0 4px
-
-.drive-sheet__default
+.drive-sheet__name
   display: flex
   flex-direction: column
   gap: 6px
+
+.drive-sheet__label
+  padding: 0 4px
+
+.drive-sheet__help, .drive-sheet__status
+  margin: 0
+  padding: 0 4px
 
 .drive-sheet__error
   margin: 0
   padding: 0 4px
   color: var(--danger)
 
-.drive-sheet .button[aria-disabled]
+.drive-sheet .button[aria-disabled], .drive-sheet .text-field__action[aria-disabled]
   opacity: .5
   pointer-events: none
 

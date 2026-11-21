@@ -274,6 +274,39 @@ let v5 =
 )|};
   ]
 
+(* Migration 6: the folder is no longer picked. A picked folder in force (its
+   id equal to drive_root_folder's) stays the root, its picked name becoming
+   drive_root_folder_name; drive_root_folder_picked and
+   drive_root_folder_default are deleted. drive_root_folder itself is not
+   touched: the next upload keeps it while it answers, else forgets it.
+   The picked value is read through guarded JSON calls only (iif short-circuits
+   like CASE), as migration 2 reads aliases: an invalid value must not fail the
+   migration. Trimming takes the characters String.trim takes, so the name
+   decodes as the settings codec reads it. The where clause keeps SQLite from
+   parsing the upsert's "on conflict" as a join constraint. *)
+let v6 =
+  let ws = "' ' || char(9) || char(10) || char(12) || char(13)" in
+  let field f =
+    Printf.sprintf
+      "iif(json_valid(value), iif(json_type(value, '$.%s') = 'text', \
+       json_extract(value, '$.%s'), null), null)"
+      f f
+  in
+  [
+    Printf.sprintf
+      {|insert into settings (key, value)
+select 'drive_root_folder_name', trim(p.name, %s)
+from (select %s as id, %s as name
+  from settings where key = 'drive_root_folder_picked') p
+join settings r on r.key = 'drive_root_folder'
+where trim(p.id, %s) <> '' and trim(p.id, %s) = trim(r.value, %s)
+  and trim(p.name, %s) <> ''
+on conflict (key) do nothing|}
+      ws (field "id") (field "name") ws ws ws ws;
+    {|delete from settings
+where key in ('drive_root_folder_picked', 'drive_root_folder_default')|};
+  ]
+
 let migrations =
   [
     {version = 1; statements = v1};
@@ -281,6 +314,7 @@ let migrations =
     {version = 3; statements = v3};
     {version = 4; statements = v4};
     {version = 5; statements = v5};
+    {version = 6; statements = v6};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

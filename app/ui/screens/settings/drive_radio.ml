@@ -12,8 +12,7 @@ let v app ~storage ~(set_error : ?step:React.step -> string option -> unit) =
   let option =
     React.S.l2 ~eq:Drive_text.equal_drive_option
       (fun (a : State.account) folder ->
-        Drive_text.drive_option ~drive:a.drive ~picker:App.picker_config
-          ~storage:a.storage folder)
+        Drive_text.drive_option ~drive:a.drive ~storage:a.storage folder)
       (State.account state) (App.drive_folder app)
   in
   (* style: the running flow, a handle kept between the tap and its close,
@@ -24,7 +23,7 @@ let v app ~storage ~(set_error : ?step:React.step -> string option -> unit) =
     running := None;
     let step = React.Step.create () in
     set_flow ~step None;
-    set_error ~step (Option.map Drive_text.pick_error_text m.error);
+    set_error ~step (Option.map Drive_text.sheet_error_text m.error);
     React.Step.execute step
   in
   let start () =

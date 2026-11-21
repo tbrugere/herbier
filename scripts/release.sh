@@ -21,7 +21,6 @@ esac
 release_env_load "$root"
 ok=0
 release_env_check_backend || ok=1
-release_env_check_picker || ok=1
 release_env_check_signing "$mode" "$root" || ok=1
 [ "$ok" = 0 ] || exit 1
 

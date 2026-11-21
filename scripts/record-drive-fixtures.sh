@@ -14,7 +14,8 @@
 # edited. Two groups:
 #
 # - no token needed (always recorded): a 403 without Authorization, the 401s
-#   of an invalid token, and the 404 of an unknown resumable session;
+#   of an invalid token (the rename's PATCH included), and the 404 of an
+#   unknown resumable session;
 # - a drive.file access token in HERBIER_DRIVE_TOKEN (from the OAuth 2.0
 #   Playground with the …/auth/drive.file scope; never committed, never
 #   printed): the success answers, made in a throwaway root folder
@@ -23,7 +24,9 @@
 #   root folder's files.get present, after a move and rename, and trashed
 #   (drive_files_get_folder_{present,moved,trashed}_200.json), and the
 #   metadata Drive.get_folder reads of a folder, a trashed folder, a file and
-#   an unknown id (drive_files_get_folder_meta_*.json). The resumable
+#   an unknown id (drive_files_get_folder_meta_*.json), and files.update of
+#   the root's name on a folder, a trashed folder and an unknown id
+#   (drive_files_update_name_*.json). The resumable
 #   session's headers are recorded too, filtered: the status line,
 #   content-type and location, whose upload_id (a credential while the
 #   session lives) is replaced by a fixed placeholder. Skipped, with a
@@ -133,6 +136,8 @@ multipart() {
 get_trashed_url() { echo "$api/$1?fields=id,trashed"; }
 # Drive.get_folder's URL (id, name, mimeType, trashed).
 get_folder_meta_url() { echo "$api/$1?fields=id,name,mimeType,trashed"; }
+# Drive.update_name's URL (files.update of the root's name, same fields).
+update_name_url() { echo "$api/$1?fields=id,name,mimeType,trashed"; }
 create_original_url="$upload_api?uploadType=multipart&fields=id,webViewLink"
 create_session_url="$upload_api?uploadType=resumable&fields=id,webViewLink"
 unknown_session_url="$upload_api?uploadType=resumable&upload_id=herbier-fixture-unknown"
@@ -150,6 +155,11 @@ keep invalid_get drive_files_get_invalid_token_401.json
 call invalid_folder_meta 401 GET "$(get_folder_meta_url abc)" \
   -H 'Authorization: Bearer ya29.invalid'
 keep invalid_folder_meta drive_files_get_folder_meta_invalid_token_401.json
+call invalid_update 401 PATCH "$(update_name_url abc)" \
+  -H 'Authorization: Bearer ya29.invalid' \
+  -H 'Content-Type: application/json; charset=UTF-8' \
+  -d '{"name":"Herbier-fixtures"}'
+keep invalid_update drive_files_update_name_invalid_token_401.json
 multipart root
 call invalid_create 401 POST "$create_original_url" \
   -H 'Authorization: Bearer ya29.invalid' \
@@ -191,12 +201,13 @@ keep folder_created drive_files_create_folder_200.json
 call folder_found 200 GET "$find_fixture_folder_url" "${auth[@]}"
 keep folder_found drive_files_list_folder_found_200.json
 
-# 4b. A root folder checked by id (Drive.resolve_root): present, then moved
-# into another folder and renamed, then trashed (the PATCHes are not
-# recorded). The moved answer has the same id,trashed shape as present on
-# purpose: the app asks only for id,trashed, so a move or rename must not
-# change what it sees. Both folders live inside Herbier-fixtures, trashed
-# with it.
+# 4b. A root folder checked by id: present, renamed by the app
+# (Drive.rename_root's files.update), then moved into another folder, then
+# trashed and renamed again. The move and trash PATCHes are not recorded; the
+# two files.update of the name (live and trashed) are. The id,trashed answers keep the health check's shape; the app's
+# root check (Drive.resolve_root) reads id,name,mimeType,trashed, so it
+# learns a name changed in Drive. Both folders live inside Herbier-fixtures,
+# trashed with it.
 call root_created 200 POST "$api?fields=id" "${auth[@]}" "${json[@]}" \
   -d "$(jq -cn --arg parent "$folder_id" '{name: "Herbier-fixtures-root",
     mimeType: "application/vnd.google-apps.folder", parents: [$parent]}')"
@@ -207,6 +218,9 @@ call other_created 200 POST "$api?fields=id" "${auth[@]}" "${json[@]}" \
 other_id="$(jq -r .id "$tmp/other_created")"
 call root_present 200 GET "$(get_trashed_url "$root_id")" "${auth[@]}"
 keep root_present drive_files_get_folder_present_200.json
+call root_renamed 200 PATCH "$(update_name_url "$root_id")" "${auth[@]}" \
+  "${json[@]}" -d '{"name":"Herbier-fixtures-renamed"}'
+keep root_renamed drive_files_update_name_200.json
 call root_move 200 PATCH \
   "$api/$root_id?addParents=$other_id&removeParents=$folder_id&fields=id" \
   "${auth[@]}" "${json[@]}" -d '{"name":"Herbier-fixtures-renamed"}'
@@ -218,6 +232,9 @@ call root_trash 200 PATCH "$api/$root_id?fields=id" "${auth[@]}" "${json[@]}" \
   -d '{"trashed":true}'
 call root_trashed 200 GET "$(get_trashed_url "$root_id")" "${auth[@]}"
 keep root_trashed drive_files_get_folder_trashed_200.json
+call root_renamed_trashed 200 PATCH "$(update_name_url "$root_id")" \
+  "${auth[@]}" "${json[@]}" -d '{"name":"Herbier-fixtures-renamed"}'
+keep root_renamed_trashed drive_files_update_name_trashed_200.json
 call root_meta_trashed 200 GET "$(get_folder_meta_url "$root_id")" "${auth[@]}"
 keep root_meta_trashed drive_files_get_folder_meta_trashed_200.json
 
@@ -263,6 +280,10 @@ keep unknown drive_files_get_unknown_404.json
 call meta_unknown 404 GET \
   "$(get_folder_meta_url 0000000000000000000000000000000)" "${auth[@]}"
 keep meta_unknown drive_files_get_folder_meta_unknown_404.json
+call update_unknown 404 PATCH \
+  "$(update_name_url 0000000000000000000000000000000)" "${auth[@]}" \
+  "${json[@]}" -d '{"name":"Herbier-fixtures"}'
+keep update_unknown drive_files_update_name_unknown_404.json
 
 # 8. A token without Drive scope (optional).
 if [ -n "${HERBIER_GOOGLE_NO_DRIVE_TOKEN:-}" ]; then

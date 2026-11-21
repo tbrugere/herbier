@@ -170,8 +170,8 @@ let drive_prompt ~(storage : Photo.Original_target.t) ~pending access =
       Some
         {
           text =
-            "Les photos attendent sur le téléphone : choisissez le compte et \
-             le dossier dans « Dossier Drive ».";
+            "Les photos attendent sur le téléphone : choisissez le compte dans \
+             « Dossier Drive ».";
           action = None;
         }
   | ( (Drive | App_only),
@@ -196,46 +196,19 @@ type card = {title : string; detail : string} [@@deriving eq]
 
 let kept = "Copies compressées gardées sur le téléphone."
 
-type folder = Default | Picked of string [@@deriving eq, show]
-
-let folder ~root ~(picked : Herbier_store.Settings.drive_folder option) =
-  match (root, picked) with
-  | Some root, Some p when String.equal root p.id -> Picked p.name
-  | (Some _ | None), (Some _ | None) -> Default
-
-let folder_name = function
-  | Default -> "Herbier"
-  | Picked n -> (
-      match Herbier_domain.Text.non_blank n with
-      | Some _ -> n
-      | None -> "(sans nom)")
-
-type picker_config = Picker_unconfigured | Picker_ready [@@deriving eq, show]
-
-let picker_config_of_project_number number =
-  match
-    String.length number > 0
-    && String.for_all (function '0' .. '9' -> true | _ -> false) number
-  with
-  | true -> Picker_ready
-  | false -> Picker_unconfigured
-
-let app_folder = "Herbier · créé par l’app"
+let folder_help =
+  "Pour le ranger ailleurs, déplacez ce dossier dans Google Drive : Herbier le \
+   suit."
 
 type choose = Enabled | Disabled of string [@@deriving eq]
 type folder_button = {detail : string; choose : choose} [@@deriving eq]
 
 let no_drive_build = "Envoi vers Drive indisponible dans cette version."
-
-let chosen_line folder email =
-  let where =
-    match folder with Default -> app_folder | Picked _ -> folder_name folder
-  in
-  where ^ " · " ^ email
+let chosen_line folder email = folder ^ " · " ^ email
 
 let folder_button ~(drive : Drive_account.t) folder =
   match drive with
-  | Unconfigured -> {detail = "Herbier"; choose = Disabled no_drive_build}
+  | Unconfigured -> {detail = folder; choose = Disabled no_drive_build}
   | Unchosen -> {detail = "Aucun compte choisi"; choose = Enabled}
   | Chosen {email} -> {detail = chosen_line folder email; choose = Enabled}
 
@@ -247,8 +220,8 @@ type drive_option = {
 }
 [@@deriving eq]
 
-let drive_option ~(drive : Drive_account.t) ~picker
-    ~(storage : Photo.Original_target.t) folder =
+let drive_option ~(drive : Drive_account.t) ~(storage : Photo.Original_target.t)
+    folder =
   let chosen =
     match (storage, drive) with
     | Drive, Chosen {email} -> Some (chosen_line folder email)
@@ -257,12 +230,9 @@ let drive_option ~(drive : Drive_account.t) ~picker
         None
   in
   let choose =
-    match (drive, picker) with
-    | Unconfigured, (Picker_ready | Picker_unconfigured) ->
-        Disabled no_drive_build
-    | (Unchosen | Chosen _), Picker_unconfigured ->
-        Disabled "Choix du dossier indisponible dans cette version."
-    | (Unchosen | Chosen _), Picker_ready -> Enabled
+    match drive with
+    | Unconfigured -> Disabled no_drive_build
+    | Unchosen | Chosen _ -> Enabled
   in
   {
     title = "Google Drive";
@@ -280,24 +250,18 @@ let drive_option_starts ~(storage : Photo.Original_target.t) ~running
   | Drive, (Enabled | Disabled (_ : string)), (true | false) ->
       false
 
-type pick_error =
-  | Not_a_folder
-  | Trashed
-  | No_access
+type sheet_error =
   | Offline
   | Token of denial
-  | Picker_unavailable
   | Not_saved
   | Drive_failed
   | Chooser_no_account
   | Chooser_failed
   | Other_account of denial
+  | Blank_name
 [@@deriving eq, show]
 
-let pick_error_text = function
-  | Not_a_folder -> "Ce n’est pas un dossier."
-  | Trashed -> "Ce dossier est dans la corbeille."
-  | No_access -> "Herbier n’a pas accès à ce dossier."
+let sheet_error_text = function
   | Offline -> "Pas de réseau : réessayez plus tard."
   | Token No_account ->
       "Ce compte Google n’est plus sur le téléphone : utilisez un autre compte."
@@ -308,7 +272,6 @@ let pick_error_text = function
        autre compte."
   | Token ((Unconfigured | No_drive_account | Offline | Misconfigured) as d) ->
       Option.value (blocker (Denied d) ~online:true) ~default:not_authorized
-  | Picker_unavailable -> "Google Picker n’a pas pu s’ouvrir."
   | Not_saved -> Settings_text.not_saved
   | Drive_failed -> "Drive n’a pas répondu : réessayez."
   | Chooser_no_account ->
@@ -321,6 +284,7 @@ let pick_error_text = function
   | Other_account
       (Unconfigured | No_drive_account | Misconfigured | No_account | Failed) ->
       "L’autre compte n’a pas pu être utilisé : rien n’a changé."
+  | Blank_name -> "Le nom du dossier ne peut pas être vide."
 
 let has_drive_photo (photos : Photo.t list) =
   List.exists
@@ -384,7 +348,7 @@ let observation_card ~folder access ~online ~wifi_only ~queued
           title =
             Fr_text.plural n "photo" "photos"
             ^ " → Google Drive, dossier "
-            ^ folder_name folder;
+            ^ folder;
           detail;
         }
 

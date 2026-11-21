@@ -1,5 +1,43 @@
 # Google Picker in the Capacitor WebView (M7.61 spike)
 
+Status: **removed in M7.79** (2026-11-21). The sections after « Phone check
+and decision » are the M7.61 spike and M7.62's layout, kept as history: the
+code they name (`bindings/google_picker.ml`, `#dev/picker`,
+`HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER`) no longer exists.
+
+## Phone check (2026-11-21) and decision
+
+On the user's phone, with a real account and its drive.file token, the
+Picker opened inside the Capacitor WebView shows « Connectez-vous à votre
+compte Google » in its frame, despite the token: the `docs.google.com`
+iframe needs a Google web session cookie, which the WebView does not have
+(the token is not a session). Its « Connexion » button opens the system
+browser, where the Picker is a desktop page not adapted to a phone, and the
+result does not come back to the app. The Picker cannot create a folder
+either, so it could only ever point at an existing one.
+
+Decision (the user, 2026-11-21, plan M7.79): the Picker is removed. The Drive
+root is always the app's own folder, « Herbier » by default, whose name the
+user edits in 4m « Dossier Drive » (« Renommer », through `files.update`: the
+app created the folder, so drive.file lets it rename it). To put it
+elsewhere, the user moves it in Google Drive; the app follows the root by id
+(M7.60). A folder picked before the upgrade stays the root while it answers
+(the earlier grant still lets the app write into it), its picked name
+becoming the stored name; once it no longer answers, it is forgotten and a
+folder is created under that name.
+
+Rejected alternatives:
+
+- a Custom Tab round-trip to a hosted Picker page: the Picker's UI is not
+  made for a phone, and it needs a redirect page hosted somewhere to bring
+  the pick back: a hack;
+- an in-app folder browser: drive.file sees only the files the app created
+  (or the user opened with it), so it cannot list the user's folders; the
+  `drive` and `drive.readonly` scopes that could are restricted scopes,
+  which need a paid third-party security assessment;
+- Android's Storage Access Framework: the Drive app does not offer folder
+  trees (`ACTION_OPEN_DOCUMENT_TREE`) to other apps.
+
 Run 2026-11-16 on the shared emulator (AVD `herbier`, API 35 Google APIs
 image, Android System WebView 124.0.6367.219, user agent with `; wv`), dev
 build, page `#dev/picker` (`app/ui/dev/picker_check.ml`), origin

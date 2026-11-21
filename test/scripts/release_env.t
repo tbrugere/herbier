@@ -394,30 +394,11 @@ before building, rc=1.
   release.sh: HERBIER_SUPABASE_URL is not set (in .env.prod or the environment)
   release.sh: HERBIER_SUPABASE_PUBLISHABLE_KEY is not set (in .env.prod or the environment)
   release.sh: HERBIER_GOOGLE_WEB_CLIENT_ID is not set (in .env.prod or the environment)
-  release.sh: Drive folder picker disabled (HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER unset)
   release.sh: HERBIER_RELEASE_KEYSTORE is not set (in .env.prod or the environment)
   release.sh: HERBIER_RELEASE_KEYSTORE_PASSWORD is not set (in .env.prod or the environment)
   release.sh: HERBIER_RELEASE_KEY_ALIAS is not set (in .env.prod or the environment)
   release.sh: HERBIER_RELEASE_KEY_PASSWORD is not set (in .env.prod or the environment)
   [1]
-
-17g. `release_env_check_picker`: the Cloud project number is optional
-(unset: one line, rc=0), digits pass silently, a placeholder or a non-digit
-value is refused, rc=1.
-
-  $ for v in "" 123456789012 "<number>" 12a4; do
-  > env -i HOME="$PWD" PATH="$PATH" HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER="$v" bash -c '
-  > . "$0"
-  > release_env_check_picker; echo "rc=$?"
-  > ' "$SCRIPT"
-  > done
-  release.sh: Drive folder picker disabled (HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER unset)
-  rc=0
-  rc=0
-  release.sh: HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER still has a <placeholder> from .env.prod.example
-  rc=1
-  release.sh: HERBIER_GOOGLE_CLOUD_PROJECT_NUMBER must be digits only
-  rc=1
 
 18. Secret hygiene: the cases logged to secrets.log above used passwords
 containing "SECRET"; none of their combined stdout+stderr does.

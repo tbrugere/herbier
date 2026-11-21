@@ -16,7 +16,7 @@ let fixture name = Fixture.read ("drive_" ^ name ^ ".json")
 
 let pp_request ppf (r : Drive.request) =
   Format.fprintf ppf "%s %s"
-    (match r.meth with `GET -> "GET" | `POST -> "POST")
+    (match r.meth with `GET -> "GET" | `POST -> "POST" | `PATCH -> "PATCH")
     r.url
 
 let request_t = Alcotest.testable pp_request Drive.equal_request

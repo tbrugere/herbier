@@ -7,31 +7,43 @@ let cls = Html.cls
 
 let v app =
   let flow = Drive_flow.create app ~purpose:Change in
+  let opened = Drive_flow.state flow in
   (* style: a local primitive signal for the machine, set from the flow's
      callbacks (futures and click handlers, outside update steps). *)
-  let machine, set_machine =
-    React.S.create ~eq:Machine.equal (Drive_flow.state flow)
+  let machine, set_machine = React.S.create ~eq:Machine.equal opened in
+  let field =
+    W.Text_field.v ~action:"Renommer"
+      ~action_enabled:(React.S.map ~eq:Bool.equal Machine.can_rename machine)
+      ~label:"Nom du dossier" ~enterkeyhint:"done" ~value:opened.folder
+      ~placeholder:(Herbier_photos.Drive.default_folder_name :> string)
+      ()
   in
-  Drive_flow.run flow
-    ~on_change:(fun m -> set_machine m)
-    ~on_close:(fun (_ : Machine.t) -> Route.back ());
+  (* A rename done: the field shows the name Drive now has. *)
+  let on_change (m : Machine.t) =
+    let before = React.S.value machine in
+    set_machine m;
+    match String.equal before.folder m.folder with
+    | true -> ()
+    | false -> field.set m.folder
+  in
+  Drive_flow.run flow ~on_change ~on_close:(fun (_ : Machine.t) ->
+      Route.back ());
   let feed = Drive_flow.feed flow in
   let back = W.Icon_button.el ~label:"Retour" W.Icon.Arrow_back in
   let back_click, back_b = Rb.click back in
   let account_el = El.span ~at:[cls "drive-sheet__account"] [] in
   let other = W.Button.text "" in
-  let folder_el = El.p ~at:[cls "t-meta"; cls "drive-sheet__folder"] [] in
-  let browse = W.Button.v ~kind:Secondary "Parcourir mes dossiers" in
-  let default = W.Button.v ~kind:Secondary "Par défaut" in
-  let default_detail =
+  let name_label =
+    El.span
+      ~at:[cls "t-meta"; cls "drive-sheet__label"]
+      [El.txt' "Nom du dossier"]
+  in
+  let name_el = El.div ~at:[cls "drive-sheet__name"] [name_label; field.el] in
+  let help_el =
     El.p
-      ~at:[cls "t-meta"; cls "drive-sheet__detail"]
-      [El.txt' "Dossier « Herbier » créé par l’app dans ce compte"]
+      ~at:[cls "t-meta"; cls "drive-sheet__help"]
+      [El.txt' Drive_text.folder_help]
   in
-  let default_el =
-    El.div ~at:[cls "drive-sheet__default"] [default.el; default_detail]
-  in
-  let note_el = El.p ~at:[cls "t-meta"; cls "drive-sheet__note"] [] in
   let status_el =
     El.p
       ~at:
@@ -63,11 +75,9 @@ let v app =
             El.span ~at:[cls "modal-header__title"] [El.txt' "Dossier Drive"];
           ];
         El.div ~at:[cls "drive-sheet__card"] [account_el; other.el];
-        folder_el;
-        browse.el;
-        default_el;
+        name_el;
+        help_el;
         status_el;
-        note_el;
         error_el;
       ]
   in
@@ -76,21 +86,21 @@ let v app =
   let error =
     React.S.map
       ~eq:(Option.equal String.equal)
-      (fun (m : Machine.t) -> Option.map Drive_text.pick_error_text m.error)
+      (fun (m : Machine.t) -> Option.map Drive_text.sheet_error_text m.error)
       machine
   in
-  let optional f = React.S.map ~eq:(Option.equal String.equal) f machine in
-  let note = optional Machine.picker_note in
-  let status = optional Machine.status_line in
-  let folder = optional Machine.folder_line in
+  let status =
+    React.S.map ~eq:(Option.equal String.equal) Machine.status_line machine
+  in
   let aria_disabled enabled =
     map (fun m -> match enabled m with true -> None | false -> Some "true")
   in
   let when_idle event () =
     match Machine.busy (React.S.value machine) with
     | true -> ()
-    | false -> feed event
+    | false -> feed (event ())
   in
+  let rename = when_idle (fun () -> Tap_rename (React.S.value field.value)) in
   {
     Screen.el;
     ready = Screen.now;
@@ -98,8 +108,7 @@ let v app =
       List.concat
         [
           other.bindings;
-          browse.bindings;
-          default.bindings;
+          field.bindings;
           [
             back_b;
             Rb.act back_click (fun () -> feed Tap_close);
@@ -107,23 +116,17 @@ let v app =
             Rb.text other.el (text_of Machine.other_account_label);
             Rb.attr other.el "aria-disabled"
               (aria_disabled (fun m -> not (Machine.busy m)));
-            Rb.act other.click (when_idle Tap_other_account);
-            Rb.text folder_el (React.S.map (Option.value ~default:"") folder);
-            Rb.class_ folder_el "is-hidden" (React.S.map Option.is_none folder);
-            Rb.class_ browse.el "is-hidden"
-              (map (fun (m : Machine.t) ->
-                   match m.picker with
-                   | Picker_ready -> false
-                   | Picker_unconfigured -> true));
-            Rb.attr browse.el "aria-disabled" (aria_disabled Machine.can_browse);
-            Rb.act browse.click (when_idle Tap_browse);
-            Rb.class_ default_el "is-hidden"
-              (map (fun m -> not (Machine.can_default m)));
-            Rb.act default.click (when_idle Tap_default);
+            Rb.act other.click (when_idle (fun () -> Tap_other_account));
+            Rb.act field.action rename;
+            (* The text sent is not edited while it is renamed: the answer
+               replaces it. *)
+            Rb.attr field.input "readonly"
+              (map (fun m ->
+                   match Machine.busy m with true -> Some "" | false -> None));
+            Rb.listen field.input Ev.keydown (fun ev ->
+                match Html.enter ev with true -> rename () | false -> ());
             Rb.text status_el (React.S.map (Option.value ~default:"") status);
             Rb.class_ status_el "is-hidden" (React.S.map Option.is_none status);
-            Rb.text note_el (React.S.map (Option.value ~default:"") note);
-            Rb.class_ note_el "is-hidden" (React.S.map Option.is_none note);
             Rb.text error_el (React.S.map (Option.value ~default:"") error);
             Rb.class_ error_el "is-hidden" (React.S.map Option.is_none error);
             Rb.attr el "aria-busy"

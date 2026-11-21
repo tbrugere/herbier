@@ -5,13 +5,15 @@
     option is [Disabled], [aria-disabled], inert, with its reason). A tap that
     {!Herbier_ui_model.Drive_text.drive_option_starts} runs {!Drive_flow} with
     [purpose = Turn_on] (the chooser when no Drive account is stored, or once
-    when Drive refuses the stored one, then Google Picker); the storage is
-    written with the pick only, so the radio, which reads [storage], never
-    leaves the stored value: a cancel or an error changes nothing. While the
-    flow runs, the radio is [aria-busy] and [status] says what runs
+    when Drive refuses the stored one, then the account's drive.file token); the
+    account and the storage are written together once the token is granted, so
+    the radio, which reads [storage], never leaves the stored value: a cancel or
+    an error changes nothing. No folder is chosen: the app's folder is created
+    at the first upload or by a rename in « Dossier Drive ». While the flow
+    runs, the radio is [aria-busy] and [status] says what runs
     ({!Herbier_ui_model.Drive_sheet.status_line}; empty otherwise). When it
-    closes, [set_error] gets its {!Herbier_ui_model.Drive_text.pick_error_text}
-    ([None] for a pick or a plain cancel; a cancel of the chooser opened after
+    closes, [set_error] gets its {!Herbier_ui_model.Drive_text.sheet_error_text}
+    ([None] for a store or a plain cancel; a cancel of the chooser opened after
     the stored account's refusal keeps that refusal); a start clears it.
     Released with the screen: a running flow is released
     ({!Drive_flow.release}). *)

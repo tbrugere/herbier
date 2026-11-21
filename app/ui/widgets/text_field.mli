@@ -16,8 +16,15 @@ type t = {
 val v :
   ?icon:Icon.t ->
   ?action:string ->
+  ?action_enabled:bool React.signal ->
+  ?label:string ->
+  ?enterkeyhint:string ->
   ?value:string ->
   placeholder:string ->
   unit ->
   t
-(** [value] is the initial text (default empty). *)
+(** [value] is the initial text (default empty). [action_enabled]: the trailing
+    action is [aria-disabled] while it is [false] (always enabled without it;
+    ignored without [action]). [label]: the input's accessible name (default
+    [placeholder]), for a field under a visible label. [enterkeyhint]: the
+    keyboard's Enter key (["done"] where Enter submits). *)
