@@ -1,7 +1,7 @@
 Recorded payloads only: API responses (`<source>_<endpoint>_<id>.json`, e.g.
 `gbif_species_5414995.json`, `wikidata_entity_Q157555.json`,
-`wikipedia_summary_fr_Digitalis_purpurea.json`; later `tela_<nn>.json`,
-`inpn_<cd_nom>.json`) and exifr output (`exifr_<name>.json`, below). Never app
+`wikipedia_summary_fr_Digitalis_purpurea.json`, `tela_taxon_22437.json`,
+`inpn_status_94959.json`) and exifr output (`exifr_<name>.json`, below). Never app
 rows. Each API file is fetched once, committed, and never edited.
 
 `gbif_*`, `wikidata_*`, `wikipedia_*.json`: recorded by
@@ -22,6 +22,29 @@ Arnica's frwiki sitelink summary (`wikipedia_summary_fr_Arnica_des_montagnes`).
 `Resolve.chosen`'s synonym pair: `gbif_species_7971454` (Digitalis
 purpurascens Lej., SYNONYM, acceptedKey 5708907) and `gbif_species_5708907`
 (its accepted taxon, Digitalis purpurea subsp. purpurea).
+
+`tela_*`, `inpn_*` (the regional layer): recorded by the same script
+(arms `tela` and `taxref`). Tela eFlore's BDTFX name bridge
+(`tela_names_<name>`), taxon (`tela_taxon_<nn>`) and Baseflor
+(`tela_baseflor_<nn>`) for Digitalis purpurea (22437), Arnica montana (6646)
+and Reynoutria japonica (55763, a synonym; its accepted taxon Fallopia
+japonica 26478 has Baseflor with an empty `floraison`); INPN open data's name
+(`inpn_name_<cd_nom>`), metropolitan status (`inpn_status_<cd_ref>`), national
+red list (`inpn_red_list_<cd_ref>`) and protection articles
+(`inpn_protections_<cd_ref>`) for 94959, 83874, 97964 (Fallopia japonica, a
+TaxRef synonym: empty status page) and its valid taxon 117503. Edge payloads:
+the subspecies name bridge (`tela_names_digitalis_purpurea_subsp_purpurea`,
+the name GBIF 5708907 gives once its authorship is cut, and its taxon
+`tela_taxon_76533`), and the protection articles of Cypripedium calceolus
+(`inpn_protections_94041`, a NATIONAL PROTECTION article). A file ending in
+`_404.txt` is a recorded 404 body (`fetch_absent` in the script: the server's
+HTML or text error page, kept as is); `test/refs/fake_net.ml` answers it as
+`Step.Absent` without parsing it: `tela_names_victoria_amazonica_404.txt` (a
+name BDTFX does not know), `tela_baseflor_31960_404.txt` (Hibiscus
+rosa-sinensis, no Baseflor row), `inpn_name_99999999_404.txt`. Licences: Tela
+Botanica data CC BY-SA (Baseflor: Julve, Ph., 1998 ff.); INPN / TaxRef
+(PatriNat), the odata API's terms are unpublished, so these files are only
+cited test inputs, as the GBIF and Wikidata ones are.
 `Identify.Choice.resolve` (`test/ui/identify_choice_tests.ml`) adds:
 Pl@ntNet's first proposal's taxon (`gbif_species_3152559`, Hibiscus
 rosa-sinensis L., ACCEPTED, SPECIES), its name match

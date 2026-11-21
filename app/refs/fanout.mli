@@ -6,7 +6,8 @@ module Reference := Herbier_domain.Reference
 module Source := Reference.Source
 
 val sources : Source.t list
-(** [[Gbif; Plantnet; Wikidata; Wikipedia]]: the sources a fetch writes. *)
+(** [[Gbif; Plantnet; Wikidata; Wikipedia; Taxref; Tela]]: the sources a fetch
+    writes (the last two by {!Regional.program}, after the {!branches}). *)
 
 type row = {
   source : Source.t;
@@ -50,6 +51,9 @@ val branches : gbif_key:int -> row list Step.t list
       [Complete] [{summary}]; [Absent] → the next one; none left (or none at
       all) → [Missing] [`Assoc []]; [Failed] or a body that does not decode →
       [Failed] (no en attempt after a fr failure). *)
+
+val live_row : Reference.t list -> Source.t -> Reference.t option
+(** The row of the source in the stored rows that is not soft-deleted. *)
 
 val decide : previous:Reference.t list -> row list -> row list
 (** The rows to store, given the plant's stored rows ([previous]; rows with

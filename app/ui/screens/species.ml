@@ -463,6 +463,15 @@ let link_anchor (l : Ref_block.link) =
       ]
     [El.txt' l.label]
 
+let chip_list ?(chip_cls = "species__ref-chip") = function
+  | [] -> []
+  | labels ->
+      [
+        El.div
+          ~at:[cls "species__ref-chips"]
+          (List.map (fun c -> El.span ~at:[cls chip_cls] [El.txt' c]) labels);
+      ]
+
 let names_others_id = "species-names-others"
 
 (* « Noms »: the French names, the other languages behind « Autres langues »;
@@ -536,15 +545,14 @@ let row_el ~opened ~set_opened id = function
           @ origin_side "Introduite :" introduced)
           sources,
         [] )
-  | Red_list {chip; sources} ->
-      ( ref_row "Liste rouge"
-          [
-            El.div
-              ~at:[cls "species__ref-chips"]
-              [El.span ~at:[cls "species__ref-chip"] [El.txt' chip]];
-          ]
+  | En_france {chips; places; sources} ->
+      ( ref_row "En France"
+          (chip_list chips
+          @ List.map (fun p -> El.div [El.txt' p]) (Option.to_list places))
           sources,
         [] )
+  | Red_list {label; chip; sources} ->
+      (ref_row label (chip_list [chip]) sources, [])
   | Flowering {months; text; sources} ->
       ( ref_row "Floraison"
           [W.Month_grid.v months; El.div [El.txt' text]]
@@ -553,18 +561,7 @@ let row_el ~opened ~set_opened id = function
   | Habitat {phrase; chips; sources} ->
       ( ref_row "Habitat"
           (List.map (fun p -> El.div [El.txt' p]) (Option.to_list phrase)
-          @
-          match chips with
-          | [] -> []
-          | _ :: _ ->
-              [
-                El.div
-                  ~at:[cls "species__ref-chips"]
-                  (List.map
-                     (fun c ->
-                       El.span ~at:[cls "species__habitat-chip"] [El.txt' c])
-                     chips);
-              ])
+          @ chip_list ~chip_cls:"species__habitat-chip" chips)
           sources,
         [] )
   | Toxicity {text; sources} ->

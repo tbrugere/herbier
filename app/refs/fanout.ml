@@ -5,7 +5,15 @@ module Gbif = Sources.Gbif
 module Wikidata = Sources.Wikidata
 module Wikipedia = Sources.Wikipedia
 
-let sources = [Source.Gbif; Source.Plantnet; Source.Wikidata; Source.Wikipedia]
+let sources =
+  [
+    Source.Gbif;
+    Source.Plantnet;
+    Source.Wikidata;
+    Source.Wikipedia;
+    Source.Taxref;
+    Source.Tela;
+  ]
 
 type row = {source : Source.t; status : Status.t; payload : Yojson.Safe.t}
 

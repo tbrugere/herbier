@@ -12,7 +12,24 @@ type area = Origin.area = {code : string option; name : string}
 let equal_area = Origin.equal_area
 
 type origin = Origin.t = {native : area list; introduced : area list}
-type habitat = {phrase : string option; chips : string list}
+type habitat = Baseflor.habitat = {phrase : string option; chips : string list}
+
+type protection = France.protection =
+  | Not_protected
+  | National
+  | Local of string list
+
+type fr_red_list = France.red_list = {
+  category : string;
+  description : string option;
+}
+
+let equal_protection = France.equal_protection
+let pp_protection = France.pp_protection
+let equal_fr_red_list = France.equal_red_list
+let pp_fr_red_list = France.pp_red_list
+let months = Baseflor.months
+
 type link = Links.t = {source : Source.t; url : string}
 type problem = {part : Payload.part; error : Decode.error}
 
@@ -27,6 +44,9 @@ type t = {
   habitat : habitat cited option;
   toxicity : string cited option;
   organ_photos : Gbif.Image.t list cited option;
+  fr_status : string cited option;
+  fr_protection : protection cited option;
+  fr_red_list : fr_red_list cited option;
   links : link list;
   problems : problem list;
 }
@@ -89,6 +109,16 @@ let project ~references ~plant_refs =
   let search = decode Wikidata_search Wikidata.search_of_json in
   let entity = decode Wikidata_entity Wikidata.entity_of_json in
   let summary = decode Wikipedia_summary Wikipedia.summary_of_json in
+  let tela_names = decode Tela_names Sources.Tela.names_of_json in
+  let tela_taxon = decode Tela_taxon Sources.Tela.taxon_of_json in
+  let baseflor = decode Tela_baseflor Sources.Tela.baseflor_of_json in
+  let inpn_name = decode Inpn_name Sources.Inpn.name_of_json in
+  let inpn_status = decode Inpn_status Sources.Inpn.status_of_json in
+  let inpn_red_list = decode Inpn_red_list Sources.Inpn.red_list_of_json in
+  let inpn_protections =
+    decode Inpn_protections Sources.Inpn.protections_of_json
+  in
+  let baseflor_value = ok baseflor in
   let taxon = ok species in
   let entity_value = Option.join (ok entity) in
   let summary_value = ok summary in
@@ -109,13 +139,16 @@ let project ~references ~plant_refs =
       Vernacular.vernacular
         (Option.fold ~none:[] ~some:Vernacular.gbif_votes (ok vernacular_names)
         @ Option.fold ~none:[] ~some:Vernacular.wikidata_votes entity_value);
-    life_form = None;
+    life_form = Option.bind baseflor_value Baseflor.life_form;
     origin = Option.bind distributions_value Origin.origin;
     red_list = Option.bind distributions_value Origin.red_list;
-    flowering_months = None;
-    habitat = None;
+    flowering_months = Option.bind baseflor_value Baseflor.flowering;
+    habitat = Option.bind baseflor_value Baseflor.habitat;
     toxicity = Option.bind summary_value Toxicity.toxicity;
     organ_photos = Option.bind (ok media) organ_photos;
+    fr_status = Option.bind (ok inpn_status) France.status;
+    fr_protection = Option.map France.protection (ok inpn_protections);
+    fr_red_list = Option.bind (ok inpn_red_list) France.red_list;
     links =
       Links.links ~plant_refs ~taxon ~entity:entity_value ~summary:summary_value;
     problems =
@@ -129,6 +162,13 @@ let project ~references ~plant_refs =
           problem Wikidata_search search;
           problem Wikidata_entity entity;
           problem Wikipedia_summary summary;
+          problem Tela_names tela_names;
+          problem Tela_taxon tela_taxon;
+          problem Tela_baseflor baseflor;
+          problem Inpn_name inpn_name;
+          problem Inpn_status inpn_status;
+          problem Inpn_red_list inpn_red_list;
+          problem Inpn_protections inpn_protections;
         ];
   }
 
@@ -205,7 +245,8 @@ let filled t = function
   | Toxicity -> Option.is_some t.toxicity
   | Organ_photos -> Option.is_some t.organ_photos
   | Links -> t.links <> []
-  | Fr_status | Fr_protection -> false
+  | Fr_status -> Option.is_some t.fr_status
+  | Fr_protection -> Option.is_some t.fr_protection
 
 let empty_fields t = List.filter (fun f -> not (filled t f)) Field.all
 

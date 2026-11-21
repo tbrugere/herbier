@@ -707,6 +707,9 @@ let decide_input_order_kept () =
 
 (* ---------- due ---------- *)
 
+(* The four sources without the regional layer: a plant with no Taxref/Tela
+   row at all is [due] on that alone (so it refetches once, picking up the
+   regional layer). *)
 let four_sources =
   [Source.Gbif; Source.Plantnet; Source.Wikidata; Source.Wikipedia]
 
@@ -718,31 +721,54 @@ let fresh_four () =
         (`Assoc []))
     four_sources
 
+let six_sources =
+  [
+    Source.Gbif;
+    Source.Plantnet;
+    Source.Wikidata;
+    Source.Wikipedia;
+    Source.Taxref;
+    Source.Tela;
+  ]
+
+let fresh_six () =
+  List.map
+    (fun source ->
+      reference_row ~source
+        ~fetched_at:(time "2026-11-11T00:00:00Z")
+        (`Assoc []))
+    six_sources
+
 let set_first f rows =
   List.mapi (fun i (r : Reference.t) -> match i with 0 -> f r | _ -> r) rows
 
 let due_no_rows () = Alcotest.(check bool) "due" true (Fanout.due ~now [])
 
+let due_four_sources_alone () =
+  Alcotest.(check bool)
+    "the four old sources alone: due (Taxref/Tela have no live row)" true
+    (Fanout.due ~now (fresh_four ()))
+
 let due_missing_a_source () =
-  let three = List.filteri (fun i _ -> i < 3) (fresh_four ()) in
-  Alcotest.(check bool) "a source has no live row" true (Fanout.due ~now three)
+  let five = List.filteri (fun i _ -> i < 5) (fresh_six ()) in
+  Alcotest.(check bool) "a source has no live row" true (Fanout.due ~now five)
 
 let due_max_age () =
   Alcotest.(check bool)
     "all fresh (1 day)" false
-    (Fanout.due ~now (fresh_four ()));
+    (Fanout.due ~now (fresh_six ()));
   Alcotest.(check bool)
     "one row 91 days old" true
     (Fanout.due ~now
        (set_first
           (fun r -> {r with Reference.fetched_at = time "2026-08-13T00:00:00Z"})
-          (fresh_four ())));
+          (fresh_six ())));
   Alcotest.(check bool)
     "exactly 90 days: not strictly over" false
     (Fanout.due ~now
        (set_first
           (fun r -> {r with Reference.fetched_at = time "2026-08-14T00:00:00Z"})
-          (fresh_four ())))
+          (fresh_six ())))
 
 let due_failed_or_partial_retry () =
   let aged st age rows =
@@ -752,36 +778,50 @@ let due_failed_or_partial_retry () =
   in
   Alcotest.(check bool)
     "failed 2 days old" true
-    (Fanout.due ~now
-       (aged Status.Failed "2026-11-10T00:00:00Z" (fresh_four ())));
+    (Fanout.due ~now (aged Status.Failed "2026-11-10T00:00:00Z" (fresh_six ())));
   Alcotest.(check bool)
     "failed 1 hour old" false
-    (Fanout.due ~now
-       (aged Status.Failed "2026-11-11T23:00:00Z" (fresh_four ())));
+    (Fanout.due ~now (aged Status.Failed "2026-11-11T23:00:00Z" (fresh_six ())));
   Alcotest.(check bool)
     "partial 2 days old" true
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-10T00:00:00Z" (fresh_four ())));
+       (aged Status.Partial "2026-11-10T00:00:00Z" (fresh_six ())));
   Alcotest.(check bool)
     "partial 1 hour old" false
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-11T23:00:00Z" (fresh_four ())));
+       (aged Status.Partial "2026-11-11T23:00:00Z" (fresh_six ())));
   Alcotest.(check bool)
     "failed exactly 1 day old: not strictly over" false
-    (Fanout.due ~now
-       (aged Status.Failed "2026-11-11T00:00:00Z" (fresh_four ())));
+    (Fanout.due ~now (aged Status.Failed "2026-11-11T00:00:00Z" (fresh_six ())));
   Alcotest.(check bool)
     "failed 1 day and 1 s old" true
-    (Fanout.due ~now
-       (aged Status.Failed "2026-11-10T23:59:59Z" (fresh_four ())));
+    (Fanout.due ~now (aged Status.Failed "2026-11-10T23:59:59Z" (fresh_six ())));
   Alcotest.(check bool)
     "partial exactly 1 day old: not strictly over" false
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-11T00:00:00Z" (fresh_four ())));
+       (aged Status.Partial "2026-11-11T00:00:00Z" (fresh_six ())));
   Alcotest.(check bool)
     "partial 1 day and 1 s old" true
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-10T23:59:59Z" (fresh_four ())))
+       (aged Status.Partial "2026-11-10T23:59:59Z" (fresh_six ())))
+
+let due_missing_tela_not_due () =
+  let rows =
+    List.map
+      (fun (r : Reference.t) ->
+        match r.source with
+        | Source.Tela ->
+            {
+              r with
+              Reference.status = Status.Missing;
+              fetched_at = time "2026-11-02T00:00:00Z";
+            }
+        | _ -> r)
+      (fresh_six ())
+  in
+  Alcotest.(check bool)
+    "a Missing tela row 10 days old is not due on its own" false
+    (Fanout.due ~now rows)
 
 (* A fetch whose Wikidata search failed stores every source (none had a
    row), so the plant is not due again before the one-day retry. *)
@@ -799,12 +839,20 @@ let due_after_wikidata_search_failed () =
       Fake_net.digitalis
   in
   let fetched_at = time "2026-11-11T23:00:00Z" in
+  (* A real fetch always runs the regional program too: add the
+     Taxref/Tela rows it would also have stored. *)
+  let regional_rows =
+    List.map
+      (fun source -> reference_row ~source ~fetched_at (`Assoc []))
+      [Source.Taxref; Source.Tela]
+  in
   let stored =
     List.map
       (fun (r : Fanout.row) ->
         reference_row ~status:r.status ~source:r.source ~fetched_at r.payload)
       (Fanout.decide ~previous:[]
          (Step.run net gbif_b @ Step.run net plantnet_b @ Step.run net wiki_b))
+    @ regional_rows
   in
   Alcotest.(check bool) "not due 1 hour later" false (Fanout.due ~now stored)
 
@@ -817,7 +865,7 @@ let due_missing_row_not_due () =
           Reference.status = Status.Missing;
           fetched_at = time "2026-11-02T00:00:00Z";
         })
-      (fresh_four ())
+      (fresh_six ())
   in
   Alcotest.(check bool) "a missing row 10 days old" false (Fanout.due ~now rows)
 
@@ -826,7 +874,7 @@ let due_soft_deleted_ignored () =
     set_first
       (fun r ->
         {r with Reference.deleted_at = Some (time "2026-11-11T00:00:00Z")})
-      (fresh_four ())
+      (fresh_six ())
   in
   Alcotest.(check bool)
     "a soft-deleted gbif row: due as if that source were absent" true
@@ -836,7 +884,7 @@ let due_future_fetched_at_ignored () =
   let rows =
     set_first
       (fun r -> {r with Reference.fetched_at = time "2026-11-12T01:00:00Z"})
-      (fresh_four ())
+      (fresh_six ())
   in
   Alcotest.(check bool)
     "a fresh row dated after now is not due because of it" false
@@ -850,7 +898,7 @@ let due_other_source_ignored () =
   in
   Alcotest.(check bool)
     "an extra Powo row (outside Fanout.sources) is ignored" false
-    (Fanout.due ~now (powo :: fresh_four ()))
+    (Fanout.due ~now (powo :: fresh_six ()))
 
 let case name f = (name, `Quick, f)
 
@@ -1143,9 +1191,22 @@ let decide_tests =
       decide_input_order_kept;
   ]
 
+let sources_test =
+  case
+    "Fanout.sources is the six sources, Gbif/Plantnet/Wikidata/Wikipedia then \
+     Taxref/Tela" (fun () ->
+      Alcotest.(check (list string))
+        "sources"
+        ["gbif"; "plantnet"; "wikidata"; "wikipedia"; "taxref"; "tela"]
+        (List.map Source.to_string Fanout.sources))
+
 let due_tests =
   [
     case "no rows: due" due_no_rows;
+    case "the four sources without the regional layer: due (no Taxref/Tela row)"
+      due_four_sources_alone;
+    case "a Missing tela row 10 days old is not due on its own"
+      due_missing_tela_not_due;
     case "a source has no live row: due" due_missing_a_source;
     case "max_age: fresh false, 91 days true, exactly 90 days false" due_max_age;
     case "Failed/Partial rows retry after 1 day (strictly), not after 1 hour"
@@ -1164,7 +1225,8 @@ let due_tests =
 
 let suite =
   ( "fanout",
-    full_fetch_tests
+    [sources_test]
+    @ full_fetch_tests
     @ gbif_branch_tests
     @ plantnet_branch_tests
     @ wiki_branch_tests

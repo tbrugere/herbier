@@ -311,7 +311,12 @@ app/
                           the decoders read; shared by the projection (reader) and the pipeline (writer)
     projection/           reference rows → ReferenceSnapshot fields (4f), pure over JSON: projection.ml (the
                           snapshot and the projection), vernacular.ml, origin.ml (WCVP ranges, IUCN status),
-                          toxicity.ml, links.ml (stored or derived links), cited.ml (a value and its sources)
+                          toxicity.ml, links.ml (stored or derived links), cited.ml (a value and its sources),
+                          france.ml (INPN: status, protection, French red list), baseflor.ml (Tela: life form,
+                          flowering months, habitat), list_ext.ml (an order-keeping dedup)
+    regional.ml           the regional layer of a fetch (Tela, INPN; M4.59) as one Step program, run after
+                          the three branches since it needs the gbif and wiki rows' name and TaxRef id; its
+                          input rules
     source_url.ml         a taxon's page URL at each source (4f's derived links, 5a's pasted ones)
     organ_photos.ml       which Pl@ntNet images a plant keeps, downloads and shows; thumbnail size; allowed host;
                           a sync's report (outcome per organ)
@@ -327,11 +332,11 @@ app/
     http.ml               fetch identified as Herbier/<version> (Api-User-Agent to
                           Wikimedia) + rate-limited queue (one per source,
                           ≤3 overall), timeouts; run: executes a refs/ Step program
-    pipeline.ml           runs Fanout for one plant, one save per branch through a callback
+    pipeline.ml           runs Fanout for one plant, then Regional on the branches' rows, one save per
+                          program through a callback
     resolver.ml           runs Resolve: Domain.Link + network lookups → gbif_key + partial snapshot
     organ_thumbs.ml       a plant's ref_images follow its Pl@ntNet row; missing thumbnails downloaded
                           (cap_http), resized on a canvas, written to refthumbs/
-    regional.ml           pluggable France layer (Tela, INPN), later
   identify/               §12 of architecture, pure part (M9): domain + net + yojson, no Brr, tested in
                           test/identify/
     herbier_identify.ml   the main module: re-exports Organ, Plantnet, Proposal, Transport, TRANSPORT,
@@ -933,7 +938,9 @@ test/
                 cli.t (cram) runs the executable
   refs/         native, alcotest: request URLs, payload decoders, stored payloads (pruning keeps decoding)
                 and the projection of the two spike species over fixtures/; the fan-out and resolver
-                programs over fixtures/; the organ photo rules (organ_photos)
+                programs over fixtures/; the regional program and the Tela / INPN decoders over the
+                recorded tela_* / inpn_* fixtures (a *_404.txt one is an absent answer); the organ
+                photo rules (organ_photos)
     jsoo/       js_of_ocaml build of the decoders run under node: GBIF occurrence keys above 2^31,
                 also through a pruned Pl@ntNet payload
   ui/           native, alcotest: herbier_ui_model (app/ui_model/); test_ui runs
@@ -1042,8 +1049,9 @@ tests; the spikes (architecture §10), dev pages and manual runs cover them.
   photo into `test/fixtures/exifr_<name>.json`, with the options of
   `app/bindings/exifr.ml` and `pick` = `Exif.tags`), `record-refs-fixtures.sh`
   (curl of every reference-source fixture
-  `test/fixtures/{gbif,wikidata,wikipedia}_*.json` at the exact URL of its
-  request description; skips existing files unless `--force`),
+  `test/fixtures/{gbif,wikidata,wikipedia,tela,inpn}_*.json` at the exact URL
+  of its request description, and the `_404.txt` bodies of the answers that
+  must be 404; skips existing files unless `--force`),
   `record-geo-fixtures.sh` (the same for
   `test/fixtures/{photon,geoplateforme}_*.json`, spaced by 1.2 s),
   `record-gotrue-fixtures.sh` (the Supabase Auth answers

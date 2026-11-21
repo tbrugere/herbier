@@ -4,6 +4,8 @@ module Payload = Herbier_refs.Payload
 module Gbif = Herbier_refs.Sources.Gbif
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
+module Tela = Herbier_refs.Sources.Tela
+module Inpn = Herbier_refs.Sources.Inpn
 module Source = Herbier_domain.Reference.Source
 module Testable = Herbier_test_support.Testable
 
@@ -34,6 +36,13 @@ let summary_en_digitalis =
   Check.json "wikipedia_summary_en_Digitalis_purpurea.json"
 
 let summary_fr_lis = Check.json "wikipedia_summary_fr_Lis.json"
+let tela_names_digitalis = Check.json "tela_names_digitalis_purpurea.json"
+let tela_taxon_digitalis = Check.json "tela_taxon_22437.json"
+let tela_baseflor_digitalis = Check.json "tela_baseflor_22437.json"
+let inpn_name_digitalis = Check.json "inpn_name_94959.json"
+let inpn_status_digitalis = Check.json "inpn_status_94959.json"
+let inpn_red_list_digitalis = Check.json "inpn_red_list_94959.json"
+let inpn_protections_arnica = Check.json "inpn_protections_83874.json"
 
 (* ---------- testables ---------- *)
 
@@ -47,6 +56,16 @@ let distribution_t =
 let image_t = Alcotest.testable Gbif.Image.pp Gbif.Image.equal
 let entity_t = Alcotest.testable Wikidata.Entity.pp Wikidata.Entity.equal
 let summary_t = Alcotest.testable Wikipedia.pp Wikipedia.equal
+let tela_name_t = Alcotest.testable Tela.pp_name Tela.equal_name
+let tela_taxon_t = Alcotest.testable Tela.pp_taxon Tela.equal_taxon
+let tela_baseflor_t = Alcotest.testable Tela.pp_baseflor Tela.equal_baseflor
+let inpn_name_t = Alcotest.testable Inpn.pp_name Inpn.equal_name
+let inpn_status_t = Alcotest.testable Inpn.pp_status Inpn.equal_status
+
+let inpn_red_list_entry_t =
+  Alcotest.testable Inpn.pp_red_list_entry Inpn.equal_red_list_entry
+
+let inpn_article_t = Alcotest.testable Inpn.pp_article Inpn.equal_article
 
 let page_t t =
   Alcotest.testable
@@ -72,12 +91,21 @@ let check_prune_preserves_decoding name (part : Payload.part) body =
   | Wikidata_search -> same (Alcotest.list qid_t) Wikidata.search_of_json
   | Wikidata_entity -> same (Alcotest.option entity_t) Wikidata.entity_of_json
   | Wikipedia_summary -> same summary_t Wikipedia.summary_of_json
+  | Tela_names -> same (Alcotest.list tela_name_t) Tela.names_of_json
+  | Tela_taxon -> same tela_taxon_t Tela.taxon_of_json
+  | Tela_baseflor -> same tela_baseflor_t Tela.baseflor_of_json
+  | Inpn_name -> same inpn_name_t Inpn.name_of_json
+  | Inpn_status -> same (Alcotest.list inpn_status_t) Inpn.status_of_json
+  | Inpn_red_list ->
+      same (Alcotest.list inpn_red_list_entry_t) Inpn.red_list_of_json
+  | Inpn_protections ->
+      same (Alcotest.list inpn_article_t) Inpn.protections_of_json
 
 (* ---------- all, source, name, parts ---------- *)
 
 let tables_tests =
   [
-    ( "all has 8 parts, declaration order",
+    ( "all has 15 parts, declaration order (the 8 existing then Tela_*, Inpn_*)",
       `Quick,
       fun () ->
         Alcotest.(check (list string))
@@ -91,6 +119,13 @@ let tables_tests =
             "Wikidata_search";
             "Wikidata_entity";
             "Wikipedia_summary";
+            "Tela_names";
+            "Tela_taxon";
+            "Tela_baseflor";
+            "Inpn_name";
+            "Inpn_status";
+            "Inpn_red_list";
+            "Inpn_protections";
           ]
           (List.map
              (function
@@ -101,11 +136,18 @@ let tables_tests =
                | Payload.Plantnet_media -> "Plantnet_media"
                | Payload.Wikidata_search -> "Wikidata_search"
                | Payload.Wikidata_entity -> "Wikidata_entity"
-               | Payload.Wikipedia_summary -> "Wikipedia_summary")
+               | Payload.Wikipedia_summary -> "Wikipedia_summary"
+               | Payload.Tela_names -> "Tela_names"
+               | Payload.Tela_taxon -> "Tela_taxon"
+               | Payload.Tela_baseflor -> "Tela_baseflor"
+               | Payload.Inpn_name -> "Inpn_name"
+               | Payload.Inpn_status -> "Inpn_status"
+               | Payload.Inpn_red_list -> "Inpn_red_list"
+               | Payload.Inpn_protections -> "Inpn_protections")
              Payload.all) );
-    ( "source: the four Gbif_* parts and occurrence_count are Gbif, \
-       Plantnet_media is Plantnet, both Wikidata_* are Wikidata, \
-       Wikipedia_summary is Wikipedia",
+    ( "source: the four Gbif_* parts are Gbif, Plantnet_media is Plantnet, \
+       both Wikidata_* are Wikidata, Wikipedia_summary is Wikipedia, the three \
+       Tela_* are Tela, the four Inpn_* are Taxref",
       `Quick,
       fun () ->
         let source_name s = Source.to_string s in
@@ -120,6 +162,13 @@ let tables_tests =
             "wikidata";
             "wikidata";
             "wikipedia";
+            "tela";
+            "tela";
+            "tela";
+            "taxref";
+            "taxref";
+            "taxref";
+            "taxref";
           ]
           (List.map (fun p -> source_name (Payload.source p)) Payload.all) );
     ( "name: the member name of each part",
@@ -136,9 +185,16 @@ let tables_tests =
             "search";
             "entity";
             "summary";
+            "names";
+            "taxon";
+            "baseflor";
+            "name";
+            "status";
+            "red_list";
+            "protections";
           ]
           (List.map Payload.name Payload.all) );
-    ( "parts of an unfetched source (powo, ipni, taxref, tela, eppo, inat) is []",
+    ( "parts of an unfetched source (powo, ipni, eppo, inat) is []",
       `Quick,
       fun () ->
         List.iter
@@ -147,14 +203,7 @@ let tables_tests =
               (Source.to_string s ^ ": parts is []")
               0
               (List.length (Payload.parts s)))
-          [
-            Source.Powo;
-            Source.Ipni;
-            Source.Taxref;
-            Source.Tela;
-            Source.Eppo;
-            Source.Inat;
-          ] );
+          [Source.Powo; Source.Ipni; Source.Eppo; Source.Inat] );
     ( "parts of a fetched source, in all order",
       `Quick,
       fun () ->
@@ -168,7 +217,15 @@ let tables_tests =
         Alcotest.(check (list string))
           "wikidata" ["search"; "entity"] (names Source.Wikidata);
         Alcotest.(check (list string))
-          "wikipedia" ["summary"] (names Source.Wikipedia) );
+          "wikipedia" ["summary"] (names Source.Wikipedia);
+        Alcotest.(check (list string))
+          "tela: names, taxon, baseflor"
+          ["names"; "taxon"; "baseflor"]
+          (names Source.Tela);
+        Alcotest.(check (list string))
+          "taxref: name, status, red_list, protections"
+          ["name"; "status"; "red_list"; "protections"]
+          (names Source.Taxref) );
     ( "every part is in (parts (source part))",
       `Quick,
       fun () ->
@@ -222,6 +279,14 @@ let fixture_prune_tests =
       summary_en_digitalis;
     case "wikipedia summary fr Lis (disambiguation)" Payload.Wikipedia_summary
       summary_fr_lis;
+    case "tela names Digitalis" Payload.Tela_names tela_names_digitalis;
+    case "tela taxon Digitalis" Payload.Tela_taxon tela_taxon_digitalis;
+    case "tela baseflor Digitalis" Payload.Tela_baseflor tela_baseflor_digitalis;
+    case "inpn name Digitalis" Payload.Inpn_name inpn_name_digitalis;
+    case "inpn status Digitalis" Payload.Inpn_status inpn_status_digitalis;
+    case "inpn red_list Digitalis" Payload.Inpn_red_list inpn_red_list_digitalis;
+    case "inpn protections Arnica (17 articles)" Payload.Inpn_protections
+      inpn_protections_arnica;
   ]
 
 (* ---------- prune preserves decoding, on malformed literals ---------- *)
@@ -554,6 +619,42 @@ let builder_tests =
         Alcotest.(check Testable.yojson)
           "summary absent" (`Assoc [])
           (Payload.wikipedia ~summary:None) );
+    ( "tela: member order is names, taxon, baseflor, whichever given",
+      `Quick,
+      fun () ->
+        Alcotest.(check (list string))
+          "every part given"
+          ["names"; "taxon"; "baseflor"]
+          (keys_of
+             (Payload.tela ~baseflor:(Some small) ~names:(Some small)
+                ~taxon:(Some small)));
+        Alcotest.(check (list string))
+          "only taxon given, order kept" ["taxon"]
+          (keys_of
+             (Payload.tela ~names:None ~taxon:(Some small) ~baseflor:None));
+        Alcotest.(check Testable.yojson)
+          "all None" (`Assoc [])
+          (Payload.tela ~names:None ~taxon:None ~baseflor:None) );
+    ( "taxref: member order is name, status, red_list, protections, whichever \
+       given",
+      `Quick,
+      fun () ->
+        Alcotest.(check (list string))
+          "every part given"
+          ["name"; "status"; "red_list"; "protections"]
+          (keys_of
+             (Payload.taxref ~protections:(Some small) ~name:(Some small)
+                ~status:(Some small) ~red_list:(Some small)));
+        Alcotest.(check (list string))
+          "only status and protections given, order kept"
+          ["status"; "protections"]
+          (keys_of
+             (Payload.taxref ~name:None ~status:(Some small) ~red_list:None
+                ~protections:(Some small)));
+        Alcotest.(check Testable.yojson)
+          "all None" (`Assoc [])
+          (Payload.taxref ~name:None ~status:None ~red_list:None
+             ~protections:None) );
   ]
 
 (* ---------- get ---------- *)

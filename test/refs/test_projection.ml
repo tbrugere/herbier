@@ -341,7 +341,7 @@ let digitalis_tests =
                  Ecology;
                ])
           (fields_json (Projection.empty_fields proj)) );
-    ( "life_form, flowering_months, habitat are None (v1: not fetched)",
+    ( "life_form, flowering_months, habitat are None without a Tela row",
       `Quick,
       fun () ->
         Alcotest.(check bool) "life_form" true (Option.is_none proj.life_form);
@@ -474,7 +474,7 @@ let arnica_tests =
                  Toxicity;
                ])
           (fields_json (Projection.empty_fields proj)) );
-    ( "life_form, flowering_months, habitat are None (v1: not fetched)",
+    ( "life_form, flowering_months, habitat are None without a Tela row",
       `Quick,
       fun () ->
         Alcotest.(check bool) "life_form" true (Option.is_none proj.life_form);
@@ -1124,6 +1124,11 @@ let every_part_broken () =
           (Payload.wikidata ~search:oops ~entity:oops);
         reference_row ~source:Source.Wikipedia ~fetched_at:t_other
           (Payload.wikipedia ~summary:oops);
+        reference_row ~source:Source.Tela ~fetched_at:t_other
+          (Payload.tela ~names:oops ~taxon:oops ~baseflor:oops);
+        reference_row ~source:Source.Taxref ~fetched_at:t_other
+          (Payload.taxref ~name:oops ~status:oops ~red_list:oops
+             ~protections:oops);
       ]
   in
   Alcotest.(check (list string))
@@ -1405,4 +1410,261 @@ let rules_tests =
       field_all_and_to_string;
   ]
 
-let suite = ("projection", digitalis_tests @ arnica_tests @ rules_tests)
+(* ---------- the regional layer ---------- *)
+
+let tela_row nn =
+  reference_row ~source:Source.Tela ~fetched_at:t_other
+    (Payload.tela ~names:None
+       ~taxon:(Some (Check.json (Printf.sprintf "tela_taxon_%s.json" nn)))
+       ~baseflor:(Some (Check.json (Printf.sprintf "tela_baseflor_%s.json" nn))))
+
+let taxref_row ?protections cd =
+  let j part = Some (Check.json (Printf.sprintf "inpn_%s_%s.json" part cd)) in
+  let protections =
+    match protections with Some p -> Some p | None -> j "protections"
+  in
+  reference_row ~source:Source.Taxref ~fetched_at:t_other
+    (Payload.taxref ~name:(j "name") ~status:(j "status")
+       ~red_list:(j "red_list") ~protections)
+
+let protection_t =
+  Alcotest.testable Projection.pp_protection Projection.equal_protection
+
+let fr_red_list_t =
+  Alcotest.testable Projection.pp_fr_red_list Projection.equal_fr_red_list
+
+let check_sources name expected (sources : Source.t list) =
+  Alcotest.(check Testable.yojson)
+    name (sources_json expected) (sources_json sources)
+
+let regional_digitalis () =
+  let proj =
+    project (rows_of digitalis @ [tela_row "22437"; taxref_row "94959"])
+  in
+  (match proj.fr_status with
+  | Some {value; sources} ->
+      Alcotest.(check string) "fr_status" "PRESENT" value;
+      check_sources "fr_status sources" [Source.Taxref] sources
+  | None -> Alcotest.fail "fr_status is None");
+  (match proj.fr_protection with
+  | Some {value; sources} ->
+      Alcotest.check protection_t "fr_protection" Projection.Not_protected value;
+      check_sources "fr_protection sources" [Source.Taxref] sources
+  | None -> Alcotest.fail "fr_protection is None");
+  (match proj.fr_red_list with
+  | Some {value; sources = _} ->
+      Alcotest.check fr_red_list_t "fr_red_list"
+        {category = "LC"; description = Some "Préoccupation mineure"}
+        value
+  | None -> Alcotest.fail "fr_red_list is None");
+  (match proj.flowering_months with
+  | Some {value; sources} ->
+      Alcotest.(check (list int)) "flowering_months" [5; 6; 7; 8; 9] value;
+      check_sources "flowering sources" [Source.Tela] sources
+  | None -> Alcotest.fail "flowering_months is None");
+  (match proj.habitat with
+  | Some {value; sources} ->
+      Alcotest.(check (option string))
+        "habitat phrase"
+        (Some
+           "mégaphorbiaies pionnières de clairières acidophiles \
+            planitiaires-collinéennes")
+        value.phrase;
+      Alcotest.(check (list string))
+        "habitat chips"
+        ["hémihéliophiles"; "mésohydriques"; "acidophiles"; "méso-eutrophiles"]
+        value.chips;
+      check_sources "habitat sources" [Source.Tela] sources
+  | None -> Alcotest.fail "habitat is None");
+  (match proj.life_form with
+  | Some {value; sources = _} ->
+      Alcotest.(check string)
+        "life_form" "Hémicryptophytes (>= 1m) bisannuels" value
+  | None -> Alcotest.fail "life_form is None");
+  Alcotest.(check (list string)) "problems" [] (problem_strings proj.problems);
+  Alcotest.(check Testable.yojson)
+    "empty_fields: only the global red list"
+    (fields_json Projection.Field.[Red_list])
+    (fields_json (Projection.empty_fields proj))
+
+let regional_arnica () =
+  let proj = project (rows_of arnica @ [tela_row "6646"; taxref_row "83874"]) in
+  Alcotest.(check (option string))
+    "fr_status" (Some "PRESENT")
+    (Option.map (fun (c : _ Projection.cited) -> c.value) proj.fr_status);
+  Alcotest.(check (option protection_t))
+    "fr_protection: regions then départements, fixture order"
+    (Some
+       (Projection.Local
+          [
+            "Centre-Val de Loire";
+            "Bourgogne";
+            "Aquitaine";
+            "Le Cher";
+            "Le Lot";
+            "L'Isère";
+            "La Drôme";
+          ]))
+    (Option.map (fun (c : _ Projection.cited) -> c.value) proj.fr_protection);
+  Alcotest.(check (option string))
+    "fr_red_list category" (Some "LC")
+    (Option.map
+       (fun (c : Projection.fr_red_list Projection.cited) -> c.value.category)
+       proj.fr_red_list);
+  Alcotest.(check (option (list int)))
+    "flowering_months"
+    (Some [6; 7])
+    (Option.map (fun (c : _ Projection.cited) -> c.value) proj.flowering_months);
+  Alcotest.(check (option string))
+    "life_form: the principal type, trimmed"
+    (Some "Hémicryptophytes (< 1m) rosettés")
+    (Option.map (fun (c : _ Projection.cited) -> c.value) proj.life_form);
+  Alcotest.(check Testable.yojson)
+    "empty_fields: only toxicity"
+    (fields_json Projection.Field.[Toxicity])
+    (fields_json (Projection.empty_fields proj))
+
+let months_parser () =
+  let cases =
+    [
+      ("5-9", Some [5; 6; 7; 8; 9]);
+      ("6", Some [6]);
+      ("11-2", Some [1; 2; 11; 12]);
+      ("4-6,9", Some [4; 5; 6; 9]);
+      (" 4-6 , 5-7 ", Some [4; 5; 6; 7]);
+      ("1-12", Some [1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12]);
+      ("", None);
+      ("0-3", None);
+      ("13", None);
+      ("a-b", None);
+      ("5-", None);
+      ("5-9,x", None);
+    ]
+  in
+  List.iter
+    (fun (input, expected) ->
+      Alcotest.(check (option (list int)))
+        (Printf.sprintf "months %S" input)
+        expected (Projection.months input))
+    cases
+
+let baseflor_row fields =
+  reference_row ~source:Source.Tela ~fetched_at:t_other
+    (Payload.tela ~names:None ~taxon:None
+       ~baseflor:(Some (`Assoc (("nom_sci", `String "X y") :: fields))))
+
+let habitat_chip_cut () =
+  let proj =
+    project
+      [
+        baseflor_row
+          [
+            ("ve_lumiere.libelle", `String "héliophiles");
+            ("ve_humidite_edaph.libelle", `String "mésohydriques (jamais)");
+            ("ve_reaction_sol.libelle", `String "mésohydriques (bis)");
+            ("ve_nutriments_sol.libelle", `String "  ");
+          ];
+      ]
+  in
+  match proj.habitat with
+  | Some {value; sources = _} ->
+      Alcotest.(check (option string)) "no phrase" None value.phrase;
+      Alcotest.(check (list string))
+        "a label without \" (\" kept whole; duplicates and blanks dropped"
+        ["héliophiles"; "mésohydriques"]
+        value.chips
+  | None -> Alcotest.fail "habitat is None"
+
+let broken_protections_problem () =
+  let proj =
+    project (rows_of digitalis @ [taxref_row ~protections:(`String "x") "94959"])
+  in
+  Alcotest.(check bool)
+    "fr_protection is None" true
+    (Option.is_none proj.fr_protection);
+  Alcotest.(check (option string))
+    "fr_status intact" (Some "PRESENT")
+    (Option.map (fun (c : _ Projection.cited) -> c.value) proj.fr_status);
+  match proj.problems with
+  | [{part = Payload.Inpn_protections; error = Decode.Unexpected _}] -> ()
+  | ps ->
+      Alcotest.failf
+        "expected one Inpn_protections Unexpected problem, got [%s]"
+        (String.concat "; " (problem_strings ps))
+
+(* Protection pages built from recorded articles: Cypripedium calceolus
+   (94041) has a NATIONAL PROTECTION article, Arnica REGIONAL and
+   DEPARTMENTAL ones. *)
+let articles file =
+  match Herbier_net.Json.member "_embedded" (Check.json file) with
+  | Some embedded -> Herbier_refs.Decode.list "protectionArticles" embedded
+  | None -> Alcotest.failf "%s: no _embedded" file
+
+let protections_page articles =
+  `Assoc
+    [
+      ("_embedded", `Assoc [("protectionArticles", `List articles)]);
+      ("page", `Assoc [("totalElements", `Int (List.length articles))]);
+    ]
+
+let rec set_overseas (json : Yojson.Safe.t) : Yojson.Safe.t =
+  match json with
+  | `Assoc kvs ->
+      `Assoc
+        (List.map
+           (fun (k, v) ->
+             match k with
+             | "overseas" -> (k, `Bool true)
+             | _ -> (k, set_overseas v))
+           kvs)
+  | `List l -> `List (List.map set_overseas l)
+  | other -> other
+
+let fr_protection_of page =
+  Option.map
+    (fun (c : _ Projection.cited) -> c.value)
+    (project (rows_of digitalis @ [taxref_row ~protections:page "94959"]))
+      .fr_protection
+
+let protection_national () =
+  Alcotest.(check (option protection_t))
+    "Cypripedium calceolus: National" (Some Projection.National)
+    (fr_protection_of (Check.json "inpn_protections_94041.json"))
+
+let protection_national_over_local () =
+  Alcotest.(check (option protection_t))
+    "a NATIONAL article wins over REGIONAL and DEPARTMENTAL ones"
+    (Some Projection.National)
+    (fr_protection_of
+       (protections_page
+          (articles "inpn_protections_83874.json"
+          @ articles "inpn_protections_94041.json")))
+
+let protection_overseas_dropped () =
+  Alcotest.(check (option protection_t))
+    "REGIONAL and DEPARTMENTAL articles located overseas: Not_protected"
+    (Some Projection.Not_protected)
+    (fr_protection_of
+       (protections_page
+          (List.map set_overseas (articles "inpn_protections_83874.json"))))
+
+let regional_tests =
+  [
+    case "Digitalis with the Tela and Taxref rows: the six regional fields"
+      regional_digitalis;
+    case "Arnica: Local protection places, months 6-7, principal life form"
+      regional_arnica;
+    case "months: ranges, wrap through December, strict parse" months_parser;
+    case "habitat chips: cut before \" (\", blanks and duplicates dropped"
+      habitat_chip_cut;
+    case "a broken protections part: a problem, fr_protection None, rest intact"
+      broken_protections_problem;
+    case "protection: a recorded NATIONAL article gives National"
+      protection_national;
+    case "protection: National wins over Local" protection_national_over_local;
+    case "protection: articles located overseas are dropped"
+      protection_overseas_dropped;
+  ]
+
+let suite =
+  ("projection", digitalis_tests @ arnica_tests @ rules_tests @ regional_tests)

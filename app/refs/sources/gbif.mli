@@ -85,6 +85,14 @@ module Taxon : sig
   (** [canonical_name], else [scientific_name]: the name without authorship that
       is stored, shown and searched. *)
 
+  val without_authorship : t -> string option
+  (** [scientific_name] cut before its authorship: the words of [canonical_name]
+      with the rank markers and hybrid sign GBIF drops from it
+      (["Digitalis purpurea subsp. purpurea"] where [canonical_name] is
+      ["Digitalis purpurea purpurea"]), the form Tela's [nom_sci] uses.
+      [canonical_name] when the words of [scientific_name] do not start with its
+      words; [None] without a [canonical_name]. *)
+
   val equal : t -> t -> bool
   val pp : Format.formatter -> t -> unit
 end

@@ -9,6 +9,13 @@ type part =
   | Wikidata_search
   | Wikidata_entity
   | Wikipedia_summary
+  | Tela_names
+  | Tela_taxon
+  | Tela_baseflor
+  | Inpn_name
+  | Inpn_status
+  | Inpn_red_list
+  | Inpn_protections
 
 let all =
   [
@@ -20,6 +27,13 @@ let all =
     Wikidata_search;
     Wikidata_entity;
     Wikipedia_summary;
+    Tela_names;
+    Tela_taxon;
+    Tela_baseflor;
+    Inpn_name;
+    Inpn_status;
+    Inpn_red_list;
+    Inpn_protections;
   ]
 
 let source = function
@@ -29,6 +43,8 @@ let source = function
   | Plantnet_media -> Source.Plantnet
   | Wikidata_search | Wikidata_entity -> Source.Wikidata
   | Wikipedia_summary -> Source.Wikipedia
+  | Tela_names | Tela_taxon | Tela_baseflor -> Source.Tela
+  | Inpn_name | Inpn_status | Inpn_red_list | Inpn_protections -> Source.Taxref
 
 let name = function
   | Gbif_species -> "species"
@@ -39,6 +55,13 @@ let name = function
   | Wikidata_search -> "search"
   | Wikidata_entity -> "entity"
   | Wikipedia_summary -> "summary"
+  | Tela_names -> "names"
+  | Tela_taxon -> "taxon"
+  | Tela_baseflor -> "baseflor"
+  | Inpn_name -> "name"
+  | Inpn_status -> "status"
+  | Inpn_red_list -> "red_list"
+  | Inpn_protections -> "protections"
 
 let parts s = List.filter (fun p -> source p = s) all
 
@@ -93,11 +116,72 @@ let entity json =
   |> map_member "claims" claims
   |> map_member "sitelinks" (keep ["frwiki"; "enwiki"; "dewiki"; "itwiki"])
 
+let tela_taxon_fields =
+  [
+    "id";
+    "nom_sci";
+    "nom_retenu.id";
+    "cd_nom";
+    "presence.libelle";
+    "statut_origine.libelle";
+    "statut_introduction.libelle";
+    "statut_culture.libelle";
+  ]
+
+let baseflor_fields =
+  [
+    "nom_sci";
+    "floraison";
+    "carac_ecolo";
+    "chorologie";
+    "type_bio.libelle";
+    "type_bio.detail";
+    "ve_lumiere.libelle";
+    "ve_humidite_edaph.libelle";
+    "ve_reaction_sol.libelle";
+    "ve_nutriments_sol.libelle";
+  ]
+
+(* An INPN HAL page: [_embedded] holds one array of [key]. *)
+let hal_page key element body =
+  map_member "_embedded"
+    (fun embedded -> map_member key (map_list element) (keep [key] embedded))
+    (keep ["_embedded"; "page"] body)
+
+let protection_article json =
+  map_member "_embedded"
+    (fun embedded ->
+      map_member "scopeLocation"
+        (keep ["locationId"; "name"; "level"; "overseas"])
+        (keep ["scopeLocation"] embedded))
+    (keep ["name"; "scope"; "type"; "category"; "_embedded"] json)
+
 let prune part body =
   match part with
   | Gbif_species | Gbif_occurrence_count | Wikidata_search | Wikipedia_summary
-    ->
+  | Tela_names ->
       body
+  | Tela_taxon -> keep tela_taxon_fields body
+  | Tela_baseflor -> keep baseflor_fields body
+  | Inpn_name ->
+      map_member "_links" (keep ["taxon"])
+        (keep ["taxrefId"; "valid"; "binomialName"; "_links"] body)
+  | Inpn_status ->
+      hal_page "biogeographicStatuses"
+        (keep ["biogeographicStatus"; "simplifiedBiogeographicStatus"])
+        body
+  | Inpn_red_list ->
+      hal_page "redListEntries"
+        (keep
+           [
+             "category";
+             "categoryDescription";
+             "trend";
+             "evaluationYear";
+             "_links";
+           ])
+        body
+  | Inpn_protections -> hal_page "protectionArticles" protection_article body
   | Gbif_vernacular_names ->
       page ["vernacularName"; "language"; "source"; "country"] body
   | Gbif_distributions ->
@@ -141,6 +225,18 @@ let wikidata ~search ~entity =
   build [(Wikidata_search, search); (Wikidata_entity, entity)]
 
 let wikipedia ~summary = build [(Wikipedia_summary, summary)]
+
+let tela ~names ~taxon ~baseflor =
+  build [(Tela_names, names); (Tela_taxon, taxon); (Tela_baseflor, baseflor)]
+
+let taxref ~name ~status ~red_list ~protections =
+  build
+    [
+      (Inpn_name, name);
+      (Inpn_status, status);
+      (Inpn_red_list, red_list);
+      (Inpn_protections, protections);
+    ]
 
 let get part = function
   | `Assoc members -> (

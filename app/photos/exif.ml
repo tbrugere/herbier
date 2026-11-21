@@ -18,9 +18,6 @@ let tags =
 let empty = {taken_at = None; position = None}
 let number_member name json = Option.bind (Json.member name json) Json.number
 
-let digits s =
-  match Json.is_digits s with true -> int_of_string_opt s | false -> None
-
 let date_time s =
   match
     String.length s = 19
@@ -32,7 +29,7 @@ let date_time s =
   with
   | false -> None
   | true -> (
-      let part i n = digits (String.sub s i n) in
+      let part i n = Json.digits (String.sub s i n) in
       match (part 0 4, part 5 2, part 8 2, part 11 2, part 14 2, part 17 2) with
       | Some y, Some mo, Some d, Some h, Some mi, Some se ->
           Some ((y, mo, d), (h, mi, se))
@@ -46,7 +43,9 @@ let offset_s s =
   in
   match (sign, String.length s = 6 && s.[3] = ':') with
   | Some sign, true -> (
-      match (digits (String.sub s 1 2), digits (String.sub s 4 2)) with
+      match
+        (Json.digits (String.sub s 1 2), Json.digits (String.sub s 4 2))
+      with
       | Some h, Some m when h <= 18 && m < 60 ->
           Some (sign * ((h * 3600) + (m * 60)))
       | _ -> None)
@@ -56,7 +55,9 @@ let sub_second_ps = function
   | "" -> None
   | s ->
       let micro = String.sub (s ^ "000000") 0 6 in
-      Option.map (fun us -> Int64.(mul (of_int us) 1_000_000L)) (digits micro)
+      Option.map
+        (fun us -> Int64.(mul (of_int us) 1_000_000L))
+        (Json.digits micro)
 
 let taken_at ~tz_offset_at json =
   let open Option.Syntax in

@@ -23,3 +23,6 @@ let number = function
 
 let is_digits s =
   s <> "" && String.for_all (function '0' .. '9' -> true | _ -> false) s
+
+let digits s =
+  match is_digits s with true -> int_of_string_opt s | false -> None

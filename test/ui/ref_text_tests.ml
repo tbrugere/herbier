@@ -214,4 +214,101 @@ let ref_text =
              (List.map (area None) ["Zèbre"; "Ane"; "Âne"; "éa"]));
         Alcotest.(check (list string))
           "[] areas give []" [] (Ref_text.origin_names []));
+    Alcotest.test_case
+      "fr_status: every listed INPN status, an unknown string gives no chip"
+      `Quick (fun () ->
+        let case expected s =
+          Alcotest.(check (option string))
+            (Printf.sprintf "fr_status %S" s)
+            expected (Ref_text.fr_status s)
+        in
+        case (Some "Indigène") "PRESENT";
+        case (Some "Endémique") "ENDEMIC";
+        case (Some "Subendémique") "SUBENDEMIC";
+        case (Some "Cryptogène") "CRYPTOGENIC";
+        case (Some "Introduite") "INTRODUCED";
+        case (Some "Introduite envahissante") "INVASIVE";
+        case (Some "Introduite non établie") "NOT_NATURALIZED";
+        case (Some "Occasionnelle") "OCCASIONAL";
+        case (Some "Présence douteuse") "DOUBTFUL";
+        case (Some "Absente") "ABSENT";
+        case (Some "Disparue") "DISAPPEARED";
+        case (Some "Éteinte") "EXTINCT";
+        case None "FOO";
+        case None "");
+    Alcotest.test_case
+      "fr_protection: Not_protected, National, Local with one place, Local \
+       with several"
+      `Quick (fun () ->
+        Alcotest.(check string)
+          "Not_protected" "Non protégée"
+          (Ref_text.fr_protection Projection.Not_protected);
+        Alcotest.(check string)
+          "National" "Protégée en France"
+          (Ref_text.fr_protection Projection.National);
+        Alcotest.(check string)
+          "Local [one]" "Protégée (Alsace)"
+          (Ref_text.fr_protection (Projection.Local ["Alsace"]));
+        Alcotest.(check string)
+          "Local [several]" "Protégée localement"
+          (Ref_text.fr_protection (Projection.Local ["Alsace"; "Le Cher"]));
+        Alcotest.(check string)
+          "Local []" "Protégée localement"
+          (Ref_text.fr_protection (Projection.Local [])));
+    Alcotest.test_case "fr_places: 0, 1, 2 and 7 names" `Quick (fun () ->
+        let names n =
+          List.init n (fun i ->
+              Printf.sprintf "%c" (Char.chr (Char.code 'a' + i)))
+        in
+        Alcotest.(check (option string))
+          "Not_protected" None
+          (Ref_text.fr_places Projection.Not_protected);
+        Alcotest.(check (option string))
+          "National" None
+          (Ref_text.fr_places Projection.National);
+        Alcotest.(check (option string))
+          "Local [0 names]" None
+          (Ref_text.fr_places (Projection.Local []));
+        Alcotest.(check (option string))
+          "Local [1 name]" None
+          (Ref_text.fr_places (Projection.Local (names 1)));
+        Alcotest.(check (option string))
+          "Local [2 names]" (Some "Protection : a, b")
+          (Ref_text.fr_places (Projection.Local (names 2)));
+        Alcotest.(check (option string))
+          "Local [7 names]" (Some "Protection : a, b, c, d, e et 2 autres")
+          (Ref_text.fr_places (Projection.Local (names 7))));
+    Alcotest.test_case
+      "fr_red_list: every listed category, NA/NE give no line, an unknown \
+       category with and without a description"
+      `Quick (fun () ->
+        let case expected ~category ~description =
+          Alcotest.(check (option string))
+            (Printf.sprintf "fr_red_list %S" category)
+            expected
+            (Ref_text.fr_red_list {Projection.category; description})
+        in
+        case (Some "Liste rouge : LC · préoccupation mineure") ~category:"LC"
+          ~description:None;
+        case (Some "Liste rouge : NT · quasi menacée") ~category:"NT"
+          ~description:None;
+        case (Some "Liste rouge : VU · vulnérable") ~category:"VU"
+          ~description:None;
+        case (Some "Liste rouge : EN · en danger") ~category:"EN"
+          ~description:None;
+        case (Some "Liste rouge : CR · en danger critique") ~category:"CR"
+          ~description:None;
+        case (Some "Liste rouge : DD · données insuffisantes") ~category:"DD"
+          ~description:None;
+        case (Some "Liste rouge : RE · disparue en France") ~category:"RE"
+          ~description:None;
+        case (Some "Liste rouge : EW · éteinte à l'état sauvage") ~category:"EW"
+          ~description:(Some "Éteinte à l'état sauvage");
+        case (Some "Liste rouge : EX · éteinte") ~category:"EX"
+          ~description:None;
+        case None ~category:"NA" ~description:None;
+        case None ~category:"NE" ~description:None;
+        case (Some "Liste rouge : XX · truc") ~category:"XX"
+          ~description:(Some "Truc");
+        case (Some "Liste rouge : XX") ~category:"XX" ~description:None);
   ]

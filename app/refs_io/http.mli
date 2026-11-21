@@ -48,5 +48,6 @@ val run : ?timeout_ms:int -> 'a Herbier_refs.Step.t -> 'a Fut.t
     [timeout_ms] per request): [Ok body] that
     {!Herbier_refs.Decode.json_of_string} parses → [Body]; [Ok] non-JSON →
     [Failed] with the parser's message; [Error (Status {status = 404; _})] →
-    [Absent]; any other [Error e] → [Failed (error_to_string e)]. Never raises;
-    an exception raised by a continuation (a bug) is not caught here. *)
+    [Absent]; any other [Error e] → [Failed (error_to_string e)]. Each [Failed]
+    is logged (console warn: source, URL, message). Never raises; an exception
+    raised by a continuation (a bug) is not caught here. *)

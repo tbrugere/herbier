@@ -10,11 +10,14 @@
   test_gbif
   test_wikidata
   test_wikipedia
+  test_tela
+  test_inpn
   test_payload
   test_projection
   test_organ_photos
   test_step
   test_fanout
+  test_regional
   test_resolve
   test_fetch_rule)
  (libraries
@@ -27,4 +30,5 @@
   alcotest)
  (deps
   (glob_files %{project_root}/test/fixtures/*.json)
+  (glob_files %{project_root}/test/fixtures/*.txt)
   %{project_root}/scripts/record-refs-fixtures.sh))

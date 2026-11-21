@@ -825,12 +825,16 @@ gbif_key
   │              P3151 iNat, sitelinks fr/en/de/it
   │  └─ Wikipedia REST page/summary/{fr sitelink title} (en sitelink when
   │     fr has none or answers 404): depends on the Wikidata entity
-  └─ regional layer (if enabled):
-       Tela  bdtfx/noms?masque={name} → nn, cd_nom
-             bdtfx/taxons/{nn} (statut origine/introduction), baseflor
-             (type_bio, floraison, écologie), coste (description), del images
-       INPN  odata-inpn /taxa/{cd_nom}, /protections/articles/entries,
-             /redLists/entries
+  └─ regional layer (refs/regional.ml, once the three branches settled):
+       Tela  bdtfx/noms?masque={GBIF name, no author} → nn (exact nom_sci)
+             bdtfx/taxons/{nn} → accepted nn, cd_nom (TaxRef id)
+             TaxRef id = Wikidata P3186, else that cd_nom; none → stop here
+             baseflor/informations/bdtfx.nn:{accepted nn}
+               (type_bio, floraison, carac_ecolo, ve_* ecology labels)
+       INPN  odata-inpn taxa/names/{id} → cd_ref (the valid TaxRef id)
+             taxa/{cd_ref}/biogeographicStatuses?locationId=TERFXFR,
+             taxa/redLists/entries?taxrefId={cd_ref}&scopes=NATIONAL&scopeLocationId=TERFXFR,
+             taxa/protections/articles?taxrefIds={cd_ref}&embed=SCOPE_LOCATION
 ```
 
 - The fetch is three concurrent branches (`refs/fanout.ml`, sans-IO programs
@@ -839,6 +843,30 @@ gbif_key
   wikipedia. Each branch's rows are written in one save when that branch
   ends, so a slow or failing branch neither delays nor rolls back another,
   and 4f fills progressively.
+- The regional layer (M4.59) is a fourth program, run once the three
+  branches have settled (it reads only the gbif and wiki rows; the plantnet
+  branch is one GBIF call, queued with the gbif branch's): it needs the GBIF
+  name without authorship, rank markers kept (Tela's name bridge, whose
+  `nom_sci` reads « Digitalis purpurea subsp. purpurea » where GBIF's
+  canonical name drops « subsp. ») and the Wikidata P3186 TaxRef id, read
+  from this fetch's rows, else the stored ones (`Regional.input`). It writes two rows, `taxref` (cited
+  « INPN ») and `tela`, in one save. A species with no TaxRef id makes only
+  the bridge calls (`bdtfx/noms`, and `bdtfx/taxons` when the name exists),
+  nothing to Baseflor or INPN; both rows are then `missing`, or `failed` when
+  the id could not be determined (bridge failed, or GBIF / Wikidata never
+  answered), so the one-day retry applies. A Baseflor 404 after a found taxon
+  is `complete` without a `baseflor` member. INPN statuses hang on the valid
+  TaxRef id (a synonym cd_nom has none), hence `taxa/names` first. Never
+  Wikidata P3105 for Tela: it can name a non-accepted nn. 4f rows: « Type »
+  (Baseflor's principal biological type as written), « Floraison »
+  (`floraison`), « Habitat » (`carac_ecolo` and the ecology labels cut
+  before their parenthesis), « En France » (status, protection and national
+  red list chips, after « Origine »; a lone « Non protégée » is no row: it
+  is all INPN says of a taxon absent from metropolitan France; INPN's
+  `PRESENT`, TaxRef's « présent, indigène ou indéterminé », reads
+  « Indigène » as in the handoff). The global
+  IUCN row reads « Liste rouge mondiale » next to it, « Liste rouge »
+  as before otherwise.
 - Statuses: `missing` = the source answered it has nothing (GBIF species 404,
   no Wikidata item, no Pl@ntNet image, no sitelink or summary 404);
   `failed` = no call of the row gave a decodable answer; `partial` = some
@@ -873,7 +901,8 @@ gbif_key
   read stored payloads unchanged: `gbif` {species, vernacular_names,
   distributions, occurrence_count}, `plantnet` {media} (the Pl@ntNet dataset's
   occurrences, fetched from GBIF but cited as Pl@ntNet, hence its own row),
-  `wikidata` {search, entity}, `wikipedia` {summary}. A failed call's member
+  `wikidata` {search, entity}, `wikipedia` {summary}, `tela` {names, taxon,
+  baseflor}, `taxref` {name, status, red_list, protections}. A failed call's member
   is absent.
 - The species page reads a **projection** of the reference rows into the
   handoff's `ReferenceSnapshot` fields (vernacular per language, family, life

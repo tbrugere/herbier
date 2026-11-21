@@ -54,6 +54,9 @@ val required_int : ?at:string -> string -> Yojson.Safe.t -> (int, error) result
 val required_list :
   ?at:string -> string -> Yojson.Safe.t -> (Yojson.Safe.t list, error) result
 
+val last_index : sep:string -> string -> int option
+(** The start of the last occurrence of [sep] in the string (an href, a URL). *)
+
 val unexpected : string -> string -> ('a, error) result
 (** [unexpected path expected] is [Error (Unexpected {path; expected})]. *)
 

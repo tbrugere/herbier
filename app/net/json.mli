@@ -17,3 +17,7 @@ val number : Yojson.Safe.t -> float option
 
 val is_digits : string -> bool
 (** Non-empty and only ASCII digits. *)
+
+val digits : string -> int option
+(** The int of a {!is_digits} string, [None] when it is not one or does not fit
+    an int (32 bits under js_of_ocaml). *)

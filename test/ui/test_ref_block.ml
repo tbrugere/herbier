@@ -97,6 +97,56 @@ let rows_of s =
 let project_species s =
   Projection.project ~references:(rows_of s) ~plant_refs:[]
 
+(* ---------- the regional layer, over the recorded Tela/INPN fixtures
+   ---------- *)
+
+type regional = {
+  tela_names : Yojson.Safe.t;
+  tela_taxon : Yojson.Safe.t;
+  tela_baseflor : Yojson.Safe.t;
+  inpn_name : Yojson.Safe.t;
+  inpn_status : Yojson.Safe.t;
+  inpn_red_list : Yojson.Safe.t;
+  inpn_protections : Yojson.Safe.t;
+}
+
+let digitalis_regional =
+  {
+    tela_names = json "tela_names_digitalis_purpurea.json";
+    tela_taxon = json "tela_taxon_22437.json";
+    tela_baseflor = json "tela_baseflor_22437.json";
+    inpn_name = json "inpn_name_94959.json";
+    inpn_status = json "inpn_status_94959.json";
+    inpn_red_list = json "inpn_red_list_94959.json";
+    inpn_protections = json "inpn_protections_94959.json";
+  }
+
+let arnica_regional =
+  {
+    tela_names = json "tela_names_arnica_montana.json";
+    tela_taxon = json "tela_taxon_6646.json";
+    tela_baseflor = json "tela_baseflor_6646.json";
+    inpn_name = json "inpn_name_83874.json";
+    inpn_status = json "inpn_status_83874.json";
+    inpn_red_list = json "inpn_red_list_83874.json";
+    inpn_protections = json "inpn_protections_83874.json";
+  }
+
+let full_rows_of s r =
+  rows_of s
+  @ [
+      reference_row ~source:Source.Tela ~fetched_at:t_other
+        (Payload.tela ~names:(Some r.tela_names) ~taxon:(Some r.tela_taxon)
+           ~baseflor:(Some r.tela_baseflor));
+      reference_row ~source:Source.Taxref ~fetched_at:t_other
+        (Payload.taxref ~name:(Some r.inpn_name) ~status:(Some r.inpn_status)
+           ~red_list:(Some r.inpn_red_list)
+           ~protections:(Some r.inpn_protections));
+    ]
+
+let project_species_full s r =
+  Projection.project ~references:(full_rows_of s r) ~plant_refs:[]
+
 (* One fake thumb path per wanted organ, derived directly from the
    projection's [organ_photos] (not through [Organ_photos.wanted]/[shown]: the
    host-filtering rules are [test_organ_photos.ml]'s job, not this pure UI
@@ -147,8 +197,12 @@ let show_row = function
         (Option.value ~default:"-" native)
         (Option.value ~default:"-" introduced)
         sources
-  | Ref_block.Red_list {chip; sources} ->
-      Printf.sprintf "Red_list %s / %s" chip sources
+  | Ref_block.En_france {chips; places; sources} ->
+      Printf.sprintf "En_france [%s] %s / %s" (String.concat "," chips)
+        (Option.value ~default:"-" places)
+        sources
+  | Ref_block.Red_list {label; chip; sources} ->
+      Printf.sprintf "Red_list (%s) %s / %s" label chip sources
   | Ref_block.Flowering {months; text; sources} ->
       Printf.sprintf "Flowering %s %s / %s"
         (String.concat "," (List.map string_of_int months))
@@ -173,6 +227,7 @@ let ctor_name = function
   | Ref_block.Names _ -> "Names"
   | Ref_block.Life_form _ -> "Life_form"
   | Ref_block.Origin _ -> "Origin"
+  | Ref_block.En_france _ -> "En_france"
   | Ref_block.Red_list _ -> "Red_list"
   | Ref_block.Flowering _ -> "Flowering"
   | Ref_block.Habitat _ -> "Habitat"
@@ -188,6 +243,7 @@ let sources_of name rows =
       ( Ref_block.Names {sources; _}
       | Life_form {sources; _}
       | Origin {sources; _}
+      | En_france {sources; _}
       | Red_list {sources; _}
       | Flowering {sources; _}
       | Habitat {sources; _}
@@ -269,7 +325,9 @@ let arnica_renders () =
   (match
      List.find_opt (function Ref_block.Red_list _ -> true | _ -> false) rows
    with
-  | Some (Ref_block.Red_list {chip; _}) ->
+  | Some (Ref_block.Red_list {label; chip; _}) ->
+      Alcotest.(check string)
+        "label without an En France row" "Liste rouge" label;
       Alcotest.(check string) "chip" "LC · préoccupation mineure" chip
   | _ -> Alcotest.fail "no Red_list row");
   match
@@ -309,6 +367,135 @@ let digitalis_offline_before_any_download () =
     "no Organ_photos row; the other rows are unchanged"
     ["Names"; "Origin"; "Toxicity"; "Links"]
     (ctors rows)
+
+(* ---------- the regional layer adds En_france, Life_form, Flowering,
+   Habitat ---------- *)
+
+let digitalis_full_renders () =
+  let proj = project_species_full digitalis digitalis_regional in
+  let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
+  Alcotest.(check (list string))
+    "Names, Life_form, Origin, En_france, Flowering, Habitat, Toxicity, \
+     Organ_photos, Links (no Red_list: no global IUCN row)"
+    [
+      "Names";
+      "Life_form";
+      "Origin";
+      "En_france";
+      "Flowering";
+      "Habitat";
+      "Toxicity";
+      "Organ_photos";
+      "Links";
+    ]
+    (ctors rows);
+  List.iter
+    (fun (expected, actual) -> Alcotest.(check string) expected expected actual)
+    [
+      ( "Life_form Hémicryptophytes (>= 1m) bisannuels / Tela Botanica",
+        show_row
+          (List.find
+             (function Ref_block.Life_form _ -> true | _ -> false)
+             rows) );
+      ( "En_france [Indigène,Non protégée,Liste rouge : LC · préoccupation \
+         mineure] - / INPN",
+        show_row
+          (List.find
+             (function Ref_block.En_france _ -> true | _ -> false)
+             rows) );
+      ( "Flowering 5,6,7,8,9 mai – septembre / Tela Botanica",
+        show_row
+          (List.find
+             (function Ref_block.Flowering _ -> true | _ -> false)
+             rows) );
+    ];
+  match
+    List.find (function Ref_block.Habitat _ -> true | _ -> false) rows
+  with
+  | Ref_block.Habitat {phrase; chips; sources} ->
+      Alcotest.(check (option string))
+        "phrase (the recorded carac_ecolo)"
+        (Some
+           "mégaphorbiaies pionnières de clairières acidophiles \
+            planitiaires-collinéennes")
+        phrase;
+      Alcotest.(check (list string))
+        "chips: the four ve_* labels cut before \" (\""
+        ["hémihéliophiles"; "mésohydriques"; "acidophiles"; "méso-eutrophiles"]
+        chips;
+      Alcotest.(check string) "sources" "Tela Botanica" sources
+  | _ -> Alcotest.fail "no Habitat row"
+
+let arnica_full_renders () =
+  let proj = project_species_full arnica arnica_regional in
+  let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
+  Alcotest.(check (list string))
+    "Names, Life_form, Origin, En_france, Red_list, Flowering, Habitat, \
+     Organ_photos, Links (no Toxicity)"
+    [
+      "Names";
+      "Life_form";
+      "Origin";
+      "En_france";
+      "Red_list";
+      "Flowering";
+      "Habitat";
+      "Organ_photos";
+      "Links";
+    ]
+    (ctors rows);
+  (match
+     List.find (function Ref_block.En_france _ -> true | _ -> false) rows
+   with
+  | Ref_block.En_france {chips; places; sources} ->
+      Alcotest.(check (list string))
+        "chips"
+        [
+          "Indigène";
+          "Protégée localement";
+          "Liste rouge : LC · préoccupation mineure";
+        ]
+        chips;
+      Alcotest.(check (option string))
+        "places (5 shown, et 2 autres)"
+        (Some
+           "Protection : Centre-Val de Loire, Bourgogne, Aquitaine, Le Cher, \
+            Le Lot et 2 autres")
+        places;
+      Alcotest.(check string) "sources" "INPN" sources
+  | _ -> Alcotest.fail "no En_france row");
+  (match
+     List.find (function Ref_block.Red_list _ -> true | _ -> false) rows
+   with
+  | Ref_block.Red_list {label; _} ->
+      Alcotest.(check string)
+        "label next to the French red list" "Liste rouge mondiale" label
+  | _ -> Alcotest.fail "no Red_list row");
+  match
+    List.find (function Ref_block.Flowering _ -> true | _ -> false) rows
+  with
+  | Ref_block.Flowering {months; text; _} ->
+      Alcotest.(check (list int)) "months" [6; 7] months;
+      Alcotest.(check string) "text" "juin – juillet" text
+  | _ -> Alcotest.fail "no Flowering row"
+
+(* A projection built from only the four global rows (no Taxref/Tela row)
+   gives exactly the rows the global-only tests above expect: the regional
+   layer disappears cleanly when it has nothing (renders as before). *)
+let projection_without_regional_rows_renders_as_before () =
+  Alcotest.(check (list string))
+    "Digitalis, four rows only"
+    ["Names"; "Origin"; "Toxicity"; "Organ_photos"; "Links"]
+    (ctors
+       (Ref_block.rows
+          (project_species digitalis)
+          ~organ_photos:(fake_organ_photos (project_species digitalis))));
+  Alcotest.(check (list string))
+    "Arnica, four rows only"
+    ["Names"; "Origin"; "Red_list"; "Organ_photos"; "Links"]
+    (ctors
+       (Ref_block.rows (project_species arnica)
+          ~organ_photos:(fake_organ_photos (project_species arnica))))
 
 (* ---------- rows: condition and order, hand-built ---------- *)
 
@@ -370,6 +557,44 @@ let red_list_not_evaluated_gives_no_row () =
 
 let cited_by sources value : _ Projection.cited = {value; sources}
 
+let en_france_rows ?status ?protection ?red_list () =
+  let taxref value = cited_by [Source.Taxref] value in
+  List.map show_row
+    (Ref_block.rows
+       {
+         empty_t with
+         fr_status = Option.map taxref status;
+         fr_protection = Option.map taxref protection;
+         fr_red_list = Option.map taxref red_list;
+       }
+       ~organ_photos:[])
+
+let en_france_lone_not_protected_no_row () =
+  Alcotest.(check (list string))
+    "INPN knows the taxon, nothing about France: no row" []
+    (en_france_rows ~protection:Projection.Not_protected ())
+
+let en_france_no_chip_no_row () =
+  Alcotest.(check (list string))
+    "unknown status, red list NA: no row" []
+    (en_france_rows ~status:"FOO"
+       ~red_list:{Projection.category = "NA"; description = None}
+       ())
+
+let en_france_national_alone () =
+  Alcotest.(check (list string))
+    "one chip"
+    ["En_france [Protégée en France] - / INPN"]
+    (en_france_rows ~protection:Projection.National ())
+
+let en_france_not_protected_with_red_list () =
+  Alcotest.(check (list string))
+    "« Non protégée » kept next to a red-list chip"
+    ["En_france [Non protégée,Liste rouge : VU · vulnérable] - / INPN"]
+    (en_france_rows ~protection:Projection.Not_protected
+       ~red_list:{Projection.category = "VU"; description = None}
+       ())
+
 let every_constructor_present_and_in_order () =
   let t =
     {
@@ -390,6 +615,13 @@ let every_constructor_present_and_in_order () =
              });
       vernacular = None;
       life_form = Some (cited_by [Source.Wikipedia] "Herbacée");
+      fr_status = Some (cited_by [Source.Taxref] "PRESENT");
+      fr_protection =
+        Some (cited_by [Source.Taxref] (Projection.Local ["Alsace"; "Le Cher"]));
+      fr_red_list =
+        Some
+          (cited_by [Source.Taxref]
+             {Projection.category = "LC"; description = None});
       origin =
         Some
           (cited_by [Source.Gbif]
@@ -436,6 +668,7 @@ let every_constructor_present_and_in_order () =
       "Names";
       "Life_form";
       "Origin";
+      "En_france";
       "Red_list";
       "Flowering";
       "Habitat";
@@ -450,7 +683,9 @@ let every_constructor_present_and_in_order () =
       "Names french=[] others=[] / Plantaginaceae · GBIF";
       "Life_form Herbacée / Wikipédia";
       "Origin France | Chile / GBIF";
-      "Red_list LC · préoccupation mineure / GBIF";
+      "En_france [Indigène,Protégée localement,Liste rouge : LC · \
+       préoccupation mineure] Protection : Alsace, Le Cher / INPN";
+      "Red_list (Liste rouge mondiale) LC · préoccupation mineure / GBIF";
       "Flowering 6,7,8 juin – août / Tela Botanica";
       "Habitat Prairies [mi-ombre] / Tela Botanica";
       "Toxicity Toxique. / Wikipédia";
@@ -578,6 +813,21 @@ let () =
           case "offline before any download: no Organ_photos row, others kept"
             digitalis_offline_before_any_download;
         ] );
+      ( "the regional layer (Tela + INPN) over the fixtures",
+        [
+          case
+            "Digitalis: Life_form, En_france (Indigène, Non protégée, LC), \
+             Flowering (mai – septembre), Habitat; no Red_list"
+            digitalis_full_renders;
+          case
+            "Arnica: En_france (Protégée localement + the Protection line), \
+             Flowering (juin – juillet)"
+            arnica_full_renders;
+          case
+            "no Taxref/Tela row: renders exactly as the global-only tests \
+             expect"
+            projection_without_regional_rows_renders_as_before;
+        ] );
       ( "rows: condition and order",
         [
           case "a projection with no rows and no photos gives []"
@@ -593,6 +843,12 @@ let () =
           case "every constructor appears exactly once, in the fixed order"
             every_constructor_present_and_in_order;
           case "a habitat of chips alone" habitat_chips_alone;
+          case "En_france: a lone « Non protégée » is no row"
+            en_france_lone_not_protected_no_row;
+          case "En_france: no chip is no row" en_france_no_chip_no_row;
+          case "En_france: National alone is one chip" en_france_national_alone;
+          case "En_france: « Non protégée » with a red-list chip is kept"
+            en_france_not_protected_with_red_list;
           case "Names sources: deduplicated, in Source.all order"
             names_sources_deduplicated_in_source_order;
         ] );

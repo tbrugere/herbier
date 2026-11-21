@@ -129,8 +129,23 @@ let response = function
   | Error ((Network _ | Timeout | Status _) as e) ->
       Herbier_refs.Step.Failed (error_to_string e)
 
+(* A failed call only leaves a Failed status in the stored row: the log is
+   what tells a CORS refusal from a timeout on the device. *)
+let logged (request : Herbier_refs.Request.t) = function
+  | Herbier_refs.Step.Failed message as r ->
+      Brr.Console.(
+        warn
+          [
+            str "refs: failed";
+            str (Source.to_string request.source);
+            str request.url;
+            str message;
+          ]);
+      r
+  | (Herbier_refs.Step.Body _ | Herbier_refs.Step.Absent) as r -> r
+
 let rec run ?timeout_ms = function
   | Herbier_refs.Step.Done x -> Fut.return x
   | Herbier_refs.Step.Get (request, k) ->
       Fut.bind (get ?timeout_ms request) (fun r ->
-          run ?timeout_ms (k (response r)))
+          run ?timeout_ms (k (logged request (response r))))

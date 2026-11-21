@@ -9,6 +9,8 @@ module Decode = Herbier_refs.Decode
 module Gbif = Herbier_refs.Sources.Gbif
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
+module Tela = Herbier_refs.Sources.Tela
+module Inpn = Herbier_refs.Sources.Inpn
 module Qid = Herbier_refs.Qid
 module Fixture = Herbier_test_support.Fixture
 
@@ -18,10 +20,16 @@ let some name = function
   | Some r -> r
   | None -> Alcotest.failf "fake_net: %s: expected Some" name
 
+(* A [_404.txt] fixture is a recorded 404 body: [Step.Absent], never parsed.
+   Any other name must be JSON, so a stray file fails loudly. *)
 let body_of_fixture file : Step.response =
-  match Decode.json_of_string (Fixture.read file) with
-  | Ok json -> Body json
-  | Error e -> Alcotest.failf "fake_net: %s: %s" file (Decode.error_to_string e)
+  match Filename.check_suffix file "_404.txt" with
+  | true -> Step.Absent
+  | false -> (
+      match Decode.json_of_string (Fixture.read file) with
+      | Ok json -> Body json
+      | Error e ->
+          Alcotest.failf "fake_net: %s: %s" file (Decode.error_to_string e))
 
 (* [fixtures table] answers a request whose URL is a key of [table] with the
    parsed body of that fixture file; any other URL fails the test. *)
@@ -89,6 +97,38 @@ let arnica =
     ~wikidata_entity:"wikidata_entity_Q207848.json" ~summary_lang:"fr"
     ~summary_title:"Arnica des montagnes"
     ~wikipedia_summary:"wikipedia_summary_fr_Arnica_des_montagnes.json"
+
+(* The regional layer's URL->fixture overrides for one taxon: Tela's
+   name bridge (by scientific [name]), its taxon call (by [taxon_nn], the
+   bridge's bdtfx id) and Baseflor call (by [baseflor_nn], the taxon's own
+   accepted id: equal to [taxon_nn] unless the bridge nn is a synonym), and
+   INPN's name call (by [cd_nom]) then status/red_list/protections (by
+   [cd_ref], the valid TaxRef id: equal to [cd_nom] unless it is a synonym).
+   Meant to be passed to [with_] over a base net (typically
+   [digitalis]/[arnica]): any URL this does not cover falls through to the
+   base, so an unexpected request still fails the test. [baseflor] is a
+   fixture name ending in [_404.txt] for a Tela taxon with no Baseflor row. *)
+let regional_fetch ~name ~taxon_nn ~baseflor_nn ~names ~taxon ~baseflor ~cd_nom
+    ~cd_ref ~inpn_name ~status ~red_list ~protections =
+  [
+    (url (some "names" (Tela.names ~name)), names);
+    (url (Tela.taxon ~nn:taxon_nn), taxon);
+    (url (Tela.baseflor ~nn:baseflor_nn), baseflor);
+    (url (Inpn.name ~cd_nom), inpn_name);
+    (url (Inpn.status ~cd_ref), status);
+    (url (Inpn.red_list ~cd_ref), red_list);
+    (url (Inpn.protections ~cd_ref), protections);
+  ]
+  |> List.map (fun (u, file) -> (u, body_of_fixture file))
+
+(* Digitalis purpurea's regional calls, from the recorded fixtures. *)
+let digitalis_regional =
+  regional_fetch ~name:"Digitalis purpurea" ~taxon_nn:22437 ~baseflor_nn:22437
+    ~names:"tela_names_digitalis_purpurea.json" ~taxon:"tela_taxon_22437.json"
+    ~baseflor:"tela_baseflor_22437.json" ~cd_nom:94959 ~cd_ref:94959
+    ~inpn_name:"inpn_name_94959.json" ~status:"inpn_status_94959.json"
+    ~red_list:"inpn_red_list_94959.json"
+    ~protections:"inpn_protections_94959.json"
 
 (* [without path json]: [json] with the member at [path] (object keys from
    the root) removed, to build a variant of a recorded body in a test

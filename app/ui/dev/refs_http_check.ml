@@ -5,7 +5,11 @@ module Decode = Herbier_refs.Decode
 module Gbif = Herbier_refs.Sources.Gbif
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
+module Tela = Herbier_refs.Sources.Tela
+module Inpn = Herbier_refs.Sources.Inpn
 module Payload = Herbier_refs.Payload
+module Fanout = Herbier_refs.Fanout
+module Regional = Herbier_refs.Regional
 module Projection = Herbier_refs.Projection
 module Reference = Herbier_domain.Reference
 
@@ -192,7 +196,66 @@ let described () =
             (Wikipedia.summary_of_json json));
     }
   in
-  fixed @ [wikidata_search; wikidata_entity; wikipedia_summary]
+  let count what decode json =
+    Result.map
+      (fun l -> Printf.sprintf "%d %s" (List.length l) what)
+      (decode json)
+  in
+  let regional =
+    [
+      {
+        name = "tela names";
+        request = built "tela names" (Tela.names ~name:"Digitalis purpurea");
+        summary = count "names" Tela.names_of_json;
+      };
+      {
+        name = "tela taxon";
+        request = Tela.taxon ~nn:22437;
+        summary =
+          (fun json ->
+            Result.map
+              (fun (t : Tela.taxon) ->
+                Printf.sprintf "%d %s cd_nom %s" t.id t.nom_sci
+                  (Option.fold ~none:"-" ~some:string_of_int t.cd_nom))
+              (Tela.taxon_of_json json));
+      };
+      {
+        name = "tela baseflor";
+        request = Tela.baseflor ~nn:22437;
+        summary =
+          (fun json ->
+            Result.map
+              (fun (b : Tela.baseflor) ->
+                "floraison " ^ Option.value ~default:"-" b.floraison)
+              (Tela.baseflor_of_json json));
+      };
+      {
+        name = "inpn name";
+        request = Inpn.name ~cd_nom:94959;
+        summary =
+          (fun json ->
+            Result.map
+              (fun (n : Inpn.name) -> Printf.sprintf "cd_ref %d" n.cd_ref)
+              (Inpn.name_of_json json));
+      };
+      {
+        name = "inpn status";
+        request = Inpn.status ~cd_ref:94959;
+        summary = count "statuses" Inpn.status_of_json;
+      };
+      {
+        name = "inpn red_list";
+        request = Inpn.red_list ~cd_ref:94959;
+        summary = count "entries" Inpn.red_list_of_json;
+      };
+      {
+        name = "inpn protections";
+        request = Inpn.protections ~cd_ref:94959;
+        summary = count "articles" Inpn.protections_of_json;
+      };
+    ]
+  in
+  fixed @ [wikidata_search; wikidata_entity; wikipedia_summary] @ regional
 
 let fetch log name request =
   Fut.map
@@ -254,11 +317,24 @@ let project_one log key =
     optional log (label ^ " entity")
       (Option.map Wikidata.entity (first_qid search))
   in
-  let+ summary =
+  let* summary =
     optional log (label ^ " summary")
       (Option.bind (wiki_title entity) (fun (lang, title) ->
            Wikipedia.summary ~lang ~title))
   in
+  let fetched source payload : Fanout.row =
+    {source; status = Reference.Status.Complete; payload}
+  in
+  let gbif =
+    Payload.gbif ~species ~vernacular_names ~distributions ~occurrence_count
+  and wikidata = Payload.wikidata ~search ~entity in
+  let input =
+    Regional.input ~previous:[]
+      [fetched Source.Gbif gbif; fetched Source.Wikidata wikidata]
+  in
+  Kit.append log
+    (Format.asprintf "%s regional input: %a" label Regional.pp_input input);
+  let+ regional = Http.run (Regional.program input) in
   let now = Ptime_clock.now () in
   let plant_id = Herbier_domain.Ids.Plant_id.fresh () in
   let row source payload =
@@ -280,14 +356,13 @@ let project_one log key =
   let t =
     Projection.project ~plant_refs:[]
       ~references:
-        [
-          row Source.Gbif
-            (Payload.gbif ~species ~vernacular_names ~distributions
-               ~occurrence_count);
-          row Source.Plantnet (Payload.plantnet ~media);
-          row Source.Wikidata (Payload.wikidata ~search ~entity);
-          row Source.Wikipedia (Payload.wikipedia ~summary);
-        ]
+        ([
+           row Source.Gbif gbif;
+           row Source.Plantnet (Payload.plantnet ~media);
+           row Source.Wikidata wikidata;
+           row Source.Wikipedia (Payload.wikipedia ~summary);
+         ]
+        @ List.map (fun (r : Fanout.row) -> row r.source r.payload) regional)
   in
   List.iter
     (fun field ->

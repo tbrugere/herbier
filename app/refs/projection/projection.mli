@@ -33,6 +33,27 @@ type origin = {native : area list; introduced : area list}
 type habitat = {phrase : string option; chips : string list}
 (** At least one of the two is non-empty. *)
 
+type protection =
+  | Not_protected
+      (** INPN answered, with no ["PROTECTION"] article outside overseas
+          locations. *)
+  | National  (** A ["PROTECTION"] article of scope ["NATIONAL"]. *)
+  | Local of string list
+      (** ["PROTECTION"] articles of scope ["REGIONAL"] then ["DEPARTMENTAL"]
+          only: their location names, regions first then départements, each
+          group in payload order, duplicates dropped. Articles whose location is
+          overseas are ignored; one without a location adds no name (so
+          [Local []] is possible). *)
+
+type fr_red_list = {category : string; description : string option}
+(** An entry of the national red list of metropolitan France (["LC"],
+    ["Préoccupation mineure"]). *)
+
+val equal_protection : protection -> protection -> bool
+val pp_protection : Format.formatter -> protection -> unit
+val equal_fr_red_list : fr_red_list -> fr_red_list -> bool
+val pp_fr_red_list : Format.formatter -> fr_red_list -> unit
+
 type link = {source : Reference.Source.t; url : string}
 type problem = {part : Payload.part; error : Decode.error}
 
@@ -45,17 +66,19 @@ type t = {
       (** fr, en, de, it in that order, languages without a name omitted; [None]
           when all are empty. *)
   life_form : string cited option;
-      (** « Type » (handoff: « Herbacée bisannuelle, 50–150 cm »). {!project}
-          leaves it [None] (regional layer, architecture §6). *)
+      (** « Type »: Baseflor's principal biological type as written («
+          Hémicryptophytes (>= 1m) bisannuels »), trimmed; [[Tela]]. *)
   origin : origin cited option;  (** [[Gbif]] (WCVP rows). *)
   red_list : string cited option;
       (** The global IUCN category as GBIF gives it (["LEAST_CONCERN"]);
           [[Gbif]]. *)
   flowering_months : int list cited option;
-      (** 1..12, ascending, without duplicates, non-empty. {!project} leaves it
-          [None] (regional layer, architecture §6). *)
+      (** 1..12, ascending, without duplicates, non-empty: Baseflor's
+          [floraison] read by {!months}; [[Tela]]. *)
   habitat : habitat cited option;
-      (** {!project} leaves it [None] (regional layer, architecture §6). *)
+      (** Baseflor's [carac_ecolo] (trimmed) as the phrase; its light, soil
+          moisture, soil reaction and nutrient labels, each cut before its first
+          [" ("], as the chips (blank ones and duplicates dropped); [[Tela]]. *)
   toxicity : string cited option;
       (** One sentence about toxicity, quoted as written, not a verdict: a
           negated one ("n'est pas toxique") is kept; [[Wikipedia]]. *)
@@ -64,11 +87,19 @@ type t = {
           the first image of the page of that organ whose [url] is
           {!Organ_photos.downloadable}, so at most one per organ, each with
           [organ = Some _]; [[Plantnet]]; [None] when no organ has one. *)
+  fr_status : string cited option;
+      (** INPN's [biogeographicStatus] in metropolitan France as given
+          (["PRESENT"]), the first entry; [[Taxref]]. *)
+  fr_protection : protection cited option;
+      (** [None] when the protections part is absent or does not decode;
+          [[Taxref]]. *)
+  fr_red_list : fr_red_list cited option;
+      (** The first entry of the national red list; [[Taxref]]. *)
   links : link list;  (** In the order of {!link_order}; may be empty. *)
   problems : problem list;
-      (** In [Payload.all] order of the failing parts. [Gbif_occurrence_count]
-          and [Wikidata_search] are decoded only for this list: no field reads
-          them. *)
+      (** In [Payload.all] order of the failing parts. [Gbif_occurrence_count],
+          [Wikidata_search], [Tela_names], [Tela_taxon] and [Inpn_name] are
+          decoded only for this list: no field reads them. *)
 }
 
 val project :
@@ -105,6 +136,9 @@ val project :
       every newline) whose lowercase (ASCII and Latin-1 capitals folded)
       contains ["toxique"], ["toxic"], ["vénéneu"] or ["poison"], trimmed; else
       the [description] when it matches;
+    - life form, flowering months, habitat: from the Tela row's [baseflor] part,
+      as their fields say; the French status, protection and red list: from the
+      Taxref row's [status], [protections] and [red_list] parts;
     - organ photos: per organ, the first Pl@ntNet image of that organ whose URL
       is {!Organ_photos.downloadable} ({!Organ_photos.wanted});
     - links: per source of {!link_order}, the [url] of the first live plant ref
@@ -116,6 +150,13 @@ val project :
       else a URL derived from the ids (GBIF key, the [Standard] summary's https
       page URL that classifies as Wikipedia, the entity's POWO, TaxRef, Tela,
       iNaturalist and EPPO ids), else none. *)
+
+val months : string -> int list option
+(** Baseflor's [floraison] ("5-9", "6", "4-6,9"): pieces split on [','], each
+    trimmed is ["a"] or ["a-b"] with [a] and [b] plain digits in 1..12; [a > b]
+    wraps through December ("11-2" → 11, 12, 1, 2). Ascending, without
+    duplicates. [None] when a piece does not parse or nothing is left (the field
+    is then [None], with no problem: the part decoded). *)
 
 val organ_photos_wanted : t -> (Reference.Organ.t * Sources.Gbif.Image.t) list
 (** [organ_photos] paired with their organ, [[]] when [None]: the [wanted] of
@@ -159,10 +200,8 @@ val filled : t -> Field.t -> bool
     [Native_range] / [Introduced_range]: the list is non-empty; [Life_form],
     [Red_list], [Flowering_months], [Toxicity], [Organ_photos]: [Some];
     [Habitat]: the habitat has a [phrase]; [Ecology]: the habitat has non-empty
-    [chips]; [Links]: non-empty. [Fr_status], [Fr_protection]: always [false]:
-    no field holds them. {!project} never fills [life_form], [flowering_months]
-    or [habitat] (they come from the regional layer, architecture §6), so for a
-    projection they are never filled. *)
+    [chips]; [Links]: non-empty; [Fr_status]: [fr_status <> None];
+    [Fr_protection]: [fr_protection <> None]. *)
 
 val empty_fields : t -> Field.t list
 (** The fields not {!filled}, in [Field.all] order. *)

@@ -28,6 +28,11 @@ val origin_names : Herbier_refs.Projection.area list -> string list
     (unique after the dedup; French order: accents and case ignored, « Îles
     Canaries » between « Hongrie » and « Irlande »). *)
 
+val in_source_order :
+  Herbier_domain.Reference.Source.t list ->
+  Herbier_domain.Reference.Source.t list
+(** The given sources in [Reference.Source.all] order, without repeats. *)
+
 val origin_line : string list -> string option
 (** [None] for []; up to 6 names: all, joined with [", "]; more: the first 5,
     then [" et <n> autres"] ([n] = the rest), e.g.
@@ -43,6 +48,32 @@ val red_list : string -> string option
     ["DATA_DEFICIENT"] → ["DD · données insuffisantes"]; ["NOT_EVALUATED"] and
     ["NOT_APPLICABLE"] → [None] (no data: the row disappears); any other string
     → [Some] of it as given. *)
+
+val fr_status : string -> string option
+(** INPN's status in metropolitan France → the « En France » chip: ["PRESENT"] →
+    ["Indigène"], ["ENDEMIC"] → ["Endémique"], ["SUBENDEMIC"] →
+    ["Subendémique"], ["CRYPTOGENIC"] → ["Cryptogène"], ["INTRODUCED"] →
+    ["Introduite"], ["INVASIVE"] → ["Introduite envahissante"],
+    ["NOT_NATURALIZED"] → ["Introduite non établie"], ["OCCASIONAL"] →
+    ["Occasionnelle"], ["DOUBTFUL"] → ["Présence douteuse"], ["ABSENT"] →
+    ["Absente"], ["DISAPPEARED"] → ["Disparue"], ["EXTINCT"] → ["Éteinte"]; any
+    other string → [None] (no chip). *)
+
+val fr_protection : Herbier_refs.Projection.protection -> string
+(** [Not_protected] → ["Non protégée"], [National] → ["Protégée en France"],
+    [Local [p]] → ["Protégée (<p>)"], any other [Local] →
+    ["Protégée localement"]. *)
+
+val fr_places : Herbier_refs.Projection.protection -> string option
+(** For [Local names] with 2 names or more: ["Protection : "] then
+    {!origin_line} of the names; [None] otherwise. *)
+
+val fr_red_list : Herbier_refs.Projection.fr_red_list -> string option
+(** ["Liste rouge : <code> · <label>"] with the labels of {!red_list} for
+    ["LC"], ["NT"], ["VU"], ["EN"], ["CR"], ["DD"], ["EW"], ["EX"], and ["RE"] →
+    ["disparue en France"]; ["NA"] and ["NE"] → [None] (not evaluated: no chip);
+    another category → ["Liste rouge : <category>"], followed by [" · "] and the
+    description in lowercase when there is one. *)
 
 val month_letter : int -> string
 (** 1..12 → ["J"], ["F"], ["M"], ["A"], ["M"], ["J"], ["J"], ["A"], ["S"],

@@ -27,6 +27,18 @@ let bool name json =
 let list name json =
   match Json.member name json with Some (`List l) -> l | _ -> []
 
+let last_index ~sep s =
+  let n = String.length sep in
+  let rec go i =
+    match i < 0 with
+    | true -> None
+    | false -> (
+        match String.equal (String.sub s i n) sep with
+        | true -> Some i
+        | false -> go (i - 1))
+  in
+  go (String.length s - n)
+
 let unexpected path expected = Error (Unexpected {path; expected})
 
 (* A required field read from a non-object is reported at the object

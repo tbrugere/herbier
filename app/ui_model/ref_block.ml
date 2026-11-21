@@ -15,7 +15,8 @@ type row =
       introduced : string option;
       sources : string;
     }
-  | Red_list of {chip : string; sources : string}
+  | En_france of {chips : string list; places : string option; sources : string}
+  | Red_list of {label : string; chip : string; sources : string}
   | Flowering of {months : int list; text : string; sources : string}
   | Habitat of {phrase : string option; chips : string list; sources : string}
   | Toxicity of {text : string; sources : string}
@@ -40,7 +41,7 @@ let names_sources (p : Projection.t) =
           p.taxon;
       ]
   in
-  List.filter (fun s -> List.mem s cited) Reference.Source.all
+  Ref_text.in_source_order cited
 
 let names (p : Projection.t) =
   let family =
@@ -84,6 +85,39 @@ let origin (c : Projection.origin Projection.cited) =
   | native, introduced ->
       Some (Origin {native; introduced; sources = sources c})
 
+let en_france (p : Projection.t) =
+  let status =
+    Option.bind p.fr_status (fun (c : _ Projection.cited) ->
+        Option.map (fun chip -> (chip, c.sources)) (Ref_text.fr_status c.value))
+  and red_list =
+    Option.bind p.fr_red_list (fun (c : _ Projection.cited) ->
+        Option.map
+          (fun chip -> (chip, c.sources))
+          (Ref_text.fr_red_list c.value))
+  in
+  (* INPN answers « not protected » for any taxon it knows, even one absent
+     from metropolitan France: alone, it is no data about France. *)
+  let protection =
+    Option.bind p.fr_protection (fun (c : _ Projection.cited) ->
+        match (c.value, status, red_list) with
+        | Projection.Not_protected, None, None -> None
+        | (Projection.Not_protected | National | Local _), _, _ ->
+            Some (Ref_text.fr_protection c.value, c.sources))
+  in
+  match List.filter_map Fun.id [status; protection; red_list] with
+  | [] -> None
+  | chips ->
+      let cited = List.concat_map snd chips in
+      Some
+        (En_france
+           {
+             chips = List.map fst chips;
+             places =
+               Option.bind p.fr_protection (fun (c : _ Projection.cited) ->
+                   Ref_text.fr_places c.value);
+             sources = Ref_text.sources_line (Ref_text.in_source_order cited);
+           })
+
 let organ_photos = function
   | [] -> None
   | shown ->
@@ -109,6 +143,12 @@ let links = function
               links))
 
 let rows (p : Projection.t) ~organ_photos:shown =
+  let en_france = en_france p in
+  let red_list_label =
+    match en_france with
+    | Some _ -> "Liste rouge mondiale"
+    | None -> "Liste rouge"
+  in
   List.filter_map Fun.id
     [
       names p;
@@ -117,9 +157,11 @@ let rows (p : Projection.t) ~organ_photos:shown =
           Life_form {text = c.value; sources = sources c})
         p.life_form;
       Option.bind p.origin origin;
+      en_france;
       Option.bind p.red_list (fun (c : _ Projection.cited) ->
           Option.map
-            (fun chip -> Red_list {chip; sources = sources c})
+            (fun chip ->
+              Red_list {label = red_list_label; chip; sources = sources c})
             (Ref_text.red_list c.value));
       Option.map
         (fun (c : _ Projection.cited) ->

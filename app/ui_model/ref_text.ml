@@ -48,6 +48,9 @@ let origin_names areas =
   in
   List.map snd (List.sort (fun (k1, _) (k2, _) -> String.compare k1 k2) unique)
 
+let in_source_order sources =
+  List.filter (fun s -> List.mem s sources) Source.all
+
 let origin_line names =
   match (names, List.length names) with
   | [], _ -> None
@@ -58,17 +61,68 @@ let origin_line names =
            (String.concat ", " (List.take 5 names))
            (n - 5))
 
+(* One wording for the IUCN codes, whichever list a chip comes from. *)
+let red_list_label = function
+  | "LC" -> Some "préoccupation mineure"
+  | "NT" -> Some "quasi menacée"
+  | "VU" -> Some "vulnérable"
+  | "EN" -> Some "en danger"
+  | "CR" -> Some "en danger critique"
+  | "DD" -> Some "données insuffisantes"
+  | "EW" -> Some "éteinte à l'état sauvage"
+  | "EX" -> Some "éteinte"
+  | "RE" -> Some "disparue en France"
+  | _ -> None
+
+let red_list_chip code =
+  Option.map (fun label -> code ^ " · " ^ label) (red_list_label code)
+
 let red_list = function
-  | "LEAST_CONCERN" -> Some "LC · préoccupation mineure"
-  | "NEAR_THREATENED" -> Some "NT · quasi menacée"
-  | "VULNERABLE" -> Some "VU · vulnérable"
-  | "ENDANGERED" -> Some "EN · en danger"
-  | "CRITICALLY_ENDANGERED" -> Some "CR · en danger critique"
-  | "EXTINCT_IN_THE_WILD" -> Some "EW · éteinte à l'état sauvage"
-  | "EXTINCT" -> Some "EX · éteinte"
-  | "DATA_DEFICIENT" -> Some "DD · données insuffisantes"
+  | "LEAST_CONCERN" -> red_list_chip "LC"
+  | "NEAR_THREATENED" -> red_list_chip "NT"
+  | "VULNERABLE" -> red_list_chip "VU"
+  | "ENDANGERED" -> red_list_chip "EN"
+  | "CRITICALLY_ENDANGERED" -> red_list_chip "CR"
+  | "EXTINCT_IN_THE_WILD" -> red_list_chip "EW"
+  | "EXTINCT" -> red_list_chip "EX"
+  | "DATA_DEFICIENT" -> red_list_chip "DD"
   | "NOT_EVALUATED" | "NOT_APPLICABLE" -> None
   | other -> Some other
+
+let fr_status = function
+  | "PRESENT" -> Some "Indigène"
+  | "ENDEMIC" -> Some "Endémique"
+  | "SUBENDEMIC" -> Some "Subendémique"
+  | "CRYPTOGENIC" -> Some "Cryptogène"
+  | "INTRODUCED" -> Some "Introduite"
+  | "INVASIVE" -> Some "Introduite envahissante"
+  | "NOT_NATURALIZED" -> Some "Introduite non établie"
+  | "OCCASIONAL" -> Some "Occasionnelle"
+  | "DOUBTFUL" -> Some "Présence douteuse"
+  | "ABSENT" -> Some "Absente"
+  | "DISAPPEARED" -> Some "Disparue"
+  | "EXTINCT" -> Some "Éteinte"
+  | _ -> None
+
+let fr_protection = function
+  | Herbier_refs.Projection.Not_protected -> "Non protégée"
+  | National -> "Protégée en France"
+  | Local [place] -> "Protégée (" ^ place ^ ")"
+  | Local ([] | _ :: _ :: _) -> "Protégée localement"
+
+let fr_places = function
+  | Herbier_refs.Projection.Local (_ :: _ :: _ as names) ->
+      Option.map (fun line -> "Protection : " ^ line) (origin_line names)
+  | Not_protected | National | Local ([] | [_]) -> None
+
+let fr_red_list ({category; description} : Herbier_refs.Projection.fr_red_list)
+    =
+  match (category, red_list_chip category, description) with
+  | ("NA" | "NE"), _, _ -> None
+  | _, Some chip, _ -> Some ("Liste rouge : " ^ chip)
+  | _, None, Some d ->
+      Some ("Liste rouge : " ^ category ^ " · " ^ String.lowercase_ascii d)
+  | _, None, None -> Some ("Liste rouge : " ^ category)
 
 let month_letter = function
   | 1 -> "J"

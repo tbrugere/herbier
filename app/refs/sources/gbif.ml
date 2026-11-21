@@ -124,6 +124,17 @@ module Taxon = struct
           (rest (words scientific_name) (words c))
           (fun tokens -> Decode.non_blank (String.concat " " tokens))
 
+  let without_authorship t =
+    Option.map
+      (fun c ->
+        let tokens = words t.scientific_name in
+        match rest tokens (words c) with
+        | Some after ->
+            String.concat " "
+              (List.take (List.length tokens - List.length after) tokens)
+        | None -> c)
+      t.canonical_name
+
   (* The endpoints name the same fields differently: [key]/[usageKey],
      [taxonomicStatus]/[status], [acceptedKey]/[acceptedUsageKey]. *)
   let of_json ~at ~key ~status ~accepted json =
@@ -306,22 +317,12 @@ let occurrence_key json =
   | Some (`Intlit s) when Json.is_digits s -> Some s
   | _ -> None
 
-let last_index ~sep s =
-  let n = String.length sep in
-  let rec go i =
-    match i < 0 with
-    | true -> None
-    | false -> (
-        match String.sub s i n = sep with true -> Some i | false -> go (i - 1))
-  in
-  go (String.length s - n)
-
 let after_last ~sep s =
   Option.map
     (fun i ->
       let start = i + String.length sep in
       String.sub s start (String.length s - start))
-    (last_index ~sep s)
+    (Decode.last_index ~sep s)
 
 (* "Iris Selcho (cc-by-sa)": the holder, then the licence code. The holder
    may be missing: "(cc-by)". *)

@@ -198,10 +198,7 @@ let digits () =
         (Old.is_digits s) (Json.is_digits s);
       Alcotest.(check (option int))
         (Printf.sprintf "exif digits %S" s)
-        (Old.Exif.digits s)
-        (match Json.is_digits s with
-        | true -> int_of_string_opt s
-        | false -> None))
+        (Old.Exif.digits s) (Json.digits s))
     [
       "";
       "0";

@@ -13,6 +13,7 @@ module Step = Herbier_refs.Step
 module Request = Herbier_refs.Request
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Fetch_rule = Herbier_refs.Fetch_rule
+module Regional = Herbier_refs.Regional
 
 (* ---------- testables ---------- *)
 
@@ -75,10 +76,10 @@ let minutes_before n =
 
 let pending_pairs l = List.map (fun (id, k) -> (Ids.Plant_id.to_string id, k)) l
 
-let four_sources_live ~status ~fetched_at =
+let every_source_live ~status ~fetched_at =
   List.map
     (fun source -> reference_row ~status ~source ~fetched_at (`Assoc []))
-    [Source.Gbif; Source.Plantnet; Source.Wikidata; Source.Wikipedia]
+    Fanout.sources
 
 (* ---------- a creation triggers the full fan-out ---------- *)
 
@@ -86,6 +87,18 @@ let branches3 gbif_key =
   match Fanout.branches ~gbif_key with
   | [g; p; w] -> (g, p, w)
   | bs -> Alcotest.failf "expected 3 branches, got %d" (List.length bs)
+
+(* A whole fetch, as the pipeline runs it: the three branches, then the
+   regional program on their rows. *)
+let fetch_all net =
+  let gbif_b, plantnet_b, wiki_b = branches3 5414995 in
+  let rows =
+    Step.run net gbif_b @ Step.run net plantnet_b @ Step.run net wiki_b
+  in
+  rows @ Step.run net (Regional.program (Regional.input ~previous:[] rows))
+
+let digitalis_net =
+  Fake_net.with_ Fake_net.digitalis_regional Fake_net.digitalis
 
 let has_request ~host reqs =
   List.exists
@@ -97,11 +110,8 @@ let linked_fetches_and_the_fan_out_covers_every_source () =
     "Linked, no fetch running, online: Fetch" Fetch_rule.Fetch
     (Fetch_rule.decide Fetch_rule.Linked ~online:true ~running:false ~now);
   let gbif_b, plantnet_b, wiki_b = branches3 5414995 in
-  let net = Fake_net.digitalis in
-  let gbif_rows = Step.run net gbif_b in
-  let plantnet_rows = Step.run net plantnet_b in
-  let wiki_rows = Step.run net wiki_b in
-  let all_rows = gbif_rows @ plantnet_rows @ wiki_rows in
+  let net = digitalis_net in
+  let all_rows = fetch_all net in
   List.iter
     (fun (r : Fanout.row) ->
       Alcotest.check status
@@ -201,10 +211,9 @@ let unfinished_true_when_a_source_has_no_live_row () =
   Alcotest.(check bool) "no rows at all: unfinished" true (unfinished []);
   Alcotest.(check bool)
     "every Fanout.sources row live and Complete: finished" false
-    (unfinished (four_sources_live ~status:Status.Complete ~fetched_at:now))
+    (unfinished (every_source_live ~status:Status.Complete ~fetched_at:now))
 
 let a_failed_wiki_branch_is_pending_after_the_backoff () =
-  let gbif_b, plantnet_b, wiki_b = branches3 5414995 in
   let search_url =
     match
       Wikidata.search ~property:Wikidata.Property.Gbif_key ~value:"5414995"
@@ -212,10 +221,8 @@ let a_failed_wiki_branch_is_pending_after_the_backoff () =
     | Some (r : Request.t) -> r.url
     | None -> Alcotest.fail "no search request"
   in
-  let net = Fake_net.with_ [(search_url, Step.Failed "x")] Fake_net.digitalis in
-  let all_rows =
-    Step.run net gbif_b @ Step.run net plantnet_b @ Step.run net wiki_b
-  in
+  let net = Fake_net.with_ [(search_url, Step.Failed "x")] digitalis_net in
+  let all_rows = fetch_all net in
   let decided = Fanout.decide ~previous:[] all_rows in
   let is_source want (r : Fanout.row) =
     String.equal (Source.to_string r.source) (Source.to_string want)
@@ -334,7 +341,7 @@ let dead_rows_do_not_count_as_live () =
 
 let powo_rows_are_ignored () =
   let rows =
-    four_sources_live ~status:Status.Complete ~fetched_at:now
+    every_source_live ~status:Status.Complete ~fetched_at:now
     @ [
         reference_row ~status:Status.Failed ~source:Source.Powo
           ~fetched_at:(minutes_before 60) (`Assoc []);
@@ -388,7 +395,7 @@ let references_of_another_plant_are_not_this_plant_s () =
     List.map
       (fun source ->
         reference_row ~plant:plant_b ~source ~fetched_at:now (`Assoc []))
-      [Source.Gbif; Source.Plantnet; Source.Wikidata; Source.Wikipedia]
+      Fanout.sources
   in
   Alcotest.(check (list (pair string int)))
     "p1 has no rows of its own (p2's rows don't count for it): p1 pending, p2 \
@@ -402,7 +409,7 @@ let opened_due_not_due_and_running () =
   Alcotest.(check action)
     "Opened, due (no rows), not running: Fetch" Fetch_rule.Fetch
     (Fetch_rule.decide (Fetch_rule.Opened []) ~online:true ~running:false ~now);
-  let fresh = four_sources_live ~status:Status.Complete ~fetched_at:now in
+  let fresh = every_source_live ~status:Status.Complete ~fetched_at:now in
   Alcotest.(check bool)
     "sanity: these rows are not due" false (Fanout.due ~now fresh);
   Alcotest.(check action)

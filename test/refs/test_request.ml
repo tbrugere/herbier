@@ -4,6 +4,8 @@ module Qid = Herbier_refs.Qid
 module Gbif = Herbier_refs.Sources.Gbif
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
+module Tela = Herbier_refs.Sources.Tela
+module Inpn = Herbier_refs.Sources.Inpn
 module Source = Herbier_domain.Reference.Source
 module Fixture = Herbier_test_support.Fixture
 module Text = Herbier_test_support.Text
@@ -522,6 +524,45 @@ let recorded_requests =
         (Wikipedia.summary ~lang:"en" ~title:"Digitalis purpurea") );
     ( "wikipedia_summary_fr_Lis.json",
       some "fr lis" (Wikipedia.summary ~lang:"fr" ~title:"Lis") );
+    ( "tela_names_digitalis_purpurea.json",
+      some "tela names" (Tela.names ~name:"Digitalis purpurea") );
+    ( "tela_names_arnica_montana.json",
+      some "tela names" (Tela.names ~name:"Arnica montana") );
+    ( "tela_names_reynoutria_japonica.json",
+      some "tela names" (Tela.names ~name:"Reynoutria japonica") );
+    ( "tela_names_digitalis_purpurea_subsp_purpurea.json",
+      some "tela names" (Tela.names ~name:"Digitalis purpurea subsp. purpurea")
+    );
+    ("tela_taxon_22437.json", Tela.taxon ~nn:22437);
+    ("tela_taxon_6646.json", Tela.taxon ~nn:6646);
+    ("tela_taxon_55763.json", Tela.taxon ~nn:55763);
+    ("tela_taxon_76533.json", Tela.taxon ~nn:76533);
+    ("tela_baseflor_22437.json", Tela.baseflor ~nn:22437);
+    ("tela_baseflor_6646.json", Tela.baseflor ~nn:6646);
+    ("tela_baseflor_26478.json", Tela.baseflor ~nn:26478);
+    ("inpn_name_94959.json", Inpn.name ~cd_nom:94959);
+    ("inpn_name_83874.json", Inpn.name ~cd_nom:83874);
+    ("inpn_name_97964.json", Inpn.name ~cd_nom:97964);
+    ("inpn_status_94959.json", Inpn.status ~cd_ref:94959);
+    ("inpn_status_83874.json", Inpn.status ~cd_ref:83874);
+    ("inpn_status_117503.json", Inpn.status ~cd_ref:117503);
+    ("inpn_status_97964.json", Inpn.status ~cd_ref:97964);
+    ("inpn_red_list_94959.json", Inpn.red_list ~cd_ref:94959);
+    ("inpn_red_list_83874.json", Inpn.red_list ~cd_ref:83874);
+    ("inpn_red_list_117503.json", Inpn.red_list ~cd_ref:117503);
+    ("inpn_protections_94959.json", Inpn.protections ~cd_ref:94959);
+    ("inpn_protections_83874.json", Inpn.protections ~cd_ref:83874);
+    ("inpn_protections_117503.json", Inpn.protections ~cd_ref:117503);
+    ("inpn_protections_94041.json", Inpn.protections ~cd_ref:94041);
+  ]
+
+(* Recorded with [fetch_absent]: a 404 body. *)
+let recorded_absent =
+  [
+    ( "tela_names_victoria_amazonica_404.txt",
+      some "tela names" (Tela.names ~name:"Victoria amazonica") );
+    ("tela_baseflor_31960_404.txt", Tela.baseflor ~nn:31960);
+    ("inpn_name_99999999_404.txt", Inpn.name ~cd_nom:99999999);
   ]
 
 (* Recorded by a URL no request function builds (no kingdom filter; Q0 is not
@@ -567,6 +608,14 @@ let script_tests =
             | true -> ()
             | false -> Alcotest.failf "missing fixture test/fixtures/%s" file)
           fixtures_without_request );
+    ( "every recorded 404's fetch_absent line appears in the recording script",
+      `Quick,
+      fun () ->
+        List.iter
+          (fun (file, request) ->
+            Check.check_recorded ~absent:true file request;
+            Check.check_fixture_exists file)
+          recorded_absent );
   ]
 
 let suite =

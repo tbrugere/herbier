@@ -136,8 +136,7 @@ let single property claims =
   match first preferred with Some _ as v -> v | None -> first normal
 
 let numeric property claims =
-  Option.bind (single property claims) (fun s ->
-      match Json.is_digits s with true -> int_of_string_opt s | false -> None)
+  Option.bind (single property claims) (fun s -> Json.digits s)
 
 let common_names claims =
   List.filter_map

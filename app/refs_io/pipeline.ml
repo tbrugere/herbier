@@ -4,6 +4,7 @@ module Db = Herbier_store_io.Db
 module References = Herbier_store.References
 module Fanout = Herbier_refs.Fanout
 module Step = Herbier_refs.Step
+module Regional = Herbier_refs.Regional
 
 type outcome =
   | Written of Reference.Status.t
@@ -52,25 +53,39 @@ let edits ~plant ~previous rows =
           ~payload:r.payload ~status:r.status ~at:now)
       stored )
 
+(* What one branch did: what happened to each source it answered for, and
+   the program's rows before [decide] ([[]] when it raised), which the
+   regional program reads. *)
+type settled = {outcomes : (Source.t * outcome) list; rows : Fanout.row list}
+
 let branch ~save ~plant ~previous program =
   let open Fut.Syntax in
   let* rows =
     Http.run (Step.recover Result.error (Step.map Result.ok program))
   in
   match rows with
-  | Error msg -> raised msg
+  | Error msg ->
+      let+ outcomes = raised msg in
+      {outcomes; rows = []}
   | Ok rows -> (
+      let settled outcomes = {outcomes; rows} in
       match edits ~plant ~previous rows with
-      | exception e -> raised (Printexc.to_string e)
-      | stored, [] -> Fut.return (outcomes rows stored (fun s -> Written s))
+      | exception e ->
+          let+ outcomes = raised (Printexc.to_string e) in
+          settled outcomes
+      | stored, [] ->
+          Fut.return (settled (outcomes rows stored (fun s -> Written s)))
       | stored, (_ :: _ as edits) -> (
           match save edits with
-          | None -> Fut.return (outcomes rows stored (fun _ -> Skipped))
+          | None ->
+              Fut.return (settled (outcomes rows stored (fun _ -> Skipped)))
           | Some saved -> (
               let+ saved = saved in
               match saved with
-              | Ok (_ : int) -> outcomes rows stored (fun s -> Written s)
-              | Error e -> outcomes rows stored (fun _ -> Not_saved e))))
+              | Ok (_ : int) ->
+                  settled (outcomes rows stored (fun s -> Written s))
+              | Error e -> settled (outcomes rows stored (fun _ -> Not_saved e))
+              )))
 
 let notify on_branch entries =
   match on_branch entries with
@@ -79,20 +94,43 @@ let notify on_branch entries =
       Brr.Console.(
         error [str "refs: on_branch raised"; str (Printexc.to_string e)])
 
+(* The regional program reads the name and the TaxRef id of the gbif and
+   wiki rows: it starts once the branches have settled. *)
+let regional ~on_branch ~save ~plant ~previous branches =
+  let open Fut.Syntax in
+  let* settled = branches in
+  match
+    Regional.program
+      (Regional.input ~previous
+         (List.concat_map (fun (b : settled) -> b.rows) settled))
+  with
+  | exception e -> raised (Printexc.to_string e)
+  | program ->
+      let+ {outcomes; rows = _} = branch ~save ~plant ~previous program in
+      notify on_branch outcomes;
+      outcomes
+
 let fetch ?(on_branch = fun (_ : report) -> ()) db ~save ~plant ~gbif_key =
   let open Fut.Syntax in
   let* previous = Db.all db (References.of_plant plant) in
   match previous with
   | Error e -> Fut.return (Error e)
   | Ok previous ->
-      let+ results =
+      let branches =
         Fut.of_list
           (List.map
              (fun program ->
-               let+ entries = branch ~save ~plant ~previous program in
-               notify on_branch entries;
-               entries)
+               let+ settled = branch ~save ~plant ~previous program in
+               notify on_branch settled.outcomes;
+               settled)
              (Fanout.branches ~gbif_key))
+      in
+      let+ results =
+        Fut.of_list
+          [
+            Fut.map (List.concat_map (fun (b : settled) -> b.outcomes)) branches;
+            regional ~on_branch ~save ~plant ~previous branches;
+          ]
       in
       let answered = List.concat results in
       Ok

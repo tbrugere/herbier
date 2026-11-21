@@ -1,7 +1,7 @@
 ; Reference sources, pure part: request descriptions, payload decoders, the
 ; stored payload and the projection. domain, yojson and ptime only, so it
 ; builds natively and is tested against test/fixtures/. Subdirectories are
-; qualified modules: Sources.Gbif, Sources.Wikidata, Sources.Wikipedia.
+; qualified modules (e.g. Sources.Gbif, Projection.Toxicity).
 (include_subdirs qualified)
 
 (library

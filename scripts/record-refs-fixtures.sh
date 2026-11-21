@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Record the reference-source payloads of test/fixtures/ (gbif_*, wikidata_*,
-# wikipedia_*) from the live APIs. Each fetch line is exactly the file, the
-# Request.source and the Request.url of the request description it records
-# (test/refs checks it), except the lines preceded by a
-# "# not built by a request function:" comment.
+# wikipedia_*, tela_*, inpn_*) from the live APIs. Each fetch line is exactly
+# the file, the Request.source and the Request.url of the request description
+# it records (test/refs checks it), except the lines preceded by a
+# "# not built by a request function:" comment. A fetch_absent line records
+# the body of a 404 (the file name ends in _404.txt): the source answering
+# that it has no such page.
 #
 #   scripts/record-refs-fixtures.sh [--force]
 #
@@ -31,12 +33,35 @@ fetch() {
   case "$source" in
     wikidata) args+=(-H "Api-User-Agent: $UA") ;;
     wikipedia) args+=(-L -H "Api-User-Agent: $UA") ;;
-    gbif) ;;
+    gbif | tela | taxref) ;;
     *) echo "unknown source $source" >&2; return 1 ;;
   esac
   curl "${args[@]}" -o "$path.tmp" "$url" || { rm -f "$path.tmp"; return 1; }
   mv "$path.tmp" "$path"
   echo "recorded $file"
+}
+
+fetch_absent() {
+  local file="$1" source="$2" url="$3"
+  local path="$out/$file"
+  if [ -e "$path" ] && [ "$force" = 0 ]; then
+    echo "skip $file"
+    return 0
+  fi
+  case "$source" in
+    tela | taxref) ;;
+    *) echo "unknown source $source" >&2; return 1 ;;
+  esac
+  local code
+  code="$(curl -sS --compressed -A "$UA" -o "$path.tmp" -w '%{http_code}' "$url")" \
+    || { rm -f "$path.tmp"; return 1; }
+  if [ "$code" != 404 ]; then
+    echo "$file: expected 404, got $code" >&2
+    rm -f "$path.tmp"
+    return 1
+  fi
+  mv "$path.tmp" "$path"
+  echo "recorded $file (404)"
 }
 
 fetch gbif_species_5414995.json gbif "https://api.gbif.org/v1/species/5414995"
@@ -90,3 +115,33 @@ fetch wikipedia_summary_fr_Arnica_montana.json wikipedia "https://fr.wikipedia.o
 fetch wikipedia_summary_en_Digitalis_purpurea.json wikipedia "https://en.wikipedia.org/api/rest_v1/page/summary/Digitalis_purpurea"
 fetch wikipedia_summary_fr_Lis.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Lis"
 fetch wikipedia_summary_fr_Arnica_des_montagnes.json wikipedia "https://fr.wikipedia.org/api/rest_v1/page/summary/Arnica_des_montagnes"
+
+fetch tela_names_digitalis_purpurea.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/noms?masque=Digitalis%20purpurea&retour.format=min"
+fetch tela_names_arnica_montana.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/noms?masque=Arnica%20montana&retour.format=min"
+fetch tela_names_reynoutria_japonica.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/noms?masque=Reynoutria%20japonica&retour.format=min"
+fetch tela_names_digitalis_purpurea_subsp_purpurea.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/noms?masque=Digitalis%20purpurea%20subsp.%20purpurea&retour.format=min"
+fetch_absent tela_names_victoria_amazonica_404.txt tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/noms?masque=Victoria%20amazonica&retour.format=min"
+fetch tela_taxon_22437.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/taxons/22437"
+fetch tela_taxon_6646.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/taxons/6646"
+fetch tela_taxon_55763.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/taxons/55763"
+fetch tela_taxon_76533.json tela "https://api.tela-botanica.org/service:eflore:0.1/bdtfx/taxons/76533"
+fetch tela_baseflor_22437.json tela "https://api.tela-botanica.org/service:eflore:0.1/baseflor/informations/bdtfx.nn%3A22437"
+fetch tela_baseflor_6646.json tela "https://api.tela-botanica.org/service:eflore:0.1/baseflor/informations/bdtfx.nn%3A6646"
+fetch tela_baseflor_26478.json tela "https://api.tela-botanica.org/service:eflore:0.1/baseflor/informations/bdtfx.nn%3A26478"
+fetch_absent tela_baseflor_31960_404.txt tela "https://api.tela-botanica.org/service:eflore:0.1/baseflor/informations/bdtfx.nn%3A31960"
+
+fetch inpn_name_94959.json taxref "https://odata-inpn.mnhn.fr/taxa/names/94959"
+fetch inpn_name_83874.json taxref "https://odata-inpn.mnhn.fr/taxa/names/83874"
+fetch inpn_name_97964.json taxref "https://odata-inpn.mnhn.fr/taxa/names/97964"
+fetch_absent inpn_name_99999999_404.txt taxref "https://odata-inpn.mnhn.fr/taxa/names/99999999"
+fetch inpn_status_94959.json taxref "https://odata-inpn.mnhn.fr/taxa/94959/biogeographicStatuses?locationId=TERFXFR"
+fetch inpn_status_83874.json taxref "https://odata-inpn.mnhn.fr/taxa/83874/biogeographicStatuses?locationId=TERFXFR"
+fetch inpn_status_117503.json taxref "https://odata-inpn.mnhn.fr/taxa/117503/biogeographicStatuses?locationId=TERFXFR"
+fetch inpn_status_97964.json taxref "https://odata-inpn.mnhn.fr/taxa/97964/biogeographicStatuses?locationId=TERFXFR"
+fetch inpn_red_list_94959.json taxref "https://odata-inpn.mnhn.fr/taxa/redLists/entries?taxrefId=94959&scopes=NATIONAL&scopeLocationId=TERFXFR"
+fetch inpn_red_list_83874.json taxref "https://odata-inpn.mnhn.fr/taxa/redLists/entries?taxrefId=83874&scopes=NATIONAL&scopeLocationId=TERFXFR"
+fetch inpn_red_list_117503.json taxref "https://odata-inpn.mnhn.fr/taxa/redLists/entries?taxrefId=117503&scopes=NATIONAL&scopeLocationId=TERFXFR"
+fetch inpn_protections_94959.json taxref "https://odata-inpn.mnhn.fr/taxa/protections/articles?taxrefIds=94959&embed=SCOPE_LOCATION&size=100"
+fetch inpn_protections_83874.json taxref "https://odata-inpn.mnhn.fr/taxa/protections/articles?taxrefIds=83874&embed=SCOPE_LOCATION&size=100"
+fetch inpn_protections_117503.json taxref "https://odata-inpn.mnhn.fr/taxa/protections/articles?taxrefIds=117503&embed=SCOPE_LOCATION&size=100"
+fetch inpn_protections_94041.json taxref "https://odata-inpn.mnhn.fr/taxa/protections/articles?taxrefIds=94041&embed=SCOPE_LOCATION&size=100"

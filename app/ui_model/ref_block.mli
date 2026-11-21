@@ -23,7 +23,20 @@ type row =
       introduced : string option;  (** « Introduite : » *)
       sources : string;
     }
-  | Red_list of {chip : string; sources : string}
+  | En_france of {
+      chips : string list;
+          (** [Ref_text.fr_status], [fr_protection], [fr_red_list], in that
+              order, those that exist. *)
+      places : string option;  (** [Ref_text.fr_places] *)
+      sources : string;
+    }  (** « En France » *)
+  | Red_list of {
+      label : string;
+          (** « Liste rouge mondiale » when an [En_france] row is shown, else «
+              Liste rouge ». *)
+      chip : string;
+      sources : string;
+    }
   | Flowering of {months : int list; text : string; sources : string}
       (** [text] = [Ref_text.months_text months]. *)
   | Habitat of {phrase : string option; chips : string list; sources : string}
@@ -43,6 +56,8 @@ val rows :
     - [Origin]: native or introduced non-empty (a side that is empty is [None]),
       each side [Ref_text.origin_line (Ref_text.origin_names areas)]: French
       names, in French order;
+    - [En_france]: at least one chip; [sources] is [Ref_text.sources_line] of
+      the union of the three fields' sources;
     - [Red_list]: [red_list = Some c] and [Ref_text.red_list c = Some chip];
     - [Flowering]: [flowering_months = Some _];
     - [Habitat]: [habitat = Some _];
