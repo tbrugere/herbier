@@ -58,8 +58,8 @@ val soft_delete : Observation_id.t -> at:Ptime.t -> Outbox.edit
 val to_rename : Observation.t Stmt.query
 (** Live observations whose id is in [place_renames] ({!Place_renames}), with
     [lat] and [lon] set, [trim(place_derived) <> ''] and a blank [place_label]:
-    the ones named before the commune-first rule, still to rename once; same
-    order as every list here. *)
+    the ones named before the commune-first rule or « À <commune> », still to
+    rename once; same order as every list here. *)
 
 val set_place_derived :
   Observation_id.t ->

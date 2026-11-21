@@ -254,7 +254,7 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  Alcotest.(check int) "latest is 7" 7 Schema.latest;
+  Alcotest.(check int) "latest is 8" 8 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -274,29 +274,29 @@ let pending_at_latest () =
 
 let pending_from_one () =
   Alcotest.(check string)
-    "pending from 1 is migrations 2, 3, 4, 5, 6 and 7" "Ok [2; 3; 4; 5; 6; 7]"
+    "pending from 1 is migrations 2 to 8" "Ok [2; 3; 4; 5; 6; 7; 8]"
     (string_of_pending (Schema.pending ~current:1))
 
 let pending_from_two () =
   Alcotest.(check string)
-    "pending from 2 is migrations 3, 4, 5, 6 and 7" "Ok [3; 4; 5; 6; 7]"
+    "pending from 2 is migrations 3 to 8" "Ok [3; 4; 5; 6; 7; 8]"
     (string_of_pending (Schema.pending ~current:2))
 
 let pending_from_three () =
   Alcotest.(check string)
-    "pending from 3 is migrations 4, 5, 6 and 7" "Ok [4; 5; 6; 7]"
+    "pending from 3 is migrations 4 to 8" "Ok [4; 5; 6; 7; 8]"
     (string_of_pending (Schema.pending ~current:3))
 
-(* A device at version 5 has two pending migrations, 6 and 7. *)
+(* A device at version 5 has three pending migrations, 6 to 8. *)
 let pending_from_five () =
   Alcotest.(check string)
-    "pending from 5 is migrations 6 and 7" "Ok [6; 7]"
+    "pending from 5 is migrations 6, 7 and 8" "Ok [6; 7; 8]"
     (string_of_pending (Schema.pending ~current:5))
 
-(* A device at version 6 has exactly one pending migration, 7. *)
+(* A device at version 6 has two pending migrations, 7 and 8. *)
 let pending_from_six () =
   Alcotest.(check string)
-    "pending from 6 is migration 7 alone" "Ok [7]"
+    "pending from 6 is migrations 7 and 8" "Ok [7; 8]"
     (string_of_pending (Schema.pending ~current:6))
 
 let pending_above_latest () =
@@ -761,7 +761,7 @@ let migration_7_marks_only_the_live_positioned_named_unlabelled_row () =
     ^ obs_v6_sql unpositioned ~place_derived:(quote "Près de Figeac"));
   migrate db ~current:6;
   Alcotest.(check int)
-    "after migration 7, user_version is 7" 7 (user_version db);
+    "after migrations 7 and 8, user_version is 8" 8 (user_version db);
   Alcotest.(check (list string))
     "place_renames holds exactly the marker's id" [marker]
     (List.map
@@ -830,6 +830,55 @@ let migration_7_tests =
        place_detail is null everywhere",
       `Quick,
       migration_7_marks_only_the_live_positioned_named_unlabelled_row );
+  ]
+
+(* ---------- migration 8: the « Près … » names marked again (M8.85) ---------- *)
+
+let db_before_migration_8 () =
+  let db = fresh_db () in
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Schema.migration) -> m.version <= 7)
+       Schema.migrations);
+  Alcotest.(check int)
+    "before migration 8, user_version is 7" 7 (user_version db);
+  db
+
+let migration_8_marks_the_pres_names () =
+  let db = db_before_migration_8 () in
+  let pres = obs7_id 1 and du = obs7_id 2 and a = obs7_id 3 in
+  let labelled = obs7_id 4 and deleted = obs7_id 5 and pending = obs7_id 6 in
+  exec_ok "observations named under M5.83" db
+    (fk_on
+    ^ obs_v6_sql pres ~lat:"44.602" ~lon:"2.03"
+        ~place_derived:(quote "Près de Figeac")
+    ^ obs_v6_sql du ~lat:"48.0633" ~lon:"7.0081"
+        ~place_derived:(quote "Près du Valtin")
+    ^ obs_v6_sql a ~lat:"44.602" ~lon:"2.03" ~place_derived:(quote "À Figeac")
+    ^ obs_v6_sql labelled ~lat:"44.602" ~lon:"2.03"
+        ~place_label:(quote "Jardin") ~place_derived:(quote "Près de Figeac")
+    ^ obs_v6_sql deleted ~lat:"44.602" ~lon:"2.03"
+        ~place_derived:(quote "Près de Figeac") ~deleted_at:t0
+    ^ obs_v6_sql pending ~lat:"44.602" ~lon:"2.03"
+        ~place_derived:(quote "Jardin")
+    ^ Printf.sprintf
+        "insert into place_renames (observation_id) values ('%s');\n" pending);
+  migrate db ~current:7;
+  Alcotest.(check int) "user_version is 8" 8 (user_version db);
+  Alcotest.(check (list string))
+    "the live, positioned, unlabelled « Près … » rows, and the pending marker \
+     kept"
+    (List.sort String.compare [pres; du; pending])
+    (List.sort String.compare
+       (List.map
+          (fun row -> string_field "observation_id" row)
+          (rows db "select observation_id from place_renames;\n")))
+
+let migration_8_tests =
+  [
+    ( "marks the « Près … » names again, keeps the pending markers",
+      `Quick,
+      migration_8_marks_the_pres_names );
   ]
 
 let observation_sql ?(plant = "NULL") ?(lat = "NULL") ?(lon = "NULL")
@@ -1568,11 +1617,11 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
-          case "pending from 1 is migrations 2 to 7" pending_from_one;
-          case "pending from 2 is migrations 3 to 7" pending_from_two;
-          case "pending from 3 is migrations 4 to 7" pending_from_three;
-          case "pending from 5 is migrations 6 and 7" pending_from_five;
-          case "pending from 6 is migration 7 alone" pending_from_six;
+          case "pending from 1 is migrations 2 to 8" pending_from_one;
+          case "pending from 2 is migrations 3 to 8" pending_from_two;
+          case "pending from 3 is migrations 4 to 8" pending_from_three;
+          case "pending from 5 is migrations 6 to 8" pending_from_five;
+          case "pending from 6 is migrations 7 and 8" pending_from_six;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
@@ -1612,6 +1661,7 @@ let () =
         ] );
       ("Migration 6 (Picker removed) in sqlite3", migration_6_tests);
       ("Migration 7 (place_detail, place_renames) in sqlite3", migration_7_tests);
+      ("Migration 8 (« Près » names marked again) in sqlite3", migration_8_tests);
       ( "Lookup tables in sqlite3",
         [
           case "each lookup table holds every constructor's to_string"

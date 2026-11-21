@@ -402,6 +402,32 @@ let near_tests =
     check "blank is None" "   " None;
   ]
 
+(* M8.85: the phrase of a commune that contains the point. *)
+let inside_tests =
+  let check what input expected =
+    ( what,
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string)) what expected (Near.inside input) )
+  in
+  [
+    check "a plain name" "Figeac" (Some "À Figeac");
+    check "Le X" "Le Mans" (Some "Au Mans");
+    check "Les X" "Les Sables-d’Olonne" (Some "Aux Sables-d’Olonne");
+    check "La X, the article lowered as in phrase" "La Rochelle"
+      (Some "À la Rochelle");
+    check "L'X, straight apostrophe" "L'Isle-Jourdain"
+      (Some "À l’Isle-Jourdain");
+    check "L’X, curly apostrophe" "L’Isle-Jourdain" (Some "À l’Isle-Jourdain");
+    check "a vowel elides nothing" "Épinal" (Some "À Épinal");
+    check "LE HAVRE: case-insensitive article" "LE HAVRE" (Some "Au HAVRE");
+    check "an article prefix without a space" "Lesneven" (Some "À Lesneven");
+    check "Le alone" "Le" (Some "À Le");
+    check "trimmed" "  Colmar " (Some "À Colmar");
+    check "empty is None" "" None;
+    check "blank is None" "   " None;
+  ]
+
 (* ---------- decoders over the fixtures, and error paths ---------- *)
 
 (* ---------- same_name, detail_max_m ---------- *)
@@ -1031,7 +1057,7 @@ let reverse_ign_tests =
         in
         Alcotest.(check named_opt_result)
           "result"
-          (Ok (Some {Geocode.name = "Près de Figeac"; detail = None}))
+          (Ok (Some {Geocode.name = "À Figeac"; detail = None}))
           result;
         Alcotest.(check (list string))
           "requests: commune then lieu-dit"
@@ -1050,10 +1076,7 @@ let reverse_ign_tests =
           "result"
           (Ok
              (Some
-                {
-                  Geocode.name = "Près de Lissac-et-Mouret";
-                  detail = Some "Pélégri";
-                }))
+                {Geocode.name = "À Lissac-et-Mouret"; detail = Some "Pélégri"}))
           result;
         Alcotest.(check (list string))
           "requests: commune then lieu-dit"
@@ -1074,7 +1097,7 @@ let reverse_ign_tests =
           (Ok
              (Some
                 {
-                  Geocode.name = "Près de Xonrupt-Longemer";
+                  Geocode.name = "À Xonrupt-Longemer";
                   detail = Some "Balveurche";
                 }))
           result );
@@ -1088,7 +1111,7 @@ let reverse_ign_tests =
         in
         Alcotest.(check named_opt_result)
           "result"
-          (Ok (Some {Geocode.name = "Près du Valtin"; detail = None}))
+          (Ok (Some {Geocode.name = "Au Valtin"; detail = None}))
           result;
         Alcotest.(check (list string))
           "requests: commune then lieu-dit"
@@ -1105,7 +1128,7 @@ let reverse_ign_tests =
         in
         Alcotest.(check named_opt_result)
           "result"
-          (Ok (Some {Geocode.name = "Près de Commensacq"; detail = None}))
+          (Ok (Some {Geocode.name = "À Commensacq"; detail = None}))
           result;
         Alcotest.(check (list string))
           "requests"
@@ -1167,7 +1190,7 @@ let reverse_ign_tests =
         in
         Alcotest.(check named_opt_result)
           "result"
-          (Ok (Some {Geocode.name = "Près de Commensacq"; detail = None}))
+          (Ok (Some {Geocode.name = "À Commensacq"; detail = None}))
           result;
         Alcotest.(check (list string))
           "requests"
@@ -1189,7 +1212,7 @@ let reverse_ign_tests =
         in
         Alcotest.(check named_opt_result)
           "result"
-          (Ok (Some {Geocode.name = "Près de Lissac-et-Mouret"; detail = None}))
+          (Ok (Some {Geocode.name = "À Lissac-et-Mouret"; detail = None}))
           result;
         Alcotest.(check (list string))
           "requests"
@@ -1210,7 +1233,7 @@ let reverse_ign_tests =
           (Ok
              (Some
                 {
-                  Geocode.name = "Près de Xonrupt-Longemer";
+                  Geocode.name = "À Xonrupt-Longemer";
                   detail = Some "Balveurche";
                 }))
           result );
@@ -1428,6 +1451,7 @@ let () =
       ("geoplateforme_detail", geoplateforme_detail_tests);
       ("photon_places", photon_places_tests);
       ("json_of_string", json_of_string_tests);
+      ("Near.inside", inside_tests);
       ("reverse_ign", reverse_ign_tests);
       ("reverse_photon", reverse_photon_tests);
       ("map", map_tests);

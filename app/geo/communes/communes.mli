@@ -170,5 +170,7 @@ val find : t -> Places.point -> commune option
     + else [None]. *)
 
 val name : t -> Places.point -> string option
-(** [Option.bind (find t p) (fun c -> Near.phrase c.name)]: « Près de Belfort »,
-    « Près d’Éloie ». *)
+(** The phrase of [find t p]'s commune [c]: [Near.inside c.name] when one of its
+    polygons contains the point (« À Belfort », « À Éloie »),
+    [Near.phrase c.name] when it is only the nearest within {!edge_m} (« Près de
+    Belfort »): there, containment is not known. *)

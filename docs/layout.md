@@ -171,7 +171,8 @@ app/
                           migration 3 the device-only ref_images and its reference_organs lookup;
                           migration 4 the device-only commune_packs; migration 5 the device-only uploads;
                           migration 6 (M7.79) the Picker's settings rows turned into drive_root_folder_name;
-                          migration 7 (M5.83) observations.place_detail and the device-only place_renames
+                          migration 7 (M5.83) observations.place_detail and the device-only place_renames;
+                          migration 8 (M8.85) marks the « Près … » names again in place_renames
     stmt.ml               statements as pure values (SQL, params, row decoder), run by store_io/db.ml (all, find, write)
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
     outbox.ml  sync_state.ml  settings.ml  ref_images.ml  commune_packs.ml  place_renames.ml   local-only tables, columns declared
@@ -375,7 +376,7 @@ app/
     geocode.ml            Photon forward and reverse, Géoplateforme reverse in France: request URLs,
                           decoders and one reverse program per source (reverse_ign, reverse_photon,
                           chained by or_else); pure, tested in test/geo/
-    near.ml               the « Près de … » phrase of a place name (Near.phrase); pure, tested in test/geo/
+    near.ml               the « Près de … » / « À … » phrases of a place name (Near.phrase, Near.inside); pure, tested in test/geo/
     place_name.ml         where a point's name comes from (M5.57): own labelled places, then the
                           place-name sources turned on in 4m, in order (« IGN hors-ligne » first, a lookup in
                           the loaded packs); the gate as a program; pure, tested in test/geo/

@@ -100,7 +100,9 @@ let nearest t (p : Places.point) =
     None candidates
   |> Option.map fst
 
-let find t (p : Places.point) =
+(* The commune for [p], and whether one of its polygons contains [p] ([true])
+   or it is only the nearest within [edge_m] ([false]). *)
+let locate t (p : Places.point) =
   match Places.finite p with
   | false -> None
   | true -> (
@@ -109,7 +111,15 @@ let find t (p : Places.point) =
         && List.exists (fun rings -> contains rings p) e.commune.polygons
       in
       match List.find_opt inside (entries t) with
-      | Some e -> Some e.commune
-      | None -> nearest t p)
+      | Some e -> Some (e.commune, true)
+      | None -> Option.map (fun c -> (c, false)) (nearest t p))
 
-let name t p = Option.bind (find t p) (fun c -> Near.phrase c.name)
+let find t p = Option.map fst (locate t p)
+
+(* « À » only when a polygon contains the point: a commune taken by
+   distance (a sliver, or just outside a pack's outer edge) is « Près de ». *)
+let name t p =
+  Option.bind (locate t p) (fun ((c : Pack.commune), inside) ->
+      match inside with
+      | true -> Near.inside c.name
+      | false -> Near.phrase c.name)

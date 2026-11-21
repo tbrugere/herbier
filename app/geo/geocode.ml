@@ -277,10 +277,10 @@ let rec or_else p next =
 
 let none () = Done (Ok None)
 
-(* The commune and its « Près de » phrase, when it has one. *)
-let phrased commune =
-  Option.bind commune (fun c ->
-      Option.map (fun name -> (c, name)) (Near.phrase c))
+(* The commune and its phrase ([Near.phrase] or [Near.inside]), when it has
+   one. *)
+let phrased phrase commune =
+  Option.bind commune (fun c -> Option.map (fun name -> (c, name)) (phrase c))
 
 (* The detail is optional: a payload it cannot be read from keeps the
    commune, without one. *)
@@ -298,7 +298,7 @@ let reverse_photon p =
                        (photon_detail ~near:p ~commune json)
                    in
                    {name; detail})
-                 (phrased commune))
+                 (phrased Near.phrase commune))
              (photon_commune json)) )
 
 let reverse_ign p =
@@ -311,7 +311,7 @@ let reverse_ign p =
             match geoplateforme_name json with
             | Error e -> Done (Error e)
             | Ok commune -> (
-                match phrased commune with
+                match phrased Near.inside commune with
                 | None -> none ()
                 | Some (commune, name) ->
                     Try

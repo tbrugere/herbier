@@ -88,8 +88,9 @@ val json_of_string : string -> (Yojson.Safe.t, error) result
 
 type named = {
   name : string;
-      (** the [place_derived] to store: « Près de <commune> » ({!Near.phrase}),
-          or a user's label verbatim *)
+      (** the [place_derived] to store: « À <commune> » ({!Near.inside}) for a
+          commune known to contain the point, « Près de <commune> »
+          ({!Near.phrase}) for the nearest one, or a user's label verbatim *)
   detail : string option;
       (** the [place_detail] to store: a lieu-dit's own name as the provider
           spells it (no « Près de »), close to the point and not the commune's
@@ -224,18 +225,22 @@ val reverse_ign : Places.point -> (named option, error) result program
 (** « IGN en ligne », commune first. Outside {!in_france}: [Done (Ok None)], no
     request. Else [geoplateforme_commune] → {!geoplateforme_name}:
     - a payload that does not decode → [Done (Error e)], no second request;
-    - no name, or one [Near.phrase] rejects → [Done (Ok None)], no lieu-dit
+    - no name, or one [Near.inside] rejects → [Done (Ok None)], no lieu-dit
       request (the lieu-dit is only a detail of a commune);
     - a commune [c] → [Try geoplateforme_lieu_dit] →
       [geoplateforme_detail ~near:p ~commune:c]: [Ok d] →
-      [Done (Ok (Some {name = <Near.phrase c>; detail = d}))]; a failed request
+      [Done (Ok (Some {name = <Near.inside c>; detail = d}))]; a failed request
       or a payload that does not decode →
-      [Done (Ok (Some {name = <Near.phrase c>; detail = None}))]: the detail is
-      optional, the commune is kept. *)
+      [Done (Ok (Some {name = <Near.inside c>; detail = None}))]: the detail is
+      optional, the commune is kept.
+
+    « À <commune> », not « Près de »: {!geoplateforme_commune} asks for the
+    commune containing the point. *)
 
 val reverse_photon : Places.point -> (named option, error) result program
 (** « Photon en ligne »: one [photon_reverse] request; {!photon_commune} → [c]
-    ([None] → [Done (Ok None)]); [Near.phrase c] ([None] → [Done (Ok None)]);
-    the detail by {!photon_detail} [~commune:c] on the same payload, [None] when
-    it does not decode. A payload {!photon_commune} cannot read →
-    [Done (Error e)]. Anywhere in the world. *)
+    ([None] → [Done (Ok None)]); [Near.phrase c] ([None] → [Done (Ok None)]:
+    Photon's city is the nearest, not one known to contain the point); the
+    detail by {!photon_detail} [~commune:c] on the same payload, [None] when it
+    does not decode. A payload {!photon_commune} cannot read → [Done (Error e)].
+    Anywhere in the world. *)

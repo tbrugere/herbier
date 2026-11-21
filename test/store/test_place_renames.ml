@@ -125,6 +125,54 @@ let never_writes_outbox () =
   in
   Alcotest.(check int) "outbox count unchanged" before (Cli.outbox_count db)
 
+(* ---------- migration 8 (M8.85): an old « Près de » IGN name renamed ---------- *)
+
+let t2 =
+  match Ptime.of_rfc3339 "2026-11-22T10:00:00Z" with
+  | Ok (t, _, _) -> t
+  | Error _ -> invalid_arg "fixture time t2"
+
+(* An observation inside Figeac named « Près de Figeac » by « IGN en ligne »
+   under M5.83, its migration 7 marker already forgotten: migration 8 marks
+   it again, and the pass's guarded rename writes « À Figeac ». *)
+let migration_8_then_rename () =
+  let db = Cli.fresh_db () in
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Herbier_store.Schema.migration) -> m.version <= 7)
+       Herbier_store.Schema.migrations);
+  let lat = 44.602 and lon = 2.03 in
+  let o =
+    {
+      (observation 1) with
+      position = Some {Observation.lat; lon; accuracy_m = None};
+    }
+  in
+  let (_ : int) =
+    Cli.write_ok "observation" db
+      (Outbox.bare_stmt (Outbox.without_entry (Observations.upsert o)))
+  in
+  Alcotest.(check int) "no marker before migration 8" 0 (count db);
+  Cli.migrate db ~current:7;
+  Alcotest.(check (list string))
+    "to_rename lists it"
+    [Ids.Observation_id.to_string o.id]
+    (List.map
+       (fun (o : Observation.t) -> Ids.Observation_id.to_string o.id)
+       (Cli.all db Observations.to_rename));
+  Alcotest.(check int)
+    "renamed: 1 change" 1
+    (Cli.write_ok "rename" db
+       (Outbox.bare_stmt
+          (Outbox.without_entry
+             (Observations.rename_place_derived o.id ~lat ~lon
+                ~was:"Près de Figeac" ~detail:None "À Figeac" ~at:t2))));
+  Alcotest.(check (option string))
+    "the stored name" (Some "À Figeac")
+    (Option.bind
+       (Cli.find db (Observations.get o.id))
+       (fun (o : Observation.t) -> o.place_derived))
+
 (* ---------- run ---------- *)
 
 let () =
@@ -146,6 +194,11 @@ let () =
         [
           case "deleting the observation deletes its marker too"
             cascade_on_observation_hard_delete;
+        ] );
+      ( "migration 8",
+        [
+          case "an old « Près de Figeac » is marked, then renamed « À Figeac »"
+            migration_8_then_rename;
         ] );
       ( "not synced",
         [case "forget never writes to the outbox" never_writes_outbox] );

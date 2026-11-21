@@ -1134,8 +1134,12 @@ the classifier must accept both a bare URL and text containing one.
     (abroad, no city) another `place` name; the detail is
     an OSM `place` hamlet, isolated_dwelling, farm, locality or
     neighbourhood. With both on, the chain is M5.43's (IGN, then Photon);
-  - the row stores the phrase « Près de … » with the French contraction
-    (du, des, de la, de l’, d’), which 4c and 4h print as is; the detail is
+  - the row stores the phrase « À … » when the commune is known to contain
+    the point (M8.85: « IGN en ligne », whose request is the commune
+    containing it, and a pack polygon containing it; `Near.inside`, with au,
+    aux, à la, à l’), else « Près de … » (Photon's city, the nearest; a pack
+    commune taken within `edge_m` of its outline; `Near.phrase`, with du,
+    des, de la, de l’, d’), which 4c and 4h print as is; the detail is
     stored as the provider spells it;
   - written by a conditional `Observations.set_place_derived` (live, same
     position, still unnamed) through `App` with its outbox entry, so a late
@@ -1152,7 +1156,10 @@ the classifier must accept both a bare URL and text containing one.
     Migration 7 marks every unlabelled named observation, commune names and
     pack answers included: a one-off cost of one or two requests each at
     the first passes after the upgrade, accepted over telling apart the
-    names that came from a lieu-dit, which the row does not record;
+    names that came from a lieu-dit, which the row does not record.
+    Migration 8 (M8.85) marks again, the same way, the unlabelled ones named
+    « Près … »: the source is not recorded either, so each is resolved once
+    more and an IGN answer renames it « À … »;
   - `App.geocode_pending` runs online or offline (own places need no
     network): at startup, when the window comes back online (main.ml's
     `online`/`offline` listener keeps `State.network` current), after every

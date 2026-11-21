@@ -390,6 +390,22 @@ where deleted_at is null and lat is not null and lon is not null
       search_triggers_v7
   @ ["delete from plant_search"; documents_v7 "p.deleted_at is null"]
 
+(* Migration 8: « À <commune> » when the point is inside it (architecture
+   §8). The stored names do not say which source gave them, so every
+   observation migration 7 would mark that is named « Près … » is marked
+   again: the geocoding pass asks its sources once more and renames those an
+   IGN source now names « À … » (the others resolve to the same name: no
+   change, marker forgotten). Markers still pending from migration 7 are
+   kept. *)
+let v8 =
+  [
+    {|insert or ignore into place_renames (observation_id)
+select id from observations
+where deleted_at is null and lat is not null and lon is not null
+  and place_derived like 'Près %'
+  and trim(coalesce(place_label, '')) = ''|};
+  ]
+
 let migrations =
   [
     {version = 1; statements = v1};
@@ -399,6 +415,7 @@ let migrations =
     {version = 5; statements = v5};
     {version = 6; statements = v6};
     {version = 7; statements = v7};
+    {version = 8; statements = v8};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

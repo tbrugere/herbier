@@ -24,6 +24,9 @@ let departements_json =
   lazy (json_fixture "geoplateforme_wfs_departements.json")
 
 let communes_90_json = lazy (json_fixture "geoplateforme_wfs_communes_90.json")
+
+(* Lot (46): the Figeac and Pélégri points of M5.83 (test_geocode.ml). *)
+let communes_46_json = lazy (json_fixture "geoplateforme_wfs_communes_46.json")
 let communes_99_json = lazy (json_fixture "geoplateforme_wfs_communes_99.json")
 
 (* Mayotte (976): the overseas proof — the WFS serves 971-974 and 976 with
@@ -43,6 +46,10 @@ let schlucht : Places.point = {lat = 48.0633; lon = 7.0081}
    payload (bbox lon <= 45.300, so a point east of it is open sea). *)
 let mamoudzou : Places.point = {lat = -12.7806; lon = 45.2279}
 let mayotte_open_sea : Places.point = {lat = -12.80; lon = 45.60}
+
+(* test_geocode.ml's points: inside Figeac, and Pélégri (Lissac-et-Mouret). *)
+let figeac : Places.point = {lat = 44.602; lon = 2.03}
+let pelegri : Places.point = {lat = 44.6300; lon = 1.9835}
 
 (* ---------- testables ---------- *)
 
@@ -203,6 +210,28 @@ let fixture_script_tests =
               Printf.sprintf
                 "fetch geoplateforme_wfs_communes_976.json geoplateforme \"%s\""
                 (force_communes_request "976").url
+            in
+            Alcotest.(check bool)
+              "fetch line present" true
+              (Text.contains ~sub:line script) );
+    ( "the recording script fetches the 46 (Lot) fixture at communes_request \
+       ~departement:46's exact URL",
+      `Quick,
+      fun () ->
+        let script_path = "../../scripts/record-geo-fixtures.sh" in
+        match
+          try Some (In_channel.with_open_bin script_path In_channel.input_all)
+          with Sys_error _ -> None
+        with
+        | None ->
+            Alcotest.fail
+              "scripts/record-geo-fixtures.sh is missing: cannot check the \
+               fixture URL against it"
+        | Some script ->
+            let line =
+              Printf.sprintf
+                "fetch geoplateforme_wfs_communes_46.json geoplateforme \"%s\""
+                (force_communes_request "46").url
             in
             Alcotest.(check bool)
               "fetch line present" true
@@ -398,6 +427,9 @@ let pack_of_payload_ok () =
 
 (* Mayotte (976): the WFS serves an overseas département exactly like a
    metropolitan one. *)
+let pack_46 =
+  lazy (force_pack_of_payload ~departement:"46" (Lazy.force communes_46_json))
+
 let pack_976 =
   lazy (force_pack_of_payload ~departement:"976" (Lazy.force communes_976_json))
 
@@ -1096,9 +1128,9 @@ let index_find_and_name () =
   | Some c -> Alcotest.(check string) "giromagny insee" "90052" c.insee
   | None -> Alcotest.fail "expected Giromagny to be found");
   Alcotest.(check (option string))
-    "eloie" (Near.phrase "Éloie") (Communes.name idx eloie);
+    "eloie" (Near.inside "Éloie") (Communes.name idx eloie);
   Alcotest.(check (option string))
-    "belfort name" (Some "Près de Belfort")
+    "belfort name" (Some "À Belfort")
     (Communes.name idx belfort);
   Alcotest.(check (option string)) "landes" None (Communes.name idx landes);
   Alcotest.(check (option string)) "schlucht" None (Communes.name idx schlucht);
@@ -1182,14 +1214,26 @@ let index_order_and_absent_remove () =
 let index_976_name () =
   let idx = Communes.add Communes.empty (Lazy.force pack_976) in
   Alcotest.(check (option string))
-    "Mamoudzou" (Some "Près de Mamoudzou")
+    "Mamoudzou" (Some "À Mamoudzou")
     (Communes.name idx mamoudzou);
   Alcotest.(check (option string))
     "open sea east of Mayotte" None
     (Communes.name idx mayotte_open_sea)
 
+(* M8.85: a pack polygon contains the point, so the commune is « À … ». *)
+let index_46_name () =
+  let idx = Communes.add Communes.empty (Lazy.force pack_46) in
+  Alcotest.(check (option string))
+    "Figeac" (Some "À Figeac") (Communes.name idx figeac);
+  Alcotest.(check (option string))
+    "Pélégri" (Some "À Lissac-et-Mouret")
+    (Communes.name idx pelegri)
+
 let index_tests =
   [
+    ( "name on the 46 pack: À Figeac, À Lissac-et-Mouret (M8.85)",
+      `Quick,
+      index_46_name );
     ( "find and name on the 90 pack: Belfort, Giromagny, Éloie, outside, nan",
       `Quick,
       index_find_and_name );
@@ -1363,6 +1407,16 @@ let holes_and_edges_tests =
           "30 m outside" (Some "AA002")
           (Communes.find idx just_outside
           |> Option.map (fun (c : Communes.commune) -> c.insee)) );
+    ( "inside a polygon is « À », within edge_m outside it « Près de » (M8.85)",
+      `Quick,
+      fun () ->
+        let idx = Lazy.force synthetic_idx in
+        Alcotest.(check (option string))
+          "inside Ouest" (Some "À Ouest")
+          (Communes.name idx (pt ~cx:10000. ~cy:0. ~dx:0. ~dy:0.));
+        Alcotest.(check (option string))
+          "30 m outside Ouest" (Some "Près d’Ouest")
+          (Communes.name idx (pt ~cx:10000. ~cy:0. ~dx:(-530.) ~dy:0.)) );
     ( "80 m outside the outer edge is None (beyond edge_m)",
       `Quick,
       fun () ->

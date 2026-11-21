@@ -68,6 +68,8 @@ let recorded_requests =
       Geocode.geoplateforme_commune {lat = 44.6300; lon = 1.9835} );
     ( "geoplateforme_lieu_dit_pelegri.json",
       Geocode.geoplateforme_lieu_dit {lat = 44.6300; lon = 1.9835} );
+    ( "photon_reverse_figeac.json",
+      Geocode.photon_reverse {lat = 44.602; lon = 2.03} );
   ]
 
 let request_line (r : Geocode.request) =
@@ -578,14 +580,13 @@ let resolve_ign_only () =
       (List.map request_line reqs)
       (List.map request_line got_reqs)
   in
-  check schlucht (named "Près du Valtin")
+  check schlucht (named "Au Valtin")
     (* the lieu-dit "le Rain des Aulx" is 464 m away, beyond detail_max_m *)
     [
       Geocode.geoplateforme_commune schlucht;
       Geocode.geoplateforme_lieu_dit schlucht;
     ];
-  check landes
-    (named "Près de Commensacq")
+  check landes (named "À Commensacq")
     [
       Geocode.geoplateforme_commune landes; Geocode.geoplateforme_lieu_dit landes;
     ];
@@ -682,13 +683,12 @@ let resolve_both_on_matches_m543 () =
   (* schlucht, landes: IGN finds a commune (its lieu-dit beyond
      detail_max_m), Photon is never tried (or_else short-circuits on
      Ok (Some _)). *)
-  check_case schlucht (named "Près du Valtin")
+  check_case schlucht (named "Au Valtin")
     [
       Geocode.geoplateforme_commune schlucht;
       Geocode.geoplateforme_lieu_dit schlucht;
     ];
-  check_case landes
-    (named "Près de Commensacq")
+  check_case landes (named "À Commensacq")
     [
       Geocode.geoplateforme_commune landes; Geocode.geoplateforme_lieu_dit landes;
     ];
@@ -730,7 +730,7 @@ let resolve_errors_stop_the_chain () =
   in
   Alcotest.(check outcome_result)
     "bad payload at the lieu-dit step, after a good commune"
-    (Ok (named "Près de Commensacq"))
+    (Ok (named "À Commensacq"))
     result;
   Alcotest.(check (list string))
     "two requests, no Photon"
@@ -841,10 +841,7 @@ let resolve_offline_in_the_pack_names_it_with_no_request () =
       (Place_name.resolve ~sources:offline_only_src ~online:false ~labelled:[]
          ~communes:(Lazy.force idx_90) belfort)
   in
-  Alcotest.(check outcome_result)
-    "belfort"
-    (Ok (named "Près de Belfort"))
-    result;
+  Alcotest.(check outcome_result) "belfort" (Ok (named "À Belfort")) result;
   Alcotest.(check int) "no request" 0 (List.length reqs)
 
 let resolve_offline_outside_the_pack_is_unknown_whatever_online () =
@@ -890,7 +887,7 @@ let resolve_offline_wins_over_online_in_the_pack () =
       (Place_name.resolve ~sources:offline_and_both_online ~online:true
          ~labelled:[] ~communes:(Lazy.force idx_90) belfort)
   in
-  Alcotest.(check outcome_result) "result" (Ok (named "Près de Belfort")) result;
+  Alcotest.(check outcome_result) "result" (Ok (named "À Belfort")) result;
   Alcotest.(check int) "no request: offline first" 0 (List.length reqs)
 
 let resolve_offline_off_ignores_the_pack () =
@@ -950,8 +947,8 @@ let resolve_figeac_gives_the_commune_with_no_detail () =
          ~communes:no_communes figeac)
   in
   Alcotest.(check outcome_result)
-    "Près de Figeac, no detail (its nearest lieu-dit is 319 m away)"
-    (Ok (named "Près de Figeac"))
+    "À Figeac, no detail (its nearest lieu-dit is 319 m away)"
+    (Ok (named "À Figeac"))
     result;
   Alcotest.(check (list string))
     "commune then lieu-dit"
@@ -969,8 +966,8 @@ let resolve_pelegri_gives_the_commune_with_the_hamlet_as_detail () =
          ~communes:no_communes pelegri)
   in
   Alcotest.(check outcome_result)
-    "Près de Lissac-et-Mouret, detail Pélégri (66 m)"
-    (Ok (named ~detail:"Pélégri" "Près de Lissac-et-Mouret"))
+    "À Lissac-et-Mouret, detail Pélégri (66 m)"
+    (Ok (named ~detail:"Pélégri" "À Lissac-et-Mouret"))
     result;
   Alcotest.(check (list string))
     "commune then lieu-dit"
@@ -980,6 +977,41 @@ let resolve_pelegri_gives_the_commune_with_the_hamlet_as_detail () =
          Geocode.geoplateforme_lieu_dit pelegri;
        ])
     (List.map request_line reqs)
+
+(* M8.85: the pack's polygon contains the Figeac point too (« À »); Photon's
+   city is only the nearest (« Près de »). *)
+let idx_46 =
+  lazy
+    (match
+       Communes.pack_of_payload
+         ~departement:(Option.get (Communes.Code.of_string "46"))
+         (json_fixture "geoplateforme_wfs_communes_46.json")
+     with
+    | Ok p -> Communes.add Communes.empty p
+    | Error e ->
+        Alcotest.failf "pack_of_payload 46: %s" (Geocode.error_to_string e))
+
+let resolve_figeac_offline_and_photon () =
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve
+         ~sources:{Place_name.none with ign_offline = true}
+         ~online:false ~labelled:[] ~communes:(Lazy.force idx_46) figeac)
+  in
+  Alcotest.(check outcome_result)
+    "IGN hors-ligne: À Figeac"
+    (Ok (named "À Figeac"))
+    result;
+  Alcotest.(check int) "no request" 0 (List.length reqs);
+  let result, _ =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:photon_only ~online:true ~labelled:[]
+         ~communes:no_communes figeac)
+  in
+  Alcotest.(check outcome_result)
+    "Photon: Près de Figeac"
+    (Ok (named "Près de Figeac"))
+    result
 
 let outcome_to_string_renders_name_and_detail () =
   Alcotest.(check string)
@@ -1004,6 +1036,10 @@ let resolve_tests =
     ( "every source off is Unknown, no request, at every point and online value",
       `Quick,
       resolve_all_off_is_unknown_with_no_request );
+    ( "Figeac: « À Figeac » from the Lot pack, « Près de Figeac » from Photon \
+       (M8.85)",
+      `Quick,
+      resolve_figeac_offline_and_photon );
     ( "Figeac: the commune, its lieu-dit too far for a detail",
       `Quick,
       resolve_figeac_gives_the_commune_with_no_detail );

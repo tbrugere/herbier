@@ -40,7 +40,10 @@ val migrations : migration list
     table [place_renames] of {!Place_renames}, filled with every live
     observation that has [lat], [lon], a non-blank [place_derived] and a blank
     [place_label] (named before the commune-first rule, renamed once by the
-    geocoding pass). *)
+    geocoding pass). Version 8 adds to [place_renames] (keeping its rows) every
+    live observation with [lat], [lon], a blank [place_label] and a
+    [place_derived] starting with ["Près "]: named before « À <commune> », whose
+    source is not stored, renamed once by the same pass. *)
 
 val latest : int
 (** Version of the last migration. *)
