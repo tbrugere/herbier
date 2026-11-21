@@ -2,9 +2,12 @@
     Supprimer tout », around the pack rows and the département picker.
 
     - [summary]: when packs exist, a line
-      ({!Herbier_ui_model.France_text.summary}) and « Supprimer tout », which
-      asks inline ({!Herbier_ui_model.France_text.delete_all_question} and its
-      note) before {!App.delete_all_packs}; an error goes to [set_message].
+      ({!Herbier_ui_model.France_text.summary}) and « Supprimer tout ». The line
+      is a [<button>] with a chevron and [aria-expanded] that shows or hides the
+      pack rows ([expanded]; the caller gives the list the id [packs], its
+      [aria-controls]). « Supprimer tout » asks inline
+      ({!Herbier_ui_model.France_text.delete_all_question} and its note) before
+      {!App.delete_all_packs}; an error goes to [set_message].
     - [button]: « Toute la France ». A tap shows « Chargement… »
       ({!App.france_plan} and {!App.connection}; another tap meanwhile does
       nothing), then an inline panel: the scope (overseas included), the
@@ -28,6 +31,9 @@
 
 type t = {
   summary : Brr.El.t list;  (** above the pack rows *)
+  expanded : bool React.signal;
+      (** the pack rows are shown: toggled by the summary line, false at first
+      *)
   button : Brr.El.t;  (** next to « Ajouter un département » *)
   after : Brr.El.t list;  (** under the picker *)
   running : bool React.signal;
@@ -35,5 +41,8 @@ type t = {
   locked : bool React.signal;
   bindings : Rb.binding list;
 }
+
+val packs_id : string
+(** The id the caller gives the pack rows' holder. *)
 
 val v : App.t -> set_message:(string option -> unit) -> t

@@ -50,26 +50,27 @@
     unless {!Herbier_ui_model.Drive_text.send_enabled}; below its card,
     {!Pending} (no retry or discard action). « Données hors-ligne » is
     {!Offline_row}. « Copie compressée hors-ligne » is always on, the preview
-    being the only local copy. « Noms de lieux »: an intro line (own places
-    first, then the sources below, then « Lieu inconnu »), then one switch per
+    being the only local copy. « Noms de lieux »: one switch per
     [Place_name.order] source (« IGN hors-ligne », « IGN en ligne », « Photon en
-    ligne »), each with what it sends to whom, off by default; a tap goes
-    through {!App.set_place_source}, whose {!App.place_error} shows below the
-    switches (hidden when [None]). Under « IGN hors-ligne »: one row per
-    {!App.packs} (« <code> · <name> », its size and commune count or « Fichier
-    illisible », and « Supprimer » through {!App.delete_pack}, inert while that
-    delete runs), {!Pack_text.no_pack} when there is none and the switch is on,
-    then « Ajouter un département » (inert while {!App.downloading}; it controls
-    the picker list, [aria-controls]): it fetches {!App.departements} once per
-    screen (« Chargement… », an error and « Réessayer »), then focuses a search
-    field over the départements not downloaded yet, filtered with
-    [Herbier_domain.Fold.matches] on « <code> <name> »; a tap downloads it
-    ({!App.download_pack}). While {!App.downloading} is [Some d], on this screen
-    or one opened again meanwhile, the list and field are hidden and a status
-    line says « Téléchargement de <d.name>… ». Success closes the picker; an
-    error goes to the status line under the list (out of the scrolled list) and
-    the list comes back. The IGN attribution ends the block. A tap on « Ajouter
-    un département » while the picker is open closes it. *)
+    ligne »), each but « IGN hors-ligne » with what it sends to whom, off by
+    default; a tap goes through {!App.set_place_source}, whose
+    {!App.place_error} shows below the switches (hidden when [None]). Under «
+    IGN hors-ligne »: {!France_block}'s summary, which folds (folded at first)
+    one row per {!App.packs} (« <code> · <name> », its size and commune count or
+    « Fichier illisible », and « Supprimer » through {!App.delete_pack}, inert
+    while that delete runs), {!Pack_text.no_pack} when there is none and the
+    switch is on, then « Ajouter un département » (inert while
+    {!App.downloading}; it controls the picker list, [aria-controls]): it
+    fetches {!App.departements} once per screen (« Chargement… », an error and «
+    Réessayer »), then focuses a search field over the départements not
+    downloaded yet, filtered with [Herbier_domain.Fold.matches] on « <code>
+    <name> »; a tap downloads it ({!App.download_pack}). While
+    {!App.downloading} is [Some d], on this screen or one opened again
+    meanwhile, the list and field are hidden and a status line says «
+    Téléchargement de <d.name>… ». Success closes the picker; an error goes to
+    the status line under the list (out of the scrolled list) and the list comes
+    back. The IGN attribution ends the block. A tap on « Ajouter un département
+    » while the picker is open closes it. *)
 
 val v : App.t -> Screen.t
 

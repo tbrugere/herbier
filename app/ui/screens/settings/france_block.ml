@@ -9,6 +9,7 @@ let cls = Html.cls
 
 type t = {
   summary : El.t list;
+  expanded : bool React.signal;
   button : El.t;
   after : El.t list;
   running : bool React.signal;
@@ -26,6 +27,7 @@ type panel =
 type delete = Delete_closed | Delete_asking | Deleting
 
 let panel_id = "france-panel"
+let packs_id = "packs"
 let line text = El.p ~at:[cls "t-meta"; cls "settings__intro"] [El.txt' text]
 
 (* Always rendered, empty when nothing runs: a live region must be in the
@@ -193,12 +195,20 @@ let v app ~set_message =
   let panel_el =
     El.div ~at:[cls "france-panel__holder"; At.id (Jstr.v panel_id)] []
   in
-  let summary_text = El.span ~at:[cls "t-meta"; cls "settings__text"] [] in
+  let summary_text = El.span ~at:[cls "t-meta"] [] in
+  let toggle =
+    Html.button
+      ~at:[At.v (Jstr.v "aria-controls") (Jstr.v packs_id)]
+      ["france-summary__toggle"]
+      [summary_text; W.Icon.el ~size:20 W.Icon.Chevron_right]
+  in
+  let expanded, set_expanded = React.S.create ~eq:Bool.equal false in
+  let set_expanded b = set_expanded b in
   let delete_all = W.Button.text ~tone:`Danger France_text.delete_all in
   let summary_row =
     El.div
       ~at:[cls "settings__row"; cls "france-summary"]
-      [summary_text; delete_all.el]
+      [toggle; delete_all.el]
   in
   let confirm_el = El.div ~at:[cls "france-panel__holder"] [] in
   let do_delete () =
@@ -285,6 +295,10 @@ let v app ~set_message =
                ~bytes:(total_bytes packs))
            (App.packs app));
       Rb.attr summary_row "hidden" (hidden_unless has_packs);
+      Rb.attr toggle "aria-expanded"
+        (React.S.map (fun b -> Some (Bool.to_string b)) expanded);
+      Rb.listen toggle Ev.click (fun _ ->
+          set_expanded (not (React.S.value expanded)));
       Rb.disabled delete_all.el busy;
       Rb.act delete_all.click (fun () ->
           match (React.S.value busy, React.S.value delete) with
@@ -321,6 +335,7 @@ let v app ~set_message =
   in
   {
     summary = [summary_row; confirm_el];
+    expanded;
     button = button.el;
     after = [panel_el; bar; status; interrupt_row];
     running;

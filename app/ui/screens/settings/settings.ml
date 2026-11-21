@@ -241,8 +241,10 @@ let ign_offline_block app =
   let set_picker p = set_picker p in
   (* style: the list fetched once per screen, kept for a reopened picker. *)
   let fetched = ref None in
-  let packs_el = El.div ~at:[cls "packs"] [] in
   let france = France_block.v app ~set_message in
+  let packs_el =
+    El.div ~at:[cls "packs"; At.id (Jstr.v France_block.packs_id)] []
+  in
   let render (packs, on) =
     let rows =
       List.map
@@ -418,6 +420,14 @@ let ign_offline_block app =
              List.equal App.equal_pack a c && Bool.equal b d)
            (fun p o -> (p, o))
            (App.packs app) on);
+      (* Only the rows fold: « Aucun département » stays when there is none. *)
+      Rb.attr packs_el "hidden"
+        (React.S.l2
+           (fun packs expanded ->
+             match (packs, expanded) with
+             | _ :: _, false -> Some ""
+             | [], _ | _ :: _, true -> None)
+           (App.packs app) france.expanded);
       Rb.view list_el render_picker
         (React.S.l4 ~eq:( == )
            (fun p q packs d -> (p, q, packs, d))
@@ -605,8 +615,14 @@ let v app =
             (State.place_sources state)
         in
         let switch =
-          W.Switch.v ~label:(Place_name.label src)
-            ~detail:(Place_name.detail src) on ()
+          (* « IGN hors-ligne » has its own block under it: no detail line. *)
+          let detail =
+            match src with
+            | Place_name.Ign_offline -> None
+            | Place_name.(Ign_online | Photon_online) ->
+                Some (Place_name.detail src)
+          in
+          W.Switch.v ~label:(Place_name.label src) ?detail on ()
         in
         ( src,
           switch,
@@ -693,20 +709,12 @@ let v app =
           [
             El.div
               ~at:[cls "settings__card"]
-              (El.p
-                 ~at:[cls "t-meta"; cls "settings__intro"]
-                 [
-                   El.txt'
-                     "Vos lieux renommés nomment d’abord les observations à \
-                      moins de 500 m, sans réseau ; sinon les sources activées \
-                      ci-dessous ; sinon « Lieu inconnu ».";
-                 ]
-               :: List.concat_map
-                    (fun (src, (s : W.Switch.t), _) ->
-                      match src with
-                      | Place_name.Ign_offline -> s.el :: offline_els
-                      | Place_name.(Ign_online | Photon_online) -> [s.el])
-                    source_switches
+              (List.concat_map
+                 (fun (src, (s : W.Switch.t), _) ->
+                   match src with
+                   | Place_name.Ign_offline -> s.el :: offline_els
+                   | Place_name.(Ign_online | Photon_online) -> [s.el])
+                 source_switches
               @ [source_error]);
           ];
         section "File d'envoi"
