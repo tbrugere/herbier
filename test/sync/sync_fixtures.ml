@@ -65,6 +65,7 @@ let observation ~at ?plant n : Observation.t =
     position = None;
     place_label = None;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = at;
     updated_at = at;

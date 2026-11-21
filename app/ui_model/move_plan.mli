@@ -65,8 +65,9 @@ val apply : Observation.t -> Places.point -> at:Ptime.t -> Observation.t option
     both). Otherwise [Some o'] with:
     - [position = Some {lat; lon; accuracy_m = None}], [lat]/[lon] from
       {!normalise} (the accuracy is cleared, architecture §2);
-    - [place_derived = None] (computed for the old point; [App.save] runs
-      [geocode_pending], which fills it again for the new one);
+    - [place_derived = None] and [place_detail = None] (computed for the old
+      point; [App.save] runs [geocode_pending], which fills them again for the
+      new one; a detail without a derived name breaks the schema's check);
     - [place_label] kept when [Places.position_point] of the observation is
       [Some from] and [Places.within from] holds for the normalised [p] (still
       the same place), else [None];

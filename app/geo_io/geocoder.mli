@@ -46,12 +46,14 @@ val run :
 (** Each [Get] through the queue; a body that
     [Herbier_geo.Geocode.json_of_string] rejects →
     [Error (Payload (Not_json _))]; a transport error stops the program with it;
-    [Done (Error e)] → [Error (Payload e)]. Never raises; the future is
-    determined unless a continuation raises (a bug, not caught). [on_start] is
-    called with each request when it starts (after its wait in the queue and the
-    spacing, and after the request is logged), for the dev log. [allow]
-    (default: always) is asked at that same moment, before anything is logged or
-    sent: [false] stops the program with [Error (Refused provider)]. *)
+    [Done (Error e)] → [Error (Payload e)]. Each [Try] through the queue too,
+    but any of those failures, a refusal by [allow] included, continues with
+    [None]. Never raises; the future is determined unless a continuation raises
+    (a bug, not caught). [on_start] is called with each request when it starts
+    (after its wait in the queue and the spacing, and after the request is
+    logged), for the dev log. [allow] (default: always) is asked at that same
+    moment, before anything is logged or sent: [false] stops the program with
+    [Error (Refused provider)]. *)
 
 val search :
   ?timeout_ms:int ->

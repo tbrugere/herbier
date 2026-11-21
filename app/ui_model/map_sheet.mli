@@ -19,6 +19,9 @@ val title : Herbier_domain.Places.cluster -> string
 (** {!Journal_day.place} of the members (« Lieu inconnu » for an unnamed place),
     or ["Lieu"] when [None]. *)
 
+val detail : Herbier_domain.Places.cluster -> string option
+(** The line under {!title}: {!Journal_day.place_detail} of the members. *)
+
 val summary : Observation.t list -> string
 (** The shown members: ["rayon 500 m · 6 observations · 4 plantes"] (distinct
     [plant_id]s), French plural rules of {!Fr_text.plural}; the plants part is

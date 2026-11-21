@@ -72,6 +72,7 @@ let places_failures () =
             position = Some {Observation.lat; lon = 5.; accuracy_m = None};
             place_label = None;
             place_derived = None;
+            place_detail = None;
             note = None;
             created_at = at;
             updated_at = at;

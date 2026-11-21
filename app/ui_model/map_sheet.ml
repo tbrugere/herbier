@@ -19,6 +19,7 @@ let snaps ~available ~top =
 let title (cluster : Places.cluster) =
   Option.value (Journal_day.place cluster.members) ~default:"Lieu"
 
+let detail (cluster : Places.cluster) = Journal_day.place_detail cluster.members
 let radius = Printf.sprintf "rayon %.0f m" Places.radius_m
 
 let summary shown =

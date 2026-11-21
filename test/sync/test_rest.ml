@@ -612,7 +612,7 @@ let decoding_recorded_answers () =
       });
   decode_one "observations" Synced.observations ~equal:Observation.equal
     ~updated_at:(fun (o : Observation.t) -> o.updated_at)
-    ~expected_updated_at:"2026-11-12T12:25:29.355985Z" ~micro:355985
+    ~expected_updated_at:"2026-11-21T16:39:34.799294Z" ~micro:799294
     ~with_updated_at:(fun updated_at : Observation.t ->
       {
         id = F.observation_id 3;
@@ -622,6 +622,7 @@ let decoding_recorded_answers () =
           Some {Observation.lat = 45.5; lon = 3.25; accuracy_m = Some 12.5};
         place_label = Some "Bois";
         place_derived = None;
+        place_detail = None;
         note = Some "Fleurs ouvertes";
         created_at = F.time "2026-11-12T09:02:00Z";
         updated_at;
@@ -728,12 +729,28 @@ let observation_full : Observation.t =
     plant_id = Some (F.plant_id 1);
     position = Some {Observation.lat = 45.5; lon = 3.25; accuracy_m = Some 12.5};
     place_label = Some "Bois";
+    place_derived = Some "Près de Lissac-et-Mouret";
+    place_detail = Some "Pélégri";
     note = Some "Fleurs ouvertes";
     deleted_at = Some t1;
   }
 
 let reference_full : Reference.t =
   {reference_min with payload = sent_reference_payload; deleted_at = Some t1}
+
+(* place_detail is pushed alongside place_derived (in the generated Tables
+   order, so after deleted_at). The recorded pull fixture carries it too
+   (null); this test covers the push direction. *)
+let push_payload_includes_place_detail () =
+  match Input.to_json (Synced.input Synced.observations observation_full) with
+  | `Assoc kvs ->
+      Alcotest.(check (option json))
+        "place_detail is in the pushed payload"
+        (Some (`String "Pélégri"))
+        (List.assoc_opt "place_detail" kvs)
+  | other ->
+      Alcotest.failf "an observation payload is an object, got %s"
+        (Yojson.Safe.to_string other)
 
 let payload_round_trip () =
   round_trip "plants" Synced.plants plant_min;
@@ -926,6 +943,9 @@ let tests =
        re-encodes the same",
       `Quick,
       payload_round_trip );
+    ( "an observation's pushed payload carries place_detail",
+      `Quick,
+      push_payload_includes_place_detail );
     ( "push: an outbox payload, decoded and upserted, sends a structurally \
        equal body",
       `Quick,

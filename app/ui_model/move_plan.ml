@@ -77,6 +77,7 @@ let apply (o : Observation.t) p ~at =
               o with
               position = Some {lat = q.lat; lon = q.lon; accuracy_m = None};
               place_derived = None;
+              place_detail = None;
               place_label =
                 (match same_place with true -> o.place_label | false -> None);
               updated_at = at;

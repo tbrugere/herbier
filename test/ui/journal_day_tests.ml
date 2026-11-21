@@ -2,7 +2,8 @@ module Journal_day = Herbier_ui_model.Journal_day
 
 let utc = Fixtures.utc
 
-let obs ?(hour = 12) ?label ?derived ?pos () : Herbier_domain.Observation.t =
+let obs ?(hour = 12) ?label ?derived ?detail ?(deleted = false) ?pos () :
+    Herbier_domain.Observation.t =
   let t = utc 2026 6 12 hour 0 in
   {
     id = Herbier_domain.Ids.Observation_id.fresh ();
@@ -15,10 +16,11 @@ let obs ?(hour = 12) ?label ?derived ?pos () : Herbier_domain.Observation.t =
         pos;
     place_label = label;
     place_derived = derived;
+    place_detail = detail;
     note = None;
     created_at = t;
     updated_at = t;
-    deleted_at = None;
+    deleted_at = (if deleted then Some t else None);
   }
 
 let journal_day =
@@ -81,4 +83,21 @@ let journal_day =
         Alcotest.check place "a nan position is not placeable" None
           (Journal_day.place [obs ~pos:(Float.nan, 7.0) ()]);
         Alcotest.check place "none" None (Journal_day.place [obs ()]));
+    (* place_detail = Places.label_detail: a thin alias (the module's full
+       plurality/tie rule is covered by test_places.ml's label_detail
+       tests); here we only check the alias wires through. *)
+    Alcotest.test_case "place_detail is Places.label_detail" `Quick (fun () ->
+        Alcotest.check place "a day with a labelled observation: None" None
+          (Journal_day.place_detail [obs ~label:"Col" ()]);
+        Alcotest.check place
+          "the same derived name, the earliest of a 1-1 tie has a detail"
+          (Some "Pélégri")
+          (Journal_day.place_detail
+             [
+               obs ~hour:9 ~derived:"Près de Lissac-et-Mouret" ~detail:"Pélégri"
+                 ();
+               obs ~hour:10 ~derived:"Près de Lissac-et-Mouret" ();
+             ]);
+        Alcotest.check place "no observation has a detail: None" None
+          (Journal_day.place_detail [obs ~derived:"Près de Figeac" ()]));
   ]

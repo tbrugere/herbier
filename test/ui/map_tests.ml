@@ -25,6 +25,25 @@ let map_filter_place_name () =
   Alcotest.check str "no label, no position gives None" None
     (Map_filter.place_name (cluster_of [obs ()]))
 
+let map_filter_place_texts () =
+  let texts = Alcotest.(list string) in
+  Alcotest.check texts "a derived name and its detail"
+    ["Près de Lissac-et-Mouret"; "Pélégri"]
+    (Map_filter.place_texts
+       (cluster_of
+          [obs ~derived:"Près de Lissac-et-Mouret" ~detail:"Pélégri" ()]));
+  Alcotest.check texts "a derived name without a detail" ["Près de Figeac"]
+    (Map_filter.place_texts (cluster_of [obs ~derived:"Près de Figeac" ()]));
+  Alcotest.check texts "a label has no detail" ["Jardin"]
+    (Map_filter.place_texts
+       (cluster_of
+          [
+            obs ~label:"Jardin" ();
+            obs ~derived:"Près de Figeac" ~detail:"Pélégri" ();
+          ]));
+  Alcotest.check texts "no name, no text" []
+    (Map_filter.place_texts (cluster_of [obs ~pos:(48.1, 7.2) ()]))
+
 let map_filter_false_whatever_the_query () =
   let p = Plant_id.fresh () in
   let o = obs ~plant:p () in
@@ -119,6 +138,8 @@ let map_filter_place_matched_once_per_cluster () =
 let map_filter =
   [
     Alcotest.test_case "place_name" `Quick map_filter_place_name;
+    Alcotest.test_case "place_texts: the name, then its detail" `Quick
+      map_filter_place_texts;
     Alcotest.test_case "keep with filter always false" `Quick
       map_filter_false_whatever_the_query;
     Alcotest.test_case "keep Everything is exactly filter" `Quick
@@ -206,6 +227,23 @@ let map_sheet_rename_value () =
     (Map_sheet.rename_value (cluster_of [obs ~label:"Jardin" ()]));
   Alcotest.check str "Derived only gives the empty string" ""
     (Map_sheet.rename_value (cluster_of [obs ~derived:"Près de Y" ()]))
+
+(* Map_sheet.detail = Places.label_detail cluster.members: a thin alias
+   (test_places.ml's label_detail tests cover the plurality/tie rule). *)
+let map_sheet_detail () =
+  let str = Alcotest.(option string) in
+  Alcotest.check str "a labelled cluster carries no detail" None
+    (Map_sheet.detail (cluster_of [obs ~label:"Jardin" ()]));
+  Alcotest.check str "derived cluster, the earliest of a 1-1 tie has a detail"
+    (Some "Pélégri")
+    (Map_sheet.detail
+       (cluster_of
+          [
+            obs ~hour:9 ~derived:"Près de Lissac-et-Mouret" ~detail:"Pélégri" ();
+            obs ~hour:10 ~derived:"Près de Lissac-et-Mouret" ();
+          ]));
+  Alcotest.check str "derived cluster, no member has a detail" None
+    (Map_sheet.detail (cluster_of [obs ~derived:"Près de Figeac" ()]))
 
 let photo_id n =
   match
@@ -308,6 +346,7 @@ let map_sheet =
     Alcotest.test_case "collapsed" `Quick map_sheet_collapsed;
     Alcotest.test_case "title" `Quick map_sheet_title;
     Alcotest.test_case "rename_value" `Quick map_sheet_rename_value;
+    Alcotest.test_case "detail" `Quick map_sheet_detail;
     Alcotest.test_case "photos_by_observation" `Quick
       map_sheet_photos_by_observation;
     Alcotest.test_case "row_meta" `Quick map_sheet_row_meta;

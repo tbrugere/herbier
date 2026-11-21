@@ -17,8 +17,10 @@ CREATE TABLE IF NOT EXISTS "public"."observations" (
     "created_at" timestamp with time zone NOT NULL,
     "updated_at" timestamp with time zone NOT NULL,
     "deleted_at" timestamp with time zone,
+    "place_detail" "text",
     CONSTRAINT "observations_accuracy_needs_position" CHECK ((("accuracy_m" IS NULL) OR ("lat" IS NOT NULL))),
     CONSTRAINT "observations_accuracy_nonnegative" CHECK (("accuracy_m" >= (0)::double precision)),
+    CONSTRAINT "observations_detail_needs_derived" CHECK ((("place_detail" IS NULL) OR ("place_derived" IS NOT NULL))),
     CONSTRAINT "observations_lat_range" CHECK ((("lat" >= ('-90'::integer)::double precision) AND ("lat" <= (90)::double precision))),
     CONSTRAINT "observations_lon_range" CHECK ((("lon" >= ('-180'::integer)::double precision) AND ("lon" <= (180)::double precision))),
     CONSTRAINT "observations_position_both_or_neither" CHECK ((("lat" IS NULL) = ("lon" IS NULL)))

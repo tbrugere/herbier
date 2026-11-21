@@ -31,7 +31,23 @@
   gap: 2px
   color: var(--moss)
 
-// A 44 px touch target; the negative margin keeps the header's height.
+// The place with a lieu-dit under it: both right-aligned.
+.journal__place-block
+  display: flex
+  flex-direction: column
+  align-items: flex-end
+  min-width: 0
+
+.journal__place-detail
+  +base.meta(12px)
+  max-width: 100%
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
+// A 44 px touch target; the negative margin keeps the header's height. A
+// detail line under it paints over the bottom of that target and is not part
+// of it.
 button.journal__place
   +widgets.bare-button
   min-height: 44px

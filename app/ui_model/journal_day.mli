@@ -13,6 +13,10 @@ val place : Herbier_domain.Observation.t list -> string option
     ({!Herbier_domain.Places.unknown_name}) when the day has a position but no
     name. [None] when the day has no label and no position. *)
 
+val place_detail : Herbier_domain.Observation.t list -> string option
+(** The line under the day's place (4c): {!Herbier_domain.Places.label_detail},
+    a lieu-dit close to the day's derived name; [None] for a user's label. *)
+
 val plant_name :
   (Herbier_domain.Ids.Plant_id.t * string) list ->
   Herbier_domain.Ids.Plant_id.t ->

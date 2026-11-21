@@ -87,10 +87,10 @@ let own observations p =
       |> List.fold_left pick None
       |> Option.map (fun (_, _, l) -> l)
 
-type outcome = Named of string | Unknown | Deferred [@@deriving eq]
+type outcome = Named of Geocode.named | Unknown | Deferred [@@deriving eq]
 
 let outcome_to_string = function
-  | Named s -> "named " ^ s
+  | Named n -> "named " ^ Geocode.named_to_string n
   | Unknown -> "unknown"
   | Deferred -> "deferred"
 
@@ -112,7 +112,7 @@ let ask sources p =
       (fun () -> Geocode.Done (Ok None))
   in
   Geocode.map
-    (Result.map (function Some s -> Named s | None -> Unknown))
+    (Result.map (function Some n -> Named n | None -> Unknown))
     (chain ())
 
 let offline sources communes p =
@@ -125,10 +125,10 @@ let resolve ~sources ~online ~labelled ~communes p =
   | false -> Geocode.Done (Ok Unknown)
   | true -> (
       match own labelled p with
-      | Some s -> Geocode.Done (Ok (Named s))
+      | Some s -> Geocode.Done (Ok (Named {name = s; detail = None}))
       | None -> (
           match (offline sources communes p, any_online sources, online) with
-          | Some s, _, _ -> Geocode.Done (Ok (Named s))
+          | Some s, _, _ -> Geocode.Done (Ok (Named {name = s; detail = None}))
           | None, false, _ -> Geocode.Done (Ok Unknown)
           | None, true, false -> Geocode.Done (Ok Deferred)
           | None, true, true -> ask sources p))

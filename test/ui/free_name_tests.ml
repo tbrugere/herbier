@@ -60,6 +60,7 @@ let mk_obs ?(id = Observation_id.fresh ()) ?(deleted_at = None) at :
     position = None;
     place_label = None;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = at;
     updated_at = at;

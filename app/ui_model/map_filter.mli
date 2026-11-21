@@ -9,11 +9,16 @@ type query =
   | Everything  (** blank search *)
   | Matching of {plants : Plant_id.t list; place : Places.cluster -> bool}
       (** [plants]: what [Search.plants_by_name] returned; [place]: does the
-          place's name match ([Herbier_domain.Fold.matches] on {!place_name}) *)
+          place's name or detail match ([Herbier_domain.Fold.matches] on
+          {!place_texts}) *)
 
 val place_name : Places.cluster -> string option
 (** The text the search matches a place on: [Places.label] of its members when
     [Named s] or [Derived s]; [None] for [Coordinates] or no label. *)
+
+val place_texts : Places.cluster -> string list
+(** What the search matches a place on: {!place_name}, then
+    [Places.label_detail] of its members, each when [Some _]. *)
 
 val keep :
   filter:(Observation.t -> bool) ->

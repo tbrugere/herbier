@@ -14,6 +14,7 @@ type t = {
   position : position option;
   place_label : string option;
   place_derived : string option;
+  place_detail : string option;
   note : string option;
   created_at : Ptime.t;
   updated_at : Ptime.t;

@@ -65,6 +65,7 @@ let observation_base : Observation.t =
       Some {Observation.lat = 48.0625; lon = 7.0625; accuracy_m = Some 12.5};
     place_label = Some "Bord du chemin";
     place_derived = Some "Vosges";
+    place_detail = Some "Pélégri";
     note = Some "Belle floraison";
     created_at = t1;
     updated_at = t1;
@@ -181,6 +182,7 @@ let observation_field_cases =
         ("position", {observation_base with position = None});
         ("place_label", {observation_base with place_label = None});
         ("place_derived", {observation_base with place_derived = None});
+        ("place_detail", {observation_base with place_detail = None});
         ("note", {observation_base with note = None});
         ("created_at", {observation_base with created_at = t2});
         ("updated_at", {observation_base with updated_at = t2});

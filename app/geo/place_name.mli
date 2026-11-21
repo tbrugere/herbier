@@ -84,7 +84,8 @@ val own : Observation.t list -> Places.point -> string option
     qualifies or [p] has a non-finite coordinate. *)
 
 type outcome =
-  | Named of string  (** the [place_derived] to store *)
+  | Named of Geocode.named
+      (** the [place_derived] to store, with its optional [place_detail] *)
   | Unknown
       (** no own place and every enabled source answered without a name (or none
           is enabled): nothing stored, the screens say « Lieu inconnu » *)
@@ -95,7 +96,8 @@ type outcome =
 val equal_outcome : outcome -> outcome -> bool
 
 val outcome_to_string : outcome -> string
-(** For logs: ["named <s>"], ["unknown"], ["deferred"]. *)
+(** For logs and the dev page: ["named <Geocode.named_to_string n>"],
+    ["unknown"], ["deferred"]. *)
 
 val resolve :
   sources:sources ->
@@ -106,16 +108,19 @@ val resolve :
   (outcome, Geocode.error) result Geocode.program
 (** The name of [p]:
     - non-finite [lat] or [lon] → [Done (Ok Unknown)], no request;
-    - [own labelled p = Some s] → [Done (Ok (Named s))], no request, whatever
-      [sources] and [online];
+    - [own labelled p = Some s] → [Done (Ok (Named {name = s; detail = None}))],
+      no request, whatever [sources] and [online] (a user's label never gets a
+      detail);
     - else [sources.ign_offline] and [Communes.name communes p = Some s] →
-      [Done (Ok (Named s))], no request, whatever [online];
+      [Done (Ok (Named {name = s; detail = None}))], no request, whatever
+      [online] (the packs hold communes only, no lieu-dit);
     - else no online source enabled → [Done (Ok Unknown)];
     - else [online = false] → [Done (Ok Deferred)];
     - else the enabled online sources in {!order}, chained with
       [Geocode.or_else]: [Ign_online] → [Geocode.reverse_ign p], [Photon_online]
-      → [Geocode.reverse_photon p]; [Some s] → [Named s]; all [None] →
-      [Unknown]; a decode error → [Done (Error e)] at once (no later source).
+      → [Geocode.reverse_photon p], each commune first with its own detail;
+      [Some n] → [Named n]; all [None] → [Unknown]; a decode error →
+      [Done (Error e)] at once (no later source).
 
     [communes] is ignored when [ign_offline] is off. Invariant: every [Get]
     issued has provider [Geoplateforme] only if [sources.ign_online], [Photon]

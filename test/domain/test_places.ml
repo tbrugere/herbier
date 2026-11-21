@@ -36,7 +36,7 @@ let obs_id n =
 
 (* [obs ~id ~at pos]: an observation with id number [id], taken [at] seconds
    after [base_time], at [pos]. *)
-let obs ?label ?derived ?(deleted = false) ~id ~at pos : Observation.t =
+let obs ?label ?derived ?detail ?(deleted = false) ~id ~at pos : Observation.t =
   let at = time at in
   {
     id = obs_id id;
@@ -49,6 +49,7 @@ let obs ?label ?derived ?(deleted = false) ~id ~at pos : Observation.t =
         pos;
     place_label = label;
     place_derived = derived;
+    place_detail = detail;
     note = None;
     created_at = at;
     updated_at = at;
@@ -416,7 +417,9 @@ let cluster_duplicate_record () =
 
 let named s = Some (Places.Named s)
 let derived s = Some (Places.Derived s)
-let at_o ?label ?derived ~id ~at () = obs ?label ?derived ~id ~at (Some o)
+
+let at_o ?label ?derived ?detail ?deleted ~id ~at () =
+  obs ?label ?derived ?detail ?deleted ~id ~at (Some o)
 
 let label_none () =
   Alcotest.(check (option label)) "empty list" None (Places.label []);
@@ -786,6 +789,146 @@ let display_name_blank_label_and_derived_positioned () =
     (Some Places.unknown_name)
     (Places.display_name (at_o ~label:"  " ~derived:"  " ~id:1 ~at:0 ()))
 
+(* ---------- place_detail ---------- *)
+
+let place_detail_hidden_once_labelled () =
+  Alcotest.(check (option string))
+    "a labelled observation has no detail line, even with a stored detail" None
+    (Places.place_detail
+       (at_o ~label:"Col" ~derived:"Près de X" ~detail:"Pélégri" ~id:1 ~at:0 ()))
+
+let place_detail_derived_with_detail_trimmed () =
+  Alcotest.(check (option string))
+    "a derived name with a detail, trimmed" (Some "Pélégri")
+    (Places.place_detail
+       (at_o ~derived:"Près de Lissac-et-Mouret" ~detail:"  Pélégri " ~id:1
+          ~at:0 ()))
+
+let place_detail_blank_derived_is_none () =
+  Alcotest.(check (option string))
+    "a blank place_derived: no detail even if place_detail is set" None
+    (Places.place_detail (at_o ~derived:"   " ~detail:"Pélégri" ~id:1 ~at:0 ()))
+
+let place_detail_blank_detail_is_none () =
+  Alcotest.(check (option string))
+    "a blank place_detail: None" None
+    (Places.place_detail
+       (at_o ~derived:"Près de X" ~detail:"   " ~id:1 ~at:0 ()))
+
+(* ---------- label_detail ---------- *)
+
+let label_detail_none_when_labelled () =
+  Alcotest.(check (option string))
+    "a day with a labelled observation: None" None
+    (Places.label_detail [at_o ~label:"Col" ~id:1 ~at:0 ()])
+
+let label_detail_plurality () =
+  let day =
+    [
+      at_o ~derived:"Près de A" ~detail:"X" ~id:1 ~at:0 ();
+      at_o ~derived:"Près de A" ~detail:"X" ~id:2 ~at:1 ();
+      at_o ~derived:"Près de A" ~detail:"Y" ~id:3 ~at:2 ();
+    ]
+  in
+  Alcotest.(check (option string))
+    "X, X, Y: X (the most frequent) wins" (Some "X") (Places.label_detail day)
+
+let label_detail_tie_goes_to_the_earliest () =
+  let x_first =
+    [
+      at_o ~derived:"Près de A" ~detail:"X" ~id:1 ~at:0 ();
+      at_o ~derived:"Près de A" ~detail:"Y" ~id:2 ~at:1 ();
+    ]
+  in
+  Alcotest.(check (option string))
+    "a 1-1 tie goes to the detail of the earliest observation" (Some "X")
+    (Places.label_detail x_first);
+  Alcotest.(check (option string))
+    "the same set, given newest first: still X (ordered by at, not input)"
+    (Some "X")
+    (Places.label_detail (List.rev x_first))
+
+let label_detail_ignores_other_derived_names () =
+  let day =
+    [
+      at_o ~derived:"Près de A" ~detail:"X" ~id:1 ~at:0 ();
+      at_o ~derived:"Près de A" ~detail:"X" ~id:2 ~at:1 ();
+      at_o ~derived:"Près de B" ~detail:"Z" ~id:3 ~at:2 ();
+    ]
+  in
+  Alcotest.(check (option string))
+    "A wins the plurality; B's detail never counts" (Some "X")
+    (Places.label_detail day)
+
+let label_detail_ignores_deleted () =
+  let day =
+    [
+      at_o ~derived:"Près de A" ~detail:"X" ~id:1 ~at:0 ();
+      at_o ~derived:"Près de A" ~detail:"Y" ~id:2 ~at:1 ~deleted:true ();
+      at_o ~derived:"Près de A" ~detail:"Y" ~id:3 ~at:2 ~deleted:true ();
+    ]
+  in
+  Alcotest.(check (option string))
+    "the two deleted Y's are not counted, even though they outnumber X"
+    (Some "X") (Places.label_detail day)
+
+let label_detail_none_when_no_detail () =
+  Alcotest.(check (option string))
+    "every winning observation has a blank or absent detail: None" None
+    (Places.label_detail
+       [
+         at_o ~derived:"Près de A" ~id:1 ~at:0 ();
+         at_o ~derived:"Près de A" ~detail:"   " ~id:2 ~at:1 ();
+       ])
+
+let label_detail_no_detail_counts () =
+  let day =
+    [
+      at_o ~derived:"Près de A" ~id:1 ~at:0 ();
+      at_o ~derived:"Près de A" ~id:2 ~at:1 ();
+      at_o ~derived:"Près de A" ~detail:"X" ~id:3 ~at:2 ();
+    ]
+  in
+  Alcotest.(check (option string))
+    "two without a detail, one with X: no detail" None (Places.label_detail day)
+
+let label_detail_tie_with_no_detail_first () =
+  let day =
+    [
+      at_o ~derived:"Près de A" ~id:1 ~at:0 ();
+      at_o ~derived:"Près de A" ~detail:"X" ~id:2 ~at:1 ();
+    ]
+  in
+  Alcotest.(check (option string))
+    "a 1-1 tie whose earliest member has no detail: None" None
+    (Places.label_detail day);
+  Alcotest.(check (option string))
+    "the earliest has X: X" (Some "X")
+    (Places.label_detail
+       [
+         at_o ~derived:"Près de A" ~detail:"X" ~id:1 ~at:0 ();
+         at_o ~derived:"Près de A" ~id:2 ~at:1 ();
+       ])
+
+let label_detail_trims_names_and_details () =
+  Alcotest.(check (option string))
+    "a padded derived name joins the group; a padded detail counts trimmed"
+    (Some "X")
+    (Places.label_detail
+       [
+         at_o ~derived:"Près de A" ~detail:"X" ~id:1 ~at:0 ();
+         at_o ~derived:"  Près de A " ~detail:" X  " ~id:2 ~at:1 ();
+         at_o ~derived:"Près de A" ~id:3 ~at:2 ();
+       ])
+
+let label_detail_coordinates_is_none () =
+  Alcotest.(check (option string))
+    "no name, only positions: None" None
+    (Places.label_detail [at_o ~id:1 ~at:0 (); at_o ~id:2 ~at:1 ()])
+
+let label_detail_empty_is_none () =
+  Alcotest.(check (option string)) "empty list" None (Places.label_detail [])
+
 let tests =
   [
     ( "equal_point compares both coordinates with Float.equal",
@@ -915,4 +1058,47 @@ let tests =
     ( "display_name: blank label and derived with a position gives unknown_name",
       `Quick,
       display_name_blank_label_and_derived_positioned );
+    ( "place_detail: a label hides any stored detail",
+      `Quick,
+      place_detail_hidden_once_labelled );
+    ( "place_detail: a derived name with a detail, trimmed",
+      `Quick,
+      place_detail_derived_with_detail_trimmed );
+    ( "place_detail: a blank place_derived gives None",
+      `Quick,
+      place_detail_blank_derived_is_none );
+    ( "place_detail: a blank place_detail gives None",
+      `Quick,
+      place_detail_blank_detail_is_none );
+    ( "label_detail: None when the day is labelled",
+      `Quick,
+      label_detail_none_when_labelled );
+    ( "label_detail: the most frequent detail wins",
+      `Quick,
+      label_detail_plurality );
+    ( "label_detail: a tie goes to the earliest observation",
+      `Quick,
+      label_detail_tie_goes_to_the_earliest );
+    ( "label_detail: another derived name's detail is ignored",
+      `Quick,
+      label_detail_ignores_other_derived_names );
+    ( "label_detail: deleted observations are ignored",
+      `Quick,
+      label_detail_ignores_deleted );
+    ( "label_detail: no member has a detail gives None",
+      `Quick,
+      label_detail_none_when_no_detail );
+    ("label_detail: empty list gives None", `Quick, label_detail_empty_is_none);
+    ( "label_detail: observations without a detail count as a candidate",
+      `Quick,
+      label_detail_no_detail_counts );
+    ( "label_detail: a tie goes to the earliest, with or without a detail",
+      `Quick,
+      label_detail_tie_with_no_detail_first );
+    ( "label_detail: names and details compared trimmed",
+      `Quick,
+      label_detail_trims_names_and_details );
+    ( "label_detail: Coordinates only gives None",
+      `Quick,
+      label_detail_coordinates_is_none );
   ]

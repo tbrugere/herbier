@@ -67,6 +67,27 @@ fetch photon_reverse_atlantic.json photon "https://photon.komoot.io/reverse?lat=
 fetch geoplateforme_lieu_dit_atlantic.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=-5.00000&lat=46.20000&limit=1&category=lieu-dit%20habit%C3%A9%2Clieu-dit%20non%20habit%C3%A9&searchgeom=%7B%22type%22%3A%22Circle%22%2C%22coordinates%22%3A%5B-5.00000%2C46.20000%5D%2C%22radius%22%3A500%7D"
 fetch geoplateforme_commune_atlantic.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=-5.00000&lat=46.20000&limit=1&category=commune&searchgeom=%7B%22type%22%3A%22Point%22%2C%22coordinates%22%3A%5B-5.00000%2C46.20000%5D%7D"
 
+# Figeac: inside the town, its nearest lieu-dit (cadastral) at 319 m.
+fetch geoplateforme_commune_figeac.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=2.03000&lat=44.60200&limit=1&category=commune&searchgeom=%7B%22type%22%3A%22Point%22%2C%22coordinates%22%3A%5B2.03000%2C44.60200%5D%7D"
+fetch geoplateforme_lieu_dit_figeac.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=2.03000&lat=44.60200&limit=1&category=lieu-dit%20habit%C3%A9%2Clieu-dit%20non%20habit%C3%A9&searchgeom=%7B%22type%22%3A%22Circle%22%2C%22coordinates%22%3A%5B2.03000%2C44.60200%5D%2C%22radius%22%3A500%7D"
+fetch photon_reverse_figeac.json photon "https://photon.komoot.io/reverse?lat=44.60200&lon=2.03000&lang=fr&limit=1&layer=city&layer=district&layer=locality"
+
+# Pélégri (Lot countryside): a lieu-dit habité at 66 m.
+fetch geoplateforme_commune_pelegri.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=1.98350&lat=44.63000&limit=1&category=commune&searchgeom=%7B%22type%22%3A%22Point%22%2C%22coordinates%22%3A%5B1.98350%2C44.63000%5D%7D"
+fetch geoplateforme_lieu_dit_pelegri.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=1.98350&lat=44.63000&limit=1&category=lieu-dit%20habit%C3%A9%2Clieu-dit%20non%20habit%C3%A9&searchgeom=%7B%22type%22%3A%22Circle%22%2C%22coordinates%22%3A%5B1.98350%2C44.63000%5D%2C%22radius%22%3A500%7D"
+fetch photon_reverse_pelegri.json photon "https://photon.komoot.io/reverse?lat=44.63000&lon=1.98350&lang=fr&limit=1&layer=city&layer=district&layer=locality"
+
+# Lissac (Lot): an OSM village inside the commune of Lissac-et-Mouret.
+fetch photon_reverse_lissac.json photon "https://photon.komoot.io/reverse?lat=44.62625&lon=1.98770&lang=fr&limit=1&layer=city&layer=district&layer=locality"
+
+# Balveurche (Vosges): an IGN lieu-dit at 163 m, an OSM locality close by.
+fetch geoplateforme_commune_balveurche.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=6.99460&lat=48.06530&limit=1&category=commune&searchgeom=%7B%22type%22%3A%22Point%22%2C%22coordinates%22%3A%5B6.99460%2C48.06530%5D%7D"
+fetch geoplateforme_lieu_dit_balveurche.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=6.99460&lat=48.06530&limit=1&category=lieu-dit%20habit%C3%A9%2Clieu-dit%20non%20habit%C3%A9&searchgeom=%7B%22type%22%3A%22Circle%22%2C%22coordinates%22%3A%5B6.99460%2C48.06530%5D%2C%22radius%22%3A500%7D"
+fetch photon_reverse_balveurche.json photon "https://photon.komoot.io/reverse?lat=48.06530&lon=6.99460&lang=fr&limit=1&layer=city&layer=district&layer=locality"
+
+# Col de la Schlucht: its commune.
+fetch geoplateforme_commune_schlucht.json geoplateforme "https://data.geopf.fr/geocodage/reverse?index=poi&lon=7.00810&lat=48.06330&limit=1&category=commune&searchgeom=%7B%22type%22%3A%22Point%22%2C%22coordinates%22%3A%5B7.00810%2C48.06330%5D%7D"
+
 # Forward search.
 fetch photon_search_col_de_la_schlucht.json photon "https://photon.komoot.io/api?q=col%20de%20la%20schlucht&lang=fr&limit=8"
 fetch photon_search_schlucht_near.json photon "https://photon.komoot.io/api?q=schlucht&lang=fr&limit=3&lat=48.06330&lon=7.00810"

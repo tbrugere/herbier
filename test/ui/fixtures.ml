@@ -55,6 +55,7 @@ let plant_obs plant_id : Herbier_domain.Observation.t =
     position = None;
     place_label = None;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = t;
     updated_at = t;
@@ -63,7 +64,7 @@ let plant_obs plant_id : Herbier_domain.Observation.t =
 
 (* An observation on 12 June 2026 that can also carry a [plant_id], for
    Map_filter's identified/unidentified cases (and Local_time's). *)
-let map_obs ?(hour = 12) ?(minute = 0) ?plant ?label ?derived ?pos () :
+let map_obs ?(hour = 12) ?(minute = 0) ?plant ?label ?derived ?detail ?pos () :
     Herbier_domain.Observation.t =
   let t = utc 2026 6 12 hour minute in
   {
@@ -77,6 +78,7 @@ let map_obs ?(hour = 12) ?(minute = 0) ?plant ?label ?derived ?pos () :
         pos;
     place_label = label;
     place_derived = derived;
+    place_detail = detail;
     note = None;
     created_at = t;
     updated_at = t;

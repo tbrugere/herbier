@@ -426,6 +426,7 @@ let orphan_observation () : Herbier_domain.Observation.t =
     position = None;
     place_label = None;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = time "2026-10-28T16:00:00Z";
     updated_at = time "2026-10-28T16:00:00Z";

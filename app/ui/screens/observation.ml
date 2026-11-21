@@ -52,11 +52,19 @@ let place (o : Observation.t) =
   match Herbier_domain.Places.display_name o with
   | None -> [El.p ~at:[cls "t-meta"] [El.txt' "Pas de position enregistrée."]]
   | Some n ->
+      let detail =
+        Option.map
+          (fun d ->
+            El.p ~at:[cls "observation__place-detail"; cls "t-meta"] [El.txt' d])
+          (Herbier_domain.Places.place_detail o)
+      in
+      let coordinates =
+        Option.map
+          (fun p -> El.p ~at:[cls "t-meta"] [El.txt' (coordinates p)])
+          o.position
+      in
       El.p ~at:[cls "observation__value"] [El.txt' n]
-      :: Option.to_list
-           (Option.map
-              (fun p -> El.p ~at:[cls "t-meta"] [El.txt' (coordinates p)])
-              o.position)
+      :: List.filter_map Fun.id [detail; coordinates]
 
 (* The plant's name and where tapping it goes. *)
 let title (d : data) =

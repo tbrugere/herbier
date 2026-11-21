@@ -11,6 +11,10 @@ let place_name (cluster : Places.cluster) =
   | Some (Named s | Derived s) -> Some s
   | Some (Coordinates _) | None -> None
 
+let place_texts (cluster : Places.cluster) =
+  Option.to_list (place_name cluster)
+  @ Option.to_list (Places.label_detail cluster.members)
+
 let keep ~filter query cluster =
   (* Applied to its cluster once (Features.places does), so the place's name
      is matched at most once per cluster, not once per member. *)

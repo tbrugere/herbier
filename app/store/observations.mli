@@ -55,18 +55,45 @@ val soft_delete : Observation_id.t -> at:Ptime.t -> Outbox.edit
     entry (payload with [deleted_at = at]) when the observation was live,
     nothing when it is absent or already deleted. Its photos are untouched. *)
 
+val to_rename : Observation.t Stmt.query
+(** Live observations whose id is in [place_renames] ({!Place_renames}), with
+    [lat] and [lon] set, [trim(place_derived) <> ''] and a blank [place_label]:
+    the ones named before the commune-first rule, still to rename once; same
+    order as every list here. *)
+
 val set_place_derived :
   Observation_id.t ->
   lat:float ->
   lon:float ->
+  detail:string option ->
   string ->
   at:Ptime.t ->
   Outbox.edit
-(** [update observations set place_derived = ?, updated_at = ? where id = ? and
-     deleted_at is null and lat = ? and lon = ? and (place_derived is null or
-     trim(place_derived) = '')], read back by [id]. One change (and one outbox
-    entry carrying the whole row, [place_derived] and [updated_at = at] set)
-    when the observation is live, still at [lat]/[lon] (the position the name
-    was computed for) and still without a derived name; no change and no entry
-    when it was deleted, moved or got a name meanwhile. No other column is
-    touched. *)
+(** [update observations set place_derived = ?, place_detail = ?, updated_at = ?
+     where id = ? and deleted_at is null and lat = ? and lon = ? and
+     (place_derived is null or trim(place_derived) = '')], read back by [id].
+    One change (and one outbox entry carrying the whole row, [place_derived],
+    [place_detail = detail] and [updated_at = at] set) when the observation is
+    live, still at [lat]/[lon] (the position the name was computed for) and
+    still without a derived name; no change and no entry when it was deleted,
+    moved or got a name meanwhile. No other column is touched. [detail] is
+    written as given ([None] clears a stale one). *)
+
+val rename_place_derived :
+  Observation_id.t ->
+  lat:float ->
+  lon:float ->
+  was:string ->
+  detail:string option ->
+  string ->
+  at:Ptime.t ->
+  Outbox.edit
+(** [update observations set place_derived = ?, place_detail = ?, updated_at = ?
+     where id = ? and deleted_at is null and lat = ? and lon = ? and
+     place_derived = ? and trim(coalesce(place_label, '')) = '' and
+     (place_derived is not ? or place_detail is not ?)], read back by [id]: the
+    one-off rename of {!to_rename}. One change and one entry (the whole row)
+    when the observation is live, still at [lat]/[lon], still named exactly
+    [was] (as read, not trimmed), still unlabelled, and the name or the detail
+    differs; no change and no entry otherwise (same name and detail, moved,
+    renamed, labelled or deleted meanwhile). *)

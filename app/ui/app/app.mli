@@ -356,24 +356,32 @@ val free_reference_photos : t -> (unit, free_error) result Fut.t
 (** {1 Place names} *)
 
 val geocode_pending : t -> unit
-(** Fills [place_derived] in the background (architecture §8), online or not.
-    When no run is going: waits for the startup load of the « IGN hors-ligne »
-    packs (see {!packs}), reads [Observations.to_geocode] then
-    [Observations.labelled] (a read error is logged, [geocode: read …], and ends
-    the run), and for each pending observation in order (newest first), reading
-    {!State.place_sources} and {!State.network} at that moment: runs
+(** Fills [place_derived] and [place_detail] in the background (architecture
+    §8), online or not, and renames once the observations named before the
+    commune-first rule. When no run is going: waits for the startup load of the
+    « IGN hors-ligne » packs (see {!packs}), reads [Observations.to_geocode],
+    [Observations.to_rename] then [Observations.labelled] (a read error is
+    logged, [geocode: read …], and ends the run), and for each pending
+    observation in order (newest first), then each one to rename (newest first),
+    reading {!State.place_sources} and {!State.network} at that moment: runs
     [Place_name.resolve ~sources ~online ~labelled ~communes p] through
     [Geocoder.run], [communes] the packs' index at that moment, where [sources]
     is [Place_name.offline_only] of the switches for an observation already
     tried at its current position this session (its own-place and pack lookups
     still run, its remote sources are not asked again);
-    - [Ok (Named s)] → one [Observations.set_place_derived ~at:now] commit
-      ({!saved} fires when it changed the row; unchanged → marked tried; a
-      failed commit is logged, marks it tried and stops the run);
-    - [Ok Unknown] → nothing written; when some online source was asked (i.e.
-      [sources] had one on and [online]), marked tried and logged
-      [geocode: <id> unknown] (a point no source was asked for logs nothing:
-      with every source off that is every unnamed point, at every trigger);
+    - [Ok (Named n)] → one commit at [~at:now]: for a pending one
+      [Observations.set_place_derived ~detail:n.detail n.name] (unchanged →
+      marked tried); for one to rename
+      [Observations.rename_place_derived ~was ~detail:n.detail n.name], [was]
+      its [place_derived] as read, then, changed or not, its marker is deleted
+      ([Place_renames.forget] through [Db.write]; an error is only logged).
+      {!saved} fires when a commit changed the row; a failed commit is logged,
+      marks it tried and stops the run;
+    - [Ok Unknown] → nothing written (a rename keeps its old name and its
+      marker); when some online source was asked (i.e. [sources] had one on and
+      [online]), marked tried and logged [geocode: <id> unknown] (a point no
+      source was asked for logs nothing: with every source off that is every
+      unnamed point, at every trigger);
     - [Ok Deferred] → nothing written, not marked; next observation;
     - [Error (Geocoder.Refused _)] (the request's source was turned off while it
       waited: [~allow] reads {!State.place_sources} when each request leaves the

@@ -134,11 +134,30 @@ let first_properties json =
     (function [] -> None | feature :: _ -> Some (properties feature))
     (features json)
 
-let photon_place_values =
+type named = {name : string; detail : string option} [@@deriving eq]
+
+let named_to_string {name; detail} =
+  match detail with None -> name | Some d -> name ^ " / " ^ d
+
+let detail_max_m = 200.
+
+let same_name a b =
+  String.equal
+    (String.lowercase_ascii (String.trim a))
+    (String.lowercase_ascii (String.trim b))
+
+(* OSM places that name a town or village: the commune itself. *)
+let photon_commune_values = ["city"; "town"; "village"]
+
+(* OSM's equivalents of a lieu-dit: hamlet, isolated_dwelling and farm for a
+   lieu-dit habité, locality for a non habité one; neighbourhood because rural
+   France maps many hamlets that way. *)
+let photon_detail_values =
+  ["hamlet"; "isolated_dwelling"; "farm"; "locality"; "neighbourhood"]
+
+(* Other places still name a point abroad when Photon gives no city. *)
+let photon_other_values =
   [
-    "city";
-    "town";
-    "village";
     "hamlet";
     "isolated_dwelling";
     "farm";
@@ -151,34 +170,36 @@ let photon_place_values =
     "islet";
   ]
 
-let photon_name json =
+let place_name values props =
+  match (string "osm_key" props, string "osm_value" props) with
+  | Some "place", Some value when List.mem value values -> string "name" props
+  | _ -> None
+
+let photon_commune json =
   Result.map
     (fun props ->
       Option.bind props (fun props ->
-          let place =
-            match (string "osm_key" props, string "osm_value" props) with
-            | Some "place", Some value when List.mem value photon_place_values
-              ->
-                string "name" props
-            | _ -> None
-          in
           List.find_map Fun.id
-            [place; string "district" props; string "city" props]))
+            [
+              string "city" props;
+              place_name photon_commune_values props;
+              string "district" props;
+              place_name photon_other_values props;
+            ]))
     (first_properties json)
+
+let geoplateforme_props_name props =
+  match string "toponym" props with
+  | Some name -> Some name
+  | None -> (
+      match Json.member "name" props with
+      | Some (`List names) ->
+          List.find_map (function `String s -> non_blank s | _ -> None) names
+      | _ -> None)
 
 let geoplateforme_name json =
   Result.map
-    (fun props ->
-      Option.bind props (fun props ->
-          match string "toponym" props with
-          | Some name -> Some name
-          | None -> (
-              match Json.member "name" props with
-              | Some (`List names) ->
-                  List.find_map
-                    (function `String s -> non_blank s | _ -> None)
-                    names
-              | _ -> None)))
+    (fun props -> Option.bind props geoplateforme_props_name)
     (first_properties json)
 
 type place = {name : string; context : string option; point : Places.point}
@@ -193,6 +214,26 @@ let point feature : Places.point option =
       | Some lon, Some lat -> Some {lat; lon}
       | _ -> None)
   | _ -> None
+
+let detail ~name_of ~near ~commune json =
+  Result.map
+    (function
+      | [] -> None
+      | feature :: _ -> (
+          match (name_of (properties feature), point feature) with
+          | Some name, Some at
+            when Places.finite at
+                 && Places.distance_m near at <= detail_max_m +. 1e-3
+                 && not (same_name name commune) ->
+              Some name
+          | _ -> None))
+    (features json)
+
+let geoplateforme_detail ~near ~commune json =
+  detail ~name_of:geoplateforme_props_name ~near ~commune json
+
+let photon_detail ~near ~commune json =
+  detail ~name_of:(place_name photon_detail_values) ~near ~commune json
 
 let context props name =
   let parts =
@@ -217,33 +258,68 @@ let photon_place feature =
 let photon_places json =
   Result.map (List.filter_map photon_place) (features json)
 
-type 'a program = Done of 'a | Get of request * (Yojson.Safe.t -> 'a program)
-
-let step request decode next =
-  Get
-    ( request,
-      fun json ->
-        match Result.map (fun n -> Option.bind n Near.phrase) (decode json) with
-        | Error e -> Done (Error e)
-        | Ok (Some phrase) -> Done (Ok (Some phrase))
-        | Ok None -> next () )
+type 'a program =
+  | Done of 'a
+  | Get of request * (Yojson.Safe.t -> 'a program)
+  | Try of request * (Yojson.Safe.t option -> 'a program)
 
 let rec map f = function
   | Done x -> Done (f x)
   | Get (request, k) -> Get (request, fun json -> map f (k json))
+  | Try (request, k) -> Try (request, fun json -> map f (k json))
 
 let rec or_else p next =
   match p with
   | Done (Ok None) -> next ()
   | Done (Ok (Some _) | Error _) -> p
   | Get (request, k) -> Get (request, fun json -> or_else (k json) next)
+  | Try (request, k) -> Try (request, fun json -> or_else (k json) next)
 
 let none () = Done (Ok None)
-let reverse_photon p = step (photon_reverse p) photon_name none
+
+(* The commune and its « Près de » phrase, when it has one. *)
+let phrased commune =
+  Option.bind commune (fun c ->
+      Option.map (fun name -> (c, name)) (Near.phrase c))
+
+(* The detail is optional: a payload it cannot be read from keeps the
+   commune, without one. *)
+let reverse_photon p =
+  Get
+    ( photon_reverse p,
+      fun json ->
+        Done
+          (Result.map
+             (fun commune ->
+               Option.map
+                 (fun (commune, name) ->
+                   let detail =
+                     Result.value ~default:None
+                       (photon_detail ~near:p ~commune json)
+                   in
+                   {name; detail})
+                 (phrased commune))
+             (photon_commune json)) )
 
 let reverse_ign p =
   match in_france p with
   | false -> none ()
   | true ->
-      step (geoplateforme_lieu_dit p) geoplateforme_name (fun () ->
-          step (geoplateforme_commune p) geoplateforme_name none)
+      Get
+        ( geoplateforme_commune p,
+          fun json ->
+            match geoplateforme_name json with
+            | Error e -> Done (Error e)
+            | Ok commune -> (
+                match phrased commune with
+                | None -> none ()
+                | Some (commune, name) ->
+                    Try
+                      ( geoplateforme_lieu_dit p,
+                        fun json ->
+                          let detail =
+                            Option.bind json (fun json ->
+                                Result.value ~default:None
+                                  (geoplateforme_detail ~near:p ~commune json))
+                          in
+                          Done (Ok (Some {name; detail})) )) )

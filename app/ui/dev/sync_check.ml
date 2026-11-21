@@ -29,6 +29,7 @@ let rejected_entry () =
       position = Some {lat = 45.; lon = 5.; accuracy_m = Some (-1.)};
       place_label = None;
       place_derived = None;
+      place_detail = None;
       note = Some "dev-sync rejected entry";
       created_at = now;
       updated_at = now;

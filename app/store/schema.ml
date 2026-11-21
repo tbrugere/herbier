@@ -307,6 +307,89 @@ on conflict (key) do nothing|}
 where key in ('drive_root_folder_picked', 'drive_root_folder_default')|};
   ]
 
+(* Migration 7's search documents: migration 2's, with each observation's
+   place_detail in [places], so a lieu-dit kept as a detail stays
+   searchable. Frozen with migration 7, as migration 2's are with it. *)
+let places_v7 =
+  "coalesce((select group_concat(coalesce(o.place_label, '') || ' ' || \
+   coalesce(o.place_derived, '') || ' ' || coalesce(o.place_detail, ''), ' ') \
+   from observations o where o.plant_id = p.id and o.deleted_at is null), '')"
+
+let documents_v7 where =
+  Printf.sprintf
+    "insert into plant_search (plant_id, names, tags, places)\n\
+    \    select p.id,\n\
+    \      %s,\n\
+    \      %s,\n\
+    \      %s\n\
+    \    from plants p\n\
+    \    where %s"
+    names tags places_v7 where
+
+let reindex_v7 cond =
+  [
+    Printf.sprintf
+      "delete from plant_search\n\
+      \    where plant_id in (select p.id from plants p where %s)"
+      cond;
+    documents_v7 (Printf.sprintf "(%s) and p.deleted_at is null" cond);
+  ]
+
+(* Every migration-2 trigger that builds documents, rebuilt with
+   [reindex_v7]; plants_search_ad only deletes and stays. *)
+let search_triggers_v7 =
+  [
+    ("plants_search_ai", "insert", "plants", "p.id = new.id");
+    ("plants_search_au", "update", "plants", "p.id in (old.id, new.id)");
+    ("plant_tags_search_ai", "insert", "plant_tags", "p.id = new.plant_id");
+    ( "plant_tags_search_au",
+      "update",
+      "plant_tags",
+      "p.id in (old.plant_id, new.plant_id)" );
+    ("plant_tags_search_ad", "delete", "plant_tags", "p.id = old.plant_id");
+    ( "tags_search_au",
+      "update",
+      "tags",
+      "p.id in (select plant_id from plant_tags where tag_id = new.id)" );
+    ("observations_search_ai", "insert", "observations", "p.id = new.plant_id");
+    ( "observations_search_au",
+      "update",
+      "observations",
+      "p.id in (old.plant_id, new.plant_id)" );
+    ("observations_search_ad", "delete", "observations", "p.id = old.plant_id");
+  ]
+
+(* Migration 7: commune first in place names (architecture §8). The detail
+   column mirrors the server's, with its check (a detail qualifies a derived
+   name), and joins the search documents. place_renames marks the
+   observations named before this version, which may hold a lieu-dit's name:
+   the geocoding pass renames each once under the commune-first rule, then
+   forgets its marker. Never synced: another install pulls the renamed
+   rows. *)
+let v7 =
+  [
+    {|alter table observations add column place_detail text
+  constraint observations_detail_needs_derived
+  check (place_detail is null or place_derived is not null)|};
+    {|create table place_renames (
+  observation_id text primary key not null
+    references observations (id) on delete cascade
+)|};
+    {|insert into place_renames (observation_id)
+select id from observations
+where deleted_at is null and lat is not null and lon is not null
+  and trim(coalesce(place_derived, '')) <> ''
+  and trim(coalesce(place_label, '')) = ''|};
+  ]
+  @ List.map
+      (fun (name, _, _, _) -> Printf.sprintf "drop trigger %s" name)
+      search_triggers_v7
+  @ List.map
+      (fun (name, event, table, cond) ->
+        trigger ~name ~event ~table (reindex_v7 cond))
+      search_triggers_v7
+  @ ["delete from plant_search"; documents_v7 "p.deleted_at is null"]
+
 let migrations =
   [
     {version = 1; statements = v1};
@@ -315,6 +398,7 @@ let migrations =
     {version = 4; statements = v4};
     {version = 5; statements = v5};
     {version = 6; statements = v6};
+    {version = 7; statements = v7};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

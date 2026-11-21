@@ -107,6 +107,21 @@ val place_name : Observation.t -> string option
     else its [place_derived] when non-blank, else [None]; trimmed with
     [String.trim] as in {!label}. *)
 
+val place_detail : Observation.t -> string option
+(** One observation's detail line (4h), under {!place_name}: [None] when its
+    [place_label] is non-blank (the label is the name, a derived detail does not
+    belong to it) or its [place_derived] is blank; else its [place_detail]
+    trimmed with [String.trim], [None] when blank. Never raises. *)
+
+val label_detail : Observation.t list -> string option
+(** The detail of a group's name (4c day, 4b sheet): [None] unless
+    [label obs = Some (Derived s)]; then, among the live observations whose
+    trimmed [place_derived] is [s], the most frequent of their trimmed non-blank
+    [place_detail] or « no detail » (blank or [None]): those without a detail
+    count as one candidate. Same tie rule as {!label} (the candidate whose
+    earliest observation, by [at] then id, comes first). [None] when « no detail
+    » wins. Never raises. *)
+
 val unknown_name : string
 (** ["Lieu inconnu"]: what the screens print for a placed observation or place
     with no name. Never stored. *)

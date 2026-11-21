@@ -129,6 +129,7 @@ let observation n ?plant ?position ?label ?derived ?note at =
         position;
     place_label = label;
     place_derived = derived;
+    place_detail = None;
     note;
     created_at = at;
     updated_at = at;

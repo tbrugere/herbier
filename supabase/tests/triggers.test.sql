@@ -4,7 +4,7 @@
 -- plant_refs and reference.
 
 begin;
-select plan(32);
+select plan(34);
 
 insert into auth.users (
   instance_id, id, aud, role, email, email_confirmed_at,
@@ -192,6 +192,23 @@ from (values
   ('lon 181', '48', '181', 'null'),
   ('a negative accuracy_m', '48', '7', '-1')
 ) as v (what, lat, lon, acc);
+
+-- A place_detail qualifies a derived name: never one without it.
+select throws_ok(
+  $$ insert into public.observations (id, at, lat, lon, place_detail, created_at, updated_at)
+     values ('00000000-0000-0000-0000-0000000e2105', now(), 48, 7, 'Pélégri', now(), now()) $$,
+  '23514', null,
+  'an observation with a place_detail and no place_derived is rejected'
+);
+select lives_ok(
+  $$ insert into public.observations (
+       id, at, lat, lon, place_derived, place_detail, created_at, updated_at
+     ) values (
+       '00000000-0000-0000-0000-0000000e2106', now(), 48, 7,
+       'Près de Lissac-et-Mouret', 'Pélégri', now(), now()
+     ) $$,
+  'an observation with a place_derived and a place_detail is accepted'
+);
 
 -- The update loop above soft-deleted every row: the natural keys still hold
 -- on tombstones, so re-adding a link revives its row (architecture §2)

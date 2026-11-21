@@ -135,6 +135,8 @@ module Observations =
       { ty = (Not_Null TimestampTz); name = "updated_at" }
     let deleted_at : (t, Ptime.t option, [ `Optional ]) Col.t =
       { ty = (Nullable TimestampTz); name = "deleted_at" }
+    let place_detail : (t, string option, [ `Optional ]) Col.t =
+      { ty = (Nullable Str); name = "place_detail" }
     let plant : (t, plants, 'a, 'a option) Col.relationship =
       { ty = One; name = "plants" }
     let photos : (t, photos, 'a, 'a list) Col.relationship =

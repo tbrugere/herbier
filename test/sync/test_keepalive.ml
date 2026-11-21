@@ -2,6 +2,13 @@
    contract between the app and web/runner/keepalive.js; it also decodes
    what the job's node test (test/runner/test_keepalive.mjs) writes. *)
 
+(* The generated app/store/tables.ml declares place_detail last, after
+   deleted_at: an ALTER TABLE column is appended, and Tables' declaration
+   order follows the catalog. The observation body below ends with
+   "place_detail":null to match. This literal is hand-written (queue_doc's own
+   test, not a recorded fixture under test/fixtures/), so it is updated by
+   hand rather than re-recorded. *)
+
 module Testable = Herbier_test_support.Testable
 module Session = Herbier_sync_core.Auth.Session
 module Gotrue = Herbier_sync_core.Auth.Gotrue
@@ -681,7 +688,7 @@ let queue_doc_bytes () =
   let {Wire.doc; _} = Wire.queue_doc ~supabase_url ~apikey (three_entries ()) in
   Alcotest.(check string)
     "queue_doc"
-    {|{"v":1,"requests":[{"method":"POST","url":"http://127.0.0.1:54321/rest/v1/plants","headers":{"apikey":"K","prefer":"resolution=merge-duplicates,missing=default","content-type":"application/json"},"body":"{\"id\":\"01965d4e-0000-7000-8000-000000000001\",\"display_name\":\"Digitale\",\"aliases\":[],\"scientific_name\":null,\"authorship\":null,\"gbif_key\":null,\"notes\":\"\",\"notes_updated_at\":null,\"cover_photo_id\":null,\"created_at\":\"2026-11-01T10:00:00Z\",\"updated_at\":\"2026-11-01T10:00:00Z\",\"deleted_at\":null}"},{"method":"POST","url":"http://127.0.0.1:54321/rest/v1/tags","headers":{"apikey":"K","prefer":"resolution=merge-duplicates,missing=default","content-type":"application/json"},"body":"{\"id\":\"01965d4e-0000-7000-8000-000000000001\",\"name\":\"Vivace\",\"created_at\":\"2026-11-01T10:00:00Z\",\"updated_at\":\"2026-11-01T10:00:00Z\",\"deleted_at\":null}"},{"method":"POST","url":"http://127.0.0.1:54321/rest/v1/observations","headers":{"apikey":"K","prefer":"resolution=merge-duplicates,missing=default","content-type":"application/json"},"body":"{\"id\":\"01965d4e-0000-7000-8000-000000000001\",\"plant_id\":null,\"at\":\"2026-11-01T10:00:00Z\",\"lat\":null,\"lon\":null,\"accuracy_m\":null,\"place_label\":null,\"place_derived\":null,\"note\":null,\"created_at\":\"2026-11-01T10:00:00Z\",\"updated_at\":\"2026-11-01T10:00:00Z\",\"deleted_at\":null}"}]}|}
+    {|{"v":1,"requests":[{"method":"POST","url":"http://127.0.0.1:54321/rest/v1/plants","headers":{"apikey":"K","prefer":"resolution=merge-duplicates,missing=default","content-type":"application/json"},"body":"{\"id\":\"01965d4e-0000-7000-8000-000000000001\",\"display_name\":\"Digitale\",\"aliases\":[],\"scientific_name\":null,\"authorship\":null,\"gbif_key\":null,\"notes\":\"\",\"notes_updated_at\":null,\"cover_photo_id\":null,\"created_at\":\"2026-11-01T10:00:00Z\",\"updated_at\":\"2026-11-01T10:00:00Z\",\"deleted_at\":null}"},{"method":"POST","url":"http://127.0.0.1:54321/rest/v1/tags","headers":{"apikey":"K","prefer":"resolution=merge-duplicates,missing=default","content-type":"application/json"},"body":"{\"id\":\"01965d4e-0000-7000-8000-000000000001\",\"name\":\"Vivace\",\"created_at\":\"2026-11-01T10:00:00Z\",\"updated_at\":\"2026-11-01T10:00:00Z\",\"deleted_at\":null}"},{"method":"POST","url":"http://127.0.0.1:54321/rest/v1/observations","headers":{"apikey":"K","prefer":"resolution=merge-duplicates,missing=default","content-type":"application/json"},"body":"{\"id\":\"01965d4e-0000-7000-8000-000000000001\",\"plant_id\":null,\"at\":\"2026-11-01T10:00:00Z\",\"lat\":null,\"lon\":null,\"accuracy_m\":null,\"place_label\":null,\"place_derived\":null,\"note\":null,\"created_at\":\"2026-11-01T10:00:00Z\",\"updated_at\":\"2026-11-01T10:00:00Z\",\"deleted_at\":null,\"place_detail\":null}"}]}|}
     doc
 
 (* Every decoder's error text, as #dev/keepalive and the console show it. *)

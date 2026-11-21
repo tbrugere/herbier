@@ -125,7 +125,7 @@ no_plant=01965d4e-0000-7000-8000-0000000000ff
 #    answer shows them reordered.
 upsert plant_v1 plants '{"id":"'$plant'","display_name":"Digitale pourpre","aliases":["Digitale","Gant de Notre-Dame"],"scientific_name":"Digitalis purpurea","authorship":"L.","gbif_key":5414995,"notes":"","notes_updated_at":null,"cover_photo_id":null,"created_at":"2026-11-12T09:00:00Z","updated_at":"2026-11-12T09:00:00Z","deleted_at":null}'
 upsert tag tags '{"id":"'$tag'","name":"Lisière","created_at":"2026-11-12T09:01:00Z","updated_at":"2026-11-12T09:01:00Z","deleted_at":null}'
-upsert observation observations '{"id":"'$observation'","plant_id":"'$plant'","at":"2026-11-12T08:45:00Z","lat":45.5,"lon":3.25,"accuracy_m":12.5,"place_label":"Bois","place_derived":null,"note":"Fleurs ouvertes","created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null}'
+upsert observation observations '{"id":"'$observation'","plant_id":"'$plant'","at":"2026-11-12T08:45:00Z","lat":45.5,"lon":3.25,"accuracy_m":12.5,"place_label":"Bois","place_derived":null,"note":"Fleurs ouvertes","created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null,"place_detail":null}'
 upsert photo photos '{"id":"'$photo'","observation_id":"'$observation'","taken_at":"2026-11-12T08:46:00Z","width":1600,"height":1200,"sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","preview_path":"previews/'$photo'.jpg","preview_bucket_key":null,"original_target":"drive","drive_file_id":null,"upload_state":"pending","created_at":"2026-11-12T09:03:00Z","updated_at":"2026-11-12T09:03:00Z","deleted_at":null}'
 upsert plant_tag plant_tags '{"id":"'$plant_tag'","plant_id":"'$plant'","tag_id":"'$tag'","created_at":"2026-11-12T09:04:00Z","updated_at":"2026-11-12T09:04:00Z","deleted_at":null}'
 upsert plant_ref plant_refs '{"id":"'$plant_ref'","plant_id":"'$plant'","source":"gbif","external_id":"5414995","url":"https://www.gbif.org/species/5414995","created_at":"2026-11-12T09:05:00Z","updated_at":"2026-11-12T09:05:00Z","deleted_at":null}'
@@ -137,7 +137,7 @@ pull s_plants plants "" id,display_name,aliases,scientific_name,authorship,gbif_
 keep s_plants sync_select_plants_200.json
 pull s_tags tags "" id,name,created_at,updated_at,deleted_at
 keep s_tags sync_select_tags_200.json
-pull s_observations observations "" id,plant_id,at,lat,lon,accuracy_m,place_label,place_derived,note,created_at,updated_at,deleted_at
+pull s_observations observations "" id,plant_id,at,lat,lon,accuracy_m,place_label,place_derived,note,created_at,updated_at,deleted_at,place_detail
 keep s_observations sync_select_observations_200.json
 pull s_photos photos "" id,observation_id,taken_at,width,height,sha256,preview_path,preview_bucket_key,original_target,drive_file_id,upload_state,created_at,updated_at,deleted_at
 keep s_photos sync_select_photos_200.json
@@ -168,11 +168,11 @@ case "$anon_status" in
 esac
 
 # An observation of a plant that does not exist (23503).
-upsert fk observations '{"id":"01965d4e-0000-7000-8000-000000000013","plant_id":"'$no_plant'","at":"2026-11-12T08:45:00Z","lat":null,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null}' 409
+upsert fk observations '{"id":"01965d4e-0000-7000-8000-000000000013","plant_id":"'$no_plant'","at":"2026-11-12T08:45:00Z","lat":null,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null,"place_detail":null}' 409
 keep fk sync_upsert_observations_fk_409.json
 
 # lat without lon (23514).
-upsert check observations '{"id":"01965d4e-0000-7000-8000-000000000023","plant_id":null,"at":"2026-11-12T08:45:00Z","lat":45.5,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null}' 400
+upsert check observations '{"id":"01965d4e-0000-7000-8000-000000000023","plant_id":null,"at":"2026-11-12T08:45:00Z","lat":45.5,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null,"place_detail":null}' 400
 keep check sync_upsert_observations_check_400.json
 
 # The keep-alive job's ping (Keepalive.Wire.ping_request): the nil tag id,

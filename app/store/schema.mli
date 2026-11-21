@@ -35,7 +35,12 @@ val migrations : migration list
     picked name becoming [drive_root_folder_name], and deletes the settings rows
     [drive_root_folder_picked] and [drive_root_folder_default]; it reads their
     JSON only through [json_valid]-guarded calls, so a bad value never fails it.
-*)
+    Version 7 adds [observations.place_detail] (null, and never set without
+    [place_derived]: a check, as on the server) and creates the device-only
+    table [place_renames] of {!Place_renames}, filled with every live
+    observation that has [lat], [lon], a non-blank [place_derived] and a blank
+    [place_label] (named before the commune-first rule, renamed once by the
+    geocoding pass). *)
 
 val latest : int
 (** Version of the last migration. *)

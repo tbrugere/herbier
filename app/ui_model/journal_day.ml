@@ -28,6 +28,8 @@ let place obs =
       | Places.Coordinates _ -> Places.unknown_name)
     (Places.label obs)
 
+let place_detail = Places.label_detail
+
 let plant_name names id =
   match
     List.find_opt (fun (p, _) -> Herbier_domain.Ids.Plant_id.equal p id) names

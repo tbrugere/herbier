@@ -3,6 +3,7 @@ module Observations = Herbier_store.Observations
 module Observation_id = Herbier_domain.Ids.Observation_id
 module Places = Herbier_domain.Places
 module Place_name = Herbier_geo.Place_name
+module Geocode_pass = Herbier_ui_model.Geocode_pass
 
 let tried (t : Core.t) (o : Herbier_domain.Observation.t) p =
   List.exists
@@ -12,8 +13,21 @@ let tried (t : Core.t) (o : Herbier_domain.Observation.t) p =
 let mark_tried (t : Core.t) (o : Herbier_domain.Observation.t) p =
   t.geocode_tried := (o.id, p) :: !(t.geocode_tried)
 
-let pending (o : Herbier_domain.Observation.t) =
-  Option.map (fun pos -> (o, Places.of_position pos)) o.position
+(* The marker is device-only bookkeeping: a failed delete only means the
+   observation is resolved again at the next pass, where the guarded rename
+   writes nothing. *)
+let forget_rename (t : Core.t) (o : Herbier_domain.Observation.t) =
+  Fut.await
+    (Db.write t.db (Herbier_store.Place_renames.forget o.id))
+    (function
+      | Ok (_ : int) -> ()
+      | Error e ->
+          Core.log_error
+            [
+              "geocode: forget rename";
+              Observation_id.to_string o.id;
+              Db.error_to_string e;
+            ])
 
 let rec geocode_pending (t : Core.t) =
   match !(t.geocode_run) with
@@ -24,14 +38,16 @@ let rec geocode_pending (t : Core.t) =
       Fut.await
         (let* () = Fut.map Result.ok t.communes_loaded in
          let* observations = Db.all t.db Observations.to_geocode in
+         let* to_rename = Db.all t.db Observations.to_rename in
          let+ labelled = Db.all t.db Observations.labelled in
-         (observations, labelled))
+         (observations, to_rename, labelled))
         (function
           | Error e ->
               Core.log_error ["geocode: read"; Db.error_to_string e];
               geocode_end t
-          | Ok (observations, labelled) ->
-              geocode_each t ~labelled (List.filter_map pending observations))
+          | Ok (observations, to_rename, labelled) ->
+              geocode_each t ~labelled
+                (Geocode_pass.items ~to_geocode:observations ~to_rename))
 
 and geocode_end (t : Core.t) =
   let again = !(t.geocode_run) in
@@ -42,7 +58,13 @@ and geocode_end (t : Core.t) =
 
 and geocode_each (t : Core.t) ~labelled = function
   | [] -> geocode_end t
-  | ((o : Herbier_domain.Observation.t), (p : Places.point)) :: rest ->
+  | item :: _
+    when Geocode_pass.yields item
+           ~again:(!(t.geocode_run) = Core.Geocoding_again) ->
+      (* geocode_end starts the new run, which reads the newly pending
+         observations first; renames already done have lost their marker. *)
+      geocode_end t
+  | {Geocode_pass.o; p; kind} :: rest ->
       let id = Observation_id.to_string o.id in
       (* A point already asked at this position keeps its local lookups
          (own places and commune packs: free, and a place labelled or a pack
@@ -82,30 +104,39 @@ and geocode_each (t : Core.t) ~labelled = function
               geocode_end t
           | Ok Place_name.Deferred -> geocode_each t ~labelled rest
           | Ok Place_name.Unknown ->
+              (* A rename keeps its old name and its marker: asked again at
+                 the next trigger, as an unnamed point is. *)
               (match asked with
               | true ->
                   mark_tried t o p;
                   Core.log ["geocode:"; id; "unknown"]
               | false -> ());
               geocode_each t ~labelled rest
-          | Ok (Place_name.Named name) -> (
+          | Ok (Place_name.Named named) -> (
+              let at = Ptime_clock.now () in
               let edit =
-                Observations.set_place_derived o.id ~lat:p.lat ~lon:p.lon name
-                  ~at:(Ptime_clock.now ())
+                match kind with
+                | Geocode_pass.Name ->
+                    Observations.set_place_derived o.id ~lat:p.lat ~lon:p.lon
+                      ~detail:named.detail named.name ~at
+                | Geocode_pass.Rename {was} ->
+                    Observations.rename_place_derived o.id ~lat:p.lat ~lon:p.lon
+                      ~was ~detail:named.detail named.name ~at
               in
               Fut.await (Core.commit t [edit]) @@ function
               | Error e ->
                   mark_tried t o p;
                   Core.log_error ["geocode: save"; id; Db.error_to_string e];
                   geocode_end t
-              | Ok 0 ->
-                  (* Moved, named or deleted meanwhile: nothing to retry at
-                     this position. *)
-                  mark_tried t o p;
-                  Core.log ["geocode:"; id; "unchanged"];
-                  geocode_each t ~labelled rest
-              | Ok (_ : int) ->
-                  Core.log ["geocode:"; id; "named"];
+              | Ok changes ->
+                  let next = Geocode_pass.after_save kind ~changes in
+                  (match next.mark_tried with
+                  | true -> mark_tried t o p
+                  | false -> ());
+                  Core.log ["geocode:"; id; next.outcome];
+                  (match next.forget with
+                  | true -> forget_rename t o
+                  | false -> ());
                   geocode_each t ~labelled rest))
 
 let settings_key = function

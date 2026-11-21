@@ -155,6 +155,17 @@
             "has_default": false,
             "is_generated": false,
             "is_primary_key": false
+        },
+        {
+            "name": "place_detail",
+            "type": "text",
+            "comment": null,
+            "fk_table": null,
+            "not_null": false,
+            "is_unique": false,
+            "has_default": false,
+            "is_generated": false,
+            "is_primary_key": false
         }
     ],
     "comment": "One sighting, optionally of a plant, with its position.\nmetadata: id=Ids.Observation_id"

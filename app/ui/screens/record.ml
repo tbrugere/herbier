@@ -307,6 +307,7 @@ let v app =
         position;
         place_label = None;
         place_derived = None;
+        place_detail = None;
         note = None;
         created_at = now;
         updated_at = now;

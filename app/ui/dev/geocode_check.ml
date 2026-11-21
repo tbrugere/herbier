@@ -10,10 +10,15 @@ module Db = Herbier_store_io.Db
 
 let schlucht = {Places.lat = 48.0633; lon = 7.0081}
 let belfort = {Places.lat = 47.6380; lon = 6.8628}
+let figeac = {Places.lat = 44.6020; lon = 2.0300}
+let pelegri = {Places.lat = 44.6300; lon = 1.9835}
 
 let points =
   [
     ("schlucht", schlucht);
+    ("figeac", figeac);
+    ("pelegri", pelegri);
+    ("balveurche", {Places.lat = 48.0653; lon = 6.9946});
     ("landes", {Places.lat = 44.25; lon = -0.85});
     ("lausanne", {Places.lat = 46.5197; lon = 6.6323});
     ("kew", {Places.lat = 51.4787; lon = -0.2956});
@@ -86,6 +91,14 @@ let status app ~opened =
     | false -> "hors ligne")
     (List.length (requests ()) - opened)
 
+let renames app =
+  Fut.map
+    (function
+      | Ok (Some n) -> Printf.sprintf "%d à renommer (place_renames)" n
+      | Ok None -> "place_renames: vide ?"
+      | Error e -> "place_renames: " ^ Db.error_to_string e)
+    (Db.find (App.db app) Herbier_store.Place_renames.count)
+
 let observation ?label (p : Places.point) : Observation.t =
   let now = Ptime_clock.now () in
   {
@@ -95,6 +108,7 @@ let observation ?label (p : Places.point) : Observation.t =
     position = Some {lat = p.lat; lon = p.lon; accuracy_m = None};
     place_label = label;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = now;
     updated_at = now;
@@ -127,7 +141,10 @@ let watch app ~out ~before (created : Observation.t list) =
     Fut.map
       (function
         | Ok (Some (r : Observation.t)) ->
-            Option.value r.place_derived ~default:Places.unknown_name
+            let name =
+              Option.value r.place_derived ~default:Places.unknown_name
+            in
+            Geocode.named_to_string {Geocode.name; detail = r.place_detail}
         | Ok None -> "absent"
         | Error e -> "error: " ^ Db.error_to_string e)
       (Db.find (App.db app) (Observations.get o.id))
@@ -180,15 +197,26 @@ let save_all app ~out observations =
 let place_names app =
   let opened = List.length (requests ()) in
   let line = El.p [El.txt' (status app ~opened)] in
+  let renames_line = El.p [] in
+  let show_renames () =
+    Fut.await (renames app) (fun s -> El.set_children renames_line [El.txt' s])
+  in
+  show_renames ();
   let refresh = Kit.button "Rafraîchir" in
   Kit.on_click refresh (fun () ->
-      El.set_children line [El.txt' (status app ~opened)]);
+      El.set_children line [El.txt' (status app ~opened)];
+      show_renames ());
   let out = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "status")] [] in
   let single = Kit.button "Observation à la Schlucht" in
   Kit.on_click single (fun () -> save_all app ~out [observation schlucht]);
   let belfort_button = Kit.button "Observation à Belfort" in
   Kit.on_click belfort_button (fun () ->
       save_all app ~out [observation belfort]);
+  let figeac_button = Kit.button "Observation à Figeac" in
+  Kit.on_click figeac_button (fun () -> save_all app ~out [observation figeac]);
+  let pelegri_button = Kit.button "Observation à Pélégri" in
+  Kit.on_click pelegri_button (fun () ->
+      save_all app ~out [observation pelegri]);
   let pair = Kit.button "Lieu nommé + voisine" in
   Kit.on_click pair (fun () ->
       save_all app ~out
@@ -202,7 +230,17 @@ let place_names app =
   [
     El.h2 [El.txt' "Noms de lieux"];
     line;
-    El.p [refresh; single; belfort_button; pair; france];
+    renames_line;
+    El.p
+      [
+        refresh;
+        single;
+        belfort_button;
+        figeac_button;
+        pelegri_button;
+        pair;
+        france;
+      ];
     out;
   ]
 

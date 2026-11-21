@@ -56,12 +56,15 @@ type view = {
    survive every view change until it closes. *)
 type head =
   | Line of string
-  | Title of string
+  | Title of {title : string; detail : string option}
   | Renaming of {value : string; placeholder : string}
 
 let head_equal a b =
   match (a, b) with
-  | Line a, Line b | Title a, Title b -> String.equal a b
+  | Line a, Line b -> String.equal a b
+  | Title a, Title b ->
+      String.equal a.title b.title
+      && Option.equal String.equal a.detail b.detail
   | Renaming _, Renaming _ -> true
   | (Line _ | Title _ | Renaming _), _ -> false
 
@@ -163,7 +166,9 @@ let head (v, renaming) =
         | None, None ->
             Map_sheet.collapsed ~places:(List.length v.places)
               ~observations:(List.length (shown_members v.places)))
-  | Some p, false -> Title (Map_sheet.title p.cluster)
+  | Some p, false ->
+      Title
+        {title = Map_sheet.title p.cluster; detail = Map_sheet.detail p.cluster}
   | Some p, true ->
       Renaming
         {
@@ -369,9 +374,7 @@ let v app =
     | None -> finish Map_filter.Everything
     | Some plants ->
         let place c =
-          match Map_filter.place_name c with
-          | Some name -> Fold.matches ~query:text name
-          | None -> false
+          List.exists (Fold.matches ~query:text) (Map_filter.place_texts c)
         in
         Fut.await (Db.all db plants) (function
           | _ when (not (alive ())) || mine <> search_seq !searching -> ()
@@ -506,12 +509,18 @@ let v app =
   in
   let head_view = function
     | Line line -> (El.p ~at:[cls "map-tab__line"] [El.txt' line], [])
-    | Title title ->
+    | Title {title; detail} ->
         let button = Html.button ["map-tab__rename"] [El.txt' "Renommer"] in
         let click, b = Rb.click button in
-        ( El.div
+        let row =
+          El.div
             ~at:[cls "map-tab__title-row"]
-            [El.h2 ~at:[cls "map-tab__title"] [El.txt' title]; button],
+            [El.h2 ~at:[cls "map-tab__title"] [El.txt' title]; button]
+        in
+        ( (match detail with
+          | None -> row
+          | Some d ->
+              El.div [row; El.p ~at:[cls "map-tab__place-detail"] [El.txt' d]]),
           [
             b;
             Rb.act click (fun () ->

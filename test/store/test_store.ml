@@ -95,6 +95,7 @@ let synced_tables : (string * column list) list =
          col T.created_at;
          col T.updated_at;
          col T.deleted_at;
+         col T.place_detail;
        ] ));
     (let module T = Tables.Photos in
      ( tname T.table,
@@ -207,6 +208,9 @@ let local_tables : (string * (string * string) list) list =
         ("last_error", "text");
         ("created_at", "text");
       ] );
+    (* place_renames (migration 7): one column, the marked
+       observation's id. *)
+    ("place_renames", [("observation_id", "text")]);
   ]
 
 (* Each lookup table and the values it must hold: the to_string of every
@@ -250,7 +254,7 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  Alcotest.(check int) "latest is 6" 6 Schema.latest;
+  Alcotest.(check int) "latest is 7" 7 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -270,24 +274,30 @@ let pending_at_latest () =
 
 let pending_from_one () =
   Alcotest.(check string)
-    "pending from 1 is migrations 2, 3, 4, 5 and 6" "Ok [2; 3; 4; 5; 6]"
+    "pending from 1 is migrations 2, 3, 4, 5, 6 and 7" "Ok [2; 3; 4; 5; 6; 7]"
     (string_of_pending (Schema.pending ~current:1))
 
 let pending_from_two () =
   Alcotest.(check string)
-    "pending from 2 is migrations 3, 4, 5 and 6" "Ok [3; 4; 5; 6]"
+    "pending from 2 is migrations 3, 4, 5, 6 and 7" "Ok [3; 4; 5; 6; 7]"
     (string_of_pending (Schema.pending ~current:2))
 
 let pending_from_three () =
   Alcotest.(check string)
-    "pending from 3 is migrations 4, 5 and 6" "Ok [4; 5; 6]"
+    "pending from 3 is migrations 4, 5, 6 and 7" "Ok [4; 5; 6; 7]"
     (string_of_pending (Schema.pending ~current:3))
 
-(* A device at version 5 has exactly one pending migration, 6. *)
+(* A device at version 5 has two pending migrations, 6 and 7. *)
 let pending_from_five () =
   Alcotest.(check string)
-    "pending from 5 is migration 6 alone" "Ok [6]"
+    "pending from 5 is migrations 6 and 7" "Ok [6; 7]"
     (string_of_pending (Schema.pending ~current:5))
+
+(* A device at version 6 has exactly one pending migration, 7. *)
+let pending_from_six () =
+  Alcotest.(check string)
+    "pending from 6 is migration 7 alone" "Ok [7]"
+    (string_of_pending (Schema.pending ~current:6))
 
 let pending_above_latest () =
   Alcotest.(check string)
@@ -360,7 +370,7 @@ let check_at_latest what db =
     (what ^ ": user_version is latest")
     Schema.latest (user_version db);
   Alcotest.(check (list string))
-    (what ^ ": the eighteen tables exist")
+    (what ^ ": the nineteen tables exist")
     all_tables (table_names db);
   Alcotest.(check (list string))
     (what ^ ": the search triggers exist")
@@ -566,7 +576,14 @@ let after_v6 before =
               "insert into settings (key, value) values (%s, %s);\n" (quote k)
               (quote v))
           before));
-  migrate db ~current:5;
+  (* [db] is already at version 5 ([db_at_version_5]); apply migration 6
+     alone. [migrate db ~current:5] would also apply migration 7,
+     now Schema.latest. *)
+  (match
+     List.filter (fun (m : Schema.migration) -> m.version = 6) Schema.migrations
+   with
+  | [m6] -> Cli.apply_migrations db [m6]
+  | _ -> Alcotest.fail "expected exactly one migration 6");
   Alcotest.(check int)
     "after migration 6, user_version is 6" 6 (user_version db);
   settings_rows db
@@ -679,6 +696,140 @@ let migration_6_tests =
     ("no root stored: no name, pick gone", `Quick, v6_no_root);
     ("none of the keys: unchanged", `Quick, v6_nothing);
     ("a name already stored is kept", `Quick, v6_name_already_set);
+  ]
+
+(* ---------- migration 7: place_detail column and the place_renames
+   one-off migration marker ----------
+
+   The marker singles out, among observations already on disk before this
+   step, exactly those the geocoding pass must revisit: live, positioned,
+   named (a non-blank place_derived) and unlabelled (a blank or absent
+   place_label). test_place_renames.ml checks the table's own CRUD and
+   cascade; this is the migration's insert only. *)
+
+let obs_v6_sql ?(lat = "NULL") ?(lon = "NULL") ?(place_label = "NULL")
+    ?(place_derived = "NULL") ?(deleted_at = "NULL") id =
+  Printf.sprintf
+    "insert into observations (id, at, lat, lon, place_label, place_derived, \
+     deleted_at, created_at, updated_at) values ('%s', %s, %s, %s, %s, %s, %s, \
+     %s, %s);\n"
+    id t0 lat lon place_label place_derived deleted_at t0 t0
+
+let obs7_id n = Printf.sprintf "00000000-0000-4000-8000-%012d" n
+
+let db_before_migration_7 () =
+  let db = fresh_db () in
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Schema.migration) -> m.version <= 6)
+       Schema.migrations);
+  Alcotest.(check int)
+    "before migration 7, user_version is 6" 6 (user_version db);
+  db
+
+let migration_7_marks_only_the_live_positioned_named_unlabelled_row () =
+  let db = db_before_migration_7 () in
+  let marker =
+    obs7_id 1
+    (* live, positioned, named, unlabelled: marked *)
+  in
+  let labelled =
+    obs7_id 2
+    (* named but labelled: not marked *)
+  in
+  let unnamed =
+    obs7_id 3
+    (* positioned but unnamed: not marked *)
+  in
+  let deleted =
+    obs7_id 4
+    (* named but soft-deleted: not marked *)
+  in
+  let unpositioned =
+    obs7_id 5
+    (* named but no position: not marked *)
+  in
+  exec_ok "five observations, as they were before this step" db
+    (fk_on
+    ^ obs_v6_sql marker ~lat:"48.0633" ~lon:"7.0081"
+        ~place_derived:(quote "Près du Champ de Saint-Barthele")
+    ^ obs_v6_sql labelled ~lat:"48.0633" ~lon:"7.0081"
+        ~place_label:(quote "Jardin") ~place_derived:(quote "Près de Figeac")
+    ^ obs_v6_sql unnamed ~lat:"48.0633" ~lon:"7.0081"
+    ^ obs_v6_sql deleted ~lat:"48.0633" ~lon:"7.0081"
+        ~place_derived:(quote "Près de Figeac") ~deleted_at:t0
+    ^ obs_v6_sql unpositioned ~place_derived:(quote "Près de Figeac"));
+  migrate db ~current:6;
+  Alcotest.(check int)
+    "after migration 7, user_version is 7" 7 (user_version db);
+  Alcotest.(check (list string))
+    "place_renames holds exactly the marker's id" [marker]
+    (List.map
+       (fun row -> string_field "observation_id" row)
+       (rows db "select observation_id from place_renames;\n"));
+  Alcotest.(check int)
+    "place_detail starts null for every observation, including the marked one" 0
+    (Cli.count db
+       "select count(*) as n from observations where place_detail is not null;\n")
+
+let migration_7_blank_fields () =
+  let db = db_before_migration_7 () in
+  let blank_label = obs7_id 1 and blank_derived = obs7_id 2 in
+  exec_ok "a blank label and a blank derived name" db
+    (fk_on
+    ^ obs_v6_sql blank_label ~lat:"48.0633" ~lon:"7.0081"
+        ~place_label:(quote "   ") ~place_derived:(quote "Près de Figeac")
+    ^ obs_v6_sql blank_derived ~lat:"48.0633" ~lon:"7.0081"
+        ~place_derived:(quote "  "));
+  migrate db ~current:6;
+  Alcotest.(check (list string))
+    "a blank label counts as none; a blank derived name as unnamed"
+    [blank_label]
+    (List.map
+       (fun row -> string_field "observation_id" row)
+       (rows db "select observation_id from place_renames;\n"))
+
+let search_ids db text =
+  List.map
+    (fun row -> string_field "plant_id" row)
+    (rows db
+       (Printf.sprintf
+          "select plant_id from plant_search where plant_search match '%s';\n"
+          text))
+
+let migration_7_search_documents () =
+  let db = db_before_migration_7 () in
+  exec_ok "a plant with a named observation, before migration 7" db
+    (fk_on
+    ^ plant_sql plant_a
+    ^ Printf.sprintf
+        "insert into observations (id, plant_id, at, lat, lon, place_derived, \
+         created_at, updated_at) values ('%s', '%s', %s, 48.0633, 7.0081, \
+         'Près de Figeac', %s, %s);\n"
+        (obs7_id 1) plant_a t0 t0 t0);
+  migrate db ~current:6;
+  Alcotest.(check (list string))
+    "the rebuilt index still finds the plant by its place" [plant_a]
+    (search_ids db "figeac");
+  exec_ok "a detail given after the migration" db
+    (Printf.sprintf
+       "update observations set place_detail = 'Pélégri' where id = '%s';\n"
+       (obs7_id 1));
+  Alcotest.(check (list string))
+    "the detail finds the plant" [plant_a] (search_ids db "pelegri")
+
+let migration_7_tests =
+  [
+    ( "a blank label is no label, a blank derived name no name",
+      `Quick,
+      migration_7_blank_fields );
+    ( "the search documents hold place_detail, existing plants kept",
+      `Quick,
+      migration_7_search_documents );
+    ( "marks only the live, positioned, named, unlabelled observation; \
+       place_detail is null everywhere",
+      `Quick,
+      migration_7_marks_only_the_live_positioned_named_unlabelled_row );
   ]
 
 let observation_sql ?(plant = "NULL") ?(lat = "NULL") ?(lon = "NULL")
@@ -1417,10 +1568,11 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
-          case "pending from 1 is migrations 2 to 6" pending_from_one;
-          case "pending from 2 is migrations 3 to 6" pending_from_two;
-          case "pending from 3 is migrations 4, 5 and 6" pending_from_three;
-          case "pending from 5 is migration 6 alone" pending_from_five;
+          case "pending from 1 is migrations 2 to 7" pending_from_one;
+          case "pending from 2 is migrations 3 to 7" pending_from_two;
+          case "pending from 3 is migrations 4 to 7" pending_from_three;
+          case "pending from 5 is migrations 6 and 7" pending_from_five;
+          case "pending from 6 is migration 7 alone" pending_from_six;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
@@ -1429,7 +1581,7 @@ let () =
       ( "Schema in sqlite3",
         [
           case
-            "a fresh install reaches the latest version with eighteen tables, \
+            "a fresh install reaches the latest version with nineteen tables, \
              the search table and its triggers"
             fresh_install;
           case "an empty database upgrades to the latest version"
@@ -1459,6 +1611,7 @@ let () =
             outbox_defaults;
         ] );
       ("Migration 6 (Picker removed) in sqlite3", migration_6_tests);
+      ("Migration 7 (place_detail, place_renames) in sqlite3", migration_7_tests);
       ( "Lookup tables in sqlite3",
         [
           case "each lookup table holds every constructor's to_string"

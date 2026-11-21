@@ -67,6 +67,7 @@ let observation ~id ~at ~plant gps =
     position = Gps.position gps;
     place_label = None;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = at;
     updated_at = at;

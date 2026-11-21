@@ -59,7 +59,17 @@ let row (del : List_delete.t) names (o : Observation.t) =
     :: Rb.act r.long (fun () -> del.observation ~from:r.el o.id)
     :: r.bindings )
 
-let day_place state (d : Observation.t Journal_day.t) =
+let with_detail (d : Observation.t Journal_day.t) place =
+  match Journal_day.place_detail d.items with
+  | None -> place
+  | Some detail ->
+      [
+        El.div
+          ~at:[cls "journal__place-block"]
+          (place @ [El.span ~at:[cls "journal__place-detail"] [El.txt' detail]]);
+      ]
+
+let day_place_name state (d : Observation.t Journal_day.t) =
   match (Journal_day.place d.items, Herbier_geo.Features.bounds d.items) with
   | None, _ -> ([], [])
   | Some p, None -> ([El.span ~at:[cls "journal__place"] [El.txt' p]], [])
@@ -78,6 +88,10 @@ let day_place state (d : Observation.t Journal_day.t) =
               State.focus_map state b;
               Route.go (Route.Tab W.Tab_bar.Map));
         ] )
+
+let day_place state (d : Observation.t Journal_day.t) =
+  let place, bindings = day_place_name state d in
+  (with_detail d place, bindings)
 
 let day state del ~this_year names (d : Observation.t Journal_day.t) =
   let place, place_bindings = day_place state d in

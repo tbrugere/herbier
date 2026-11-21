@@ -48,6 +48,8 @@ let recorded_requests =
     ("photon_reverse_atlantic.json", Geocode.photon_reverse atlantic);
     ( "geoplateforme_lieu_dit_schlucht.json",
       Geocode.geoplateforme_lieu_dit schlucht );
+    ( "geoplateforme_commune_schlucht.json",
+      Geocode.geoplateforme_commune schlucht );
     ("geoplateforme_lieu_dit_landes.json", Geocode.geoplateforme_lieu_dit landes);
     ("geoplateforme_commune_landes.json", Geocode.geoplateforme_commune landes);
     ( "geoplateforme_lieu_dit_lausanne.json",
@@ -58,6 +60,14 @@ let recorded_requests =
       Geocode.geoplateforme_lieu_dit atlantic );
     ( "geoplateforme_commune_atlantic.json",
       Geocode.geoplateforme_commune atlantic );
+    ( "geoplateforme_commune_figeac.json",
+      Geocode.geoplateforme_commune {lat = 44.602; lon = 2.03} );
+    ( "geoplateforme_lieu_dit_figeac.json",
+      Geocode.geoplateforme_lieu_dit {lat = 44.602; lon = 2.03} );
+    ( "geoplateforme_commune_pelegri.json",
+      Geocode.geoplateforme_commune {lat = 44.6300; lon = 1.9835} );
+    ( "geoplateforme_lieu_dit_pelegri.json",
+      Geocode.geoplateforme_lieu_dit {lat = 44.6300; lon = 1.9835} );
   ]
 
 let request_line (r : Geocode.request) =
@@ -78,6 +88,7 @@ let run_program ~answer program =
   let rec step acc = function
     | Geocode.Done result -> (result, List.rev acc)
     | Geocode.Get (req, k) -> step (req :: acc) (k (answer req))
+    | Geocode.Try (req, k) -> step (req :: acc) (k (Some (answer req)))
   in
   step [] program
 
@@ -113,6 +124,7 @@ let obs ?label ?(deleted = false) ~id ~at (pos : Places.point option) :
         pos;
     place_label = label;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = at;
     updated_at = at;
@@ -150,6 +162,12 @@ let outcome =
     Place_name.equal_outcome
 
 let outcome_result = Alcotest.result outcome error
+
+(* A shorthand for the common case: a name with no detail (an own label, an
+   offline commune, or an online source that found none within
+   [Geocode.detail_max_m]). *)
+let named ?detail name : Place_name.outcome =
+  Place_name.Named {Geocode.name; detail}
 
 (* ---------- sources: none, set/enabled, can_search, order, label ---------- *)
 
@@ -486,7 +504,8 @@ let resolve_own_place_online () =
          ~communes:no_communes schlucht)
   in
   Alcotest.(check outcome_result)
-    "own place wins over every online source" (Ok (Place_name.Named "Jardin"))
+    "own place wins over every online source"
+    (Ok (named "Jardin"))
     result;
   Alcotest.(check int) "zero requests" 0 (List.length reqs)
 
@@ -498,7 +517,9 @@ let resolve_own_place_offline () =
          ~communes:no_communes schlucht)
   in
   Alcotest.(check outcome_result)
-    "own place names it, offline" (Ok (Place_name.Named "Jardin")) result;
+    "own place names it, offline"
+    (Ok (named "Jardin"))
+    result;
   Alcotest.(check int) "zero requests" 0 (List.length reqs)
 
 let resolve_neighbour_names_it_whatever_the_sources () =
@@ -517,7 +538,8 @@ let resolve_neighbour_names_it_whatever_the_sources () =
           Alcotest.(check outcome_result)
             (Printf.sprintf "%s, online = %b: named by the neighbour" name
                online)
-            (Ok (Place_name.Named "Jardin")) result;
+            (Ok (named "Jardin"))
+            result;
           Alcotest.(check int) "zero requests" 0 (List.length reqs))
         [true; false])
     [
@@ -541,24 +563,31 @@ let resolve_deferred_when_a_source_is_on_but_offline () =
       Alcotest.(check int) (name ^ ": zero requests") 0 (List.length reqs))
     [("IGN alone", ign_only); ("Photon alone", photon_only)]
 
+(* Commune first: IGN asks the commune, then, only when it found one,
+   the lieu-dit (kept only as a detail within [Geocode.detail_max_m]). *)
 let resolve_ign_only () =
-  let named point name reqs =
+  let check point expected_outcome reqs =
     let result, got_reqs =
       run_program ~answer:answer_from_fixtures
         (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[]
            ~communes:no_communes point)
     in
-    Alcotest.(check outcome_result) "result" (Ok (Place_name.Named name)) result;
+    Alcotest.(check outcome_result) "result" (Ok expected_outcome) result;
     Alcotest.(check (list string))
       "requests"
       (List.map request_line reqs)
       (List.map request_line got_reqs)
   in
-  named schlucht "Près du Rain des Aulx"
-    [Geocode.geoplateforme_lieu_dit schlucht];
-  named landes "Près de Commensacq"
+  check schlucht (named "Près du Valtin")
+    (* the lieu-dit "le Rain des Aulx" is 464 m away, beyond detail_max_m *)
     [
-      Geocode.geoplateforme_lieu_dit landes; Geocode.geoplateforme_commune landes;
+      Geocode.geoplateforme_commune schlucht;
+      Geocode.geoplateforme_lieu_dit schlucht;
+    ];
+  check landes
+    (named "Près de Commensacq")
+    [
+      Geocode.geoplateforme_commune landes; Geocode.geoplateforme_lieu_dit landes;
     ];
   let result, reqs =
     run_program ~answer:answer_from_fixtures
@@ -576,12 +605,8 @@ let resolve_ign_only () =
   Alcotest.(check outcome_result)
     "lausanne: unknown" (Ok Place_name.Unknown) result;
   Alcotest.(check (list string))
-    "lausanne: lieu_dit then commune, no Photon"
-    (List.map request_line
-       [
-         Geocode.geoplateforme_lieu_dit lausanne;
-         Geocode.geoplateforme_commune lausanne;
-       ])
+    "lausanne: the commune alone is empty, no lieu-dit request"
+    (List.map request_line [Geocode.geoplateforme_commune lausanne])
     (List.map request_line reqs)
 
 let resolve_photon_only () =
@@ -591,7 +616,9 @@ let resolve_photon_only () =
          ~communes:no_communes kew)
   in
   Alcotest.(check outcome_result)
-    "kew" (Ok (Place_name.Named "Près de Kew")) result;
+    "kew: city before district"
+    (Ok (named "Près de Londres"))
+    result;
   Alcotest.(check (list string))
     "kew: one photon request"
     (List.map request_line [Geocode.photon_reverse kew])
@@ -602,7 +629,9 @@ let resolve_photon_only () =
          ~communes:no_communes lausanne)
   in
   Alcotest.(check outcome_result)
-    "lausanne" (Ok (Place_name.Named "Près de Lausanne")) result;
+    "lausanne"
+    (Ok (named "Près de Lausanne"))
+    result;
   Alcotest.(check (list string))
     "lausanne: one photon request, no geoplateforme"
     (List.map request_line [Geocode.photon_reverse lausanne])
@@ -650,25 +679,30 @@ let resolve_both_on_matches_m543 () =
       (List.map request_line expected_reqs)
       (List.map request_line reqs)
   in
-  check_case schlucht (Place_name.Named "Près du Rain des Aulx")
-    [Geocode.geoplateforme_lieu_dit schlucht];
-  check_case landes (Place_name.Named "Près de Commensacq")
+  (* schlucht, landes: IGN finds a commune (its lieu-dit beyond
+     detail_max_m), Photon is never tried (or_else short-circuits on
+     Ok (Some _)). *)
+  check_case schlucht (named "Près du Valtin")
     [
-      Geocode.geoplateforme_lieu_dit landes; Geocode.geoplateforme_commune landes;
+      Geocode.geoplateforme_commune schlucht;
+      Geocode.geoplateforme_lieu_dit schlucht;
     ];
-  check_case lausanne (Place_name.Named "Près de Lausanne")
+  check_case landes
+    (named "Près de Commensacq")
     [
-      Geocode.geoplateforme_lieu_dit lausanne;
-      Geocode.geoplateforme_commune lausanne;
-      Geocode.photon_reverse lausanne;
+      Geocode.geoplateforme_commune landes; Geocode.geoplateforme_lieu_dit landes;
     ];
-  check_case kew (Place_name.Named "Près de Kew") [Geocode.photon_reverse kew];
+  (* lausanne: IGN's commune alone is empty (no lieu-dit request), so
+     Photon is tried next and finds it. *)
+  check_case lausanne
+    (named "Près de Lausanne")
+    [Geocode.geoplateforme_commune lausanne; Geocode.photon_reverse lausanne];
+  (* kew: outside the IGN box, no IGN request at all; Photon finds the city
+     (city before district). *)
+  check_case kew (named "Près de Londres") [Geocode.photon_reverse kew];
+  (* atlantic: both sources' commune step is empty. *)
   check_case atlantic Place_name.Unknown
-    [
-      Geocode.geoplateforme_lieu_dit atlantic;
-      Geocode.geoplateforme_commune atlantic;
-      Geocode.photon_reverse atlantic;
-    ]
+    [Geocode.geoplateforme_commune atlantic; Geocode.photon_reverse atlantic]
 
 let resolve_errors_stop_the_chain () =
   let result, reqs =
@@ -682,23 +716,25 @@ let resolve_errors_stop_the_chain () =
     (Error (Geocode.Unexpected {path = "/features"; expected = "array"}))
     result;
   Alcotest.(check int) "one request" 1 (List.length reqs);
+  (* A bad lieu-dit payload after a good commune: the detail is optional, so
+     the commune names the point, with no detail and no Photon request. *)
   let lieu_dit = Geocode.geoplateforme_lieu_dit landes in
   let result, reqs =
     run_program
       ~answer:(fun (req : Geocode.request) ->
         match Geocode.equal_request req lieu_dit with
-        | true -> answer_from_fixtures req
-        | false -> `Assoc [("features", `Int 3)])
+        | true -> `Assoc [("features", `Int 3)]
+        | false -> answer_from_fixtures req)
       (Place_name.resolve ~sources:all_on ~online:true ~labelled:[]
          ~communes:no_communes landes)
   in
   Alcotest.(check outcome_result)
-    "bad payload at the commune step"
-    (Error (Geocode.Unexpected {path = "/features"; expected = "array"}))
+    "bad payload at the lieu-dit step, after a good commune"
+    (Ok (named "Près de Commensacq"))
     result;
   Alcotest.(check (list string))
     "two requests, no Photon"
-    (List.map request_line [lieu_dit; Geocode.geoplateforme_commune landes])
+    (List.map request_line [Geocode.geoplateforme_commune landes; lieu_dit])
     (List.map request_line reqs)
 
 let resolve_nonfinite_point_is_unknown () =
@@ -806,7 +842,9 @@ let resolve_offline_in_the_pack_names_it_with_no_request () =
          ~communes:(Lazy.force idx_90) belfort)
   in
   Alcotest.(check outcome_result)
-    "belfort" (Ok (Place_name.Named "Près de Belfort")) result;
+    "belfort"
+    (Ok (named "Près de Belfort"))
+    result;
   Alcotest.(check int) "no request" 0 (List.length reqs)
 
 let resolve_offline_outside_the_pack_is_unknown_whatever_online () =
@@ -838,7 +876,9 @@ let resolve_offline_and_photon_outside_the_pack () =
          ~communes:(Lazy.force idx_90) kew)
   in
   Alcotest.(check outcome_result)
-    "online" (Ok (Place_name.Named "Près de Kew")) result;
+    "online: city before district"
+    (Ok (named "Près de Londres"))
+    result;
   Alcotest.(check (list string))
     "one photon request"
     (List.map request_line [Geocode.photon_reverse kew])
@@ -850,8 +890,7 @@ let resolve_offline_wins_over_online_in_the_pack () =
       (Place_name.resolve ~sources:offline_and_both_online ~online:true
          ~labelled:[] ~communes:(Lazy.force idx_90) belfort)
   in
-  Alcotest.(check outcome_result)
-    "result" (Ok (Place_name.Named "Près de Belfort")) result;
+  Alcotest.(check outcome_result) "result" (Ok (named "Près de Belfort")) result;
   Alcotest.(check int) "no request: offline first" 0 (List.length reqs)
 
 let resolve_offline_off_ignores_the_pack () =
@@ -870,8 +909,7 @@ let resolve_own_place_wins_over_the_pack () =
       (Place_name.resolve ~sources:offline_and_both_online ~online:true
          ~labelled:[jardin] ~communes:(Lazy.force idx_90) belfort)
   in
-  Alcotest.(check outcome_result)
-    "result" (Ok (Place_name.Named "Jardin")) result;
+  Alcotest.(check outcome_result) "result" (Ok (named "Jardin")) result;
   Alcotest.(check int) "no request" 0 (List.length reqs)
 
 let offline_tests =
@@ -899,11 +937,79 @@ let offline_tests =
       resolve_own_place_wins_over_the_pack );
   ]
 
+(* End to end through [Place_name.resolve]: a lieu-dit inside a commune is
+   not the name itself, only an optional detail under it, kept only when
+   close enough. *)
+let figeac : Places.point = {lat = 44.602; lon = 2.03}
+let pelegri : Places.point = {lat = 44.6300; lon = 1.9835}
+
+let resolve_figeac_gives_the_commune_with_no_detail () =
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[]
+         ~communes:no_communes figeac)
+  in
+  Alcotest.(check outcome_result)
+    "Près de Figeac, no detail (its nearest lieu-dit is 319 m away)"
+    (Ok (named "Près de Figeac"))
+    result;
+  Alcotest.(check (list string))
+    "commune then lieu-dit"
+    (List.map request_line
+       [
+         Geocode.geoplateforme_commune figeac;
+         Geocode.geoplateforme_lieu_dit figeac;
+       ])
+    (List.map request_line reqs)
+
+let resolve_pelegri_gives_the_commune_with_the_hamlet_as_detail () =
+  let result, reqs =
+    run_program ~answer:answer_from_fixtures
+      (Place_name.resolve ~sources:ign_only ~online:true ~labelled:[]
+         ~communes:no_communes pelegri)
+  in
+  Alcotest.(check outcome_result)
+    "Près de Lissac-et-Mouret, detail Pélégri (66 m)"
+    (Ok (named ~detail:"Pélégri" "Près de Lissac-et-Mouret"))
+    result;
+  Alcotest.(check (list string))
+    "commune then lieu-dit"
+    (List.map request_line
+       [
+         Geocode.geoplateforme_commune pelegri;
+         Geocode.geoplateforme_lieu_dit pelegri;
+       ])
+    (List.map request_line reqs)
+
+let outcome_to_string_renders_name_and_detail () =
+  Alcotest.(check string)
+    "named with a detail" "named Près de Lissac-et-Mouret / Pélégri"
+    (Place_name.outcome_to_string
+       (named ~detail:"Pélégri" "Près de Lissac-et-Mouret"));
+  Alcotest.(check string)
+    "named without a detail" "named Près de Figeac"
+    (Place_name.outcome_to_string (named "Près de Figeac"));
+  Alcotest.(check string)
+    "unknown" "unknown"
+    (Place_name.outcome_to_string Place_name.Unknown);
+  Alcotest.(check string)
+    "deferred" "deferred"
+    (Place_name.outcome_to_string Place_name.Deferred)
+
 let resolve_tests =
   [
+    ( "outcome_to_string: « named <name> / <detail> », unknown, deferred",
+      `Quick,
+      outcome_to_string_renders_name_and_detail );
     ( "every source off is Unknown, no request, at every point and online value",
       `Quick,
       resolve_all_off_is_unknown_with_no_request );
+    ( "Figeac: the commune, its lieu-dit too far for a detail",
+      `Quick,
+      resolve_figeac_gives_the_commune_with_no_detail );
+    ( "Pélégri: the commune, with the nearby hamlet as its detail",
+      `Quick,
+      resolve_pelegri_gives_the_commune_with_the_hamlet_as_detail );
     ( "an own place wins over every online source",
       `Quick,
       resolve_own_place_online );
@@ -922,7 +1028,8 @@ let resolve_tests =
     ( "both on: the IGN-then-Photon chain's five cases",
       `Quick,
       resolve_both_on_matches_m543 );
-    ( "a decode error stops the chain at once, no later source",
+    ( "a commune decode error stops the chain at once; a lieu-dit one keeps \
+       the commune",
       `Quick,
       resolve_errors_stop_the_chain );
     ( "a non-finite point is Unknown, no request",

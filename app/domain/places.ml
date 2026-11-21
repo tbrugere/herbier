@@ -104,6 +104,14 @@ let place_name (o : Observation.t) =
   | Some l -> Some l
   | None -> Option.bind o.place_derived Text.non_blank
 
+let place_detail (o : Observation.t) =
+  match
+    ( Option.bind o.place_label Text.non_blank,
+      Option.bind o.place_derived Text.non_blank )
+  with
+  | None, Some _ -> Option.bind o.place_detail Text.non_blank
+  | Some _, _ | None, None -> None
+
 let unknown_name = "Lieu inconnu"
 
 let display_name (o : Observation.t) =
@@ -168,6 +176,24 @@ let label observations =
           |> List.filter_map position_point
           |> mean
           |> Option.map (fun c -> Coordinates c))
+
+let label_detail observations =
+  match label observations with
+  | Some (Derived s) ->
+      observations
+      |> List.filter (fun (o : Observation.t) ->
+          Option.is_none o.deleted_at
+          && Option.equal String.equal
+               (Option.bind o.place_derived Text.non_blank)
+               (Some s))
+      |> List.stable_sort compare_obs
+      (* "" stands for no detail: it is a candidate, so one observation near
+         a lieu-dit does not give it to a group whose others are not. *)
+      |> List.map (fun (o : Observation.t) ->
+          Option.value ~default:"" (Option.bind o.place_detail Text.non_blank))
+      |> plurality
+      |> Fun.flip Option.bind Text.non_blank
+  | Some (Named _ | Coordinates _) | None -> None
 
 let rename name ~at {centroid = _; members} =
   let label = Text.non_blank name in

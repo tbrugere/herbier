@@ -64,8 +64,15 @@ PlantRef     id, plant_id, source (gbif|wikidata|wikipedia|powo|ipni|taxref|
              created_at, updated_at, deleted_at?; unique (plant_id, source)
 Observation  id, plant_id? (null ⇒ « À identifier »), at, lat?, lon?,
              accuracy_m?, place_label?, place_derived?, note?,
-             created_at, updated_at, deleted_at?;
-             lat and lon both null or both set, accuracy_m only with them
+             created_at, updated_at, deleted_at?, place_detail?;
+             lat and lon both null or both set, accuracy_m only with them;
+             place_detail (a close lieu-dit, §8) only with place_derived
+             (two options in Observation.t, not one nested option: the
+             setters write both, the checks guard the rest); an install
+             built before this column that moves an observation having a
+             detail pushes place_derived = null alone and is refused by the
+             check (23514) until updated: update every install together
+             with the migration
 Photo        id, observation_id, taken_at, width, height,
              sha256 (of the original as captured),
              preview_path (device), preview_bucket_key? (unused: the previews
@@ -241,7 +248,9 @@ the mean of the positions. Details in `app/domain/places.mli`.
   one document per live plant keyed by the plant's id (not its rowid, which a
   `VACUUM`, a re-key or a table rebuild may renumber), holding its display
   name, scientific name and aliases, the names of its live tags (through live links), and the
-  `place_label` / `place_derived` of its live observations. Triggers on
+  `place_label` / `place_derived` of its live observations (and, since
+  migration 7, their `place_detail`, so a lieu-dit kept as a detail stays
+  searchable; 4b's place search matches it too). Triggers on
   `plants`, `plant_tags`, `tags` and `observations` rebuild the documents of
   the plants a write touches, so every writer (UI, seed, pull, cascade)
   keeps the index right.
@@ -1065,7 +1074,7 @@ the classifier must accept both a bare URL and text containing one.
   only titles the drawer, it is never stored. « Valider » (disabled while the
   camera moves, so it saves what the drawer shows) writes the
   centre at the last `moveend` (6 decimals, longitude wrapped into [-180, 180), latitude clamped)
-  with `accuracy_m` and `place_derived` cleared, `place_label` kept only
+  with `accuracy_m`, `place_derived` and `place_detail` cleared, `place_label` kept only
   within 500 m of the old point, through `Observations.upsert`; `App.save`
   then runs the reverse geocoding below for the new point (`Move_plan`).
 - Place names for `place_derived` (M5.57: positions stay on the phone
@@ -1092,23 +1101,58 @@ the classifier must accept both a bare URL and text containing one.
      `settings` keys `place_source_ign_offline`, `place_source_ign_online`,
      `place_source_photon_online`; unset or unreadable = off), mirrored in
      `State.place_sources`. With both IGN switches on, a point in a
-     downloaded département gets its commune, never the online lieu-dit;
+     downloaded département gets its commune with no request (the packs
+     hold communes only: no detail);
   3. else nothing is stored, and 4c, 4b's sheet and 4h print
      « Lieu inconnu » (`Places.unknown_name`, never stored: a stored
      placeholder would sync as a fake name and stop later sources).
 
   With a source on but the phone offline the outcome is `Deferred`: no
   request, asked again on the `online` event. Rules of the sources:
-  - IGN: inside a coarse box of metropolitan France and Corsica, the nearest
-    Géoplateforme lieu-dit (habité or not) within 500 m, else the commune
-    containing the point; outside the box, no request. Photon's name counts
-    only when it is an OSM `place` (city … islet), else its district, else
-    its city. With both on, the chain is M5.43's (IGN, then Photon);
+  - commune first (M5.83, after a point inside Figeac was named after a
+    cadastral lieu-dit 312 m away): `place_derived` is always the commune,
+    and a lieu-dit only an optional detail, `place_detail` (synced, a column
+    of its own, never composed into the name), kept when its point is within
+    `Geocode.detail_max_m` (200 m, measured client-side from the feature's
+    geometry, the same rule for both providers) and its name differs from
+    the commune's (trimmed, ASCII case-folded). It shows in smaller text
+    under the name in 4h, 4c's day header and 4b's sheet title
+    (`Places.place_detail`, `Places.label_detail`: the most frequent detail
+    among the observations carrying the group's derived name, those without
+    a detail counting as one candidate, so a single stop near a hamlet does
+    not label a whole day; none under a user's label), never instead of it; one-line metas (4f rows, 5e, 4k)
+    print the commune only;
+  - IGN: inside a coarse box of metropolitan France and Corsica, the commune
+    containing the point, then (only when there is one) the nearest
+    Géoplateforme lieu-dit (habité or not) within 500 m for the detail;
+    outside the box, no request (the lieu-dit request keeps the 500 m
+    circle; the answer comes nearest first, and the distance rule above
+    applies). Photon (one request): the commune is the feature's city (a
+    village or old commune carries its commune there: Lissac is « Près de
+    Lissac-et-Mouret »), else the OSM `place` name when it is a city, town
+    or village (the commune itself has no city), else its district, else
+    (abroad, no city) another `place` name; the detail is
+    an OSM `place` hamlet, isolated_dwelling, farm, locality or
+    neighbourhood. With both on, the chain is M5.43's (IGN, then Photon);
   - the row stores the phrase « Près de … » with the French contraction
-    (du, des, de la, de l’, d’), which 4c and 4h print as is;
+    (du, des, de la, de l’, d’), which 4c and 4h print as is; the detail is
+    stored as the provider spells it;
   - written by a conditional `Observations.set_place_derived` (live, same
     position, still unnamed) through `App` with its outbox entry, so a late
     answer never overwrites a move or a newer name;
+  - observations named before M5.83 (possibly after a lieu-dit) are marked
+    by local migration 7 in the device-only `place_renames`; the same pass,
+    after the unnamed ones, resolves each again and rewrites it through a
+    conditional `Observations.rename_place_derived` (still there, still that
+    name, still unlabelled; nothing written when unchanged), then forgets
+    its marker; a miss or an error keeps the marker for the next trigger.
+    A trigger that comes during the renames (a new observation saved) ends
+    the pass before the next rename, so the new run names the newly pending
+    observations first and goes on with the renames left (`Geocode_pass`).
+    Migration 7 marks every unlabelled named observation, commune names and
+    pack answers included: a one-off cost of one or two requests each at
+    the first passes after the upgrade, accepted over telling apart the
+    names that came from a lieu-dit, which the row does not record;
   - `App.geocode_pending` runs online or offline (own places need no
     network): at startup, when the window comes back online (main.ml's
     `online`/`offline` listener keeps `State.network` current), after every

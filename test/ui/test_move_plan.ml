@@ -28,8 +28,9 @@ let t2 = time "2026-11-10T09:05:00Z"
 
 (* [obs ~id ~at]: a live observation with no plant, position or note by
    default. *)
-let obs ?plant ?pos ?place_label ?place_derived ?note ?(created_at = t0)
-    ?(updated_at = t0) ?deleted_at ~id ~at () : Observation.t =
+let obs ?plant ?pos ?place_label ?place_derived ?place_detail ?note
+    ?(created_at = t0) ?(updated_at = t0) ?deleted_at ~id ~at () : Observation.t
+    =
   {
     id = obs_id id;
     plant_id = Option.map plant_id plant;
@@ -37,6 +38,7 @@ let obs ?plant ?pos ?place_label ?place_derived ?note ?(created_at = t0)
     position = pos;
     place_label;
     place_derived;
+    place_detail;
     note;
     created_at;
     updated_at;
@@ -252,7 +254,8 @@ let apply =
       let o =
         obs ~id:1 ~at:t1
           ~pos:{lat = origin.lat; lon = origin.lon; accuracy_m = Some 12.}
-          ~plant:7 ~place_label:"Lac Blanc" ~note:"une touffe" ()
+          ~plant:7 ~place_label:"Lac Blanc" ~place_derived:"Près de Schlucht"
+          ~place_detail:"Pélégri" ~note:"une touffe" ()
       in
       nothing_to_save "the centre equals the origin, even with a stale accuracy"
         (Move_plan.apply o origin ~at:t2);
@@ -276,6 +279,10 @@ let apply =
             "accuracy is cleared" None p.accuracy_m;
           Alcotest.(check (option string))
             "place_derived is cleared" None o'.place_derived;
+          Alcotest.(check (option string))
+            "place_detail is cleared alongside place_derived (the check \
+             constraint rejects a detail without a derived name)"
+            None o'.place_detail;
           Alcotest.(check (option string))
             "place_label is kept: still within 500 m of the origin"
             (Some "Lac Blanc") o'.place_label;

@@ -135,6 +135,13 @@ let rec run ?(timeout_ms = default_timeout_ms) ?(on_start = ignore)
             match Geocode.json_of_string body with
             | Error e -> Fut.return (Error (Payload e))
             | Ok json -> run ~timeout_ms ~on_start ~allow (k json)))
+  | Geocode.Try (request, k) ->
+      Fut.bind (get ~timeout_ms ~on_start ~allow request) (fun body ->
+          let json =
+            Option.bind (Result.to_option body) (fun body ->
+                Result.to_option (Geocode.json_of_string body))
+          in
+          run ~timeout_ms ~on_start ~allow (k json))
 
 let search ?timeout_ms ?on_start ?allow ?near q =
   match String.trim q with

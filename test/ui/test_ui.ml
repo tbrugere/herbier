@@ -45,4 +45,5 @@ let () =
       ("free_name", Free_name_tests.free_name);
       ("wgsrpd_fr", Wgsrpd_fr_tests.wgsrpd_fr);
       ("ref_photos", Ref_photos_tests.ref_photos);
+      ("geocode_pass", Geocode_pass_tests.geocode_pass);
     ]

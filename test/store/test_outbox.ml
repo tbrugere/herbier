@@ -63,8 +63,8 @@ let plant ?(aliases = []) ?scientific_name ?authorship ?gbif_key ?(notes = "")
     deleted_at;
   }
 
-let observation ?plant ?position ?place_label ?note ?(created_at = t0)
-    ?(updated_at = t0) n at : Observation.t =
+let observation ?plant ?position ?place_label ?place_detail ?note
+    ?(created_at = t0) ?(updated_at = t0) n at : Observation.t =
   {
     id = observation_id n;
     plant_id = Option.map plant_id plant;
@@ -72,6 +72,7 @@ let observation ?plant ?position ?place_label ?note ?(created_at = t0)
     position;
     place_label;
     place_derived = None;
+    place_detail;
     note;
     created_at;
     updated_at;
@@ -179,6 +180,7 @@ let observation_payload ~updated_at ~deleted_at : Yojson.Safe.t =
       ("accuracy_m", `Float 12.5);
       ("place_label", str "Lac Blanc, rive \"nord\"");
       ("place_derived", `Null);
+      ("place_detail", `Null);
       ("note", str "l'eau");
       ("created_at", ts_json t0);
       ("updated_at", ts_json updated_at);
@@ -487,19 +489,27 @@ let observations_set_place_derived () =
     1 db
     [
       Observations.set_place_derived (observation_id 0x31) ~lat ~lon
-        "Près du Lac Blanc" ~at:t2;
+        ~detail:(Some "Pélégri") "Près du Lac Blanc" ~at:t2;
     ];
   check_entry "the filled observation's entry" ~table:"observations"
     ~row_id:(uuid 0x31)
     ~payload:
       (Input.to_json
          (Observations.input
-            {o with place_derived = Some "Près du Lac Blanc"; updated_at = t2}))
+            {
+              o with
+              place_derived = Some "Près du Lac Blanc";
+              place_detail = Some "Pélégri";
+              updated_at = t2;
+            }))
     (last db);
+  Alcotest.(check Cli.yojson)
+    "the entry's payload carries the detail" (`String "Pélégri")
+    (payload_field "place_detail" (last db));
   check_edit "set_place_derived again (already named) appends nothing" 0 db
     [
       Observations.set_place_derived (observation_id 0x31) ~lat ~lon
-        "Près d'ailleurs" ~at:t3;
+        ~detail:(Some "Autre") "Près d'ailleurs" ~at:t3;
     ];
   check_count "one entry, from the fill only" 2 db
 
@@ -1317,6 +1327,7 @@ let by_id_edits_are_pinned () =
            "created_at";
            "updated_at";
            "deleted_at";
+           "place_detail";
          ])
     ~params:upsert.params ~reread:"select * from observations where id = ?"
     ~reread_params:[oid];
@@ -1326,18 +1337,41 @@ let by_id_edits_are_pinned () =
     ~params:[at; at; oid] ~reread:"select * from observations where id = ?"
     ~reread_params:[oid];
   check_edit "observations set_place_derived"
-    (Observations.set_place_derived o.id ~lat:45.5 ~lon:6.25 "Annecy" ~at:t3)
+    (Observations.set_place_derived o.id ~lat:45.5 ~lon:6.25
+       ~detail:(Some "Pélégri") "Annecy" ~at:t3)
     ~sql:
-      "update observations set place_derived = ?, updated_at = ? where id = ? \
-       and deleted_at is null and lat = ? and lon = ? and (place_derived is \
-       null or trim(place_derived) = '')"
+      "update observations set place_derived = ?, place_detail = ?, updated_at \
+       = ? where id = ? and deleted_at is null and lat = ? and lon = ? and \
+       (place_derived is null or trim(place_derived) = '')"
     ~params:
       [
         Codec.Text "Annecy";
+        Codec.param O.place_detail (Some "Pélégri");
         at;
         oid;
         Codec.param O.lat (Some 45.5);
         Codec.param O.lon (Some 6.25);
+      ]
+    ~reread:"select * from observations where id = ?" ~reread_params:[oid];
+  check_edit "observations rename_place_derived"
+    (Observations.rename_place_derived o.id ~lat:45.5 ~lon:6.25
+       ~was:"Près du Champ" ~detail:(Some "Pélégri") "Près d'Annecy" ~at:t3)
+    ~sql:
+      "update observations set place_derived = ?, place_detail = ?, updated_at \
+       = ? where id = ? and deleted_at is null and lat = ? and lon = ? and \
+       place_derived = ? and trim(coalesce(place_label, '')) = '' and \
+       (place_derived is not ? or place_detail is not ?)"
+    ~params:
+      [
+        Codec.Text "Près d'Annecy";
+        Codec.param O.place_detail (Some "Pélégri");
+        at;
+        oid;
+        Codec.param O.lat (Some 45.5);
+        Codec.param O.lon (Some 6.25);
+        Codec.Text "Près du Champ";
+        Codec.Text "Près d'Annecy";
+        Codec.param O.place_detail (Some "Pélégri");
       ]
     ~reread:"select * from observations where id = ?" ~reread_params:[oid];
   let phid = Codec.param Ph.id ph.id in
@@ -1559,7 +1593,9 @@ let () =
         ] );
       ( "the edits' statements, pinned",
         [
-          case "by id: upsert, soft_delete, set_place_derived and read-back"
+          case
+            "by id: upsert, soft_delete, set_place_derived, rename and \
+             read-back"
             by_id_edits_are_pinned;
           case "by natural key: untag, remove, unlink and read-back"
             natural_key_soft_deletes_are_pinned;

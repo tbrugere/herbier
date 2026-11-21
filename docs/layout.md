@@ -170,12 +170,14 @@ app/
     schema.ml             ordered migrations, each a list of SQL statements; `user_version`; migration 2 is the FTS5 index and its triggers;
                           migration 3 the device-only ref_images and its reference_organs lookup;
                           migration 4 the device-only commune_packs; migration 5 the device-only uploads;
-                          migration 6 (M7.79) the Picker's settings rows turned into drive_root_folder_name
+                          migration 6 (M7.79) the Picker's settings rows turned into drive_root_folder_name;
+                          migration 7 (M5.83) observations.place_detail and the device-only place_renames
     stmt.ml               statements as pure values (SQL, params, row decoder), run by store_io/db.ml (all, find, write)
     plants.ml  observations.ml  photos.ml  tags.ml  references.ml   SQL per table, as Stmt values (joins, time ranges)
-    outbox.ml  sync_state.ml  settings.ml  ref_images.ml  commune_packs.ml   local-only tables, columns declared
+    outbox.ml  sync_state.ml  settings.ml  ref_images.ml  commune_packs.ml  place_renames.ml   local-only tables, columns declared
                           (settings: typed keys, the Drive account and root folder keys among them)
-                          next to their queries (commune_packs: « IGN hors-ligne » packs, one row per département);
+                          next to their queries (commune_packs: « IGN hors-ligne » packs, one row per département;
+                          place_renames: observations named before the commune-first rule, renamed once by the geocoding pass);
     uploads.ml            the device-only queue of originals bound for Drive (path, type, size, resumable session,
                           attempts, last error), one row per photo this install holds the original of
                           outbox.ml also holds `edit`, the value every synced write is (statement, read-back, payload),
@@ -420,6 +422,8 @@ app/
     arrival.ml the incoming text, labels.ml, sheet.ml the resolution states, card.ml the card texts,
     recent tags and first observation; intercept.ml re-exports them), gps.ml (a new
     observation's fix: searching, fix, none), move_plan.ml (5b's texts and what « Valider » writes),
+    geocode_pass.ml (the geocoding pass's work list: names, then renames; when a rename yields to a
+    new run; what follows each save),
     plant_version.ml (same plant, same plant at the same updated_at: the list diffs' keys),
     identify/ (M9: the identification layer's states, its French texts, and what a proposal's button
     does for each caller: « Lier » or « + Créer » in 4k and 4h (the Observation caller, also

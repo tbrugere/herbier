@@ -46,9 +46,14 @@ module Observations = struct
   let soft_delete id ~at =
     Outbox.bare_stmt (Outbox.without_entry (soft_delete id ~at))
 
-  let set_place_derived id ~lat ~lon name ~at =
+  let set_place_derived id ~lat ~lon ~detail name ~at =
     Outbox.bare_stmt
-      (Outbox.without_entry (set_place_derived id ~lat ~lon name ~at))
+      (Outbox.without_entry (set_place_derived id ~lat ~lon ~detail name ~at))
+
+  let rename_place_derived id ~lat ~lon ~was ~detail name ~at =
+    Outbox.bare_stmt
+      (Outbox.without_entry
+         (rename_place_derived id ~lat ~lon ~was ~detail name ~at))
 end
 
 module Photos = struct
@@ -108,7 +113,7 @@ let plant ?(aliases = []) ?scientific_name ?authorship ?gbif_key ?(notes = "")
     deleted_at;
   }
 
-let observation ?plant ?position ?place_label ?place_derived ?note
+let observation ?plant ?position ?place_label ?place_derived ?place_detail ?note
     ?(created_at = t0) ?(updated_at = t0) ?deleted_at n at : Observation.t =
   {
     id = observation_id n;
@@ -117,6 +122,7 @@ let observation ?plant ?position ?place_label ?place_derived ?note
     position;
     place_label;
     place_derived;
+    place_detail;
     note;
     created_at;
     updated_at;
@@ -171,6 +177,7 @@ let observation_json (o : Observation.t) =
           o.position );
       ("place_label", opt str o.place_label);
       ("place_derived", opt str o.place_derived);
+      ("place_detail", opt str o.place_detail);
       ("note", opt str o.note);
       ("created_at", ts o.created_at);
       ("updated_at", ts o.updated_at);
@@ -594,7 +601,8 @@ let full_observation =
     ~plant:0x1
     ~position:{lat = 48.0625; lon = 7.0625; accuracy_m = Some 12.5}
     ~place_label:"Lac Blanc, rive \"nord\"" ~place_derived:"Orbey; Haut-Rhin"
-    ~note:"l'eau -- ? froide" ~created_at:t1 ~updated_at:t2 ~deleted_at:t3
+    ~place_detail:"Pélégri" ~note:"l'eau -- ? froide" ~created_at:t1
+    ~updated_at:t2 ~deleted_at:t3
 
 let observations_round_trip () =
   let db = Cli.migrated_db () in
@@ -648,6 +656,7 @@ let observations_row_position () =
            ("accuracy_m", accuracy);
            ("place_label", `Null);
            ("place_derived", `Null);
+           ("place_detail", `Null);
            ("note", `Null);
            ("created_at", `String "2026-10-28T12:00:00.000000Z");
            ("updated_at", `String "2026-10-28T12:00:00.000000Z");
@@ -687,7 +696,15 @@ let observations_invalid () =
        (observation 0x32 t1
           ~position:{lat = 0.; lon = 0.; accuracy_m = Some (-1.)}));
   check_fails "an unknown plant" db
-    (Observations.upsert (observation 0x33 t1 ~plant:0x99))
+    (Observations.upsert (observation 0x33 t1 ~plant:0x99));
+  check_fails "a place_detail without a place_derived" db
+    (Observations.upsert (observation 0x35 t1 ~place_detail:"Pélégri"));
+  writes "a place_detail with a place_derived is accepted" db
+    [
+      Observations.upsert
+        (observation 0x36 t1 ~place_derived:"Près de Lissac-et-Mouret"
+           ~place_detail:"Pélégri");
+    ]
 
 let observations_list_order () =
   let db = Cli.migrated_db () in
@@ -895,13 +912,20 @@ let observations_set_place_derived () =
   writes "observation" db [Observations.upsert o];
   check_changes "a matching, unnamed, live observation changes 1 row" 1 db
     (Observations.set_place_derived (observation_id 0x31) ~lat ~lon
-       "Près du Lac Blanc" ~at:t2);
+       ~detail:(Some "Pélégri") "Près du Lac Blanc" ~at:t2);
   Alcotest.(check (option observation_t))
-    "get gives it back with the new name and updated_at, nothing else changed"
-    (Some {o with place_derived = Some "Près du Lac Blanc"; updated_at = t2})
+    "get gives it back with the new name, detail and updated_at, nothing else \
+     changed"
+    (Some
+       {
+         o with
+         place_derived = Some "Près du Lac Blanc";
+         place_detail = Some "Pélégri";
+         updated_at = t2;
+       })
     (find db (Observations.get (observation_id 0x31)));
   check_changes "set_place_derived again (already named) changes 0 rows" 0 db
-    (Observations.set_place_derived (observation_id 0x31) ~lat ~lon
+    (Observations.set_place_derived (observation_id 0x31) ~lat ~lon ~detail:None
        "Près d'ailleurs" ~at:t3);
   let blank =
     observation 0x34 t1
@@ -911,7 +935,7 @@ let observations_set_place_derived () =
   writes "an observation with a blank place_derived" db
     [Observations.upsert blank];
   check_changes "a blank place_derived counts as unnamed: 1 row" 1 db
-    (Observations.set_place_derived (observation_id 0x34) ~lat ~lon
+    (Observations.set_place_derived (observation_id 0x34) ~lat ~lon ~detail:None
        "Près d'ailleurs" ~at:t2);
   let moved = observation 0x32 t1 ~position:{lat; lon; accuracy_m = None} in
   let deleted =
@@ -921,16 +945,148 @@ let observations_set_place_derived () =
     [Observations.upsert moved; Observations.upsert deleted];
   check_changes "a different lat changes 0 rows" 0 db
     (Observations.set_place_derived (observation_id 0x32) ~lat:(lat +. 1.) ~lon
-       "Près d'ailleurs" ~at:t3);
+       ~detail:None "Près d'ailleurs" ~at:t3);
   check_changes "a different lon changes 0 rows" 0 db
     (Observations.set_place_derived (observation_id 0x32) ~lat ~lon:(lon +. 1.)
-       "Près d'ailleurs" ~at:t3);
+       ~detail:None "Près d'ailleurs" ~at:t3);
   check_changes "a deleted observation changes 0 rows" 0 db
-    (Observations.set_place_derived (observation_id 0x33) ~lat ~lon
+    (Observations.set_place_derived (observation_id 0x33) ~lat ~lon ~detail:None
        "Près d'ailleurs" ~at:t3);
   check_changes "an absent observation changes 0 rows" 0 db
-    (Observations.set_place_derived (observation_id 0x99) ~lat ~lon
+    (Observations.set_place_derived (observation_id 0x99) ~lat ~lon ~detail:None
        "Près d'ailleurs" ~at:t3)
+
+(* The place_renames rows are a device-local migration marker: no store API
+   inserts them outside the migration (checked by test_store.ml), so here we
+   seed the table directly through the sqlite3 CLI. *)
+let mark_for_rename db (os : Observation.t list) =
+  Cli.exec_ok "mark for rename" db
+    (String.concat ""
+       (List.map
+          (fun (o : Observation.t) ->
+            Printf.sprintf
+              "insert into place_renames (observation_id) values ('%s');\n"
+              (Ids.Observation_id.to_string o.id))
+          os))
+
+let observations_to_rename () =
+  let db = Cli.migrated_db () in
+  let lat = 48.0625 and lon = 7.0625 in
+  let pos = {Observation.lat; lon; accuracy_m = None} in
+  let marked_live =
+    observation 0x31 t1 ~position:pos
+      ~place_derived:"Près du Champ de Saint-Barthele"
+  in
+  let marked_live_later =
+    observation 0x36 t3 ~position:pos ~place_derived:"Près de Pélégri"
+  in
+  let marked_but_labelled =
+    observation 0x32 t2 ~position:pos ~place_derived:"Près de Pélégri"
+      ~place_label:"Jardin"
+  in
+  let marked_but_deleted =
+    observation 0x33 t1 ~position:pos
+      ~place_derived:"Près du Champ de Saint-Barthele" ~deleted_at:t3
+  in
+  let marked_but_unnamed = observation 0x34 t1 ~position:pos in
+  let marked_but_unpositioned =
+    observation 0x37 t1 ~place_derived:"Près de Figeac"
+  in
+  let unmarked_live =
+    observation 0x35 t3 ~position:pos ~place_derived:"Près de Colmar"
+  in
+  writes "every observation" db
+    (List.map Observations.upsert
+       [
+         marked_live;
+         marked_live_later;
+         marked_but_labelled;
+         marked_but_deleted;
+         marked_but_unnamed;
+         marked_but_unpositioned;
+         unmarked_live;
+       ]);
+  mark_for_rename db
+    [
+      marked_live;
+      marked_live_later;
+      marked_but_labelled;
+      marked_but_deleted;
+      marked_but_unnamed;
+      marked_but_unpositioned;
+    ];
+  Alcotest.(check (list string))
+    "only the live, positioned, named, unlabelled marked rows, newest first"
+    [
+      Ids.Observation_id.to_string marked_live_later.id;
+      Ids.Observation_id.to_string marked_live.id;
+    ]
+    (List.map
+       (fun (o : Observation.t) -> Ids.Observation_id.to_string o.id)
+       (all db Observations.to_rename))
+
+let observations_rename_place_derived () =
+  let db = Cli.migrated_db () in
+  let lat = 48.0625 and lon = 7.0625 in
+  let pos = {Observation.lat; lon; accuracy_m = None} in
+  let o =
+    observation 0x31 t1 ~position:pos
+      ~place_derived:"Près du Champ de Saint-Barthele"
+  in
+  writes "observation" db [Observations.upsert o];
+  check_changes "the name differs: 1 row changes" 1 db
+    (Observations.rename_place_derived (observation_id 0x31) ~lat ~lon
+       ~was:"Près du Champ de Saint-Barthele" ~detail:None "Près de Figeac"
+       ~at:t2);
+  Alcotest.(check (option observation_t))
+    "get gives it back renamed, detail cleared, updated_at bumped"
+    (Some
+       {
+         o with
+         place_derived = Some "Près de Figeac";
+         place_detail = None;
+         updated_at = t2;
+       })
+    (find db (Observations.get (observation_id 0x31)));
+  check_changes "same name, same detail (both None): 0 rows" 0 db
+    (Observations.rename_place_derived (observation_id 0x31) ~lat ~lon
+       ~was:"Près de Figeac" ~detail:None "Près de Figeac" ~at:t3);
+  check_changes "the detail alone differs: 1 row changes" 1 db
+    (Observations.rename_place_derived (observation_id 0x31) ~lat ~lon
+       ~was:"Près de Figeac" ~detail:(Some "Pélégri") "Près de Figeac" ~at:t3);
+  check_changes "same name, same non-null detail: 0 rows" 0 db
+    (Observations.rename_place_derived (observation_id 0x31) ~lat ~lon
+       ~was:"Près de Figeac" ~detail:(Some "Pélégri") "Près de Figeac" ~at:t3);
+  check_changes "was no longer matches the stored name: 0 rows" 0 db
+    (Observations.rename_place_derived (observation_id 0x31) ~lat ~lon
+       ~was:"Près du Champ de Saint-Barthele" ~detail:None "Près d'ailleurs"
+       ~at:t3);
+  let moved =
+    observation 0x32 t1 ~position:pos ~place_derived:"Près de Colmar"
+  in
+  let labelled =
+    observation 0x33 t1 ~position:pos ~place_derived:"Près de Colmar"
+      ~place_label:"Jardin"
+  in
+  let deleted =
+    observation 0x34 t1 ~position:pos ~place_derived:"Près de Colmar"
+      ~deleted_at:t1
+  in
+  writes "moved, labelled and deleted observations" db
+    [
+      Observations.upsert moved;
+      Observations.upsert labelled;
+      Observations.upsert deleted;
+    ];
+  check_changes "a different lat (the row has since moved): 0 rows" 0 db
+    (Observations.rename_place_derived (observation_id 0x32) ~lat:(lat +. 1.)
+       ~lon ~was:"Près de Colmar" ~detail:None "Près d'ailleurs" ~at:t3);
+  check_changes "labelled since: 0 rows" 0 db
+    (Observations.rename_place_derived (observation_id 0x33) ~lat ~lon
+       ~was:"Près de Colmar" ~detail:None "Près d'ailleurs" ~at:t3);
+  check_changes "deleted: 0 rows" 0 db
+    (Observations.rename_place_derived (observation_id 0x34) ~lat ~lon
+       ~was:"Près de Colmar" ~detail:None "Près d'ailleurs" ~at:t3)
 
 let observations_upsert_overwrites () =
   check_upsert_overwrites "Observations" observation_t
@@ -2313,6 +2469,23 @@ let search_places () =
   check_search "a hard-deleted observation's place no longer finds" db "munster"
     []
 
+let search_place_detail () =
+  let db = three_plants_db () in
+  let near =
+    observation 0x31 t1 ~plant:0xd3 ~place_derived:"Près de Lissac-et-Mouret"
+      ~place_detail:"Pélégri"
+  in
+  writes "an observation with a detail" db [Observations.upsert near];
+  check_search "a place_detail finds the plant, without its accent" db "pelegri"
+    ["Églantier"];
+  check_search "its commune still finds the plant" db "lissac" ["Églantier"];
+  writes "the detail cleared" db
+    [
+      Observations.upsert
+        {near with Observation.place_detail = None; updated_at = t2};
+    ];
+  check_search "a cleared detail no longer finds" db "pelegri" []
+
 let search_by_name () =
   let db = three_plants_db () in
   writes "observations" db
@@ -2711,6 +2884,15 @@ let () =
             "set_place_derived changes 1 row when live, unnamed and at the \
              given position, else 0"
             observations_set_place_derived;
+          case
+            "to_rename is the live, positioned, named, unlabelled marked rows, \
+             newest first"
+            observations_to_rename;
+          case
+            "rename_place_derived changes 1 row (name and/or detail, whole \
+             row) when still live, positioned, named [was] and unlabelled, \
+             else 0"
+            observations_rename_place_derived;
           case "upsert over an existing id rewrites every column"
             observations_upsert_overwrites;
           case "upsert is insert on conflict, never replace"
@@ -2859,6 +3041,8 @@ let () =
           case "the index follows tagging, renaming and deleting tags"
             search_tags;
           case "the index follows observation places" search_places;
+          case "the index holds an observation's place_detail"
+            search_place_detail;
           case "plants_by_name ignores observation places" search_by_name;
           case "a plant matching several fields is returned once" search_once;
           case "migration 2 backfills plants present at version 1"

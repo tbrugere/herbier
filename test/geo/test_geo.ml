@@ -47,6 +47,7 @@ let obs ?plant ?(deleted = false) ~id ~at pos : Observation.t =
         pos;
     place_label = None;
     place_derived = None;
+    place_detail = None;
     note = None;
     created_at = at;
     updated_at = at;

@@ -22,7 +22,8 @@ let row =
   and+ note = Row.col O.note
   and+ created_at = Row.col O.created_at
   and+ updated_at = Row.col O.updated_at
-  and+ deleted_at = Row.col O.deleted_at in
+  and+ deleted_at = Row.col O.deleted_at
+  and+ place_detail = Row.col O.place_detail in
   {
     Observation.id;
     plant_id;
@@ -30,6 +31,7 @@ let row =
     position = position lat lon accuracy_m;
     place_label;
     place_derived;
+    place_detail;
     note;
     created_at;
     updated_at;
@@ -61,6 +63,13 @@ let to_geocode =
      trim(place_derived) = '') and trim(coalesce(place_label, '')) = ''"
     []
 
+let to_rename =
+  query
+    " and lat is not null and lon is not null and trim(coalesce(place_derived, \
+     '')) <> '' and trim(coalesce(place_label, '')) = '' and id in (select \
+     observation_id from place_renames)"
+    []
+
 let labelled =
   query
     " and lat is not null and lon is not null and trim(coalesce(place_label, \
@@ -89,6 +98,7 @@ let input (o : Observation.t) : (O.t, [`Full]) Postgrest.Input.t =
           Mandatory (O.created_at, Value o.created_at);
           Mandatory (O.updated_at, Value o.updated_at);
           Optional (O.deleted_at, Value o.deleted_at);
+          Optional (O.place_detail, Value o.place_detail);
         ];
     }
 
@@ -110,19 +120,45 @@ let soft_delete = Writes.soft_delete
 
 (* The position and "still unnamed" conditions make a name computed before a
    move or a concurrent edit a no-op instead of overwriting newer data. *)
-let set_place_derived id ~lat ~lon name ~at =
+let set_place_derived id ~lat ~lon ~detail name ~at =
   Writes.edit id
     {
       Stmt.sql =
-        "update observations set place_derived = ?, updated_at = ? where id = \
-         ? and deleted_at is null and lat = ? and lon = ? and (place_derived \
-         is null or trim(place_derived) = '')";
+        "update observations set place_derived = ?, place_detail = ?, \
+         updated_at = ? where id = ? and deleted_at is null and lat = ? and \
+         lon = ? and (place_derived is null or trim(place_derived) = '')";
       params =
         [
           Codec.param O.place_derived (Some name);
+          Codec.param O.place_detail detail;
           Codec.param O.updated_at at;
           Codec.param O.id id;
           Codec.param O.lat (Some lat);
           Codec.param O.lon (Some lon);
+        ];
+    }
+
+(* Same guards as set_place_derived, the name read before resolving standing
+   for "still unnamed"; "is not" compares nulls as values, so an unchanged
+   name and detail write nothing and queue nothing. *)
+let rename_place_derived id ~lat ~lon ~was ~detail name ~at =
+  Writes.edit id
+    {
+      Stmt.sql =
+        "update observations set place_derived = ?, place_detail = ?, \
+         updated_at = ? where id = ? and deleted_at is null and lat = ? and \
+         lon = ? and place_derived = ? and trim(coalesce(place_label, '')) = \
+         '' and (place_derived is not ? or place_detail is not ?)";
+      params =
+        [
+          Codec.param O.place_derived (Some name);
+          Codec.param O.place_detail detail;
+          Codec.param O.updated_at at;
+          Codec.param O.id id;
+          Codec.param O.lat (Some lat);
+          Codec.param O.lon (Some lon);
+          Codec.param O.place_derived (Some was);
+          Codec.param O.place_derived (Some name);
+          Codec.param O.place_detail detail;
         ];
     }

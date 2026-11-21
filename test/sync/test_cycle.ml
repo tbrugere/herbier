@@ -445,7 +445,7 @@ let cases =
         t = Synced.observations;
         equal = Observation.equal;
         id = 3;
-        updated_at = "2026-11-12T12:25:29.355985Z";
+        updated_at = "2026-11-21T16:39:34.799294Z";
       };
     Case
       {
@@ -734,15 +734,21 @@ let pull_same_answers_again_are_unchanged () =
           Alcotest.(check int) (r.table ^ ": replaced = 0") 0 r.replaced)
         reports;
       Alcotest.(check int) "Pull.writes = 0" 0 (Pull.writes reports);
-      (* Every fixture's updated_at is 2026-11-12T12:25:29.xxxxxxZ: minus
-         5 s, in whole seconds. *)
+      (* Each table's cursor follows its fixture's own recording run (the
+         script records a missing file alone): its updated_at minus 5 s, in
+         whole seconds. *)
+      let filter table =
+        match table with
+        | "observations" -> "updated_at=gt.2026-11-21T16:39:29Z"
+        | _ -> "updated_at=gt.2026-11-12T12:25:24Z"
+      in
       List.iter
         (fun (r : Mock_http.request) ->
+          let table = request_table r in
           Alcotest.(check bool)
-            (request_table r ^ ": updated_at=gt.<cursor - 5 s>")
+            (table ^ ": updated_at=gt.<cursor - 5 s>")
             true
-            (Text.contains ~sub:"updated_at=gt.2026-11-12T12:25:24Z"
-               (Mock_http.decoded_target r.url)))
+            (Text.contains ~sub:(filter table) (Mock_http.decoded_target r.url)))
         !Mock_http.requests;
       Alcotest.(check int) "7 requests" 7 (List.length !Mock_http.requests)
   | Pull.Stopped s ->

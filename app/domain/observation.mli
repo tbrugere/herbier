@@ -22,6 +22,12 @@ type t = {
       (** User-given name of the place cluster (handoff 4b). *)
   place_derived : string option;
       (** Reverse-geocoded label, cached (architecture §8). *)
+  place_detail : string option;
+      (** A lieu-dit close to the point (the geocoder's detail threshold) and
+          named differently from the commune of [place_derived] (architecture
+          §8): shown under it, never instead. [None] for most rows; never
+          [Some _] without [place_derived]: the store's setters write both
+          together, and the local and Supabase checks refuse a detail alone. *)
   note : string option;
   created_at : Ptime.t;
   updated_at : Ptime.t;
