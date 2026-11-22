@@ -146,17 +146,73 @@ let entry_text ({row; photo; job} : Queue.entry) =
     (match row.session with Some _ -> "oui" | None -> "non")
     (Option.fold ~none:"" ~some:(fun e -> " · " ^ e) row.last_error)
 
+let trash_text (r : Herbier_store.Drive_trash.t) =
+  Printf.sprintf "corbeille · %s · fichier %s · attempts %d%s"
+    (Herbier_domain.Ids.Photo_id.to_string r.photo_id)
+    r.file_id r.attempts
+    (Option.fold ~none:"" ~some:(fun e -> " · " ^ e) r.last_error)
+
+(* The emulator has no Google account: a live Drive photo not uploaded yet
+   gets a made-up Drive file id, so that deleting it fills the Drive bin's
+   queue (its request then waits for a token). *)
+let fake_uploaded app log refresh () =
+  let open Fut.Syntax in
+  Fut.await
+    (let* photos = Db.all (App.db app) Herbier_store.Photos.live in
+     match photos with
+     | Error e -> Fut.return (Error (Db.error_to_string e))
+     | Ok photos -> (
+         match
+           List.find_opt
+             (fun (p : Photo.t) ->
+               match (p.original_target, p.drive_file_id) with
+               | Drive, None -> true
+               | Drive, Some _ | App_only, _ -> false)
+             photos
+         with
+         | None -> Fut.return (Error "no Drive photo without a file")
+         | Some p ->
+             let file =
+               "dev-fake-" ^ Herbier_domain.Ids.Photo_id.to_string p.id
+             in
+             Fut.map
+               (function
+                 | Ok (_ : int) ->
+                     Ok
+                       (file
+                       ^ " ← "
+                       ^ Herbier_domain.Ids.Photo_id.to_string p.id)
+                 | Error e -> Error (Db.error_to_string e))
+               (App.save app
+                  [
+                    Herbier_store.Photos.set_upload p.id ~state:Uploaded
+                      ~drive_file_id:(Some file) ~at:(Ptime_clock.now ());
+                  ])))
+    (fun r ->
+      Kit.append log
+        (match r with
+        | Ok m -> "fake upload: " ^ m
+        | Error e -> "fake upload: " ^ e);
+      refresh ())
+
 let queue_part app =
   let uploads = App.uploads app in
   let log = El.div ~at:[At.v (Jstr.v "role") (Jstr.v "log")] [] in
   let rows = El.div [] in
+  let trash = El.div [] in
   let refresh () =
     Fut.await (Queue.entries uploads) (function
       | Ok [] -> El.set_children rows [El.p [El.txt' "(file vide)"]]
       | Ok l ->
           El.set_children rows
             (List.map (fun e -> El.p [El.txt' (entry_text e)]) l)
-      | Error e -> Kit.append log ("entries: " ^ Db.error_to_string e))
+      | Error e -> Kit.append log ("entries: " ^ Db.error_to_string e));
+    Fut.await (Queue.trash_entries uploads) (function
+      | Ok [] -> El.set_children trash [El.p [El.txt' "(corbeille vide)"]]
+      | Ok l ->
+          El.set_children trash
+            (List.map (fun r -> El.p [El.txt' (trash_text r)]) l)
+      | Error e -> Kit.append log ("trash: " ^ Db.error_to_string e))
   in
   let pass ~interactive () =
     Kit.append log
@@ -210,8 +266,10 @@ let queue_part app =
           Kit.action "Passe interactive" (pass ~interactive:true);
           Kit.action "Rafraîchir la file" refresh;
           Kit.action "Marquer en échec" mark_failed;
+          Kit.action "Faux envoi Drive" (fake_uploaded app log refresh);
         ];
       rows;
+      trash;
       log;
     ]
 

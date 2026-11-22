@@ -77,6 +77,15 @@ val presence :
   (Api.presence, 'e error) result Fut.t
 (** Runs {!Api.presence} the same way as {!put_original} (one request). *)
 
+val trash_original :
+  token:(unit -> (string, 'e) result Fut.t) ->
+  drop_token:(string -> unit Fut.t) ->
+  file_id:string ->
+  (unit, 'e error) result Fut.t
+(** Runs {!Api.trash_original} as {!presence} runs its program (one PATCH, one
+    renewal on a 401; the console line « drive: PATCH /drive/v3/files/<id> →
+    <status> »). Never raises. *)
+
 val health :
   token:(unit -> (string, 'e) result Fut.t) ->
   drop_token:(string -> unit Fut.t) ->

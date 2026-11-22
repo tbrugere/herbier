@@ -213,7 +213,8 @@ val save :
 (** {!Herbier_store_io.Db.edit}: the edits and their outbox entries in one
     transaction. After a commit that appended at least one entry, {!saved} fires
     and the sync engine gets a local write (outside any update step, once the
-    future is determined), and {!geocode_pending} runs. *)
+    future is determined), {!geocode_pending} runs, and so does
+    {!upload_pending} (a delete's cancelled uploads and Drive-bin rows). *)
 
 val saved : t -> unit React.event
 (** The store changed (a local save, or a pull that wrote rows): screens showing

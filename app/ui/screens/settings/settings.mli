@@ -44,6 +44,7 @@
     existing choice. « Envoyer seulement en Wi-Fi » is written to the local
     [settings] table and kept in {!State.account}. « File d'envoi » follows
     {!App.upload_queue}: {!Herbier_ui_model.Drive_text.queue_title},
+    {!Herbier_ui_model.Drive_text.trash_line} (hidden when [None]),
     {!Herbier_ui_model.Drive_text.queue_status} (hidden when [None]),
     {!Herbier_ui_model.Drive_text.last_sent} (read again when the queue
     changes), and « Envoyer maintenant » ({!App.send_now}), [aria-disabled]

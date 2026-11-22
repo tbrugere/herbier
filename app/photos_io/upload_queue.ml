@@ -3,6 +3,7 @@ module Photo_id = Herbier_domain.Ids.Photo_id
 module Db = Herbier_store_io.Db
 module Files = Herbier_store_io.Files
 module Uploads = Herbier_store.Uploads
+module Drive_trash = Herbier_store.Drive_trash
 module Photos = Herbier_store.Photos
 module Api = Herbier_photos.Drive
 module Queue = Herbier_photos.Upload_queue
@@ -337,6 +338,20 @@ let start t ~interactive ~attempts (row : Uploads.t) photo =
               let+ () = count_failure t row error in
               Open))
 
+(* The photo was deleted after its upload: the file it made gets its trash
+   row before the upload row goes; an add that fails keeps the upload row,
+   and the next pass tries again. *)
+let discard_uploaded t (row : Uploads.t) (file : Api.file) =
+  let open Fut.Syntax in
+  let* added =
+    Db.write t.db
+      (Drive_trash.add row.photo_id ~file_id:file.id ~at:(Ptime_clock.now ()))
+  in
+  match added with
+  | Error e ->
+      Fut.return (log_error [id_string row; "trash row:"; Db.error_to_string e])
+  | Ok (_ : int) -> discard t row
+
 let start_if_open t ~interactive ~attempts gate row photo =
   match (gate, photo) with
   | Closed, _ | Open, None -> Fut.return gate
@@ -348,6 +363,9 @@ let act t ~interactive gate (row : Uploads.t) photo action =
   | Nothing -> Fut.return gate
   | Discard ->
       let+ () = discard t row in
+      gate
+  | Discard_uploaded file ->
+      let+ () = discard_uploaded t row file in
       gate
   | Finish file ->
       let+ () = finish t row file in
@@ -380,7 +398,9 @@ let rewire t ~now (row : Uploads.t) job action =
           log [id_string row; "enqueue (network changed)"];
           Some (enqueue t row ~attempts:row.attempts session)
       | None -> None)
-  | Start | Enqueue _ | Finish _ | Retry _ | Give_up _ | Discard -> None
+  | Start | Enqueue _ | Finish _ | Retry _ | Give_up _ | Discard
+  | Discard_uploaded _ ->
+      None
 
 let step t ~interactive ~network_changed ~jobs gate (row : Uploads.t) =
   let open Fut.Syntax in
@@ -416,9 +436,118 @@ let step t ~interactive ~network_changed ~jobs gate (row : Uploads.t) =
       | None ->
           (match action with
           | Nothing -> ()
-          | Start | Enqueue _ | Finish _ | Retry _ | Give_up _ | Discard ->
+          | Start | Enqueue _ | Finish _ | Retry _ | Give_up _ | Discard
+          | Discard_uploaded _ ->
               log [id_string row; Format.asprintf "%a" Queue.pp_action action]);
           act t ~interactive gate row photo action)
+
+(* The Drive bin *)
+
+let trash_id (row : Drive_trash.t) = Photo_id.to_string row.photo_id
+
+let write_trash t (row : Drive_trash.t) =
+  Fut.map
+    (function
+      | Ok (_ : int) -> ()
+      | Error e -> log_error [trash_id row; "trash row:"; Db.error_to_string e])
+    (Db.write t.db (Drive_trash.put row))
+
+let remove_trash t (row : Drive_trash.t) =
+  Fut.map
+    (function
+      | Ok (_ : int) -> ()
+      | Error e -> log_error [trash_id row; "trash row:"; Db.error_to_string e])
+    (Db.write t.db (Drive_trash.remove row.photo_id))
+
+let send_trash t ~interactive (row : Drive_trash.t) =
+  let open Fut.Syntax in
+  log [trash_id row; "trash"; row.file_id];
+  let* sent =
+    Drive.trash_original
+      ~token:(fun () -> t.token ~interactive)
+      ~drop_token:t.drop_token ~file_id:row.file_id
+  in
+  let result =
+    match sent with
+    | Ok () -> `Drive (Ok ())
+    | Error (Drive e) -> `Drive (Error e)
+    | Error (Token e) -> `Token e
+  in
+  match result with
+  | `Token e ->
+      log [trash_id row; "no token:"; e];
+      Fut.return Closed
+  | `Drive r -> (
+      match Queue.trash_outcome ~attempts:row.attempts r with
+      | Trashed ->
+          log [trash_id row; "trashed"];
+          let+ () = remove_trash t row in
+          Open
+      | Blocked error ->
+          log [trash_id row; "trash:"; error];
+          let+ () = write_trash t {row with last_error = Some error} in
+          Closed
+      | Counted (Retry_later {attempts; error} | Give_up_now {attempts; error})
+        ->
+          log [trash_id row; "trash:"; error];
+          let+ () =
+            write_trash t {row with attempts; last_error = Some error}
+          in
+          Open)
+
+let trash_step t ~interactive gate (row : Drive_trash.t) =
+  let open Fut.Syntax in
+  let* photo = Db.find t.db (Photos.get row.photo_id) in
+  match photo with
+  | Error e ->
+      log_error [trash_id row; "photo:"; Db.error_to_string e];
+      Fut.return gate
+  | Ok photo -> (
+      match
+        Queue.trash_next ~live:(Option.is_some photo) ~attempts:row.attempts
+      with
+      | Trash_failed -> Fut.return gate
+      | Forget_trash ->
+          log [trash_id row; "trash dropped: photo live"];
+          let+ () = remove_trash t row in
+          gate
+      | Trash -> (
+          match gate with
+          | Closed -> Fut.return gate
+          | Open -> send_trash t ~interactive row))
+
+(* After the uploads: every trash row, one request at a time; a token or
+   account-wide error closes the gate for the rows after it. *)
+let trash_pass t ~interactive gate =
+  let open Fut.Syntax in
+  let* rows = Db.all t.db Drive_trash.all in
+  match rows with
+  | Error e -> Fut.return (log_error ["trash rows:"; Db.error_to_string e])
+  | Ok rows ->
+      let+ (_ : gate) =
+        List.fold_left
+          (fun acc row ->
+            Fut.bind acc (fun gate -> trash_step t ~interactive gate row))
+          (Fut.return gate) rows
+      in
+      ()
+
+(* « Envoyer maintenant »: the trash rows that gave up start again. *)
+let reset_trash t =
+  let open Fut.Syntax in
+  let* rows = Db.all t.db Drive_trash.all in
+  match rows with
+  | Error e -> Fut.return (log_error ["trash reset:"; Db.error_to_string e])
+  | Ok rows ->
+      List.fold_left
+        (fun acc (row : Drive_trash.t) ->
+          Fut.bind acc (fun () ->
+              match Queue.trash_gave_up ~attempts:row.attempts with
+              | false -> Fut.return ()
+              | true ->
+                  log [trash_id row; "trash reset"];
+                  write_trash t {row with attempts = 0; last_error = None}))
+        (Fut.return ()) rows
 
 (* Before a pass: the rows and their live photos; the first read error. *)
 let rows_with_photos t =
@@ -532,7 +661,31 @@ let stop t answers =
 let prepare t ~stop:answers ~retry =
   let open Fut.Syntax in
   let* () = stop t answers in
-  match retry with true -> reset_failed t | false -> Fut.return ()
+  match retry with
+  | true -> Fut.bind (reset_failed t) (fun () -> reset_trash t)
+  | false -> Fut.return ()
+
+let uploads_pass t ~interactive =
+  let open Fut.Syntax in
+  let* jobs = Cap_uploader.jobs () in
+  match jobs with
+  | Error e ->
+      log ["jobs:"; Cap_error.to_string e];
+      Fut.return Open
+  | Ok jobs -> (
+      let* rows = Db.all t.db Uploads.all in
+      match rows with
+      | Error e ->
+          log_error ["rows:"; Db.error_to_string e];
+          Fut.return Open
+      | Ok rows ->
+          let network_changed = !(t.network_changed) in
+          t.network_changed := false;
+          List.fold_left
+            (fun acc row ->
+              Fut.bind acc (fun gate ->
+                  step t ~interactive ~network_changed ~jobs gate row))
+            (Fut.return Open) rows)
 
 let pass t ~interactive =
   let open Fut.Syntax in
@@ -540,24 +693,8 @@ let pass t ~interactive =
   t.stop_requested := [];
   t.retry_failed := false;
   let* () = prepare t ~stop ~retry in
-  let* jobs = Cap_uploader.jobs () in
-  match jobs with
-  | Error e -> Fut.return (log ["jobs:"; Cap_error.to_string e])
-  | Ok jobs -> (
-      let* rows = Db.all t.db Uploads.all in
-      match rows with
-      | Error e -> Fut.return (log_error ["rows:"; Db.error_to_string e])
-      | Ok rows ->
-          let network_changed = !(t.network_changed) in
-          t.network_changed := false;
-          let+ (_ : gate) =
-            List.fold_left
-              (fun acc row ->
-                Fut.bind acc (fun gate ->
-                    step t ~interactive ~network_changed ~jobs gate row))
-              (Fut.return Open) rows
-          in
-          ())
+  let* gate = uploads_pass t ~interactive in
+  trash_pass t ~interactive gate
 
 (* A raise before the pass's first future would leave the single-flight state
    Running for good: it is logged and the pass ends. A raise in a later
@@ -667,3 +804,5 @@ let entries t =
                      }
                     :: entries)))
         rows (Fut.return (Ok []))
+
+let trash_entries t = Db.all t.db Drive_trash.all

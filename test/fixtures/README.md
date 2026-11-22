@@ -210,6 +210,13 @@ and are recorded by `scripts/record-drive-fixtures.sh` with
   …/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink` with
   `Bearer ya29.invalid` and a minimal multipart body: `401` (the same
   envelope; Drive rejects the token before reading the body).
+- `drive_files_update_trash_invalid_token_401.json`: `PATCH
+  https://www.googleapis.com/drive/v3/files/abc?fields=id,trashed` with
+  `Bearer ya29.invalid` and the body `{"trashed":true}` (Drive.trash,
+  M8.94): `401 UNAUTHENTICATED`. The token run adds
+  `drive_files_update_trash{,_again}_200.json` and
+  `drive_files_update_trash_unknown_404.json`; `test_drive.ml` skips that
+  case until they exist.
 
 No personal data in any of them: a throwaway `abc` file id and a token that
 was never valid.

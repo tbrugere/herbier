@@ -39,17 +39,22 @@ let ortie = Plant.v ~id:(plant_id ()) ~at:(utc 2026 1 1 0 0) "Ortie"
 let now = utc 2026 11 20 10 0
 let ids n fresh = List.init n (fun _ -> fresh ())
 
-let plant_scope ?(observations = 0) ?(photos = 0) ?(tags = 0) () :
-    Delete_plan.plant =
+let plant_scope ?(observations = 0) ?(photos = 0) ?(tags = 0) ?(in_drive = 0) ()
+    : Delete_plan.plant =
   {
     plant = ortie;
     observations = ids observations Observation_id.fresh;
     photos = ids photos Photo_id.fresh;
     tags = ids tags Tag_id.fresh;
+    in_drive;
   }
 
-let obs_scope ?(photos = 0) () : Delete_plan.observation =
-  {observation = Observation_id.fresh (); photos = ids photos Photo_id.fresh}
+let obs_scope ?(photos = 0) ?(in_drive = 0) () : Delete_plan.observation =
+  {
+    observation = Observation_id.fresh ();
+    photos = ids photos Photo_id.fresh;
+    in_drive;
+  }
 
 (* ---------- comparing two [Outbox.edit] lists statement-for-statement
    ---------- *)
@@ -94,28 +99,86 @@ let plant_text_tests () =
       (0, 3, "La fiche quitte l'herbier.");
       (1, 0, "La fiche et son observation quittent l'herbier.");
       (3, 0, "La fiche et ses 3 observations quittent l'herbier.");
-      ( 1,
-        1,
-        "La fiche, son observation et ses 1 photo quittent l'herbier. Les \
-         originaux envoy\xc3\xa9s dans Google Drive y restent." );
-      ( 1,
-        4,
-        "La fiche, son observation et ses 4 photos quittent l'herbier. Les \
-         originaux envoy\xc3\xa9s dans Google Drive y restent." );
+      (1, 1, "La fiche, son observation et ses 1 photo quittent l'herbier.");
+      (1, 4, "La fiche, son observation et ses 4 photos quittent l'herbier.");
       ( 2,
         5,
-        "La fiche, ses 2 observations et leurs 5 photos quittent l'herbier. \
-         Les originaux envoy\xc3\xa9s dans Google Drive y restent." );
+        "La fiche, ses 2 observations et leurs 5 photos quittent l'herbier." );
     ]
   in
   List.iter
     (fun (observations, photos, expected) ->
       Alcotest.(check string)
-        (Printf.sprintf "plant_text, %d observation(s), %d photo(s)"
+        (Printf.sprintf
+           "plant_text, %d observation(s), %d photo(s), none in Drive"
            observations photos)
         expected
         (Delete_plan.plant_text (plant_scope ~observations ~photos ())))
     cases
+
+(* The bin sentence, by originals in Drive among the photos leaving. *)
+let bin_one =
+  "Son original va dans la corbeille de Google Drive \
+   (r\xc3\xa9cup\xc3\xa9rable 30 jours)."
+
+let bin_all =
+  "Leurs originaux vont dans la corbeille de Google Drive \
+   (r\xc3\xa9cup\xc3\xa9rables 30 jours)."
+
+let bin_one_of =
+  "L'original d\xc3\xa9j\xc3\xa0 envoy\xc3\xa9 va dans la corbeille de Google \
+   Drive (r\xc3\xa9cup\xc3\xa9rable 30 jours)."
+
+let bin_some_of d =
+  Printf.sprintf
+    "Les %d originaux d\xc3\xa9j\xc3\xa0 envoy\xc3\xa9s vont dans la corbeille \
+     de Google Drive (r\xc3\xa9cup\xc3\xa9rables 30 jours)."
+    d
+
+let plant_text_drive_tests () =
+  let cases =
+    [
+      ( 1,
+        1,
+        1,
+        "La fiche, son observation et ses 1 photo quittent l'herbier. "
+        ^ bin_one );
+      ( 1,
+        4,
+        4,
+        "La fiche, son observation et ses 4 photos quittent l'herbier. "
+        ^ bin_all );
+      ( 2,
+        5,
+        1,
+        "La fiche, ses 2 observations et leurs 5 photos quittent l'herbier. "
+        ^ bin_one_of );
+      ( 2,
+        5,
+        3,
+        "La fiche, ses 2 observations et leurs 5 photos quittent l'herbier. "
+        ^ bin_some_of 3 );
+    ]
+  in
+  List.iter
+    (fun (observations, photos, in_drive, expected) ->
+      Alcotest.(check string)
+        (Printf.sprintf
+           "plant_text, %d observation(s), %d photo(s), %d in Drive"
+           observations photos in_drive)
+        expected
+        (Delete_plan.plant_text
+           (plant_scope ~observations ~photos ~in_drive ())))
+    cases;
+  Alcotest.(check bool)
+    "no text says the originals stay in Drive any more" false
+    (List.exists
+       (Herbier_test_support.Text.contains ~sub:"y restent")
+       [
+         Delete_plan.plant_text (plant_scope ~observations:1 ~photos:2 ());
+         Delete_plan.plant_text
+           (plant_scope ~observations:1 ~photos:2 ~in_drive:2 ());
+       ])
 
 let plant_text_ignores_tags_tests () =
   Alcotest.(check string)
@@ -159,15 +222,42 @@ let observation_text_tests () =
     "observation_text, no photo" "Elle quitte l'herbier et le journal."
     (Delete_plan.observation_text (obs_scope ()));
   Alcotest.(check string)
-    "observation_text, one photo"
-    "Elle quitte l'herbier avec ses 1 photo. Les originaux envoy\xc3\xa9s dans \
-     Google Drive y restent."
+    "observation_text, one photo, not in Drive"
+    "Elle quitte l'herbier avec ses 1 photo."
     (Delete_plan.observation_text (obs_scope ~photos:1 ()));
   Alcotest.(check string)
-    "observation_text, several photos"
-    "Elle quitte l'herbier avec ses 3 photos. Les originaux envoy\xc3\xa9s \
-     dans Google Drive y restent."
-    (Delete_plan.observation_text (obs_scope ~photos:3 ()))
+    "observation_text, several photos, none in Drive"
+    "Elle quitte l'herbier avec ses 3 photos."
+    (Delete_plan.observation_text (obs_scope ~photos:3 ()));
+  Alcotest.(check string)
+    "observation_text, one photo in Drive"
+    ("Elle quitte l'herbier avec ses 1 photo. " ^ bin_one)
+    (Delete_plan.observation_text (obs_scope ~photos:1 ~in_drive:1 ()));
+  Alcotest.(check string)
+    "observation_text, 3 photos all in Drive"
+    ("Elle quitte l'herbier avec ses 3 photos. " ^ bin_all)
+    (Delete_plan.observation_text (obs_scope ~photos:3 ~in_drive:3 ()));
+  Alcotest.(check string)
+    "observation_text, 3 photos, 1 in Drive"
+    ("Elle quitte l'herbier avec ses 3 photos. " ^ bin_one_of)
+    (Delete_plan.observation_text (obs_scope ~photos:3 ~in_drive:1 ()));
+  Alcotest.(check string)
+    "observation_text, 3 photos, 2 in Drive"
+    ("Elle quitte l'herbier avec ses 3 photos. " ^ bin_some_of 2)
+    (Delete_plan.observation_text (obs_scope ~photos:3 ~in_drive:2 ()))
+
+(* ---------- photo_title / photo_text (5e « Retirer d'Herbier ») ---------- *)
+
+let photo_text_tests () =
+  Alcotest.(check string)
+    "photo_title" "Retirer cette photo d'Herbier ?" Delete_plan.photo_title;
+  Alcotest.(check string)
+    "photo_text, not in Drive" "Elle quitte la fiche et l'observation."
+    (Delete_plan.photo_text ~in_drive:false);
+  Alcotest.(check string)
+    "photo_text, in Drive"
+    ("Elle quitte la fiche et l'observation. " ^ bin_one)
+    (Delete_plan.photo_text ~in_drive:true)
 
 (* ---------- observation_failure ---------- *)
 
@@ -203,12 +293,16 @@ let plant_edits_tests () =
 let observation_edits_tests () =
   let a = Photo_id.fresh () and b = Photo_id.fresh () in
   let observation = Observation_id.fresh () in
-  let scope : Delete_plan.observation = {observation; photos = [a; b]} in
+  let scope : Delete_plan.observation =
+    {observation; photos = [a; b]; in_drive = 0}
+  in
   let expected = Cascade.observation ~at:now ~photos:[a; b] observation in
   let actual = Delete_plan.observation_edits ~at:now scope in
   check_edits "observation_edits, 2 photos" expected actual;
   Alcotest.(check int) "length = 1 + 2 = 3" 3 (List.length actual);
-  let scope0 : Delete_plan.observation = {observation; photos = []} in
+  let scope0 : Delete_plan.observation =
+    {observation; photos = []; in_drive = 0}
+  in
   let expected0 = Cascade.observation ~at:now ~photos:[] observation in
   let actual0 = Delete_plan.observation_edits ~at:now scope0 in
   check_edits "observation_edits, no photo" expected0 actual0;
@@ -304,6 +398,34 @@ let of_rows_tests () =
     (strings Photo_id.to_string [ph1.id])
     (strings Photo_id.to_string e.photos)
 
+let in_drive_tests () =
+  let o = Fixtures.plant_obs (Some ortie.id) in
+  let base = photo o.id in
+  let drive ?(file = Some "F1") () =
+    {(photo o.id) with original_target = Drive; drive_file_id = file}
+  in
+  Alcotest.(check bool)
+    "app-only: no Drive file" false
+    (Delete_plan.has_drive_file {base with drive_file_id = Some "F0"});
+  Alcotest.(check bool)
+    "Drive, uploaded: a Drive file" true
+    (Delete_plan.has_drive_file (drive ()));
+  Alcotest.(check bool)
+    "Drive, still waiting (no id): none" false
+    (Delete_plan.has_drive_file (drive ~file:None ()));
+  Alcotest.(check bool)
+    "Drive, blank id: none" false
+    (Delete_plan.has_drive_file (drive ~file:(Some "  ") ()));
+  let photos =
+    [drive (); base; drive ~file:None (); drive ~file:(Some "F2") ()]
+  in
+  Alcotest.(check int)
+    "observation_of counts the photos with a Drive file" 2
+    (Delete_plan.observation_of o.id ~photos).in_drive;
+  Alcotest.(check int)
+    "plant_of counts the photos with a Drive file" 2
+    (Delete_plan.plant_of ortie ~observations:[o] ~photos ~tags:[]).in_drive
+
 let delete_plan =
   [
     Alcotest.test_case "plant_of / observation_of keep the rows' ids" `Quick
@@ -314,6 +436,15 @@ let delete_plan =
       "plant_text: by observation and photo counts, 0 observations ignores \
        photos"
       `Quick plant_text_tests;
+    Alcotest.test_case
+      "plant_text: the Drive bin sentence by originals in Drive, singular and \
+       plural, all or some"
+      `Quick plant_text_drive_tests;
+    Alcotest.test_case "photo_title / photo_text: 5e's confirmation" `Quick
+      photo_text_tests;
+    Alcotest.test_case
+      "has_drive_file / in_drive: Drive target and a file id only" `Quick
+      in_drive_tests;
     Alcotest.test_case "plant_text: the tag count changes nothing" `Quick
       plant_text_ignores_tags_tests;
     Alcotest.test_case "plant_action: 5a's footer label by observation count"

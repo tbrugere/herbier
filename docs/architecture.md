@@ -108,8 +108,12 @@ Journal and Carte only; free-name plants (`scientific_name = null`) are
 valid and linking later fills `gbif_key`/refs and turns the free name into
 an alias (the display name becomes the chosen row's French name, else its
 Latin name; a relink of an already linked plant keeps its names and
-aliases); deleting a photo in Herbier only unlinks, never touches Drive;
-a Drive-side deletion becomes `original_missing` with the preview kept.
+aliases); deleting a photo in Herbier sends its Drive original to Drive's
+bin (restorable for 30 days, never deleted for good: the user's override of
+the handoff's « Supprimer une photo dans Herbier délie ; l'original Google
+n'est jamais touché », 2026-11-22, M8.94; Google Photos is not
+implemented, and its API could not delete); a Drive-side deletion becomes
+`original_missing` with the preview kept.
 
 Derived, not stored: places. A "place" in the UI is a cluster of
 observations within 500 m; a user-given name is written to `place_label` on
@@ -172,7 +176,11 @@ the mean of the positions. Details in `app/domain/places.mli`.
   device-only table `uploads` (`store/uploads.ml`: photo id (foreign key to
   `photos`, cascade), path, type, size, the resumable session's URL and start
   time (both or neither), attempts, last error, creation time; not synced,
-  hard deletes), one row per original this install keeps for Drive. The schema version is SQLite's `user_version`; a file at a
+  hard deletes), one row per original this install keeps for Drive.
+  Migration 11 (M8.94) creates the device-only table `drive_trash`
+  (`store/drive_trash.ml`: photo id (foreign key, cascade), the Drive file
+  id, attempts, last error, creation time; not synced, hard deletes) and
+  the trigger `photos_drive_trash` that fills it (§5). The schema version is SQLite's `user_version`; a file at a
   version above the app's is refused, not migrated. A migration is a list of
   statements (`Schema.migration`), applied with its `user_version` bump in one
   transaction by the plugin's `executeSet`, which prepares each string as
@@ -608,7 +616,33 @@ capture / pick
   original (the first Drive photo may show the consent). Only the install that
   holds an original uploads it: a photo pulled from another install has no
   row. A photo deleted, uploaded or switched to app-only discards its row,
-  file and job.
+  file and job; a photo deleted after its job succeeded but before the pass
+  recorded it also gets a `drive_trash` row for the file that job made.
+- Deleting in Herbier trashes the Drive original (M8.94, the user's
+  override of the handoff, 2026-11-22). A photo whose `original_target` is
+  `drive` and `drive_file_id` is set that goes from live to deleted — 4h
+  « Supprimer », 4c's long-press, 5a and 4a's plant delete (the cascade
+  takes its observations' photos), 5e « Retirer d'Herbier », or a delete
+  pulled from another install — gets a `drive_trash` row from the trigger
+  of migration 11, in the delete's own transaction. A move to another
+  observation (5e « Déplacer ») leaves `deleted_at` alone: no row, the file
+  stays. A photo still waiting for its upload has no file id: its upload is
+  cancelled by the next pass (`Discard`), nothing to trash. Every pass (the
+  same triggers, plus one after each save, so a delete is sent at once when
+  online) then sends each row, after the uploads, with the same token:
+  `files.update` `PATCH …/files/<id>?fields=id,trashed` with
+  `{"trashed":true}` (never `files.delete`, never the bin emptied; the
+  drive.file scope reaches only the files Herbier made). `trashed: true`
+  or 404 (already gone) → the row goes; an account-wide error (token, 401,
+  scope, API off, quota, 5xx, network: offline included) leaves the row
+  with its last error and stops the bin's part of that pass; a file-only
+  error counts one attempt of 3, after which the row waits for « Envoyer
+  maintenant » (4m « File d'envoi » shows « Mise à la corbeille Drive : n
+  original(aux) en attente »). A row whose photo is live again is dropped
+  unsent. Species folders are left as they are, even empty. The delete
+  confirmations say so: « Son original va dans la corbeille de Google Drive
+  (récupérable 30 jours). » and its plural and partial forms
+  (`ui_model/delete_plan.ml`), only for photos with a Drive file.
 - The job (`UploaderPlugin.java`, `UploadWorker.java`; the npm uploader
   `@capgo/capacitor-uploader` was replaced: a foreground service with no
   network constraint, no token hook and no response body): one unique

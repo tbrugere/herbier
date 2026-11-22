@@ -205,6 +205,8 @@ let queue_of_tests =
             sending = 1;
             last_upload;
             queued = List.map photo_id [1; 2; 3; 4; 5; 6];
+            trashing = 0;
+            trash_failed = 0;
           }
           q;
         Alcotest.(check int) "pending_count" 3 (Drive_text.pending_count q) );
@@ -218,6 +220,8 @@ let queue_of_tests =
             sending = 0;
             last_upload = None;
             queued = [photo_id 1];
+            trashing = 0;
+            trash_failed = 0;
           }
           (Drive_text.queue_of ~last_upload:None
              [entry ~state:Photo.Upload_state.Failed ~running:true 1]) );
@@ -230,9 +234,17 @@ let queue_of_tests =
 
 (* ---------- queue_title ---------- *)
 
-let queue ?(waiting = 0) ?(failed = 0) ?(sending = 0) ?(last_upload = None) () :
-    Drive_text.queue =
-  {Drive_text.waiting; failed; sending; last_upload; queued = []}
+let queue ?(waiting = 0) ?(failed = 0) ?(sending = 0) ?(last_upload = None)
+    ?(trashing = 0) ?(trash_failed = 0) () : Drive_text.queue =
+  {
+    Drive_text.waiting;
+    failed;
+    sending;
+    last_upload;
+    queued = [];
+    trashing;
+    trash_failed;
+  }
 
 let queue_title_tests =
   [
@@ -1316,9 +1328,81 @@ let drive_option_choose_tests =
       case "Chosen, Drive: enabled" ~drive:chosen_a ~storage:O.Drive Enabled;
     ]
 
+(* ---------- the Drive bin's rows (M8.94) ---------- *)
+
+let trash_tests =
+  let line q = Drive_text.trash_line q in
+  let status ?(access = Drive_text.Granted) ?(online = true)
+      ?(wifi_only = false) q =
+    Drive_text.queue_status access ~online ~wifi_only q
+  in
+  [
+    ( "queue_of copies the bin counts; pending_count leaves them out",
+      `Quick,
+      fun () ->
+        let q =
+          Drive_text.queue_of ~trashing:2 ~trash_failed:1 ~last_upload:None []
+        in
+        Alcotest.(check int) "trashing" 2 q.trashing;
+        Alcotest.(check int) "trash_failed" 1 q.trash_failed;
+        Alcotest.(check int) "pending_count" 0 (Drive_text.pending_count q);
+        Alcotest.(check int) "trash_count" 3 (Drive_text.trash_count q) );
+    ( "trash_line: none, one, several, with failures",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string)) "empty" None (line (queue ()));
+        Alcotest.(check (option string))
+          "photos only" None
+          (line (queue ~waiting:2 ()));
+        Alcotest.(check (option string))
+          "one"
+          (Some "Mise \xc3\xa0 la corbeille Drive : 1 original en attente")
+          (line (queue ~trashing:1 ()));
+        Alcotest.(check (option string))
+          "three"
+          (Some "Mise \xc3\xa0 la corbeille Drive : 3 originaux en attente")
+          (line (queue ~trashing:3 ()));
+        Alcotest.(check (option string))
+          "two, one failed"
+          (Some
+             "Mise \xc3\xa0 la corbeille Drive : 2 originaux en attente \
+              \xc2\xb7 1 en \xc3\xa9chec")
+          (line (queue ~trashing:1 ~trash_failed:1 ())) );
+    ( "queue_status: the bin alone is not « nothing waits »",
+      `Quick,
+      fun () ->
+        Alcotest.(check (option string))
+          "bin only, granted" (Some "Mise \xc3\xa0 la corbeille en attente.")
+          (status (queue ~trashing:1 ()));
+        Alcotest.(check (option string))
+          "bin only, offline"
+          (Some "Envoi d\xc3\xa8s le retour du r\xc3\xa9seau.")
+          (status ~online:false (queue ~trashing:1 ()));
+        Alcotest.(check (option string))
+          "bin failed"
+          (Some
+             "\xc3\x89chec de la mise \xc3\xa0 la corbeille : \xc2\xab Envoyer \
+              maintenant \xc2\xbb pour r\xc3\xa9essayer.")
+          (status (queue ~trash_failed:1 ()));
+        Alcotest.(check (option string))
+          "photos waiting win over the bin, Wi-Fi only"
+          (Some "Envoi en Wi-Fi seulement.")
+          (status ~wifi_only:true (queue ~waiting:1 ~trashing:1 ())) );
+    ( "send_enabled with only bin rows",
+      `Quick,
+      fun () ->
+        Alcotest.(check bool)
+          "trashing" true
+          (Drive_text.send_enabled (queue ~trashing:1 ()));
+        Alcotest.(check bool)
+          "trash_failed" true
+          (Drive_text.send_enabled (queue ~trash_failed:1 ())) );
+  ]
+
 let drive_text =
   List.concat
     [
+      trash_tests;
       access_tests;
       queue_of_tests;
       queue_title_tests;

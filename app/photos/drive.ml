@@ -323,6 +323,13 @@ let get_trashed ~file_id =
     body = Empty;
   }
 
+let trash ~file_id =
+  {
+    meth = `PATCH;
+    url = api ^ "/" ^ Url.encode file_id ^ "?fields=id,trashed";
+    body = Json (Yojson.Safe.to_string (`Assoc [("trashed", `Bool true)]));
+  }
+
 let get_folder ~file_id =
   {
     meth = `GET;
@@ -448,6 +455,14 @@ let presence ~file_id =
   bind
     (send (get_trashed ~file_id) decode_trashed)
     (function Error Not_found -> Done (Ok Missing) | r -> Done r)
+
+let trash_original ~file_id =
+  bind
+    (send (trash ~file_id) decode_trashed)
+    (function
+      | Ok Trashed | Error Not_found -> Done (Ok ())
+      | Ok (Present | Missing) -> Done (Error (Malformed "trashed"))
+      | Error e -> Done (Error e))
 
 (* The token's drive.file grant does not cover this id: lasting. *)
 let lost_access = function

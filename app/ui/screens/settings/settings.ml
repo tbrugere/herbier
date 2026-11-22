@@ -453,8 +453,8 @@ let ign_offline_block app =
 
 type stop_choice = Send_anyway | Dont_send | Keep_drive
 
-(* 4m « File d'envoi »: the queue's title, why it waits, the last upload, and
-   « Envoyer maintenant ». *)
+(* 4m « File d'envoi »: the queue's title, the Drive bin's line, why it
+   waits, the last upload, and « Envoyer maintenant ». *)
 let queue_block app =
   let state = App.state app in
   let queue = App.upload_queue app in
@@ -471,6 +471,12 @@ let queue_block app =
       []
   in
   let last = El.span ~at:[cls "t-meta"] [] in
+  (* The Drive bin's rows: originals deleted in Herbier, on their way to
+     Drive's bin. *)
+  let trash = El.span ~at:[cls "t-meta"] [] in
+  let trash_text =
+    React.S.map ~eq:(Option.equal String.equal) Drive_text.trash_line queue
+  in
   let status_text =
     React.S.l4
       ~eq:(Option.equal String.equal)
@@ -494,13 +500,15 @@ let queue_block app =
   let el =
     El.div
       ~at:[cls "settings__row"]
-      [El.span ~at:[cls "settings__text"] [title; status; last]; send.el]
+      [El.span ~at:[cls "settings__text"] [title; trash; status; last]; send.el]
   in
   ( el,
     [
       Rb.text title (React.S.map Drive_text.queue_title queue);
       Rb.text status (React.S.map (Option.value ~default:"") status_text);
       Rb.class_ status "is-hidden" (React.S.map Option.is_none status_text);
+      Rb.text trash (React.S.map (Option.value ~default:"") trash_text);
+      Rb.class_ trash "is-hidden" (React.S.map Option.is_none trash_text);
       Rb.act (React.S.changes queue) show_last;
       Rb.attr send.el "aria-disabled"
         (React.S.map (function true -> None | false -> Some "true") enabled);

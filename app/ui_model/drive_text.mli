@@ -46,6 +46,10 @@ type queue = {
   sending : int;  (** [Pending] rows whose job is [Running] *)
   last_upload : Ptime.t option;
   queued : Photo_id.t list;  (** every row's photo, counted or not *)
+  trashing : int;
+      (** Drive-bin rows still tried ([Upload_queue.trash_entries] below
+          [max_attempts]) *)
+  trash_failed : int;  (** Drive-bin rows that gave up *)
 }
 
 val equal_queue : queue -> queue -> bool
@@ -53,12 +57,28 @@ val equal_queue : queue -> queue -> bool
 val empty_queue : queue
 (** No row, no upload yet. *)
 
-val queue_of : last_upload:Ptime.t option -> entry list -> queue
+val queue_of :
+  ?trashing:int ->
+  ?trash_failed:int ->
+  last_upload:Ptime.t option ->
+  entry list ->
+  queue
 (** Rows whose photo is absent, [Uploaded] or [Original_missing] (the next pass
-    discards them) are not counted. *)
+    discards them) are not counted. [trashing] and [trash_failed] (default 0)
+    are copied: App counts the bin rows. *)
 
 val pending_count : queue -> int
-(** [waiting + failed]: the photos waiting on this phone (4d, 4m). *)
+(** [waiting + failed]: the photos waiting on this phone (4d, 4m). The bin rows
+    are not photos waiting: not counted. *)
+
+val trash_count : queue -> int
+(** [trashing + trash_failed]. *)
+
+val trash_line : queue -> string option
+(** 4m's line under the title for the Drive bin: [None] when {!trash_count} is
+    0; else « Mise à la corbeille Drive : 1 original en attente » (« 3 originaux
+    en attente »), with [trash_failed > 0] « · <trash_failed> en échec »
+    appended. *)
 
 val queue_title : queue -> string
 (** « Aucune photo en attente » (0); « 1 photo en attente »; « 3 photos en
@@ -79,9 +99,12 @@ val blocker : access -> online:bool -> string option
 
 val queue_status :
   access -> online:bool -> wifi_only:bool -> queue -> string option
-(** 4m's line under the title; [None] when nothing waits. Else {!blocker}; else
-    [failed > 0] → « Échec de l’envoi : « Envoyer maintenant » pour réessayer.
-    »; [sending > 0] → « Envoi en cours… »; [wifi_only] → « Envoi en Wi-Fi
+(** 4m's line under the title; [None] when nothing waits ({!pending_count} and
+    {!trash_count} both 0). Else {!blocker}; else [failed > 0] → « Échec de
+    l’envoi : « Envoyer maintenant » pour réessayer. »; [trash_failed > 0] → «
+    Échec de la mise à la corbeille : « Envoyer maintenant » pour réessayer. »;
+    [sending > 0] → « Envoi en cours… »; {!pending_count} = 0 (only the bin
+    waits) → « Mise à la corbeille en attente. »; [wifi_only] → « Envoi en Wi-Fi
     seulement. »; else « Envoi en attente. ». *)
 
 val last_sent : now:Ptime.t -> tz_offset_s:int -> Ptime.t option -> string
@@ -91,7 +114,7 @@ val last_sent : now:Ptime.t -> tz_offset_s:int -> Ptime.t option -> string
     [now] reads as today. *)
 
 val send_enabled : queue -> bool
-(** [pending_count q > 0]. *)
+(** [pending_count q > 0 || trash_count q > 0]. *)
 
 val account_meta : email:string option -> string
 (** 4m sync account card (signed in): the address, or « Adresse inconnue »

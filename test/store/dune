@@ -16,7 +16,8 @@
   test_commune_packs
   test_place_renames
   test_sync_state
-  test_uploads)
+  test_uploads
+  test_drive_trash)
  (libraries
   herbier_store
   herbier_domain

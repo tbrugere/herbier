@@ -220,6 +220,14 @@ val update_name : file_id:string -> name:folder_name -> request
 val get_trashed : file_id:string -> request
 (** GET {!api}[/<file_id, Url.encode>?fields=id,trashed]. *)
 
+val trash : file_id:string -> request
+(** files.update to the bin: PATCH
+    {!api}[/<file_id, Url.encode>?fields=id,trashed], [Json] of
+    [{"trashed":true}]. Exact URL for id ["F1"]:
+    ["https://www.googleapis.com/drive/v3/files/F1?fields=id,trashed"], exact
+    body [{"trashed":true}]. Never files.delete: the file stays restorable for
+    30 days. *)
+
 val folder_mime : string
 (** ["application/vnd.google-apps.folder"]. *)
 
@@ -460,6 +468,15 @@ val presence : file_id:string -> (presence, error) result t
 (** {!get_trashed}: 2xx [trashed = false] → [Present], [true] → [Trashed]
     ([trashed] absent or not a bool → [Malformed "trashed"]); 404 → [Missing];
     anything else → its error. *)
+
+val trash_original : file_id:string -> (unit, error) result t
+(** An original deleted in Herbier goes to Drive's bin: one {!trash}. 2xx with
+    [trashed = true] → [Ok ()] (a file already in the bin answers the same); 404
+    (gone for good, or never this token's) → [Ok ()]: nothing left to do; 2xx
+    with [trashed = false] or without a bool [trashed] →
+    [Error (Malformed "trashed")]; any other non-2xx → {!error_of_answer} (a 401
+    [Unauthorized], a 403 by its reason); [Unreachable m] → [Error (Network m)].
+*)
 
 val folder_info : file_id:string -> (folder_info, error) result t
 (** One {!get_folder}: 2xx → {!decode_folder}; 404 → [Ok No_access]; 403 whose

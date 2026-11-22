@@ -2,6 +2,7 @@ module Cover = Herbier_ui_model.Cover
 module Fr_date = Herbier_ui_model.Fr_date
 module Journal_day = Herbier_ui_model.Journal_day
 module Drive_text = Herbier_ui_model.Drive_text
+module Delete_plan = Herbier_ui_model.Delete_plan
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -201,16 +202,16 @@ let render app focus (d : data) =
   let see = chip "Voir l'observation" and remove = chip "Retirer d'Herbier" in
   let see_click, b_see = Rb.click see in
   let remove_click, b_remove = Rb.click remove in
-  let confirm =
-    W.Dialog.v ~title:"Retirer cette photo d'Herbier ?"
-      ~text:
-        "Elle quitte la fiche et l'observation. Un original envoyé dans Google \
-         Drive y reste."
+  (* Two confirmations, one per text: the photo in view picks hers. *)
+  let confirm in_drive =
+    W.Dialog.v ~title:Delete_plan.photo_title
+      ~text:(Delete_plan.photo_text ~in_drive)
       [
         (W.Button.Danger, "Retirer", Remove);
         (W.Button.Secondary, "Garder", Keep);
       ]
   in
+  let confirm_drive = confirm true and confirm_plain = confirm false in
   (* Both actions need a plant: without one, no ⋯ at all. *)
   let actions =
     match d.plant with
@@ -324,7 +325,8 @@ let render app focus (d : data) =
             missing;
             El.div ~at:[cls "viewer__chips"] [see; drive; remove];
           ];
-        confirm.el;
+        confirm_drive.el;
+        confirm_plain.el;
         menu.el;
         mover.el;
       ]
@@ -339,10 +341,13 @@ let render app focus (d : data) =
           Rb.act see_click (fun () ->
               Route.go
                 (Route.Modal (Route.Observation (current ()).observation_id)));
-          Rb.act remove_click confirm.show;
-          Rb.act confirm.choice (function
-            | Remove -> remove_current ()
-            | Keep -> ());
+          Rb.act remove_click (fun () ->
+              match Delete_plan.has_drive_file (current ()) with
+              | true -> confirm_drive.show ()
+              | false -> confirm_plain.show ());
+          Rb.act
+            (React.E.select [confirm_drive.choice; confirm_plain.choice])
+            (function Remove -> remove_current () | Keep -> ());
           Rb.act menu.choice (function
             | Cover -> set_cover ()
             | Move ->
@@ -355,7 +360,8 @@ let render app focus (d : data) =
           Rb.act mover.choice (function Some o -> move_to o | None -> ());
         ];
         b_more;
-        confirm.bindings;
+        confirm_drive.bindings;
+        confirm_plain.bindings;
         menu.bindings;
         mover.bindings;
       ] )

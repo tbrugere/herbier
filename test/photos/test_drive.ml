@@ -1637,3 +1637,107 @@ let update_name_fixture_tests =
               (Drive.error_of_answer ~status:404
                  ~body:(fixture "files_update_name_unknown_404")) );
   ]
+
+(* ---------- trash, trash_original (M8.94: a delete in Herbier) ---------- *)
+
+let trash_result = Alcotest.(result unit error_t)
+
+let trash_request_tests =
+  [
+    ( "trash is files.update: PATCH, the exact URL and body, never a DELETE",
+      `Quick,
+      fun () ->
+        Alcotest.check request_t "trash F1"
+          {
+            Drive.meth = `PATCH;
+            url =
+              "https://www.googleapis.com/drive/v3/files/F1?fields=id,trashed";
+            body = Drive.Json {|{"trashed":true}|};
+          }
+          (Drive.trash ~file_id:"F1");
+        Alcotest.(check (option string))
+          "content_type" (Some "application/json; charset=UTF-8")
+          (Drive.content_type (Drive.trash ~file_id:"F1").body) );
+    ( "trash percent-encodes the file id in the path",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "url"
+          (Drive.api ^ "/a%2Fb?fields=id,trashed")
+          (Drive.trash ~file_id:"a/b").url );
+    ( "trash_original sends exactly one trash request",
+      `Quick,
+      fun () ->
+        check_requests "requests"
+          [Drive.trash ~file_id:"F1"]
+          (Drive.requests
+             (seq_net [answer {|{"id":"F1","trashed":true}|}])
+             (Drive.trash_original ~file_id:"F1")) );
+  ]
+
+let trash_original_tests =
+  let case name resp expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check trash_result "trash_original" expected
+          (Drive.run (seq_net [resp]) (Drive.trash_original ~file_id:"F1")) )
+  in
+  [
+    case "trashed = true is done" (answer {|{"id":"F1","trashed":true}|}) (Ok ());
+    case "a 404 (gone, or never this token's) is done" (answer ~status:404 "{}")
+      (Ok ());
+    case "trashed = false is Malformed \"trashed\""
+      (answer {|{"id":"F1","trashed":false}|})
+      (Error (Drive.Malformed "trashed"));
+    case "no trashed field is Malformed \"trashed\"" (answer {|{"id":"F1"}|})
+      (Error (Drive.Malformed "trashed"));
+    case "a 401 (recorded) is Unauthorized"
+      (answer ~status:401 (fixture "files_update_trash_invalid_token_401"))
+      (Error Drive.Unauthorized);
+    case "a 403 (recorded, no token) is classified, not done"
+      (answer ~status:403 (fixture "files_get_no_token_403"))
+      (Error
+         (Drive.Http
+            {
+              status = 403;
+              reason = Some "forbidden";
+              message = Some "Permission denied on the service.";
+            }));
+    case "a 403 appNotAuthorizedToFile is not done"
+      (answer ~status:403
+         {|{"error":{"code":403,"message":"no","errors":[{"reason":"appNotAuthorizedToFile"}]}}|})
+      (Error
+         (Drive.Http
+            {
+              status = 403;
+              reason = Some "appNotAuthorizedToFile";
+              message = Some "no";
+            }));
+    case "a 5xx is Server" (answer ~status:503 "") (Error (Drive.Server 503));
+    case "an unreachable network is Network" (Drive.Unreachable "timeout")
+      (Error (Drive.Network "timeout"));
+    ( "the recorded success answers (user's run of \
+       scripts/record-drive-fixtures.sh with HERBIER_DRIVE_TOKEN), when \
+       present: trashed, trashed again and unknown are all done; skipped \
+       otherwise",
+      `Quick,
+      fun () ->
+        let files =
+          [
+            ("drive_files_update_trash_200.json", 200);
+            ("drive_files_update_trash_again_200.json", 200);
+            ("drive_files_update_trash_unknown_404.json", 404);
+          ]
+        in
+        match List.for_all (fun (f, _) -> Fixture.exists f) files with
+        | false -> ()
+        | true ->
+            List.iter
+              (fun (f, status) ->
+                Alcotest.check trash_result f (Ok ())
+                  (Drive.run
+                     (seq_net [answer ~status (Fixture.read f)])
+                     (Drive.trash_original ~file_id:"F1")))
+              files );
+  ]

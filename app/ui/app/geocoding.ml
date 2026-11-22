@@ -214,7 +214,13 @@ let set_place_source (t : Core.t) source value =
           | true, false -> geocode_pending t
           | false, _ -> ()))
 
+(* A save may delete photos: the pass cancels their uploads and sends the
+   Drive bin's new rows at once (architecture §5). *)
 let save (t : Core.t) edits =
   let r = Core.commit t edits in
-  Fut.await r (function Ok 0 | Error _ -> () | Ok _ -> geocode_pending t);
+  Fut.await r (function
+    | Ok 0 | Error _ -> ()
+    | Ok _ ->
+        geocode_pending t;
+        Core.upload_pending t);
   r

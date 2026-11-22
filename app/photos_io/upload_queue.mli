@@ -55,6 +55,8 @@ val run : t -> interactive:bool -> unit Fut.t
     - [Nothing]: nothing;
     - [Discard]: [Cap_uploader.cancel] (error logged), [Uploads.remove],
       [Files.delete] (a missing file is not an error);
+    - [Discard_uploaded f]: [Drive_trash.add] for [f.id], then as [Discard] (a
+      failed add: console line, nothing else, the next pass again);
     - [Finish f]: commits
       [Photos.set_upload ~state:Uploaded ~drive_file_id:(Some f.id)]; once
       committed, [Settings.set Last_upload_at now] (its error a console line),
@@ -88,6 +90,17 @@ val run : t -> interactive:bool -> unit Fut.t
       {!Herbier_photos.Upload_queue.count_failure} from the saved row, the
       session dropped (the row only: the next pass starts again, not this one,
       so a lasting error does not use every attempt at once).
+
+    Then the Drive bin: [Drive_trash.all], oldest first, each row by
+    {!Herbier_photos.Upload_queue.trash_next} ([Photos.get]: live or not):
+    [Forget_trash] → [Drive_trash.remove]; [Trash_failed] → nothing; [Trash]
+    (skipped once the gate is closed, by the uploads above or a row before) →
+    {!Drive.trash_original} with the same token, then by
+    {!Herbier_photos.Upload_queue.trash_outcome}: [Trashed] → the row removed;
+    [Blocked e] → the row's [last_error], no more trash this pass; [Counted] →
+    the row's [attempts] and [last_error]; a [Token e] → console line, row
+    untouched, no more trash this pass. The bin part runs even when
+    [Cap_uploader.jobs] or [Uploads.all] failed (it needs neither).
 
     Starts run one after the other and passes never overlap, so sessions are
     started one at a time (architecture §5). Every action but [Nothing] logs a
@@ -130,7 +143,10 @@ val send_now : t -> unit Fut.t
     listing a finished job as failed after a cancel: it is not counted again,
     even by a later pass when this one could not start a new job). Then the pass
     as usual (rows that were only waiting are started or enqueued as {!run}
-    does). Resolves with that pass. Never alongside a pass. *)
+    does). The trash rows that gave up
+    ({!Herbier_photos.Upload_queue.trash_gave_up}) are written back with
+    [attempts = 0; last_error = None] before it. Resolves with that pass. Never
+    alongside a pass. *)
 
 val stop_drive : t -> (unit, Db.error) result Fut.t
 (** 4m storage radio → « Dans Herbier seulement » with « Ne pas les envoyer »:
@@ -151,3 +167,7 @@ type entry = {
 val entries : t -> (entry list, Db.error) result Fut.t
 (** For #dev/uploader: the rows, their photos' states and their jobs (none when
     the plugin is missing). *)
+
+val trash_entries :
+  t -> (Herbier_store.Drive_trash.t list, Db.error) result Fut.t
+(** The [drive_trash] rows (4m « File d'envoi », #dev/uploader). *)

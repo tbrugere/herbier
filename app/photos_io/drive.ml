@@ -130,6 +130,9 @@ let rename_root ~token ~drop_token ~root ~name =
 let presence ~token ~drop_token ~file_id =
   run ~token ~drop_token (Api.presence ~file_id)
 
+let trash_original ~token ~drop_token ~file_id =
+  run ~token ~drop_token (Api.trash_original ~file_id)
+
 let health ~token ~drop_token items =
   exec ~token ~drop_token (Herbier_photos.Health.program items)
 

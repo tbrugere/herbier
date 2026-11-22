@@ -26,7 +26,9 @@
 #   metadata Drive.get_folder reads of a folder, a trashed folder, a file and
 #   an unknown id (drive_files_get_folder_meta_*.json), and files.update of
 #   the root's name on a folder, a trashed folder and an unknown id
-#   (drive_files_update_name_*.json). The resumable
+#   (drive_files_update_name_*.json), and Drive.trash (M8.94) of the file,
+#   of the file already in the bin, and of an unknown id
+#   (drive_files_update_trash_*.json). The resumable
 #   session's headers are recorded too, filtered: the status line,
 #   content-type and location, whose upload_id (a credential while the
 #   session lives) is replaced by a fixed placeholder. Skipped, with a
@@ -138,6 +140,8 @@ get_trashed_url() { echo "$api/$1?fields=id,trashed"; }
 get_folder_meta_url() { echo "$api/$1?fields=id,name,mimeType,trashed"; }
 # Drive.update_name's URL (files.update of the root's name, same fields).
 update_name_url() { echo "$api/$1?fields=id,name,mimeType,trashed"; }
+# Drive.trash's URL (files.update to the bin), body {"trashed":true}.
+trash_url() { echo "$api/$1?fields=id,trashed"; }
 create_original_url="$upload_api?uploadType=multipart&fields=id,webViewLink"
 create_session_url="$upload_api?uploadType=resumable&fields=id,webViewLink"
 unknown_session_url="$upload_api?uploadType=resumable&upload_id=herbier-fixture-unknown"
@@ -160,6 +164,11 @@ call invalid_update 401 PATCH "$(update_name_url abc)" \
   -H 'Content-Type: application/json; charset=UTF-8' \
   -d '{"name":"Herbier-fixtures"}'
 keep invalid_update drive_files_update_name_invalid_token_401.json
+call invalid_trash 401 PATCH "$(trash_url abc)" \
+  -H 'Authorization: Bearer ya29.invalid' \
+  -H 'Content-Type: application/json; charset=UTF-8' \
+  -d '{"trashed":true}'
+keep invalid_trash drive_files_update_trash_invalid_token_401.json
 multipart root
 call invalid_create 401 POST "$create_original_url" \
   -H 'Authorization: Bearer ya29.invalid' \
@@ -265,13 +274,18 @@ call session_complete 200 PUT "$session_url" -H 'Content-Type: image/jpeg' \
   --data-binary "@$tmp/pixel.jpg"
 keep session_complete drive_session_put_complete_200.json
 
-# 7. Its presence: there, trashed (the PATCH is not recorded), unknown.
+# 7. Its presence: there, trashed (Drive.trash's answer, twice: the second
+# on a file already in the bin), unknown.
 call present 200 GET "$(get_trashed_url "$file_id")" "${auth[@]}"
 keep present drive_files_get_present_200.json
 call meta_not_folder 200 GET "$(get_folder_meta_url "$file_id")" "${auth[@]}"
 keep meta_not_folder drive_files_get_folder_meta_not_folder_200.json
-call trash 200 PATCH "$api/$file_id?fields=id" "${auth[@]}" "${json[@]}" \
+call trash 200 PATCH "$(trash_url "$file_id")" "${auth[@]}" "${json[@]}" \
   -d '{"trashed":true}'
+keep trash drive_files_update_trash_200.json
+call trash_again 200 PATCH "$(trash_url "$file_id")" "${auth[@]}" \
+  "${json[@]}" -d '{"trashed":true}'
+keep trash_again drive_files_update_trash_again_200.json
 call trashed 200 GET "$(get_trashed_url "$file_id")" "${auth[@]}"
 keep trashed drive_files_get_trashed_200.json
 call unknown 404 GET "$(get_trashed_url 0000000000000000000000000000000)" \
@@ -284,6 +298,9 @@ call update_unknown 404 PATCH \
   "$(update_name_url 0000000000000000000000000000000)" "${auth[@]}" \
   "${json[@]}" -d '{"name":"Herbier-fixtures"}'
 keep update_unknown drive_files_update_name_unknown_404.json
+call trash_unknown 404 PATCH "$(trash_url 0000000000000000000000000000000)" \
+  "${auth[@]}" "${json[@]}" -d '{"trashed":true}'
+keep trash_unknown drive_files_update_trash_unknown_404.json
 
 # 8. A token without Drive scope (optional).
 if [ -n "${HERBIER_GOOGLE_NO_DRIVE_TOKEN:-}" ]; then

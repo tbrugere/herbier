@@ -39,13 +39,23 @@ type queue = {
   sending : int;
   last_upload : Ptime.t option;
   queued : Photo_id.t list;
+  trashing : int;
+  trash_failed : int;
 }
 [@@deriving eq]
 
 let empty_queue =
-  {waiting = 0; failed = 0; sending = 0; last_upload = None; queued = []}
+  {
+    waiting = 0;
+    failed = 0;
+    sending = 0;
+    last_upload = None;
+    queued = [];
+    trashing = 0;
+    trash_failed = 0;
+  }
 
-let queue_of ~last_upload entries =
+let queue_of ?(trashing = 0) ?(trash_failed = 0) ~last_upload entries =
   List.fold_left
     (fun q (e : entry) ->
       match e.state with
@@ -60,12 +70,27 @@ let queue_of ~last_upload entries =
     {
       empty_queue with
       last_upload;
+      trashing;
+      trash_failed;
       queued = List.map (fun (e : entry) -> e.photo_id) entries;
     }
     entries
 
 let pending_count q = q.waiting + q.failed
-let send_enabled q = pending_count q > 0
+let trash_count q = q.trashing + q.trash_failed
+let send_enabled q = pending_count q > 0 || trash_count q > 0
+
+let trash_line q =
+  match trash_count q with
+  | 0 -> None
+  | n -> (
+      let base =
+        "Mise à la corbeille Drive : "
+        ^ Fr_text.plural n "original en attente" "originaux en attente"
+      in
+      match q.trash_failed with
+      | 0 -> Some base
+      | f -> Some (Printf.sprintf "%s · %d en échec" base f))
 
 let queue_title q =
   let base =
@@ -104,7 +129,7 @@ let blocker access ~online =
   | (Unknown | Granted), true -> None
 
 let queue_status access ~online ~wifi_only q =
-  match pending_count q with
+  match pending_count q + trash_count q with
   | 0 -> None
   | _ -> (
       match blocker access ~online with
@@ -114,7 +139,11 @@ let queue_status access ~online ~wifi_only q =
             (match () with
             | () when q.failed > 0 ->
                 "Échec de l’envoi : « Envoyer maintenant » pour réessayer."
+            | () when q.trash_failed > 0 ->
+                "Échec de la mise à la corbeille : « Envoyer maintenant » pour \
+                 réessayer."
             | () when q.sending > 0 -> "Envoi en cours…"
+            | () when pending_count q = 0 -> "Mise à la corbeille en attente."
             | () when wifi_only -> "Envoi en Wi-Fi seulement."
             | () -> "Envoi en attente."))
 

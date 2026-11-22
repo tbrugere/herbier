@@ -43,7 +43,14 @@ val migrations : migration list
     geocoding pass). Version 8 adds to [place_renames] (keeping its rows) every
     live observation with [lat], [lon], a blank [place_label] and a
     [place_derived] starting with ["Près "]: named before « À <commune> », whose
-    source is not stored, renamed once by the same pass. *)
+    source is not stored, renamed once by the same pass. Version 9 adds the
+    reference source [plantuse]. Version 10 gives parked observation and photo
+    outbox entries their current rows and unparks them (M8.93). Version 11
+    creates the device-only table [drive_trash] of {!Drive_trash} and the
+    trigger [photos_drive_trash]: a photo whose [deleted_at] goes from null to
+    set, with [original_target = 'drive'] and a non-blank [drive_file_id], gets
+    a [drive_trash] row (that file id, [attempts = 0], created now) in the same
+    statement; an existing row is kept. *)
 
 val latest : int
 (** Version of the last migration. *)

@@ -442,3 +442,146 @@ let retryable_tests =
     case "App_only, Failed: false" false
       (Some (photo ~original_target:App_only ~upload_state:Failed ()));
   ]
+
+(* ---------- a photo deleted while uploading, and the Drive bin (M8.94) ---------- *)
+
+let deleted_tests =
+  let file_body =
+    {|{"id":"F9","webViewLink":"https://drive.google.com/file/d/F9/view"}|}
+  in
+  let f9 =
+    {
+      Drive.id = "F9";
+      web_view_link = Some "https://drive.google.com/file/d/F9/view";
+    }
+  in
+  let case name job expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check action_t "next" expected
+          (next ~now:t0 ~photo:None (pending ()) job) )
+  in
+  [
+    case "deleted, job Succeeded 200: Discard_uploaded of its file"
+      (Some (succeeded 200 file_body))
+      (Upload_queue.Discard_uploaded f9);
+    case "deleted, job Succeeded 201: Discard_uploaded of its file"
+      (Some (succeeded 201 file_body))
+      (Upload_queue.Discard_uploaded f9);
+    case "deleted, job Succeeded with an undecodable body: Discard"
+      (Some (succeeded 200 "<html>"))
+      Upload_queue.Discard;
+    case "deleted, job Succeeded 308: Discard"
+      (Some (succeeded 308 ""))
+      Upload_queue.Discard;
+    case "deleted while still waiting: Discard (its upload cancelled)"
+      (Some Upload_queue.Waiting) Upload_queue.Discard;
+    case "deleted while running: Discard (its upload cancelled)"
+      (Some Upload_queue.Running) Upload_queue.Discard;
+    case "deleted, no job: Discard" None Upload_queue.Discard;
+    ( "app-only (not deleted), job Succeeded: Discard, nothing trashed",
+      `Quick,
+      fun () ->
+        Alcotest.check action_t "next" Upload_queue.Discard
+          (next ~now:t0
+             ~photo:(Some (photo ~original_target:App_only ()))
+             (pending ())
+             (Some (succeeded 200 file_body))) );
+    ( "pp_action names the file to trash",
+      `Quick,
+      fun () ->
+        Alcotest.(check string)
+          "pp" "discard, trash F9"
+          (Format.asprintf "%a" Upload_queue.pp_action
+             (Upload_queue.Discard_uploaded f9)) );
+  ]
+
+let trash_step_t =
+  Alcotest.testable
+    (fun ppf s ->
+      Format.pp_print_string ppf
+        (match (s : Upload_queue.trash_step) with
+        | Trash -> "Trash"
+        | Forget_trash -> "Forget_trash"
+        | Trash_failed -> "Trash_failed"))
+    Upload_queue.equal_trash_step
+
+let trash_outcome_t =
+  Alcotest.testable
+    (fun ppf (o : Upload_queue.trash_outcome) ->
+      match o with
+      | Trashed -> Format.pp_print_string ppf "Trashed"
+      | Blocked e -> Format.fprintf ppf "Blocked %S" e
+      | Counted (Retry_later {attempts; error}) ->
+          Format.fprintf ppf "Retry_later %d %S" attempts error
+      | Counted (Give_up_now {attempts; error}) ->
+          Format.fprintf ppf "Give_up_now %d %S" attempts error)
+    Upload_queue.equal_trash_outcome
+
+let trash_tests =
+  let step ~live ~attempts expected =
+    ( Printf.sprintf "trash_next ~live:%b ~attempts:%d" live attempts,
+      `Quick,
+      fun () ->
+        Alcotest.check trash_step_t "trash_next" expected
+          (Upload_queue.trash_next ~live ~attempts) )
+  in
+  let outcome name ~attempts r expected =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.check trash_outcome_t "trash_outcome" expected
+          (Upload_queue.trash_outcome ~attempts r) )
+  in
+  [
+    step ~live:false ~attempts:0 Upload_queue.Trash;
+    step ~live:false ~attempts:2 Upload_queue.Trash;
+    step ~live:false ~attempts:3 Upload_queue.Trash_failed;
+    step ~live:true ~attempts:0 Upload_queue.Forget_trash;
+    step ~live:true ~attempts:3 Upload_queue.Forget_trash;
+    ( "trash_gave_up at max_attempts",
+      `Quick,
+      fun () ->
+        Alcotest.(check bool) "2" false (Upload_queue.trash_gave_up ~attempts:2);
+        Alcotest.(check bool) "3" true (Upload_queue.trash_gave_up ~attempts:3)
+    );
+    outcome "done (trashed, already in the bin, or 404) is Trashed" ~attempts:1
+      (Ok ()) Upload_queue.Trashed;
+    outcome "401 is Blocked, not counted" ~attempts:0 (Error Drive.Unauthorized)
+      (Upload_queue.Blocked "unauthorized");
+    outcome "a missing scope is Blocked" ~attempts:0 (Error Drive.Scope_missing)
+      (Upload_queue.Blocked (Drive.error_to_string Drive.Scope_missing));
+    outcome "offline (Network) is Blocked" ~attempts:2
+      (Error (Drive.Network "timeout"))
+      (Upload_queue.Blocked (Drive.error_to_string (Drive.Network "timeout")));
+    outcome "a file-only error counts one attempt" ~attempts:0
+      (Error
+         (Drive.Http
+            {
+              status = 403;
+              reason = Some "appNotAuthorizedToFile";
+              message = None;
+            }))
+      (Upload_queue.Counted
+         (Retry_later
+            {
+              attempts = 1;
+              error =
+                Drive.error_to_string
+                  (Drive.Http
+                     {
+                       status = 403;
+                       reason = Some "appNotAuthorizedToFile";
+                       message = None;
+                     });
+            }));
+    outcome "the third file-only error gives up" ~attempts:2
+      (Error (Drive.Malformed "trashed"))
+      (Upload_queue.Counted
+         (Give_up_now
+            {
+              attempts = 3;
+              error = Drive.error_to_string (Drive.Malformed "trashed");
+            }));
+  ]

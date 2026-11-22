@@ -452,6 +452,8 @@ let () =
       ("drive folder program", Test_drive.folder_tests);
       ("drive put_original program", Test_drive.put_original_tests);
       ("drive presence program", Test_drive.presence_tests);
+      ("drive trash request", Test_drive.trash_request_tests);
+      ("drive trash_original program", Test_drive.trash_original_tests);
       ("drive get_folder", Test_drive.get_folder_tests);
       ("drive decode_folder", Test_drive.decode_folder_tests);
       ("drive folder_info program", Test_drive.folder_info_program_tests);
@@ -485,6 +487,8 @@ let () =
       ( "upload_queue on_network_change",
         Test_upload_queue.on_network_change_tests );
       ("upload_queue retryable", Test_upload_queue.retryable_tests);
+      ("upload_queue deleted photo", Test_upload_queue.deleted_tests);
+      ("upload_queue Drive bin", Test_upload_queue.trash_tests);
       ("health interval", Test_health.interval_tests);
       ("health due", Test_health.due_tests);
       ("health items", Test_health.items_tests);

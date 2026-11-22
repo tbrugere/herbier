@@ -458,6 +458,34 @@ where table_name = 'observations'
 where table_name in ('observations', 'photos') and last_error is not null|};
   ]
 
+(* Migration 11 (M8.94): the device-only bin queue (Drive_trash, architecture §3,
+   §5). A Drive photo with a file id that goes from live to deleted, by any
+   write (a delete in Herbier, a pulled one, the cascades of 4a/4c/4h/5a, the
+   viewer's « Retirer »), gets its row in the same statement, so the delete
+   and its trash are one transaction. A move or any other update leaves
+   deleted_at alone and adds nothing. The time is written as the outbox's,
+   in Codec.timestamp's format. *)
+let v11 =
+  [
+    {|create table drive_trash (
+  photo_id text primary key not null references photos (id) on delete cascade,
+  file_id text not null check (length(trim(file_id)) > 0),
+  attempts integer not null default 0 check (attempts >= 0),
+  last_error text,
+  created_at text not null
+)|};
+    {|create trigger photos_drive_trash after update of deleted_at on photos for each row
+when old.deleted_at is null and new.deleted_at is not null
+  and new.original_target = 'drive'
+  and length(trim(coalesce(new.drive_file_id, ''))) > 0
+begin
+  insert into drive_trash (photo_id, file_id, attempts, last_error, created_at)
+  values (new.id, new.drive_file_id, 0, null,
+    strftime('%Y-%m-%dT%H:%M:%f', 'now') || '000Z')
+  on conflict (photo_id) do nothing;
+end|};
+  ]
+
 let migrations =
   [
     {version = 1; statements = v1};
@@ -470,6 +498,7 @@ let migrations =
     {version = 8; statements = v8};
     {version = 9; statements = v9};
     {version = 10; statements = v10};
+    {version = 11; statements = v11};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

@@ -34,6 +34,7 @@ type action =
   | Retry of {attempts : int; error : string; resume : resume}
   | Give_up of {attempts : int; error : string}
   | Discard
+  | Discard_uploaded of Drive.file
 [@@deriving eq]
 
 (* Never the session URL: it is a credential. *)
@@ -48,13 +49,14 @@ let pp_action ppf = function
   | Give_up {attempts; error} ->
       Format.fprintf ppf "give up %d (%s)" attempts error
   | Discard -> Format.pp_print_string ppf "discard"
+  | Discard_uploaded f -> Format.fprintf ppf "discard, trash %s" f.id
 
 let usable ~now = function
   | Some s when session_usable ~now s -> Some s
   | Some _ | None -> None
 
-type count = {attempts : int; error : string}
-type counted = Retry_later of count | Give_up_now of count
+type count = {attempts : int; error : string} [@@deriving eq]
+type counted = Retry_later of count | Give_up_now of count [@@deriving eq]
 
 let count_failure (p : pending) error =
   let attempts = p.attempts + 1 in
@@ -92,9 +94,20 @@ let pending_next ~now (p : pending) = function
   | Some Cancelled | None -> (
       match usable ~now p.session with Some s -> Enqueue s | None -> Start)
 
+(* Deleted after its bytes reached Drive but before [Finish]: the file is
+   the deleted photo's original, and goes to the bin as the others do. *)
+let gone job =
+  match job with
+  | Some (Succeeded {status = 200 | 201; body}) -> (
+      match Drive.decode_file body with
+      | Ok f -> Discard_uploaded f
+      | Error _ -> Discard)
+  | Some (Succeeded _ | Waiting | Running | Failed _ | Cancelled) | None ->
+      Discard
+
 let next ~now ~(photo : Photo.t option) pending job =
   match photo with
-  | None -> Discard
+  | None -> gone job
   | Some {original_target = App_only; _} -> Discard
   | Some {upload_state = Uploaded | Original_missing; _} -> Discard
   | Some {upload_state = Failed; _} -> Nothing
@@ -116,3 +129,24 @@ let retryable : Photo.t option -> bool = function
 let on_network_change ~now (p : pending) = function
   | Some Waiting -> usable ~now p.session
   | Some (Running | Succeeded _ | Failed _ | Cancelled) | None -> None
+
+type trash_step = Trash | Forget_trash | Trash_failed [@@deriving eq]
+
+let trash_gave_up ~attempts = attempts >= max_attempts
+
+let trash_next ~live ~attempts =
+  match (live, trash_gave_up ~attempts) with
+  | true, _ -> Forget_trash
+  | false, true -> Trash_failed
+  | false, false -> Trash
+
+type trash_outcome = Trashed | Blocked of string | Counted of counted
+[@@deriving eq]
+
+let trash_outcome ~attempts = function
+  | Ok () -> Trashed
+  | Error e -> (
+      let error = Drive.error_to_string e in
+      match Drive.error_scope e with
+      | Account -> Blocked error
+      | This_file -> Counted (count_failure {attempts; session = None} error))

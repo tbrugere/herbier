@@ -47,17 +47,25 @@ type action =
   | Retry of {attempts : int; error : string; resume : resume}
   | Give_up of {attempts : int; error : string}
   | Discard  (** nothing to upload any more: cancel, delete row and file *)
+  | Discard_uploaded of Drive.file
+      (** the photo was deleted once its bytes were in Drive: as [Discard], and
+          that file goes to Drive's bin (a trash row) *)
 
 val equal_action : action -> action -> bool
 
 val pp_action : Format.formatter -> action -> unit
 (** One line, never the session's URL (a credential): ["enqueue"],
-    ["retry 2 (HTTP 503) resume"], ["finish <file id>"], … *)
+    ["retry 2 (HTTP 503) resume"], ["finish <file id>"],
+    ["discard, trash <file id>"], … *)
 
 val next :
   now:Ptime.t -> photo:Photo.t option -> pending -> job option -> action
 (** [photo]: the live photo row, [None] when absent or soft-deleted. First rule
     that applies:
+    + [photo = None] (deleted) with
+      [job = Some (Succeeded {status = 200 | 201; body})] whose body
+      {!Drive.decode_file}s to [Ok f] → [Discard_uploaded f]: the upload ended
+      after the delete, and the file it made follows the photo to the bin.
     + [photo = None], [original_target <> Drive], or [upload_state] is
       [Uploaded] or [Original_missing] → [Discard].
     + [upload_state = Failed] → [Nothing] (waits for « Envoyer maintenant »).
@@ -103,6 +111,8 @@ type counted =
   | Retry_later of count  (** the next pass tries again *)
   | Give_up_now of count  (** [attempts >= max_attempts] *)
 
+val equal_counted : counted -> counted -> bool
+
 val count_failure : pending -> string -> counted
 (** [attempts + 1] with this error. *)
 
@@ -111,3 +121,46 @@ val on_network_change : now:Ptime.t -> pending -> job option -> session option
     [Waiting] and [s] the pending's usable session (the job is enqueued again
     under the new constraint); [None] otherwise (a running job finishes on its
     network, a finished one is the pass's to handle). *)
+
+(** {1 The Drive bin}
+
+    An original deleted in Herbier (architecture §5): its Drive file goes to the
+    bin through a device-only row ([Herbier_store.Drive_trash]), tried by each
+    pass as an upload is, never deleted for good. *)
+
+(** What a pass does with one trash row. *)
+type trash_step =
+  | Trash  (** send {!Drive.trash_original} *)
+  | Forget_trash
+      (** the photo is live again (its delete undone): the row goes, nothing is
+          sent *)
+  | Trash_failed
+      (** {!trash_gave_up}: waits for « Envoyer maintenant », which resets
+          [attempts] *)
+
+val equal_trash_step : trash_step -> trash_step -> bool
+
+val trash_gave_up : attempts:int -> bool
+(** [attempts >= max_attempts]. *)
+
+val trash_next : live:bool -> attempts:int -> trash_step
+(** [live] (the photo row is live) → [Forget_trash]; else {!trash_gave_up} →
+    [Trash_failed]; else [Trash]. *)
+
+(** How a {!Drive.trash_original} ended for a row. *)
+type trash_outcome =
+  | Trashed  (** in the bin, already there, or gone (404): the row goes *)
+  | Blocked of string
+      (** an [Account] error ({!Drive.error_scope}: token, scope, API, network,
+          …): the row's [last_error], nothing counted, no more trash in this
+          pass *)
+  | Counted of counted
+      (** a [This_file] error: one more attempt, as {!count_failure} *)
+
+val equal_trash_outcome : trash_outcome -> trash_outcome -> bool
+
+val trash_outcome : attempts:int -> (unit, Drive.error) result -> trash_outcome
+(** [Ok ()] → [Trashed]; [Error e] → by {!Drive.error_scope} [e]: [Account] →
+    [Blocked (Drive.error_to_string e)], [This_file] →
+    [Counted (count_failure {attempts; session = None} (Drive.error_to_string
+     e))]. *)

@@ -427,12 +427,29 @@ let last_upload t =
 let refresh_queue t =
   let open Fut.Syntax in
   let* entries = Upload_queue.entries t.uploads in
+  let* trash = Upload_queue.trash_entries t.uploads in
   let+ last_upload = last_upload t in
+  let trash =
+    match trash with
+    | Ok rows -> rows
+    | Error e ->
+        log_error ["upload: trash:"; Db.error_to_string e];
+        []
+  in
+  let trash_failed =
+    List.length
+      (List.filter
+         (fun (r : Herbier_store.Drive_trash.t) ->
+           Herbier_photos.Upload_queue.trash_gave_up ~attempts:r.attempts)
+         trash)
+  in
   match entries with
   | Error e -> log_error ["upload: queue:"; Db.error_to_string e]
   | Ok entries ->
       let q =
         Drive_text.queue_of ~last_upload
+          ~trashing:(List.length trash - trash_failed)
+          ~trash_failed
           (List.map
              (fun (e : Upload_queue.entry) ->
                {
@@ -617,6 +634,7 @@ let start_uploads t =
   Fut.await
     (Herbier_bindings.Cap_uploader.on_change (fun () -> upload_pending t))
     (log_listener "job listener");
+
   let wifi_only =
     React.S.map ~eq:Bool.equal
       (fun (a : State.account) -> a.wifi_only)
