@@ -410,6 +410,54 @@ where deleted_at is null and lat is not null and lon is not null
    (supabase/migrations/20261121130000_reference_source_plantuse.sql). *)
 let v9 = [{|insert into reference_sources (value) values ('plantuse')|}]
 
+(* Migration 10 (M8.93): observation entries queued before migration 7 carry
+   no place_detail, and Synced.decode_entry refuses a payload missing a
+   column (« Entrée illisible » in 4m); the photos of those observations were
+   then refused on their foreign key (HTTP 409) and parked too, while later
+   entries of the same rows (the geocoding pass's renames) were pushed. So a
+   parked observation or photo entry is given the row as it is now, not
+   merely a place_detail: its old snapshot may be older than what the server
+   already holds, and pushing it would put an older version back. Any other
+   observation entry lacking place_detail (a row gone, an entry not pushed
+   yet) gets it null: the row had none when the entry was queued. The parked
+   entries are then unparked
+   (attempts kept): the next push sends each observation, then its photos
+   (seq order). The decoder stays strict (a truncated payload is still
+   refused); a migration that adds a column to a synced table rewrites the
+   queued payloads (architecture §4). Other tables' parked entries are left
+   as they are. Timestamps keep the stored text, which the row specs decode. *)
+let v10 =
+  [
+    {|update outbox set payload_json = (
+  select json_object(
+    'id', o.id, 'plant_id', o.plant_id, 'at', o.at, 'lat', o.lat,
+    'lon', o.lon, 'accuracy_m', o.accuracy_m, 'place_label', o.place_label,
+    'place_derived', o.place_derived, 'note', o.note,
+    'created_at', o.created_at, 'updated_at', o.updated_at,
+    'deleted_at', o.deleted_at, 'place_detail', o.place_detail)
+  from observations o where o.id = outbox.row_id)
+where table_name = 'observations' and last_error is not null
+  and row_id in (select id from observations)|};
+    {|update outbox set payload_json = (
+  select json_object(
+    'id', p.id, 'observation_id', p.observation_id, 'taken_at', p.taken_at,
+    'width', p.width, 'height', p.height, 'sha256', p.sha256,
+    'preview_path', p.preview_path,
+    'preview_bucket_key', p.preview_bucket_key,
+    'original_target', p.original_target, 'drive_file_id', p.drive_file_id,
+    'upload_state', p.upload_state, 'created_at', p.created_at,
+    'updated_at', p.updated_at, 'deleted_at', p.deleted_at)
+  from photos p where p.id = outbox.row_id)
+where table_name = 'photos' and last_error is not null
+  and row_id in (select id from photos)|};
+    {|update outbox set payload_json = json_set(payload_json, '$.place_detail', null)
+where table_name = 'observations'
+  and json_valid(payload_json)
+  and json_type(payload_json, '$.place_detail') is null|};
+    {|update outbox set last_error = null
+where table_name in ('observations', 'photos') and last_error is not null|};
+  ]
+
 let migrations =
   [
     {version = 1; statements = v1};
@@ -421,6 +469,7 @@ let migrations =
     {version = 7; statements = v7};
     {version = 8; statements = v8};
     {version = 9; statements = v9};
+    {version = 10; statements = v10};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

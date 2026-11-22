@@ -5,9 +5,13 @@ module Outcome = Herbier_sync_core.Cycle.Outcome
 module Server_text = Herbier_ui_model.Server_text
 
 let cls = Html.cls
+let parked_list_id = "parked-entries"
 
-let parked_rows = function
-  | [] -> []
+(* The header folds the entries (M8.93), as « IGN hors-ligne »'s summary folds
+   its packs (France_block): collapsed by default, the state kept across the
+   card's rebuilds by [expanded], owned by [v]. *)
+let parked_rows (expanded, set_expanded) = function
+  | [] -> ([], [])
   | entries ->
       let entry (e : Outbox.entry) =
         let {Parked_entry.title; detail} =
@@ -16,17 +20,34 @@ let parked_rows = function
         in
         Row.v ~title ~detail ()
       in
-      El.div
-        ~at:[cls "settings__row"]
+      let toggle =
+        Html.button
+          ~at:[At.v (Jstr.v "aria-controls") (Jstr.v parked_list_id)]
+          ["settings__fold"]
+          [
+            El.span
+              ~at:[cls "settings__title"]
+              [
+                El.txt'
+                  (Printf.sprintf "Non synchronisé · %d" (List.length entries));
+              ];
+            Widgets.Icon.el ~size:20 Widgets.Icon.Chevron_right;
+          ]
+      in
+      let list =
+        El.div
+          ~at:[cls "settings__parked-list"; At.id (Jstr.v parked_list_id)]
+          (List.map entry entries)
+      in
+      ( [El.div ~at:[cls "settings__row"] [toggle]; list],
         [
-          El.span
-            ~at:[cls "settings__title"]
-            [
-              El.txt'
-                (Printf.sprintf "Non synchronisé · %d" (List.length entries));
-            ];
-        ]
-      :: List.map entry entries
+          Rb.attr toggle "aria-expanded"
+            (React.S.map (fun b -> Some (Bool.to_string b)) expanded);
+          Rb.attr list "hidden"
+            (React.S.map (function true -> None | false -> Some "") expanded);
+          Rb.listen toggle Ev.click (fun _ ->
+              set_expanded (not (React.S.value expanded)));
+        ] )
 
 (* Architecture §4: a 540 shows here, with the hosted project's dashboard
    (where it is restored); the local stack has none. *)
@@ -53,16 +74,17 @@ let paused_rows = function
           ~detail:Server_text.paused_detail ();
       ]
 
-let card (paused, blocked, entries) =
+let card expanded (paused, blocked, entries) =
   let blocked_row =
     match blocked with
     | Some stop ->
         [Row.v ~title:"Réception bloquée" ~detail:(Outcome.to_string stop) ()]
     | None -> []
   in
-  match paused_rows paused @ blocked_row @ parked_rows entries with
+  let parked, bindings = parked_rows expanded entries in
+  match paused_rows paused @ blocked_row @ parked with
   | [] -> (El.div ~at:[cls "is-hidden"] [], [])
-  | rows -> (El.div ~at:[cls "settings__card"] rows, [])
+  | rows -> (El.div ~at:[cls "settings__card"] rows, bindings)
 
 let pull_blocked engine =
   Option.bind (Herbier_sync.Engine.last engine) (fun report ->
@@ -80,6 +102,8 @@ let unreadable () =
 
 let v app =
   let el = El.div ~at:[cls "settings__parked"] [] in
+  let expanded, set_expanded = React.S.create ~eq:Bool.equal false in
+  let expanded = (expanded, fun b -> set_expanded b) in
   let bindings =
     Loaded.v ~reload:(App.synced app) ~failed:unreadable
       ~what:"réglages: file d'envoi" el
@@ -91,6 +115,6 @@ let v app =
                  pull_blocked engine,
                  entries )))
           (Herbier_store_io.Db.all (App.db app) Outbox.parked))
-      card
+      (card expanded)
   in
   (el, bindings)

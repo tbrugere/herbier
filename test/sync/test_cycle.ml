@@ -356,9 +356,228 @@ let push_a_failed_delete_stops_on_store () =
   Alcotest.(check int) "one request" 1 (List.length !Mock_http.requests);
   Alcotest.(check int) "the entry is still there" 1 (Cli.outbox_count db)
 
+(* ---------- M8.93: entries queued before migration 7 ---------- *)
+
+let fixture_json file = Yojson.Safe.from_string (Fixture.read file)
+
+let with_field name value = function
+  | `Assoc fields -> `Assoc ((name, value) :: List.remove_assoc name fields)
+  | _ -> Alcotest.fail "fixture is not an object"
+
+let decoded t json =
+  match Synced.decode_payload t json with
+  | Ok row -> row
+  | Error e ->
+      Alcotest.failf "decoding a %s payload: %s" (Synced.name t)
+        (Herbier_store.Codec.row_error_to_string e)
+
+(* The observation and photo the old payloads describe, as rows. *)
+let old_observation () =
+  decoded Synced.observations
+    (with_field "place_detail" `Null
+       (fixture_json "sync_outbox_v6_observation.json"))
+
+let old_photo () =
+  decoded Synced.photos (fixture_json "sync_outbox_v6_photo.json")
+
+(* The observation as the geocoding pass renamed it later: that rename's own
+   entry was pushed (and deleted), so the server already holds it. *)
+let renamed_observation () =
+  {
+    (old_observation ()) with
+    Observation.place_derived = Some "À Nulle-Part";
+    place_detail = Some "Le Bois";
+    updated_at = Sync_fixtures.time "2026-11-21T23:00:00Z";
+  }
+
+(* A database at version 9, as the phone was, with an observation entry and
+   its photo's in the shape the phone held them (queued by a build before
+   migration 7: no place_detail; made-up ids and position). [~rows]: the
+   plant, the renamed observation and the photo are in the local tables, as
+   on the phone; without, the entries have no row behind them. *)
+let old_outbox_db ~rows =
+  let db = Cli.fresh_db () in
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Herbier_store.Schema.migration) -> m.version <= 9)
+       Herbier_store.Schema.migrations);
+  (match rows with
+  | false -> ()
+  | true ->
+      let o = renamed_observation () in
+      let plant =
+        match o.plant_id with
+        | Some id ->
+            {(Sync_fixtures.plant ~at:o.created_at 1 "Thym") with Plant.id}
+        | None -> Alcotest.fail "the fixture observation has a plant"
+      in
+      Cli.write_all_bare_ok "local rows" db
+        [
+          Synced.write Synced.plants plant;
+          Synced.write Synced.observations o;
+          Synced.write Synced.photos (old_photo ());
+        ]);
+  let entry table file =
+    let payload = fixture_json file in
+    let row_id =
+      match payload with
+      | `Assoc fields -> (
+          match List.assoc_opt "id" fields with
+          | Some (`String id) -> id
+          | _ -> Alcotest.failf "%s: no id" file)
+      | _ -> Alcotest.failf "%s: not an object" file
+    in
+    let (_ : int) =
+      Cli.write_ok file db (Outbox.entry_stmt ~table_name:table ~row_id payload)
+    in
+    ()
+  in
+  entry "observations" "sync_outbox_v6_observation.json";
+  entry "photos" "sync_outbox_v6_photo.json";
+  db
+
+let photo_fk_409 () =
+  ok ~status:409 (Fixture.read "sync_upsert_photos_fk_409.json")
+
+(* Parks both as the phone did: the observation refused by the decoder, no
+   request; its photo refused by the server on its foreign key. *)
+let park_as_on_the_phone db =
+  Mock_http.reset ();
+  Mock_http.responder := sequence [photo_fk_409 ()];
+  Push_cli.run db ~conn:conn_ok
+
+let old_entries_park_as_on_the_phone () =
+  let db = old_outbox_db ~rows:true in
+  Alcotest.check push_result "both parked"
+    (Push.Done {pushed = 0; parked = 2})
+    (park_as_on_the_phone db);
+  Alcotest.(check (list (pair string (option string))))
+    "last errors"
+    [
+      ( "observations",
+        Some "invalid entry: observations payload: missing column" );
+      ("photos", Some "HTTP 409");
+    ]
+    (List.map
+       (fun (e : Outbox.entry) -> (e.table_name, e.last_error))
+       (Cli.all db Outbox.parked))
+
+let decode_next db =
+  List.map
+    (fun (e : Outbox.entry) ->
+      match Synced.decode_entry ~table_name:e.table_name e.payload with
+      | Ok entry -> (e, entry)
+      | Error err ->
+          Alcotest.failf "%s does not decode: %s" e.table_name
+            (Synced.entry_error_to_string err))
+    (Cli.all db (Outbox.next ~limit:10))
+
+(* Migration 10 gives both entries their row as it is now (the renamed
+   observation, not its older snapshot) and unparks them, attempts kept; the
+   next push sends the observation, then its photo, and empties the
+   outbox. *)
+let migration_10_then_push_sends_the_rows_parent_first () =
+  let db = old_outbox_db ~rows:true in
+  let (_ : Push.t) = park_as_on_the_phone db in
+  Cli.migrate db ~current:9;
+  Alcotest.(check int)
+    "nothing parked" 0
+    (List.length (Cli.all db Outbox.parked));
+  let next = decode_next db in
+  Alcotest.(check (list (pair string int)))
+    "both back in next, in seq order, attempts kept"
+    [("observations", 1); ("photos", 1)]
+    (List.map (fun ((e : Outbox.entry), _) -> (e.table_name, e.attempts)) next);
+  (match next with
+  | [(o, _); (p, _)] ->
+      Alcotest.(check bool)
+        "the observation's payload is the local row (renamed)" true
+        (Observation.equal (renamed_observation ())
+           (decoded Synced.observations o.payload));
+      Alcotest.(check bool)
+        "the photo's payload is its local row" true
+        (Photo.equal (old_photo ()) (decoded Synced.photos p.payload))
+  | _ -> Alcotest.fail "expected two entries");
+  Mock_http.reset ();
+  Mock_http.respond ~status:201 "";
+  Alcotest.check push_result "both pushed"
+    (Push.Done {pushed = 2; parked = 0})
+    (Push_cli.run db ~conn:conn_ok);
+  let requests = List.rev !Mock_http.requests in
+  Alcotest.(check (list string))
+    "the observation before its photo" ["observations"; "photos"]
+    (List.map request_table requests);
+  (match requests with
+  | {body = Some body; _} :: _ ->
+      let field name =
+        match Yojson.Safe.from_string body with
+        | `Assoc fields -> List.assoc_opt name fields
+        | _ -> None
+      in
+      Alcotest.(check (list (option string)))
+        "the sent observation is the renamed one"
+        [Some {|"À Nulle-Part"|}; Some {|"Le Bois"|}]
+        (List.map
+           (fun n -> Option.map Yojson.Safe.to_string (field n))
+           ["place_derived"; "place_detail"])
+  | _ -> Alcotest.fail "no observation request body");
+  Alcotest.(check int) "outbox empty" 0 (Cli.outbox_count db)
+
+(* A parked old entry whose row is gone: place_detail null, unparked. *)
+let migration_10_without_rows_fills_place_detail () =
+  let db = old_outbox_db ~rows:false in
+  let (_ : Push.t) = park_as_on_the_phone db in
+  Cli.migrate db ~current:9;
+  match decode_next db with
+  | [(o, _); (p, _)] ->
+      Alcotest.(check (option string))
+        "place_detail null" (Some "null")
+        (match o.payload with
+        | `Assoc fields ->
+            Option.map Yojson.Safe.to_string
+              (List.assoc_opt "place_detail" fields)
+        | _ -> None);
+      Alcotest.(check bool)
+        "the photo's payload unchanged" true
+        (Yojson.Safe.equal p.payload (fixture_json "sync_outbox_v6_photo.json"))
+  | es -> Alcotest.failf "expected 2 entries, got %d" (List.length es)
+
+(* Another table's parked entry stays parked. *)
+let migration_10_leaves_other_tables_parked () =
+  let db = Cli.fresh_db () in
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Herbier_store.Schema.migration) -> m.version <= 9)
+       Herbier_store.Schema.migrations);
+  let (_ : int) =
+    Cli.write_ok "a tag entry" db
+      (Outbox.entry_stmt ~table_name:"tags"
+         ~row_id:"019a8f00-0000-7000-8000-0000000000c1"
+         (`Assoc [("id", `String "019a8f00-0000-7000-8000-0000000000c1")]))
+  in
+  let (_ : Push.t) = Push_cli.run db ~conn:conn_ok in
+  Cli.migrate db ~current:9;
+  Alcotest.(check (list string))
+    "still parked" ["tags"]
+    (List.map
+       (fun (e : Outbox.entry) -> e.table_name)
+       (Cli.all db Outbox.parked))
+
 let push_tests =
   let case name f = Alcotest.test_case name `Quick f in
   [
+    case
+      "M8.93: old observation and photo entries park as on the phone (missing \
+       column, then HTTP 409)"
+      old_entries_park_as_on_the_phone;
+    case
+      "M8.93: migration 10 gives them their current rows and unparks them; the \
+       push sends the observation, then its photo"
+      migration_10_then_push_sends_the_rows_parent_first;
+    case "M8.93: migration 10, rows gone: place_detail null, unparked"
+      migration_10_without_rows_fills_place_detail;
+    case "M8.93: migration 10 leaves another table's parked entry parked"
+      migration_10_leaves_other_tables_parked;
     case
       "a plants entry whose payload does not decode parks as \"invalid entry: \
        plants payload: …\", no request for it"

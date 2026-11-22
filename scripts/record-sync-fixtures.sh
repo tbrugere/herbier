@@ -117,6 +117,7 @@ plant_tag=01965d4e-0000-7000-8000-000000000005
 plant_ref=01965d4e-0000-7000-8000-000000000006
 reference=01965d4e-0000-7000-8000-000000000007
 no_plant=01965d4e-0000-7000-8000-0000000000ff
+no_observation=01965d4e-0000-7000-8000-0000000000fe
 
 # 2. One row per table, parents first; then the plant again (update path),
 #    with notes and the cover (PostgREST answers 200 there, 201 for an
@@ -170,6 +171,11 @@ esac
 # An observation of a plant that does not exist (23503).
 upsert fk observations '{"id":"01965d4e-0000-7000-8000-000000000013","plant_id":"'$no_plant'","at":"2026-11-12T08:45:00Z","lat":null,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null,"place_detail":null}' 409
 keep fk sync_upsert_observations_fk_409.json
+
+# A photo of an observation the server does not have (23503): how a photo
+# whose observation entry is parked is refused (M8.93).
+upsert fk_photo photos '{"id":"01965d4e-0000-7000-8000-000000000014","observation_id":"'$no_observation'","taken_at":"2026-11-12T08:46:00Z","width":1600,"height":1200,"sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","preview_path":"previews/01965d4e-0000-7000-8000-000000000014.jpg","preview_bucket_key":null,"original_target":"drive","drive_file_id":null,"upload_state":"pending","created_at":"2026-11-12T09:03:00Z","updated_at":"2026-11-12T09:03:00Z","deleted_at":null}' 409
+keep fk_photo sync_upsert_photos_fk_409.json
 
 # lat without lon (23514).
 upsert check observations '{"id":"01965d4e-0000-7000-8000-000000000023","plant_id":null,"at":"2026-11-12T08:45:00Z","lat":45.5,"lon":null,"accuracy_m":null,"place_label":null,"place_derived":null,"note":null,"created_at":"2026-11-12T09:02:00Z","updated_at":"2026-11-12T09:02:00Z","deleted_at":null,"place_detail":null}' 400

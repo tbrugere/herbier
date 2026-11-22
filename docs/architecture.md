@@ -343,7 +343,17 @@ sign-in. No online check: a failed fetch is a stop like any other.
    the status, shown in Settings: the library's error carries no body). A
    network error is transient too. Foreign keys
    are not deferrable, so `seq` order (parents first) is load-bearing and a
-   parked row also parks the rows that reference it.
+   parked row also parks the rows that reference it. A payload is a snapshot
+   of every column of its table, decoded strictly before it is sent (a
+   payload that does not decode parks as `invalid entry: …`): a local
+   migration that adds a column to a synced table also rewrites the queued
+   payloads to the new shape. Nothing unparks an entry but a migration, and
+   an unparked snapshot may be older than what later entries of its row
+   already pushed: migration 10 (M8.93) gives each parked observation and
+   photo entry its current row (the entries queued before migration 7 had no
+   `place_detail`, and their photos had been refused on the foreign key),
+   then unparks them, attempts kept; one whose cause is still there parks
+   again.
 2. **Pull**: per table, `GET …?updated_at=gt.<last_pulled_at - overlap>&select=<columns>&order=updated_at,id`
    with `Range-Unit: items` and pages of 500 rows (`Range: 0-499`, then
    `500-999`, …), below Supabase's `max_rows` (1000), so a full page means

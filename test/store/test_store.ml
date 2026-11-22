@@ -254,9 +254,9 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  (* Migration 9 (plantuse reference source), after migration 8
-     (« Près » names marked again). *)
-  Alcotest.(check int) "latest is 9" 9 Schema.latest;
+  (* Migration 10 (old outbox payloads rewritten, parked entries unparked),
+     after migration 9 (plantuse reference source). *)
+  Alcotest.(check int) "latest is 10" 10 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -276,36 +276,36 @@ let pending_at_latest () =
 
 let pending_from_one () =
   Alcotest.(check string)
-    "pending from 1 is migrations 2 to 9" "Ok [2; 3; 4; 5; 6; 7; 8; 9]"
+    "pending from 1 is migrations 2 to 10" "Ok [2; 3; 4; 5; 6; 7; 8; 9; 10]"
     (string_of_pending (Schema.pending ~current:1))
 
 let pending_from_two () =
   Alcotest.(check string)
-    "pending from 2 is migrations 3 to 9" "Ok [3; 4; 5; 6; 7; 8; 9]"
+    "pending from 2 is migrations 3 to 10" "Ok [3; 4; 5; 6; 7; 8; 9; 10]"
     (string_of_pending (Schema.pending ~current:2))
 
 let pending_from_three () =
   Alcotest.(check string)
-    "pending from 3 is migrations 4 to 9" "Ok [4; 5; 6; 7; 8; 9]"
+    "pending from 3 is migrations 4 to 10" "Ok [4; 5; 6; 7; 8; 9; 10]"
     (string_of_pending (Schema.pending ~current:3))
 
-(* A device at version 5 has four pending migrations, 6 to 9. *)
+(* A device at version 5 has five pending migrations, 6 to 10. *)
 let pending_from_five () =
   Alcotest.(check string)
-    "pending from 5 is migrations 6 to 9" "Ok [6; 7; 8; 9]"
+    "pending from 5 is migrations 6 to 10" "Ok [6; 7; 8; 9; 10]"
     (string_of_pending (Schema.pending ~current:5))
 
-(* A device at version 6 has three pending migrations, 7, 8 and 9. *)
+(* A device at version 6 has four pending migrations, 7 to 10. *)
 let pending_from_six () =
   Alcotest.(check string)
-    "pending from 6 is migrations 7, 8 and 9" "Ok [7; 8; 9]"
+    "pending from 6 is migrations 7 to 10" "Ok [7; 8; 9; 10]"
     (string_of_pending (Schema.pending ~current:6))
 
-(* A device at version 8 has exactly one pending migration, 9
-   (plantuse). *)
+(* A device at version 8 has two pending migrations, 9 (plantuse) and 10
+   (old outbox payloads). *)
 let pending_from_eight () =
   Alcotest.(check string)
-    "pending from 8 is migration 9 alone" "Ok [9]"
+    "pending from 8 is migrations 9 and 10" "Ok [9; 10]"
     (string_of_pending (Schema.pending ~current:8))
 
 let pending_above_latest () =
@@ -770,7 +770,7 @@ let migration_7_marks_only_the_live_positioned_named_unlabelled_row () =
     ^ obs_v6_sql unpositioned ~place_derived:(quote "Près de Figeac"));
   migrate db ~current:6;
   Alcotest.(check int)
-    "after migrations 7, 8 and 9, user_version is 9" 9 (user_version db);
+    "after migrations 7 to 10, user_version is 10" 10 (user_version db);
   Alcotest.(check (list string))
     "place_renames holds exactly the marker's id" [marker]
     (List.map
@@ -1112,7 +1112,7 @@ let migration_9_upgrade_from_eight_accepts_plantuse () =
   accepted "a plant, before migration 9" db (plant_sql plant_a);
   migrate db ~current:8;
   Alcotest.(check int)
-    "after migration 9, user_version is 9" 9 (user_version db);
+    "after migrations 9 and 10, user_version is 10" 10 (user_version db);
   accepted "a plantuse reference row, on a device upgraded from 8" db
     (reference_sql "00000000-0000-4000-8000-0000000000b4" ~plant:plant_a
        ~source:Source.Plantuse)
@@ -1655,12 +1655,12 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
-          case "pending from 1 is migrations 2 to 9" pending_from_one;
-          case "pending from 2 is migrations 3 to 9" pending_from_two;
-          case "pending from 3 is migrations 4 to 9" pending_from_three;
-          case "pending from 5 is migrations 6 to 9" pending_from_five;
-          case "pending from 6 is migrations 7, 8 and 9" pending_from_six;
-          case "pending from 8 is migration 9 alone" pending_from_eight;
+          case "pending from 1 is migrations 2 to 10" pending_from_one;
+          case "pending from 2 is migrations 3 to 10" pending_from_two;
+          case "pending from 3 is migrations 4 to 10" pending_from_three;
+          case "pending from 5 is migrations 6 to 10" pending_from_five;
+          case "pending from 6 is migrations 7 to 10" pending_from_six;
+          case "pending from 8 is migrations 9 and 10" pending_from_eight;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
