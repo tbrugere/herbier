@@ -8,3 +8,7 @@ type t = {
 val load :
   Herbier_store_io.Db.t -> (t list, Herbier_store_io.Db.error) result Fut.t
 (** In the store's tag order (name, case-insensitive); two queries. *)
+
+val counts : t list -> (Herbier_domain.Tag.t * int) list
+(** Each tag with the number of plants carrying it, in the same order: what
+    {!Herbier_ui_model.Tag_pick.suggestions} reads. *)

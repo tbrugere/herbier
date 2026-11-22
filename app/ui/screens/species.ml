@@ -3,6 +3,7 @@ module Fr_date = Herbier_ui_model.Fr_date
 module Fr_text = Herbier_ui_model.Fr_text
 module Journal_day = Herbier_ui_model.Journal_day
 module Plant_form = Herbier_ui_model.Plant_form
+module Tag_pick = Herbier_ui_model.Tag_pick
 module Ref_block = Herbier_ui_model.Ref_block
 module Ref_text = Herbier_ui_model.Ref_text
 module Free_name = Herbier_ui_model.Free_name
@@ -36,6 +37,7 @@ type data = {
   plant : Plant.t;
   tags : Tag.t list;
   all_tags : Tag.t list;
+  tag_uses : (Tag.t * int) list; (* every live tag, with its plant count *)
   observations : Observation.t list; (* newest first *)
   photos : Herbier_domain.Photo.t list;
   references : Reference.t list;
@@ -51,7 +53,9 @@ let load db id =
   | None -> Fut.ok None
   | Some plant ->
       let* tags = Db.all db (Tags.of_plant id) in
-      let* all_tags = Db.all db Tags.list in
+      let* usage = Tag_usage.load db in
+      let tag_uses = Tag_usage.counts usage in
+      let all_tags = List.map fst tag_uses in
       let* observations = Db.all db (Observations.of_plant id) in
       let* photos = Db.all db (Photos.of_plant id) in
       let* references = Db.all db (References.of_plant id) in
@@ -72,6 +76,7 @@ let load db id =
           plant;
           tags;
           all_tags;
+          tag_uses;
           observations;
           photos;
           references;
@@ -784,7 +789,6 @@ let render app ~host (data : data React.signal) =
               Route.go (Route.Modal (Route.Viewer ph.id)))
           :: grid.bindings )
   in
-  let adder = W.Adder.v ~label:"tag" ~placeholder:"Nom du tag" () in
   (* style: [known] holds the tags this fiche put on the plant, so that a tag
      added before the reload shows the previous one neither creates a second
      tag of that name nor links one twice. Written by [add_tag] and its save's
@@ -814,6 +818,15 @@ let render app ~host (data : data React.signal) =
               problem
                 (Printf.sprintf "Le tag « %s » n'a pas pu être ajouté." name)
           | Ok _ -> problem "")
+  in
+  let adder =
+    W.Tag_picker.v ~placeholder:"Nom du tag"
+      ~suggest:(fun text ->
+        let d = React.S.value data in
+        Tag_pick.suggestions ~tags:d.tag_uses
+          ~current:(List.map (fun (t : Tag.t) -> t.name) (union d.tags !known))
+          text)
+      ()
   in
   let chips = El.span ~at:[cls "species__chips"] [] in
   let obs_title = El.h2 ~at:[cls "t-section-label"] [] in

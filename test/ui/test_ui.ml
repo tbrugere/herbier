@@ -13,6 +13,7 @@ let () =
       ("to_identify", Local_time_tests.to_identify);
       ("plant_form", Plant_form_tests.plant_form);
       ("tag_edits", Tag_edits_tests.tag_edits);
+      ("tag_pick", Tag_pick_tests.tag_pick);
       ("long_press", Long_press_tests.long_press);
       ("delete_plan", Delete_plan_tests.delete_plan);
       ("fr_date", Fr_date_tests.fr_date @ Fr_date_tests.ago);

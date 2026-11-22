@@ -13,3 +13,5 @@ let load db =
     (fun (tag : Tag.t) ->
       {tag; plants = List.concat (Collection_filter.tagged links [tag.id])})
     tags
+
+let counts = List.map (fun u -> (u.tag, List.length u.plants))

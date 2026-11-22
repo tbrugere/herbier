@@ -5,6 +5,7 @@ module Fr_text = Herbier_ui_model.Fr_text
 module List_patch = Herbier_ui_model.List_patch
 module Plant_form = Herbier_ui_model.Plant_form
 module Ref_paste = Herbier_ui_model.Ref_paste
+module Tag_pick = Herbier_ui_model.Tag_pick
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -41,6 +42,7 @@ type data = {
   plant : Plant.t;
   tags : Tag.t list;
   all_tags : Tag.t list;
+  tag_uses : (Tag.t * int) list; (* every live tag, with its plant count *)
   origin : origin;
 }
 
@@ -48,9 +50,13 @@ let blank () = Plant.v ~id:(Plant_id.fresh ()) ~at:(Ptime_clock.now ()) ""
 
 let load db mode =
   let open Fut.Result_syntax in
-  let* all_tags = Db.all db Tags.list in
+  let* usage = Tag_usage.load db in
+  let tag_uses = Tag_usage.counts usage in
+  let all_tags = List.map fst tag_uses in
   match mode with
-  | New -> Fut.ok (Some {plant = blank (); tags = []; all_tags; origin = Fresh})
+  | New ->
+      Fut.ok
+        (Some {plant = blank (); tags = []; all_tags; tag_uses; origin = Fresh})
   | Edit id -> (
       let* plant = Db.find db (Plants.get id) in
       match plant with
@@ -65,6 +71,7 @@ let load db mode =
               plant;
               tags;
               all_tags;
+              tag_uses;
               origin = Stored {observations; photos; plant_refs};
             })
 
@@ -364,7 +371,14 @@ let render app mode (d : data) =
       covers
   in
   let add_alias = W.Adder.v ~label:"alias" ~placeholder:"Autre nom" () in
-  let add_tag = W.Adder.v ~label:"tag" ~placeholder:"Nom du tag" () in
+  let add_tag =
+    W.Tag_picker.v ~placeholder:"Nom du tag"
+      ~suggest:(fun text ->
+        Tag_pick.suggestions ~tags:d.tag_uses
+          ~current:(List.map Plant_form.tag_name !form.tags)
+          text)
+      ()
+  in
   let alias_list = El.span ~at:[cls "chip-row__items"] [] in
   let tag_list = El.span ~at:[cls "chip-row__items"] [] in
   let valid =
