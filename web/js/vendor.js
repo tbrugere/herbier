@@ -49,6 +49,10 @@ globalThis.herbier = {
   foregroundRun: Capacitor.isNativePlatform()
     ? registerPlugin('ForegroundRun')
     : undefined,
+  // Herbier's own plugin (android/…/VolumeKeyPlugin.java, volume down as 4d's
+  // shutter): absent in a browser, so that the binding reports it
+  // Unavailable.
+  volumeKey: Capacitor.isNativePlatform() ? registerPlugin('VolumeKey') : undefined,
   exifr,
   map,
 };

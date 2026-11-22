@@ -2,6 +2,7 @@ package re.bruge.herbier;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.BridgeActivity;
 
@@ -26,6 +27,14 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(GoogleAuthorizationPlugin.class);
         registerPlugin(UploaderPlugin.class);
         registerPlugin(ForegroundRunPlugin.class);
+        registerPlugin(VolumeKeyPlugin.class);
         super.onCreate(savedInstanceState);
+    }
+
+    // Here rather than on the WebView: the key arrives whichever view has
+    // the focus. Only volume down while 4d enabled it (VolumeKeyPlugin).
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        return VolumeKeyPlugin.handle(event) || super.dispatchKeyEvent(event);
     }
 }

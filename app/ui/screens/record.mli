@@ -10,7 +10,9 @@
     Enregistrer is [disabled] until {!Shot_row.can_save} (a photo in the row and
     no capture pending); a shutter tap shows a striped placeholder at once, in
     the click listener ({!Shot_row.begin_capture}), replaced by the preview,
-    removed on a failed capture (logged).
+    removed on a failed capture (logged). While 4d is up, the volume-down key
+    does what a shutter tap does ({!Herbier_bindings.Cap_volume_key}: one shot
+    per press, the volume left alone); released with the screen.
 
     Saving never waits for the network: the plant (an existing one when the name
     matches, else a new 4g plant; none → « À identifier »), the observation

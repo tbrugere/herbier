@@ -16,6 +16,8 @@ module Observation_id = Herbier_domain.Ids.Observation_id
 module Capture = Herbier_photos_io.Capture
 module Object_url = Herbier_bindings.Object_url
 module Camera_stream = Herbier_bindings.Camera_stream
+module Cap_volume_key = Herbier_bindings.Cap_volume_key
+module Cap_error = Herbier_bindings.Cap_error
 module RList = ReactiveData.RList
 module W = Widgets
 
@@ -430,6 +432,30 @@ let v app =
   let idle f () =
     match React.S.value saving with true -> () | false -> f ()
   in
+  (* The shutter button and the volume-down key. *)
+  let take_photo =
+    idle (fun () -> match !viewfinder with None -> () | Some v -> shoot v)
+  in
+  (* Volume down is the shutter while 4d is up: a listener resolving after
+     the release is removed at once and never enables the key. *)
+  let volume_listener = ref None in
+  Fut.await (Cap_volume_key.on_volume_down take_photo) (function
+    | Error (Cap_error.Unavailable _) -> ()
+    | Error e -> log "volume" (Cap_error.to_string e)
+    | Ok l when !released -> ignore (Cap_volume_key.remove l : _ Fut.t)
+    | Ok l ->
+        volume_listener := Some l;
+        Fut.await (Cap_volume_key.enable ()) (function
+          | Ok () -> ()
+          | Error e -> log "volume" (Cap_error.to_string e)));
+  let release_volume () =
+    Option.iter
+      (fun l ->
+        ignore (Cap_volume_key.disable () : _ Fut.t);
+        ignore (Cap_volume_key.remove l : _ Fut.t))
+      !volume_listener;
+    volume_listener := None
+  in
   let discard =
     W.Dialog.v ~title:"Abandonner ces photos ?"
       ~text:"Elles ne sont pas encore enregistrées."
@@ -485,6 +511,7 @@ let v app =
           b_save;
           Rb.on_release (fun () ->
               released := true;
+              release_volume ();
               close_when_attached ();
               List.iter (fun (_, u) -> Object_url.revoke u) (items ()));
           Rb.rlist thumb_list thumb thumbs;
@@ -518,9 +545,7 @@ let v app =
           Rb.act discard.choice (function
             | Discard -> idle Route.back ()
             | Continue -> ());
-          Rb.act shutter_click
-            (idle (fun () ->
-                 match !viewfinder with None -> () | Some v -> shoot v));
+          Rb.act shutter_click take_photo;
           Rb.act gallery_click
             (idle (fun () ->
                  Fut.await (Capture.pick ~limit:10) (function

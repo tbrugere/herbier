@@ -107,3 +107,21 @@
     -r
     %{dep:foreground_run_stub.js}
     %{dep:cap_foreground_run_smoke.bc.js}))))
+
+; Herbier_bindings.Cap_volume_key over a stub globalThis.herbier.volumeKey
+; (volume_key_stub.js, preloaded with node -r): enable/disable's calls and
+; rejections, the "volumeDown" listener's calls and removal, and the
+; plugin-absent case.
+
+(executable
+ (name cap_volume_key_smoke)
+ (modes js)
+ (libraries herbier_bindings brr))
+
+(rule
+ (alias runtest)
+ (action
+  (setenv
+   NODE_OPTIONS
+   ""
+   (run node -r %{dep:volume_key_stub.js} %{dep:cap_volume_key_smoke.bc.js}))))

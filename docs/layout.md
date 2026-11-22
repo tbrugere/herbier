@@ -127,6 +127,8 @@ app/
                           PUTs it to a Drive resumable session under a network constraint; jobs, cancel, changes
     cap_foreground_run.ml  Herbier's inline ForegroundRun plugin (android/, §4): a dataSync foreground service
                           with one progress notification and its interrupt action (« Toute la France »)
+    cap_volume_key.ml     Herbier's inline VolumeKey plugin (android/, §4): volume down as 4d's shutter
+                          (enable, disable, a volumeDown event per press)
     cap_google_authorization.ml  Herbier's inline GoogleAuthorization plugin (android/, §4): a drive.file
                           access token from Play Services' AuthorizationClient for the Drive account,
                           clearToken, and chooseAccount (Credential Manager's « Sign in with Google »
@@ -842,7 +844,8 @@ edits, all under `android/app/src/main/`:
   with Google », the credential's email; the id token is discarded), in Java
   like `MainActivity` (the app module has no Kotlin toolchain).
 - `java/re/bruge/herbier/MainActivity.java`: generated; touched only to
-  register a plugin by hand, to drop a launch intent that was already
+  register a plugin by hand, to hand volume down to `VolumeKeyPlugin`
+  (`dispatchKeyEvent`), to drop a launch intent that was already
   handled (no 4j replay after process death or from recents, architecture
   §7) and to install the splash screen (`SplashScreen.installSplashScreen`,
   `androidx.core:core-splashscreen`).
@@ -859,6 +862,11 @@ edits, all under `android/app/src/main/`:
   notification permission asked at `start` on Android 13+, and an
   `interrupt` event from its action (or Android 15's timeout). It never acts
   on the run, which stays in the WebView.
+- `java/re/bruge/herbier/VolumeKeyPlugin.java`: volume down as 4d's
+  shutter (M8.92). `MainActivity.dispatchKeyEvent` hands it the key; while
+  `enable`d and listened to, a press is consumed with its repeats and its
+  release (no volume change or panel) and sends one `volumeDown` event.
+  Volume up and every other screen keep the system behaviour.
 - `java/re/bruge/herbier/`: any further Java as small Capacitor plugin
   classes inline here, bound from `app/bindings/`, until the native side
   grows a package of its own.
@@ -1007,7 +1015,8 @@ test/
                 Fut_result.traverse against the sequential folds it replaced; Cap_uploader over
                 uploader_stub.js (enqueue's wire shape, jobs' decoding, the plugin absent);
                 Cap_system_bars over system_bars_stub.js (setStyle's wire shape, rejections,
-                the plugin absent); Cap_foreground_run over foreground_run_stub.js
+                the plugin absent); Cap_foreground_run over foreground_run_stub.js;
+                Cap_volume_key over volume_key_stub.js (enable/disable, the volumeDown listener)
   scripts/      cram: release_env.t, scripts/lib/release-env.sh's loading and checks of the
                 production values (missing, placeholder, paths, no password ever printed)
   version/      native, alcotest: the git describe stamp (herbier_version), apart so that a commit
