@@ -11,6 +11,7 @@ let source_name = function
   | Source.Eppo -> "EPPO"
   | Source.Inat -> "iNaturalist"
   | Source.Plantnet -> "Pl@ntNet"
+  | Source.Plantuse -> "Pl@ntUse"
 
 let names_line (v : Herbier_refs.Projection.vernacular) =
   String.concat ", " v.names
@@ -194,3 +195,11 @@ let credits (images : Herbier_domain.Reference.Image.t list) =
   | _ :: _ -> "Photos : " ^ String.concat ", " pieces
 
 let link_label source = source_name source ^ " ↗"
+let uses_label = "Utilisations"
+let plantuse_credit = "Pl@ntUse · CC BY-SA"
+
+let wikipedia_uses_credit ~lang ~section =
+  let name =
+    match lang with "fr" -> "Wikipédia" | lang -> "Wikipédia (" ^ lang ^ ")"
+  in
+  name ^ " · « " ^ section ^ " » · CC BY-SA · extrait automatique"

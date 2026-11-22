@@ -12,6 +12,10 @@
   test_wikipedia
   test_tela
   test_inpn
+  test_wiki_text
+  test_plantuse
+  test_uses_fetch
+  test_uses
   test_payload
   test_projection
   test_organ_photos

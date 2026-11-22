@@ -13,6 +13,7 @@ module Source : sig
     | Eppo
     | Inat
     | Plantnet
+    | Plantuse
 
   val equal : t -> t -> bool
   val pp : Format.formatter -> t -> unit
@@ -22,8 +23,8 @@ module Source : sig
 
   val to_string : t -> string
   (** ["gbif"], ["wikidata"], ["wikipedia"], ["powo"], ["ipni"], ["taxref"],
-      ["tela"], ["eppo"], ["inat"], ["plantnet"]: the values of its Postgres
-      lookup table. *)
+      ["tela"], ["eppo"], ["inat"], ["plantnet"], ["plantuse"]: the values of
+      its Postgres lookup table. *)
 
   val of_string : string -> t option
   (** Exact inverse of [to_string]; [None] for any other string. *)

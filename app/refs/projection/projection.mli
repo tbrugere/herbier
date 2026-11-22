@@ -54,6 +54,9 @@ val pp_protection : Format.formatter -> protection -> unit
 val equal_fr_red_list : fr_red_list -> fr_red_list -> bool
 val pp_fr_red_list : Format.formatter -> fr_red_list -> unit
 
+module Uses = Uses
+(** The « Utilisations » parts ({!Uses.plantuse}, {!Uses.wikipedia}). *)
+
 type link = {source : Reference.Source.t; url : string}
 type problem = {part : Payload.part; error : Decode.error}
 
@@ -82,6 +85,15 @@ type t = {
   toxicity : string cited option;
       (** One sentence about toxicity, quoted as written, not a verdict: a
           negated one ("n'est pas toxique") is kept; [[Wikipedia]]. *)
+  plantuse_uses : Uses.plantuse cited option;
+      (** « Utilisations », Pl@ntUse's part: {!Uses.plantuse} of the page of the
+          Plantuse row's [page] part that {!Sources.Plantuse.find} gives for the
+          GBIF taxon's name without authorship (none without a taxon);
+          [[Plantuse]]. *)
+  wikipedia_uses : Uses.wikipedia cited option;
+      (** « Utilisations », Wikipedia's part: {!Uses.wikipedia} of the Wikipedia
+          row's [uses] part; [[Wikipedia]]. A heuristic (the section is picked
+          by its title), marked as such on 4f. *)
   organ_photos : Sources.Gbif.Image.t list cited option;
       (** Per organ in [Reference.Organ.all] order (flower, leaf, fruit, habit),
           the first image of the page of that organ whose [url] is
@@ -149,7 +161,8 @@ val project :
       [www.wikidata.org] or [m.wikidata.org], [www.ipni.org] or [ipni.org]);
       else a URL derived from the ids (GBIF key, the [Standard] summary's https
       page URL that classifies as Wikipedia, the entity's POWO, TaxRef, Tela,
-      iNaturalist and EPPO ids), else none. *)
+      iNaturalist and EPPO ids, the Pl@ntUse page found for [plantuse_uses] even
+      when it has no use data), else none. *)
 
 val months : string -> int list option
 (** Baseflor's [floraison] ("5-9", "6", "4-6,9"): pieces split on [','], each
@@ -165,9 +178,9 @@ val organ_photos_wanted : t -> (Reference.Organ.t * Sources.Gbif.Image.t) list
     [plant_refs:[]] gives the same list. *)
 
 val link_order : Reference.Source.t list
-(** [Gbif; Plantnet; Wikipedia; Powo; Taxref; Tela; Inat; Eppo; Wikidata; Ipni]:
-    the handoff's row (GBIF, Pl@ntNet, Wikipédia, POWO, INPN, Tela) then the
-    others. Every source appears once. *)
+(** [Gbif; Plantnet; Wikipedia; Powo; Taxref; Tela; Inat; Eppo; Wikidata; Ipni;
+     Plantuse]: the handoff's row (GBIF, Pl@ntNet, Wikipédia, POWO, INPN, Tela)
+    then the others. Every source appears once. *)
 
 (** The handoff's [ReferenceSnapshot] fields (altitude dropped, architecture
     §6): a field not {!filled} is a row 4f hides. *)

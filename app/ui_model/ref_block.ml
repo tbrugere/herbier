@@ -3,6 +3,25 @@ module Reference = Herbier_domain.Reference
 
 type link = {label : string; url : string}
 
+type plantuse_uses = {
+  chips : string list;
+  line : string option;
+  url : string;
+  credit : string;
+}
+
+type wikipedia_uses = {paragraph : string; url : string; credit : string}
+
+type uses =
+  | Plantuse_only of plantuse_uses
+  | Wikipedia_only of wikipedia_uses
+  | Both of plantuse_uses * wikipedia_uses
+
+let uses_parts = function
+  | Plantuse_only p -> (Some p, None)
+  | Wikipedia_only w -> (None, Some w)
+  | Both (p, w) -> (Some p, Some w)
+
 type row =
   | Names of {
       french : string list;
@@ -20,6 +39,7 @@ type row =
   | Flowering of {months : int list; text : string; sources : string}
   | Habitat of {phrase : string option; chips : string list; sources : string}
   | Toxicity of {text : string; sources : string}
+  | Uses of uses
   | Organ_photos of {
       photos : (Reference.Organ.t * string) list;
       credits : string;
@@ -118,6 +138,35 @@ let en_france (p : Projection.t) =
              sources = Ref_text.sources_line (Ref_text.in_source_order cited);
            })
 
+let uses (p : Projection.t) =
+  let plantuse =
+    Option.map
+      (fun (c : Projection.Uses.plantuse Projection.cited) ->
+        {
+          chips = c.value.summary;
+          line = c.value.text;
+          url = c.value.url;
+          credit = Ref_text.plantuse_credit;
+        })
+      p.plantuse_uses
+  and wikipedia =
+    Option.map
+      (fun (c : Projection.Uses.wikipedia Projection.cited) ->
+        {
+          paragraph = c.value.paragraph;
+          url = c.value.url;
+          credit =
+            Ref_text.wikipedia_uses_credit ~lang:c.value.lang
+              ~section:c.value.section;
+        })
+      p.wikipedia_uses
+  in
+  match (plantuse, wikipedia) with
+  | None, None -> None
+  | Some p, None -> Some (Uses (Plantuse_only p))
+  | None, Some w -> Some (Uses (Wikipedia_only w))
+  | Some p, Some w -> Some (Uses (Both (p, w)))
+
 let organ_photos = function
   | [] -> None
   | shown ->
@@ -185,6 +234,7 @@ let rows (p : Projection.t) ~organ_photos:shown =
         (fun (c : _ Projection.cited) ->
           Toxicity {text = c.value; sources = sources c})
         p.toxicity;
+      uses p;
       organ_photos shown;
       links p.links;
     ]

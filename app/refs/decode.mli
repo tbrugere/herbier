@@ -60,6 +60,16 @@ val last_index : sep:string -> string -> int option
 val unexpected : string -> string -> ('a, error) result
 (** [unexpected path expected] is [Error (Unexpected {path; expected})]. *)
 
+val api_error : Yojson.Safe.t -> error option
+(** A MediaWiki API error ([{"error": {"code", "info"}}], Wikidata's and
+    Pl@ntUse's): [Some (Api_error {code; info})] ([info] [""] when absent);
+    [Some (Unexpected "/error" …)] when [error] has no string [code]; [None]
+    without an [error] member. *)
+
+val flag : string -> Yojson.Safe.t -> bool
+(** [flag name json]: the member [name] is [true]. MediaWiki's boolean page
+    flags ([missing], [invalid]), absent when false. *)
+
 module Syntax : sig
   val ( let* ) :
     ('a, error) result -> ('a -> ('b, error) result) -> ('b, error) result

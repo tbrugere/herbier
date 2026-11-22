@@ -5,6 +5,7 @@ module References = Herbier_store.References
 module Fanout = Herbier_refs.Fanout
 module Step = Herbier_refs.Step
 module Regional = Herbier_refs.Regional
+module Uses_fetch = Herbier_refs.Uses_fetch
 
 type outcome =
   | Written of Reference.Status.t
@@ -94,21 +95,34 @@ let notify on_branch entries =
       Brr.Console.(
         error [str "refs: on_branch raised"; str (Printexc.to_string e)])
 
-(* The regional program reads the name and the TaxRef id of the gbif and
-   wiki rows: it starts once the branches have settled. *)
-let regional ~on_branch ~save ~plant ~previous branches =
+(* The regional and Pl@ntUse programs read the name (and the TaxRef id) of
+   the gbif and wiki rows: they start once the branches have settled, on one
+   input, and run concurrently. *)
+let after_branches ~on_branch ~save ~plant ~previous branches =
   let open Fut.Syntax in
   let* settled = branches in
+  let run program =
+    match program () with
+    | exception e -> raised (Printexc.to_string e)
+    | program ->
+        let+ {outcomes; rows = _} = branch ~save ~plant ~previous program in
+        notify on_branch outcomes;
+        outcomes
+  in
   match
-    Regional.program
-      (Regional.input ~previous
-         (List.concat_map (fun (b : settled) -> b.rows) settled))
+    Regional.input ~previous
+      (List.concat_map (fun (b : settled) -> b.rows) settled)
   with
   | exception e -> raised (Printexc.to_string e)
-  | program ->
-      let+ {outcomes; rows = _} = branch ~save ~plant ~previous program in
-      notify on_branch outcomes;
-      outcomes
+  | input ->
+      let+ outcomes =
+        Fut.of_list
+          [
+            run (fun () -> Regional.program input);
+            run (fun () -> Uses_fetch.program input);
+          ]
+      in
+      List.concat outcomes
 
 let fetch ?(on_branch = fun (_ : report) -> ()) db ~save ~plant ~gbif_key =
   let open Fut.Syntax in
@@ -129,7 +143,7 @@ let fetch ?(on_branch = fun (_ : report) -> ()) db ~save ~plant ~gbif_key =
         Fut.of_list
           [
             Fut.map (List.concat_map (fun (b : settled) -> b.outcomes)) branches;
-            regional ~on_branch ~save ~plant ~previous branches;
+            after_branches ~on_branch ~save ~plant ~previous branches;
           ]
       in
       let answered = List.concat results in

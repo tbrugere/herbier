@@ -254,7 +254,9 @@ let versions_ascending () =
     "versions are 1..n without gap"
     (List.init (List.length versions) (fun i -> i + 1))
     versions;
-  Alcotest.(check int) "latest is 8" 8 Schema.latest;
+  (* Migration 9 (plantuse reference source), after migration 8
+     (« Près » names marked again). *)
+  Alcotest.(check int) "latest is 9" 9 Schema.latest;
   Alcotest.(check (option int))
     "latest is the last version" (Some Schema.latest)
     (match List.rev versions with last :: _ -> Some last | [] -> None)
@@ -274,30 +276,37 @@ let pending_at_latest () =
 
 let pending_from_one () =
   Alcotest.(check string)
-    "pending from 1 is migrations 2 to 8" "Ok [2; 3; 4; 5; 6; 7; 8]"
+    "pending from 1 is migrations 2 to 9" "Ok [2; 3; 4; 5; 6; 7; 8; 9]"
     (string_of_pending (Schema.pending ~current:1))
 
 let pending_from_two () =
   Alcotest.(check string)
-    "pending from 2 is migrations 3 to 8" "Ok [3; 4; 5; 6; 7; 8]"
+    "pending from 2 is migrations 3 to 9" "Ok [3; 4; 5; 6; 7; 8; 9]"
     (string_of_pending (Schema.pending ~current:2))
 
 let pending_from_three () =
   Alcotest.(check string)
-    "pending from 3 is migrations 4 to 8" "Ok [4; 5; 6; 7; 8]"
+    "pending from 3 is migrations 4 to 9" "Ok [4; 5; 6; 7; 8; 9]"
     (string_of_pending (Schema.pending ~current:3))
 
-(* A device at version 5 has three pending migrations, 6 to 8. *)
+(* A device at version 5 has four pending migrations, 6 to 9. *)
 let pending_from_five () =
   Alcotest.(check string)
-    "pending from 5 is migrations 6, 7 and 8" "Ok [6; 7; 8]"
+    "pending from 5 is migrations 6 to 9" "Ok [6; 7; 8; 9]"
     (string_of_pending (Schema.pending ~current:5))
 
-(* A device at version 6 has two pending migrations, 7 and 8. *)
+(* A device at version 6 has three pending migrations, 7, 8 and 9. *)
 let pending_from_six () =
   Alcotest.(check string)
-    "pending from 6 is migrations 7 and 8" "Ok [7; 8]"
+    "pending from 6 is migrations 7, 8 and 9" "Ok [7; 8; 9]"
     (string_of_pending (Schema.pending ~current:6))
+
+(* A device at version 8 has exactly one pending migration, 9
+   (plantuse). *)
+let pending_from_eight () =
+  Alcotest.(check string)
+    "pending from 8 is migration 9 alone" "Ok [9]"
+    (string_of_pending (Schema.pending ~current:8))
 
 let pending_above_latest () =
   Alcotest.(check string)
@@ -761,7 +770,7 @@ let migration_7_marks_only_the_live_positioned_named_unlabelled_row () =
     ^ obs_v6_sql unpositioned ~place_derived:(quote "Près de Figeac"));
   migrate db ~current:6;
   Alcotest.(check int)
-    "after migrations 7 and 8, user_version is 8" 8 (user_version db);
+    "after migrations 7, 8 and 9, user_version is 9" 9 (user_version db);
   Alcotest.(check (list string))
     "place_renames holds exactly the marker's id" [marker]
     (List.map
@@ -863,7 +872,11 @@ let migration_8_marks_the_pres_names () =
         ~place_derived:(quote "Jardin")
     ^ Printf.sprintf
         "insert into place_renames (observation_id) values ('%s');\n" pending);
-  migrate db ~current:7;
+  (* Migration 8 alone: upgrading from 7 also runs 9 (plantuse). *)
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Schema.migration) -> m.version = 8)
+       Schema.migrations);
   Alcotest.(check int) "user_version is 8" 8 (user_version db);
   Alcotest.(check (list string))
     "the live, positioned, unlabelled « Près … » rows, and the pending marker \
@@ -1078,6 +1091,31 @@ let natural_keys () =
     ~because:"UNIQUE constraint failed: reference.plant_id, reference.source" db
     (reference_sql "00000000-0000-4000-8000-0000000000b2" ~plant:plant_a
        ~source:Source.Gbif)
+
+(* ---------- migration 9: the plantuse reference source ---------- *)
+
+let migration_9_fresh_accepts_plantuse () =
+  let db = migrated_db () in
+  accepted "a plant and a plantuse reference row, fresh install" db
+    (plant_sql plant_a
+    ^ reference_sql "00000000-0000-4000-8000-0000000000b3" ~plant:plant_a
+        ~source:Source.Plantuse)
+
+let migration_9_upgrade_from_eight_accepts_plantuse () =
+  let db = fresh_db () in
+  Cli.apply_migrations db
+    (List.filter
+       (fun (m : Schema.migration) -> m.version <= 8)
+       Schema.migrations);
+  Alcotest.(check int)
+    "before migration 9, user_version is 8" 8 (user_version db);
+  accepted "a plant, before migration 9" db (plant_sql plant_a);
+  migrate db ~current:8;
+  Alcotest.(check int)
+    "after migration 9, user_version is 9" 9 (user_version db);
+  accepted "a plantuse reference row, on a device upgraded from 8" db
+    (reference_sql "00000000-0000-4000-8000-0000000000b4" ~plant:plant_a
+       ~source:Source.Plantuse)
 
 (* ---------- lookup tables ---------- *)
 
@@ -1617,11 +1655,12 @@ let () =
             versions_ascending;
           case "pending from 0 is every migration" pending_from_zero;
           case "pending at latest is empty" pending_at_latest;
-          case "pending from 1 is migrations 2 to 8" pending_from_one;
-          case "pending from 2 is migrations 3 to 8" pending_from_two;
-          case "pending from 3 is migrations 4 to 8" pending_from_three;
-          case "pending from 5 is migrations 6 to 8" pending_from_five;
-          case "pending from 6 is migrations 7 and 8" pending_from_six;
+          case "pending from 1 is migrations 2 to 9" pending_from_one;
+          case "pending from 2 is migrations 3 to 9" pending_from_two;
+          case "pending from 3 is migrations 4 to 9" pending_from_three;
+          case "pending from 5 is migrations 6 to 9" pending_from_five;
+          case "pending from 6 is migrations 7, 8 and 9" pending_from_six;
+          case "pending from 8 is migration 9 alone" pending_from_eight;
           case "pending above latest is Unknown_version" pending_above_latest;
           case "pending below 0 is Unknown_version" pending_negative;
           case "batch is the statements then the user_version pragma"
@@ -1662,6 +1701,15 @@ let () =
       ("Migration 6 (Picker removed) in sqlite3", migration_6_tests);
       ("Migration 7 (place_detail, place_renames) in sqlite3", migration_7_tests);
       ("Migration 8 (« Près » names marked again) in sqlite3", migration_8_tests);
+      ( "Migration 9 (plantuse reference source) in sqlite3",
+        [
+          case "a fresh install accepts a plantuse reference row"
+            migration_9_fresh_accepts_plantuse;
+          case
+            "a device upgraded from migration 8 also accepts a plantuse \
+             reference row"
+            migration_9_upgrade_from_eight_accepts_plantuse;
+        ] );
       ( "Lookup tables in sqlite3",
         [
           case "each lookup table holds every constructor's to_string"

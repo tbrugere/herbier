@@ -45,6 +45,25 @@ rosa-sinensis, no Baseflor row), `inpn_name_99999999_404.txt`. Licences: Tela
 Botanica data CC BY-SA (Baseflor: Julve, Ph., 1998 ff.); INPN / TaxRef
 (PatriNat), the odata API's terms are unpublished, so these files are only
 cited test inputs, as the GBIF and Wikidata ones are.
+
+`plantuse_*`, `wikipedia_extract_*` (the « Utilisations » row):
+recorded by the same script (arm `plantuse`; the Wikipedia ones reuse the
+`wikipedia` arm). Pl@ntUse's MediaWiki `action=query&prop=revisions` answer
+(`plantuse_page_<title>.json`) for Digitalis purpurea (a box, no prose),
+Arnica montana (no box, no prose: a robot-created page), Fallopia japonica
+(a missing page), Urtica dioica (four bullets, a prose paragraph in a
+wikitable cell), Quercus robur (twelve bullets, an English PFAF quote in a
+`Citation encadré` template never read), Polygonum cuspidatum (a redirect
+to Reynoutria japonica) and Digitalis purpurea subsp. purpurea (two
+titles, the first missing). Wikipedia's TextExtracts answer
+(`wikipedia_extract_<lang>_<title>.json`) for the fr and en articles of
+Digitalis purpurea (no fr section, an en « Medicinal use ») and Arnica
+montana/des montagnes (an fr « Usages et propriétés » with only
+subsections, the paragraph read being « Phytothérapie » under « Usages en
+médecine humaine »; an en « Use in herbal medicine »), en Urtica
+dioica (no section matches) and a missing fr title (`Xyzzy_foo`).
+Licence: Pl@ntUse Creative Commons (no version given on the site; see
+`docs/exploratory_research/plantuse-wikipedia-uses.md`); Wikipedia CC BY-SA.
 `Identify.Choice.resolve` (`test/ui/identify_choice_tests.ml`) adds:
 Pl@ntNet's first proposal's taxon (`gbif_species_3152559`, Hibiscus
 rosa-sinensis L., ACCEPTED, SPECIES), its name match

@@ -278,15 +278,18 @@ blocked: nothing.
   months, ecology, French status, Coste description, images), INPN
   `odata-inpn.mnhn.fr` (French vernaculars, protection, red list; undocumented
   HAL API, the official TaxRef API is currently redirecting to the web UI),
-  Wikipedia REST summary fr→en (description, toxicity heuristic), Pl@ntNet
-  images by organ through **GBIF's Pl@ntNet occurrence dataset** (CC BY-SA)
+  Wikipedia REST summary fr→en (description, toxicity heuristic) and action
+  API TextExtracts fr→en (the uses section, heuristic), Pl@ntUse's MediaWiki
+  action API (`plantuse.plantnet.org/fr/api.php`: the uses summary of a
+  species page; M4.81, `exploratory_research/plantuse-wikipedia-uses.md`),
+  Pl@ntNet images by organ through **GBIF's Pl@ntNet occurrence dataset** (CC BY-SA)
   rather than Pl@ntNet's own pages (terms forbid copying, pages rate-limit).
   That is 4f's « Photos par organe »; identification's related images (M9)
   come from the identify API itself, whose documentation licenses them for
   reuse with their credits, and are shown, never stored.
 - **Not obtainable**: structured altitude range. **Partial**: native vs
   introduced range (WCVP gaps, POWO's JSON API is Cloudflare-blocked),
-  height (parsed from Coste prose), toxicity (heuristic).
+  height (parsed from Coste prose), toxicity and uses (heuristics).
 - **Regional layer**: INPN and Tela Botanica are France-specific. They are an
   optional "regional" enrichment (M4.59), fetched for species with a TaxRef
   id; the design's "En France" row and the other rows they fill only render

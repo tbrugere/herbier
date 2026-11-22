@@ -39,7 +39,7 @@ let default_timeout_ms = Timed_fetch.timeout_ms
 let wikimedia = function
   | Source.Wikidata | Source.Wikipedia -> true
   | Source.Gbif | Source.Powo | Source.Ipni | Source.Taxref | Source.Tela
-  | Source.Eppo | Source.Inat | Source.Plantnet ->
+  | Source.Eppo | Source.Inat | Source.Plantnet | Source.Plantuse ->
       false
 
 type job = {

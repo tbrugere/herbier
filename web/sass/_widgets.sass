@@ -808,3 +808,29 @@ $card-padding: 16px
 // flex gap does not count it (the dialog inside is fixed).
 .list-delete
   display: contents
+
+// A long paragraph of 4f (Widgets.Expandable_text): three lines, the last
+// fading out, then the whole text after a tap. The button reads as the
+// paragraph it holds; the mask fades to whatever is behind, sand on 4f.
+.expandable-text
+  +bare-button
+  +pressed-text(.75)
+  display: block
+  width: 100%
+  color: inherit
+  font: inherit
+  text-align: start
+
+.expandable-text__body
+  display: -webkit-box
+  -webkit-box-orient: vertical
+  -webkit-line-clamp: 3
+  overflow: hidden
+  // Prefixed for WebViews before Chromium 120.
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.4em), transparent)
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.4em), transparent)
+  .expandable-text.is-open &
+    display: block
+    -webkit-line-clamp: unset
+    -webkit-mask-image: none
+    mask-image: none

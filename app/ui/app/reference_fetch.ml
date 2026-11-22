@@ -230,9 +230,10 @@ let gbif_ref ~plant ~at (taxon : Herbier_refs.Sources.Gbif.Taxon.t) =
     ~at
 
 (* The sources a plant ref can be pasted for (5a): all but the GBIF link,
-   which {!link} itself writes. *)
+   which {!link} itself writes, and Pl@ntUse, whose links 5a reads as not a
+   reference (Ref_paste). *)
 let pasted_source = function
-  | Source.Gbif -> false
+  | Source.Gbif | Source.Plantuse -> false
   | Source.(
       ( Wikidata | Wikipedia | Powo | Ipni | Taxref | Tela | Eppo | Inat
       | Plantnet )) ->

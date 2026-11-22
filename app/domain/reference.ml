@@ -10,10 +10,23 @@ module Source = struct
     | Eppo
     | Inat
     | Plantnet
+    | Plantuse
   [@@deriving eq, show]
 
   let all =
-    [Gbif; Wikidata; Wikipedia; Powo; Ipni; Taxref; Tela; Eppo; Inat; Plantnet]
+    [
+      Gbif;
+      Wikidata;
+      Wikipedia;
+      Powo;
+      Ipni;
+      Taxref;
+      Tela;
+      Eppo;
+      Inat;
+      Plantnet;
+      Plantuse;
+    ]
 
   let to_string = function
     | Gbif -> "gbif"
@@ -26,6 +39,7 @@ module Source = struct
     | Eppo -> "eppo"
     | Inat -> "inat"
     | Plantnet -> "plantnet"
+    | Plantuse -> "plantuse"
 
   include Lookup.Make (struct
     type nonrec t = t

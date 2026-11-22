@@ -103,7 +103,7 @@ let requests_of net prog =
 
 (* ---------- full fetch of each spike species ---------- *)
 
-let full_fetch ~gbif_key ~net ~entity_qid ~summary_title ~taxon_key
+let full_fetch ~gbif_key ~net ~entity_qid ~summary_title ~taxon_key ~extract_en
     ~empty_fields =
   let gbif_b, plantnet_b, wiki_b = branches3 gbif_key in
   let gbif_rows = Step.run net gbif_b in
@@ -130,14 +130,25 @@ let full_fetch ~gbif_key ~net ~entity_qid ~summary_title ~taxon_key
     (requests_of net plantnet_b);
   Alcotest.(check (list string))
     "wiki branch requests, in order"
-    [
-      url
-        (some "search"
-           (Wikidata.search ~property:Wikidata.Property.Gbif_key
-              ~value:(string_of_int gbif_key)));
-      url (Wikidata.entity (some "qid" (Qid.of_string entity_qid)));
-      url (some "summary" (Wikipedia.summary ~lang:"fr" ~title:summary_title));
-    ]
+    ([
+       url
+         (some "search"
+            (Wikidata.search ~property:Wikidata.Property.Gbif_key
+               ~value:(string_of_int gbif_key)));
+       url (Wikidata.entity (some "qid" (Qid.of_string entity_qid)));
+       url (some "summary" (Wikipedia.summary ~lang:"fr" ~title:summary_title));
+       url
+         (some "extract fr" (Wikipedia.extract ~lang:"fr" ~title:summary_title));
+     ]
+    @
+    match extract_en with
+    | false -> []
+    | true ->
+        [
+          url
+            (some "extract en"
+               (Wikipedia.extract ~lang:"en" ~title:summary_title));
+        ])
     (requests_of net wiki_b);
   let all_rows = gbif_rows @ plantnet_rows @ wiki_rows in
   let decided = Fanout.decide ~previous:[] all_rows in
@@ -160,7 +171,7 @@ let full_fetch ~gbif_key ~net ~entity_qid ~summary_title ~taxon_key
 
 let digitalis_full_fetch () =
   full_fetch ~gbif_key:5414995 ~net:Fake_net.digitalis ~entity_qid:"Q157555"
-    ~summary_title:"Digitalis purpurea" ~taxon_key:5414995
+    ~summary_title:"Digitalis purpurea" ~taxon_key:5414995 ~extract_en:true
     ~empty_fields:
       Projection.Field.
         [
@@ -175,7 +186,7 @@ let digitalis_full_fetch () =
 
 let arnica_full_fetch () =
   full_fetch ~gbif_key:5405976 ~net:Fake_net.arnica ~entity_qid:"Q207848"
-    ~summary_title:"Arnica des montagnes" ~taxon_key:5405976
+    ~summary_title:"Arnica des montagnes" ~taxon_key:5405976 ~extract_en:false
     ~empty_fields:
       Projection.Field.
         [
@@ -220,11 +231,14 @@ let payload_equality () =
           ~search:(Some (fixture_body "wikidata_search_p846_5414995.json"))
           ~entity:(Some (fixture_body "wikidata_entity_Q157555.json"))));
   Alcotest.(check bool)
-    "wikipedia payload" true
+    "wikipedia payload: summary fr, uses the en extract (fr has no section)"
+    true
     (Yojson.Safe.equal wikipedia_row.payload
        (Payload.wikipedia
           ~summary:
-            (Some (fixture_body "wikipedia_summary_fr_Digitalis_purpurea.json"))))
+            (Some (fixture_body "wikipedia_summary_fr_Digitalis_purpurea.json"))
+          ~uses:
+            (Some (fixture_body "wikipedia_extract_en_Digitalis_purpurea.json"))))
 
 (* ---------- gbif branch degradation ---------- *)
 
@@ -428,10 +442,15 @@ let fr_absent_falls_back_to_en () =
   match Step.run net wiki_b with
   | [_wikidata_row; wikipedia_row] ->
       Alcotest.check status "complete" Status.Complete wikipedia_row.status;
+      (* The summary outcome is Complete (not Failed), so the uses step still
+         runs over the base digitalis fixtures: fr has no section, en does. *)
       Alcotest.(check bool)
-        "payload summary is the en body" true
+        "payload summary is the en body, uses is the en extract" true
         (Yojson.Safe.equal wikipedia_row.payload
-           (Payload.wikipedia ~summary:(Some en_body)))
+           (Payload.wikipedia ~summary:(Some en_body)
+              ~uses:
+                (Some
+                   (fixture_body "wikipedia_extract_en_Digitalis_purpurea.json"))))
   | rs ->
       Alcotest.failf "expected [wikidata; wikipedia], got %d rows"
         (List.length rs)
@@ -739,6 +758,20 @@ let fresh_six () =
         (`Assoc []))
     six_sources
 
+(* [Fanout.sources] has Plantuse after Tela. A plant fetched before Plantuse
+   was a source only has the six rows of [fresh_six]; [fresh_seven] is the
+   up-to-date baseline used where a test wants "every source fresh" to mean
+   genuinely not due. *)
+let seven_sources = six_sources @ [Source.Plantuse]
+
+let fresh_seven () =
+  List.map
+    (fun source ->
+      reference_row ~source
+        ~fetched_at:(time "2026-11-11T00:00:00Z")
+        (`Assoc []))
+    seven_sources
+
 let set_first f rows =
   List.mapi (fun i (r : Reference.t) -> match i with 0 -> f r | _ -> r) rows
 
@@ -756,19 +789,19 @@ let due_missing_a_source () =
 let due_max_age () =
   Alcotest.(check bool)
     "all fresh (1 day)" false
-    (Fanout.due ~now (fresh_six ()));
+    (Fanout.due ~now (fresh_seven ()));
   Alcotest.(check bool)
     "one row 91 days old" true
     (Fanout.due ~now
        (set_first
           (fun r -> {r with Reference.fetched_at = time "2026-08-13T00:00:00Z"})
-          (fresh_six ())));
+          (fresh_seven ())));
   Alcotest.(check bool)
     "exactly 90 days: not strictly over" false
     (Fanout.due ~now
        (set_first
           (fun r -> {r with Reference.fetched_at = time "2026-08-14T00:00:00Z"})
-          (fresh_six ())))
+          (fresh_seven ())))
 
 let due_failed_or_partial_retry () =
   let aged st age rows =
@@ -778,32 +811,36 @@ let due_failed_or_partial_retry () =
   in
   Alcotest.(check bool)
     "failed 2 days old" true
-    (Fanout.due ~now (aged Status.Failed "2026-11-10T00:00:00Z" (fresh_six ())));
+    (Fanout.due ~now
+       (aged Status.Failed "2026-11-10T00:00:00Z" (fresh_seven ())));
   Alcotest.(check bool)
     "failed 1 hour old" false
-    (Fanout.due ~now (aged Status.Failed "2026-11-11T23:00:00Z" (fresh_six ())));
+    (Fanout.due ~now
+       (aged Status.Failed "2026-11-11T23:00:00Z" (fresh_seven ())));
   Alcotest.(check bool)
     "partial 2 days old" true
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-10T00:00:00Z" (fresh_six ())));
+       (aged Status.Partial "2026-11-10T00:00:00Z" (fresh_seven ())));
   Alcotest.(check bool)
     "partial 1 hour old" false
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-11T23:00:00Z" (fresh_six ())));
+       (aged Status.Partial "2026-11-11T23:00:00Z" (fresh_seven ())));
   Alcotest.(check bool)
     "failed exactly 1 day old: not strictly over" false
-    (Fanout.due ~now (aged Status.Failed "2026-11-11T00:00:00Z" (fresh_six ())));
+    (Fanout.due ~now
+       (aged Status.Failed "2026-11-11T00:00:00Z" (fresh_seven ())));
   Alcotest.(check bool)
     "failed 1 day and 1 s old" true
-    (Fanout.due ~now (aged Status.Failed "2026-11-10T23:59:59Z" (fresh_six ())));
+    (Fanout.due ~now
+       (aged Status.Failed "2026-11-10T23:59:59Z" (fresh_seven ())));
   Alcotest.(check bool)
     "partial exactly 1 day old: not strictly over" false
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-11T00:00:00Z" (fresh_six ())));
+       (aged Status.Partial "2026-11-11T00:00:00Z" (fresh_seven ())));
   Alcotest.(check bool)
     "partial 1 day and 1 s old" true
     (Fanout.due ~now
-       (aged Status.Partial "2026-11-10T23:59:59Z" (fresh_six ())))
+       (aged Status.Partial "2026-11-10T23:59:59Z" (fresh_seven ())))
 
 let due_missing_tela_not_due () =
   let rows =
@@ -817,7 +854,7 @@ let due_missing_tela_not_due () =
               fetched_at = time "2026-11-02T00:00:00Z";
             }
         | _ -> r)
-      (fresh_six ())
+      (fresh_seven ())
   in
   Alcotest.(check bool)
     "a Missing tela row 10 days old is not due on its own" false
@@ -839,12 +876,12 @@ let due_after_wikidata_search_failed () =
       Fake_net.digitalis
   in
   let fetched_at = time "2026-11-11T23:00:00Z" in
-  (* A real fetch always runs the regional program too: add the
-     Taxref/Tela rows it would also have stored. *)
+  (* A real fetch always runs the regional program and Uses_fetch too: add
+     the Taxref/Tela/Plantuse rows they would also have stored. *)
   let regional_rows =
     List.map
       (fun source -> reference_row ~source ~fetched_at (`Assoc []))
-      [Source.Taxref; Source.Tela]
+      [Source.Taxref; Source.Tela; Source.Plantuse]
   in
   let stored =
     List.map
@@ -865,7 +902,7 @@ let due_missing_row_not_due () =
           Reference.status = Status.Missing;
           fetched_at = time "2026-11-02T00:00:00Z";
         })
-      (fresh_six ())
+      (fresh_seven ())
   in
   Alcotest.(check bool) "a missing row 10 days old" false (Fanout.due ~now rows)
 
@@ -874,7 +911,7 @@ let due_soft_deleted_ignored () =
     set_first
       (fun r ->
         {r with Reference.deleted_at = Some (time "2026-11-11T00:00:00Z")})
-      (fresh_six ())
+      (fresh_seven ())
   in
   Alcotest.(check bool)
     "a soft-deleted gbif row: due as if that source were absent" true
@@ -884,7 +921,7 @@ let due_future_fetched_at_ignored () =
   let rows =
     set_first
       (fun r -> {r with Reference.fetched_at = time "2026-11-12T01:00:00Z"})
-      (fresh_six ())
+      (fresh_seven ())
   in
   Alcotest.(check bool)
     "a fresh row dated after now is not due because of it" false
@@ -898,7 +935,14 @@ let due_other_source_ignored () =
   in
   Alcotest.(check bool)
     "an extra Powo row (outside Fanout.sources) is ignored" false
-    (Fanout.due ~now (powo :: fresh_six ()))
+    (Fanout.due ~now (powo :: fresh_seven ()))
+
+(* A plant fetched before Plantuse was a source has no plantuse row at all:
+   it is due once, even though every other source is fresh. *)
+let due_backfill_no_plantuse_row () =
+  Alcotest.(check bool)
+    "every other source fresh, no plantuse row: due" true
+    (Fanout.due ~now (fresh_six ()))
 
 let case name f = (name, `Quick, f)
 
@@ -1046,8 +1090,11 @@ let fr_absent_without_en_sitelink_is_missing () =
   | rs ->
       Alcotest.failf "expected [wikidata; wikipedia], got %d rows"
         (List.length rs));
+  (* The summary outcome (Missing) is not Failed, so the uses step still
+     runs over the fr sitelink (same title); no en sitelink, so no en
+     extract call either. *)
   Alcotest.(check int)
-    "search, entity, fr summary: no en request" 3
+    "search, entity, fr summary, fr extract: no en request" 4
     (List.length (requests_of net wiki_b))
 
 let fr_absent_en_failed_is_failed () =
@@ -1144,8 +1191,169 @@ let plantnet_branch_tests =
       plantnet_missing;
   ]
 
+(* ---------- wiki branch: the uses step ---------- *)
+
+let digitalis_uses_fr_then_en () =
+  let _, _, wiki_b = branches3 5414995 in
+  let net = Fake_net.digitalis in
+  Alcotest.(check (list string))
+    "search, entity, summary fr, extract fr, extract en (fr has no section)"
+    [
+      url
+        (some "search"
+           (Wikidata.search ~property:Wikidata.Property.Gbif_key
+              ~value:"5414995"));
+      url (Wikidata.entity (some "qid" (Qid.of_string "Q157555")));
+      url
+        (some "summary"
+           (Wikipedia.summary ~lang:"fr" ~title:"Digitalis purpurea"));
+      url
+        (some "extract fr"
+           (Wikipedia.extract ~lang:"fr" ~title:"Digitalis purpurea"));
+      url
+        (some "extract en"
+           (Wikipedia.extract ~lang:"en" ~title:"Digitalis purpurea"));
+    ]
+    (requests_of net wiki_b);
+  match Step.run net wiki_b with
+  | [_; wikipedia_row] ->
+      Alcotest.check status "complete" Status.Complete wikipedia_row.status;
+      Alcotest.(check bool)
+        "member uses is the en extract body" true
+        (Yojson.Safe.equal wikipedia_row.payload
+           (Payload.wikipedia
+              ~summary:
+                (Some
+                   (fixture_body "wikipedia_summary_fr_Digitalis_purpurea.json"))
+              ~uses:
+                (Some
+                   (fixture_body "wikipedia_extract_en_Digitalis_purpurea.json"))))
+  | rs ->
+      Alcotest.failf "expected [wikidata; wikipedia], got %d rows"
+        (List.length rs)
+
+let arnica_uses_fr_only () =
+  let _, _, wiki_b = branches3 5405976 in
+  let net = Fake_net.arnica in
+  Alcotest.(check (list string))
+    "search, entity, summary fr, extract fr only (fr has the section)"
+    [
+      url
+        (some "search"
+           (Wikidata.search ~property:Wikidata.Property.Gbif_key
+              ~value:"5405976"));
+      url (Wikidata.entity (some "qid" (Qid.of_string "Q207848")));
+      url
+        (some "summary"
+           (Wikipedia.summary ~lang:"fr" ~title:"Arnica des montagnes"));
+      url
+        (some "extract fr"
+           (Wikipedia.extract ~lang:"fr" ~title:"Arnica des montagnes"));
+    ]
+    (requests_of net wiki_b);
+  match Step.run net wiki_b with
+  | [_; wikipedia_row] ->
+      Alcotest.check status "complete" Status.Complete wikipedia_row.status
+  | rs ->
+      Alcotest.failf "expected [wikidata; wikipedia], got %d rows"
+        (List.length rs)
+
+let extract_fr_failed_is_partial_no_en_call () =
+  let _, _, wiki_b = branches3 5414995 in
+  let net =
+    Fake_net.with_
+      [
+        ( url
+            (some "extract fr"
+               (Wikipedia.extract ~lang:"fr" ~title:"Digitalis purpurea")),
+          Step.Failed "x" );
+      ]
+      Fake_net.digitalis
+  in
+  (match Step.run net wiki_b with
+  | [_; wikipedia_row] ->
+      Alcotest.check status "partial" Status.Partial wikipedia_row.status;
+      Alcotest.(check bool)
+        "member summary kept, no uses member" true
+        (Yojson.Safe.equal wikipedia_row.payload
+           (Payload.wikipedia
+              ~summary:
+                (Some
+                   (fixture_body "wikipedia_summary_fr_Digitalis_purpurea.json"))
+              ~uses:None))
+  | rs ->
+      Alcotest.failf "expected [wikidata; wikipedia], got %d rows"
+        (List.length rs));
+  Alcotest.(check bool)
+    "no extract en request" false
+    (List.exists
+       (fun u ->
+         Herbier_test_support.Text.contains ~sub:"lang=en" u
+         || Herbier_test_support.Text.contains ~sub:"en.wikipedia" u)
+       (requests_of net wiki_b))
+
+let extract_url lang =
+  url
+    (some ("extract " ^ lang)
+       (Wikipedia.extract ~lang ~title:"Digitalis purpurea"))
+
+let summary_fr = "wikipedia_summary_fr_Digitalis_purpurea.json"
+
+let wikipedia_row_of net wiki_b =
+  match Step.run net wiki_b with
+  | [_; wikipedia_row] -> wikipedia_row
+  | rs ->
+      Alcotest.failf "expected [wikidata; wikipedia], got %d rows"
+        (List.length rs)
+
+let extract_en_failed_after_fr_without_section () =
+  let _, _, wiki_b = branches3 5414995 in
+  let net =
+    Fake_net.with_ [(extract_url "en", Step.Failed "x")] Fake_net.digitalis
+  in
+  let row = wikipedia_row_of net wiki_b in
+  Alcotest.check status "partial" Status.Partial row.status;
+  Alcotest.(check bool)
+    "summary kept, the fr candidate dropped" true
+    (Yojson.Safe.equal row.payload
+       (Payload.wikipedia ~summary:(Some (fixture_body summary_fr)) ~uses:None))
+
+let extract_fr_undecodable_is_partial_no_en_call () =
+  let _, _, wiki_b = branches3 5414995 in
+  let net =
+    Fake_net.with_
+      [(extract_url "fr", Step.Body (`Assoc []))]
+      Fake_net.digitalis
+  in
+  let row = wikipedia_row_of net wiki_b in
+  Alcotest.check status "partial" Status.Partial row.status;
+  Alcotest.(check bool)
+    "no extract en request" false
+    (List.mem (extract_url "en") (requests_of net wiki_b))
+
+let neither_extract_has_a_section () =
+  let _, _, wiki_b = branches3 5414995 in
+  let urtica_en = fixture_body "wikipedia_extract_en_Urtica_dioica.json" in
+  let net =
+    Fake_net.with_ [(extract_url "en", Step.Body urtica_en)] Fake_net.digitalis
+  in
+  let row = wikipedia_row_of net wiki_b in
+  Alcotest.check status "complete" Status.Complete row.status;
+  Alcotest.(check bool)
+    "uses is the last body read, the en one" true
+    (Yojson.Safe.equal row.payload
+       (Payload.wikipedia
+          ~summary:(Some (fixture_body summary_fr))
+          ~uses:(Some urtica_en)))
+
 let wiki_branch_tests =
   [
+    case "fr extract without a section, en extract Failed: Partial, no uses"
+      extract_en_failed_after_fr_without_section;
+    case "fr extract undecodable: Partial, no en call"
+      extract_fr_undecodable_is_partial_no_en_call;
+    case "fr and en extracts both without a section: Complete, the en body"
+      neither_extract_has_a_section;
     case "wikidata search Failed: [wikidata Failed] only, no wikipedia row"
       wikidata_search_failed;
     case
@@ -1161,6 +1369,16 @@ let wiki_branch_tests =
       fr_and_en_absent_is_missing;
     case "fr summary Failed: wikipedia Failed, no en attempt"
       fr_failed_no_en_attempt;
+    case
+      "Digitalis: uses step tries fr then en (fr has no section), member uses \
+       is the en extract"
+      digitalis_uses_fr_then_en;
+    case "Arnica: uses step tries fr only (fr has the section), no en call"
+      arnica_uses_fr_only;
+    case
+      "extract fr Failed after summary Complete: wikipedia Partial {summary}, \
+       no en attempt"
+      extract_fr_failed_is_partial_no_en_call;
   ]
 
 let decide_tests =
@@ -1193,11 +1411,19 @@ let decide_tests =
 
 let sources_test =
   case
-    "Fanout.sources is the six sources, Gbif/Plantnet/Wikidata/Wikipedia then \
-     Taxref/Tela" (fun () ->
+    "Fanout.sources is the seven sources, Gbif/Plantnet/Wikidata/Wikipedia \
+     then Taxref/Tela/Plantuse (Plantuse last)" (fun () ->
       Alcotest.(check (list string))
         "sources"
-        ["gbif"; "plantnet"; "wikidata"; "wikipedia"; "taxref"; "tela"]
+        [
+          "gbif";
+          "plantnet";
+          "wikidata";
+          "wikipedia";
+          "taxref";
+          "tela";
+          "plantuse";
+        ]
         (List.map Source.to_string Fanout.sources))
 
 let due_tests =
@@ -1221,6 +1447,8 @@ let due_tests =
       due_future_fetched_at_ignored;
     case "a row of a source outside Fanout.sources is ignored"
       due_other_source_ignored;
+    case "backfill: every source fresh except no plantuse row at all: due"
+      due_backfill_no_plantuse_row;
   ]
 
 let suite =

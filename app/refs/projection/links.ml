@@ -19,6 +19,7 @@ let link_order =
     Eppo;
     Wikidata;
     Ipni;
+    Plantuse;
   ]
 
 (* The URL builders are Source_url's, whose parser is Herbier_domain.Link;
@@ -56,7 +57,7 @@ let wikipedia_url (summary : Wikipedia.t) =
           None)
   | (Standard | Disambiguation | Other _), _ -> None
 
-let derived ~taxon ~entity ~summary source =
+let derived ~taxon ~entity ~summary ~plantuse source =
   let from_entity f = Option.bind entity f in
   match (source : Source.t) with
   | Gbif -> Option.map (fun (t : Gbif.Taxon.t) -> Gbif.species_url t.key) taxon
@@ -74,11 +75,16 @@ let derived ~taxon ~entity ~summary source =
           positive Source_url.inat e.inat)
   | Eppo ->
       from_entity (fun (e : Wikidata.Entity.t) -> Option.bind e.eppo eppo_url)
+  | Plantuse ->
+      Option.map
+        (fun (p : Sources.Plantuse.page) -> Source_url.plantuse p.title)
+        plantuse
   | Plantnet | Wikidata | Ipni -> None
 
 let classified_source : Link.t -> Source.t option = function
   | Gbif _ -> Some Gbif
-  | Plantnet _ | Plantnet_observation _ | Plantuse _ -> Some Plantnet
+  | Plantnet _ | Plantnet_observation _ -> Some Plantnet
+  | Plantuse _ -> Some Plantuse
   | Wikipedia _ -> Some Wikipedia
   | Inpn _ -> Some Taxref
   | Tela _ -> Some Tela
@@ -91,7 +97,7 @@ let prefixes : Source.t -> string list = function
   | Eppo -> ["https://gd.eppo.int/"]
   | Wikidata -> ["https://www.wikidata.org/"; "https://m.wikidata.org/"]
   | Ipni -> ["https://www.ipni.org/"; "https://ipni.org/"]
-  | Gbif | Plantnet | Wikipedia | Powo | Taxref | Tela | Inat -> []
+  | Gbif | Plantnet | Wikipedia | Powo | Taxref | Tela | Inat | Plantuse -> []
 
 let stored_url_ok source url =
   String.starts_with ~prefix:"https://" url
@@ -104,7 +110,7 @@ let stored_url_ok source url =
         (fun prefix -> String.starts_with ~prefix url)
         (prefixes source)
 
-let links ~plant_refs ~taxon ~entity ~summary =
+let links ~plant_refs ~taxon ~entity ~summary ~plantuse =
   List.filter_map
     (fun source ->
       let stored =
@@ -120,5 +126,5 @@ let links ~plant_refs ~taxon ~entity ~summary =
       | None ->
           Option.map
             (fun url -> {source; url})
-            (derived ~taxon ~entity ~summary source))
+            (derived ~taxon ~entity ~summary ~plantuse source))
     link_order

@@ -7,6 +7,7 @@ module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
 module Tela = Herbier_refs.Sources.Tela
 module Inpn = Herbier_refs.Sources.Inpn
+module Plantuse = Herbier_refs.Sources.Plantuse
 module Payload = Herbier_refs.Payload
 module Fanout = Herbier_refs.Fanout
 module Regional = Herbier_refs.Regional
@@ -255,7 +256,45 @@ let described () =
       };
     ]
   in
-  fixed @ [wikidata_search; wikidata_entity; wikipedia_summary] @ regional
+  (* The « Utilisations » sources: the Pl@ntUse API answers CORS
+     without a custom header, the Wikimedia one carries Api-User-Agent. *)
+  let uses =
+    [
+      {
+        name = "plantuse page";
+        request =
+          built "plantuse page" (Plantuse.page ~titles:["Digitalis purpurea"]);
+        summary =
+          (fun json ->
+            Result.map
+              (fun answer ->
+                match Plantuse.pick ~titles:["Digitalis purpurea"] answer with
+                | None -> "Pl@ntUse : no page"
+                | Some page ->
+                    "Pl@ntUse : "
+                    ^ String.concat ", " (Plantuse.uses page).summary)
+              (Plantuse.answer_of_json json));
+      };
+      {
+        name = "wikipedia extract";
+        request =
+          built "wikipedia extract"
+            (Wikipedia.extract ~lang:"en" ~title:"Digitalis purpurea");
+        summary =
+          (fun json ->
+            Result.map
+              (fun article ->
+                match Option.bind article Wikipedia.uses_line with
+                | None -> "Wikipédia : no uses section"
+                | Some (section, _) -> "Wikipédia (en) : " ^ section)
+              (Wikipedia.article_of_json json));
+      };
+    ]
+  in
+  fixed
+  @ [wikidata_search; wikidata_entity; wikipedia_summary]
+  @ regional
+  @ uses
 
 let fetch log name request =
   Fut.map
@@ -277,20 +316,22 @@ let first_qid search =
   | Some (Ok (qid :: _)) -> Some qid
   | Some (Ok []) | Some (Error _) | None -> None
 
+let sitelink entity lang =
+  match Option.map Wikidata.entity_of_json entity with
+  | Some (Ok (Some (e : Wikidata.Entity.t))) ->
+      List.find_map
+        (fun (l : Wikidata.Entity.sitelink) ->
+          match String.equal l.lang lang with
+          | true -> Some (lang, l.title)
+          | false -> None)
+        e.sitelinks
+  | Some (Ok None) | Some (Error _) | None -> None
+
 (* The fr article, else the en one (architecture §6). *)
 let wiki_title entity =
-  match Option.map Wikidata.entity_of_json entity with
-  | Some (Ok (Some (e : Wikidata.Entity.t))) -> (
-      let title lang =
-        List.find_map
-          (fun (l : Wikidata.Entity.sitelink) ->
-            match String.equal l.lang lang with
-            | true -> Some (lang, l.title)
-            | false -> None)
-          e.sitelinks
-      in
-      match title "fr" with Some _ as fr -> fr | None -> title "en")
-  | Some (Ok None) | Some (Error _) | None -> None
+  match sitelink entity "fr" with
+  | Some _ as fr -> fr
+  | None -> sitelink entity "en"
 
 let optional log name = function
   | None -> Fut.return None
@@ -322,6 +363,26 @@ let project_one log key =
       (Option.bind (wiki_title entity) (fun (lang, title) ->
            Wikipedia.summary ~lang ~title))
   in
+  (* The uses extract as the fetch reads it: fr, then en when fr has no uses
+     section. *)
+  let extract lang =
+    optional log
+      (label ^ " extract " ^ lang)
+      (Option.bind (sitelink entity lang) (fun (lang, title) ->
+           Wikipedia.extract ~lang ~title))
+  in
+  let has_uses json =
+    match Option.map Wikipedia.article_of_json json with
+    | Some (Ok (Some article)) -> Wikipedia.has_uses article
+    | Some (Ok None) | Some (Error _) | None -> false
+  in
+  let* uses_extract =
+    let* fr = extract "fr" in
+    match has_uses fr with
+    | true -> Fut.return fr
+    | false ->
+        Fut.map (function None -> fr | Some _ as en -> en) (extract "en")
+  in
   let fetched source payload : Fanout.row =
     {source; status = Reference.Status.Complete; payload}
   in
@@ -334,7 +395,8 @@ let project_one log key =
   in
   Kit.append log
     (Format.asprintf "%s regional input: %a" label Regional.pp_input input);
-  let+ regional = Http.run (Regional.program input) in
+  let* regional = Http.run (Regional.program input) in
+  let+ uses = Http.run (Herbier_refs.Uses_fetch.program input) in
   let now = Ptime_clock.now () in
   let plant_id = Herbier_domain.Ids.Plant_id.fresh () in
   let row source payload =
@@ -360,9 +422,11 @@ let project_one log key =
            row Source.Gbif gbif;
            row Source.Plantnet (Payload.plantnet ~media);
            row Source.Wikidata wikidata;
-           row Source.Wikipedia (Payload.wikipedia ~summary);
+           row Source.Wikipedia (Payload.wikipedia ~summary ~uses:uses_extract);
          ]
-        @ List.map (fun (r : Fanout.row) -> row r.source r.payload) regional)
+        @ List.map
+            (fun (r : Fanout.row) -> row r.source r.payload)
+            (regional @ uses))
   in
   List.iter
     (fun field ->

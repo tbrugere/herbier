@@ -6,8 +6,10 @@ module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
 module Tela = Herbier_refs.Sources.Tela
 module Inpn = Herbier_refs.Sources.Inpn
+module Plantuse = Herbier_refs.Sources.Plantuse
 module Source = Herbier_domain.Reference.Source
 module Testable = Herbier_test_support.Testable
+module Json = Herbier_net.Json
 
 (* ---------- fixtures ---------- *)
 
@@ -36,6 +38,19 @@ let summary_en_digitalis =
   Check.json "wikipedia_summary_en_Digitalis_purpurea.json"
 
 let summary_fr_lis = Check.json "wikipedia_summary_fr_Lis.json"
+
+let extract_fr_digitalis =
+  Check.json "wikipedia_extract_fr_Digitalis_purpurea.json"
+
+let extract_en_digitalis =
+  Check.json "wikipedia_extract_en_Digitalis_purpurea.json"
+
+let extract_fr_arnica =
+  Check.json "wikipedia_extract_fr_Arnica_des_montagnes.json"
+
+let extract_en_arnica = Check.json "wikipedia_extract_en_Arnica_montana.json"
+let extract_en_urtica = Check.json "wikipedia_extract_en_Urtica_dioica.json"
+let plantuse_digitalis = Check.json "plantuse_page_digitalis_purpurea.json"
 let tela_names_digitalis = Check.json "tela_names_digitalis_purpurea.json"
 let tela_taxon_digitalis = Check.json "tela_taxon_22437.json"
 let tela_baseflor_digitalis = Check.json "tela_baseflor_22437.json"
@@ -72,8 +87,19 @@ let page_t t =
     (Gbif.pp_page (Alcotest.pp t))
     (Gbif.equal_page (Alcotest.equal t))
 
+let uses_line_of_json json =
+  match Wikipedia.article_of_json json with
+  | Error e -> Error e
+  | Ok None -> Ok None
+  | Ok (Some a) -> Ok (Wikipedia.uses_line a)
+
+let uses_line_t = Alcotest.(result (option (pair string string)) Check.error)
+
 (* [decode (prune p b) = decode p b], one [Alcotest.check] per part, through
-   that part's decoder. *)
+   that part's decoder. [Wikipedia_uses] prunes [extract] on purpose (keeps
+   every heading, and the bodies of the uses sections only), so its
+   invariant is on {!Wikipedia.uses_line} of the decoded article, not on
+   decoded-article equality; [Plantuse_page] prunes to the identity. *)
 let check_prune_preserves_decoding name (part : Payload.part) body =
   let same value decode =
     Alcotest.(check (result value Check.error))
@@ -91,6 +117,11 @@ let check_prune_preserves_decoding name (part : Payload.part) body =
   | Wikidata_search -> same (Alcotest.list qid_t) Wikidata.search_of_json
   | Wikidata_entity -> same (Alcotest.option entity_t) Wikidata.entity_of_json
   | Wikipedia_summary -> same summary_t Wikipedia.summary_of_json
+  | Wikipedia_uses ->
+      Alcotest.check uses_line_t name (uses_line_of_json body)
+        (uses_line_of_json (Payload.prune part body))
+  | Plantuse_page ->
+      Alcotest.(check Testable.yojson) name body (Payload.prune part body)
   | Tela_names -> same (Alcotest.list tela_name_t) Tela.names_of_json
   | Tela_taxon -> same tela_taxon_t Tela.taxon_of_json
   | Tela_baseflor -> same tela_baseflor_t Tela.baseflor_of_json
@@ -105,7 +136,8 @@ let check_prune_preserves_decoding name (part : Payload.part) body =
 
 let tables_tests =
   [
-    ( "all has 15 parts, declaration order (the 8 existing then Tela_*, Inpn_*)",
+    ( "all has 17 parts, declaration order (Wikipedia_uses right after \
+       Wikipedia_summary, Plantuse_page last)",
       `Quick,
       fun () ->
         Alcotest.(check (list string))
@@ -119,6 +151,7 @@ let tables_tests =
             "Wikidata_search";
             "Wikidata_entity";
             "Wikipedia_summary";
+            "Wikipedia_uses";
             "Tela_names";
             "Tela_taxon";
             "Tela_baseflor";
@@ -126,6 +159,7 @@ let tables_tests =
             "Inpn_status";
             "Inpn_red_list";
             "Inpn_protections";
+            "Plantuse_page";
           ]
           (List.map
              (function
@@ -137,17 +171,19 @@ let tables_tests =
                | Payload.Wikidata_search -> "Wikidata_search"
                | Payload.Wikidata_entity -> "Wikidata_entity"
                | Payload.Wikipedia_summary -> "Wikipedia_summary"
+               | Payload.Wikipedia_uses -> "Wikipedia_uses"
                | Payload.Tela_names -> "Tela_names"
                | Payload.Tela_taxon -> "Tela_taxon"
                | Payload.Tela_baseflor -> "Tela_baseflor"
                | Payload.Inpn_name -> "Inpn_name"
                | Payload.Inpn_status -> "Inpn_status"
                | Payload.Inpn_red_list -> "Inpn_red_list"
-               | Payload.Inpn_protections -> "Inpn_protections")
+               | Payload.Inpn_protections -> "Inpn_protections"
+               | Payload.Plantuse_page -> "Plantuse_page")
              Payload.all) );
     ( "source: the four Gbif_* parts are Gbif, Plantnet_media is Plantnet, \
-       both Wikidata_* are Wikidata, Wikipedia_summary is Wikipedia, the three \
-       Tela_* are Tela, the four Inpn_* are Taxref",
+       both Wikidata_* are Wikidata, both Wikipedia_* are Wikipedia, the three \
+       Tela_* are Tela, the four Inpn_* are Taxref, Plantuse_page is Plantuse",
       `Quick,
       fun () ->
         let source_name s = Source.to_string s in
@@ -162,6 +198,7 @@ let tables_tests =
             "wikidata";
             "wikidata";
             "wikipedia";
+            "wikipedia";
             "tela";
             "tela";
             "tela";
@@ -169,6 +206,7 @@ let tables_tests =
             "taxref";
             "taxref";
             "taxref";
+            "plantuse";
           ]
           (List.map (fun p -> source_name (Payload.source p)) Payload.all) );
     ( "name: the member name of each part",
@@ -185,6 +223,7 @@ let tables_tests =
             "search";
             "entity";
             "summary";
+            "uses";
             "names";
             "taxon";
             "baseflor";
@@ -192,6 +231,7 @@ let tables_tests =
             "status";
             "red_list";
             "protections";
+            "page";
           ]
           (List.map Payload.name Payload.all) );
     ( "parts of an unfetched source (powo, ipni, eppo, inat) is []",
@@ -217,7 +257,8 @@ let tables_tests =
         Alcotest.(check (list string))
           "wikidata" ["search"; "entity"] (names Source.Wikidata);
         Alcotest.(check (list string))
-          "wikipedia" ["summary"] (names Source.Wikipedia);
+          "wikipedia: summary, uses" ["summary"; "uses"]
+          (names Source.Wikipedia);
         Alcotest.(check (list string))
           "tela: names, taxon, baseflor"
           ["names"; "taxon"; "baseflor"]
@@ -225,7 +266,9 @@ let tables_tests =
         Alcotest.(check (list string))
           "taxref: name, status, red_list, protections"
           ["name"; "status"; "red_list"; "protections"]
-          (names Source.Taxref) );
+          (names Source.Taxref);
+        Alcotest.(check (list string))
+          "plantuse: page" ["page"] (names Source.Plantuse) );
     ( "every part is in (parts (source part))",
       `Quick,
       fun () ->
@@ -279,6 +322,18 @@ let fixture_prune_tests =
       summary_en_digitalis;
     case "wikipedia summary fr Lis (disambiguation)" Payload.Wikipedia_summary
       summary_fr_lis;
+    case "wikipedia extract fr Digitalis (no uses section)"
+      Payload.Wikipedia_uses extract_fr_digitalis;
+    case "wikipedia extract en Digitalis (« Medicinal use »)"
+      Payload.Wikipedia_uses extract_en_digitalis;
+    case "wikipedia extract fr Arnica des montagnes (« Phytothérapie »)"
+      Payload.Wikipedia_uses extract_fr_arnica;
+    case "wikipedia extract en Arnica montana (« Use in herbal medicine »)"
+      Payload.Wikipedia_uses extract_en_arnica;
+    case "wikipedia extract en Urtica dioica (no section matches)"
+      Payload.Wikipedia_uses extract_en_urtica;
+    case "plantuse page Digitalis purpurea" Payload.Plantuse_page
+      plantuse_digitalis;
     case "tela names Digitalis" Payload.Tela_names tela_names_digitalis;
     case "tela taxon Digitalis" Payload.Tela_taxon tela_taxon_digitalis;
     case "tela baseflor Digitalis" Payload.Tela_baseflor tela_baseflor_digitalis;
@@ -511,6 +566,84 @@ let prune_prunes_tests =
         | other ->
             Alcotest.failf "root not an object: %s"
               (Yojson.Safe.to_string other) );
+    ( "prune Wikipedia_uses: the pruned fr Arnica des montagnes extract is \
+       under a third of the raw one",
+      `Quick,
+      fun () ->
+        let raw = extract_fr_arnica in
+        let pruned = Payload.prune Payload.Wikipedia_uses raw in
+        let len j = String.length (Yojson.Safe.to_string j) in
+        Alcotest.(check bool)
+          (Printf.sprintf "pruned %d < raw %d / 3" (len pruned) (len raw))
+          true
+          (len pruned * 3 < len raw) );
+    ( "prune Wikipedia_uses on fr Arnica: no lead, no unmatched body, the uses \
+       subsections' bodies kept",
+      `Quick,
+      fun () ->
+        let pruned = Payload.prune Payload.Wikipedia_uses extract_fr_arnica in
+        match
+          Option.bind (Check.first_page pruned) (Json.string_member "extract")
+        with
+        | None -> Alcotest.fail "no extract"
+        | Some extract ->
+            let has sub = Herbier_test_support.Text.contains ~sub extract in
+            Alcotest.(check bool)
+              "starts with a heading" true
+              (String.starts_with ~prefix:"==" extract);
+            Alcotest.(check bool)
+              "no lead" false
+              (has "L’Arnica des montagnes, ou Arnica montana");
+            Alcotest.(check bool)
+              "no Description body" false
+              (has "Plante vivace de 20 à 40 cm");
+            Alcotest.(check bool)
+              "Description heading kept" true (has "== Description ==");
+            Alcotest.(check bool)
+              "matched body kept" true
+              (has "En phytothérapie vétérinaire");
+            Alcotest.(check bool)
+              "unmatched subsection of a uses section kept" true
+              (has "En médecine traditionnelle, l'usage de l'arnica") );
+    ( "prune Wikipedia_uses drops root's batchcomplete, keeps only query",
+      `Quick,
+      fun () ->
+        check_kept "root keys" ["query"] extract_fr_digitalis
+          (Payload.prune Payload.Wikipedia_uses extract_fr_digitalis) );
+    ( "prune Wikipedia_uses keeps query's documented keys only",
+      `Quick,
+      fun () ->
+        let raw_query =
+          match Json.member "query" extract_fr_arnica with
+          | Some q -> q
+          | None -> Alcotest.fail "no query member"
+        in
+        let pruned_query =
+          match Payload.prune Payload.Wikipedia_uses extract_fr_arnica with
+          | `Assoc [("query", q)] -> q
+          | other ->
+              Alcotest.failf "unexpected shape: %s"
+                (Yojson.Safe.to_string other)
+        in
+        check_kept "query keys"
+          ["normalized"; "redirects"; "pages"]
+          raw_query pruned_query );
+    ( "prune Wikipedia_uses rebuilds extract to headings + uses section \
+       bodies: the lead is dropped",
+      `Quick,
+      fun () ->
+        let pruned =
+          Payload.prune Payload.Wikipedia_uses extract_fr_digitalis
+        in
+        match Check.first_page pruned with
+        | Some page -> (
+            match Json.string_member "extract" page with
+            | Some extract ->
+                Alcotest.(check bool)
+                  "no lead text before the first heading" true
+                  (String.length extract = 0 || String.get extract 0 = '=')
+            | None -> Alcotest.fail "no extract member")
+        | None -> Alcotest.fail "no query.pages[0]" );
   ]
 
 (* ---------- size ---------- *)
@@ -539,7 +672,9 @@ let size_tests =
             Payload.plantnet ~media:(Some plantnet_media_digitalis);
             Payload.wikidata ~search:(Some search_p846_digitalis)
               ~entity:(Some entity_digitalis);
-            Payload.wikipedia ~summary:(Some summary_fr_digitalis);
+            (* The budget covers the four summary payloads; Wikipedia_uses and
+               Plantuse_page are outside it. *)
+            Payload.wikipedia ~summary:(Some summary_fr_digitalis) ~uses:None;
           ] );
     ( "Arnica montana: the four payloads together are under 131072 bytes",
       `Quick,
@@ -553,7 +688,7 @@ let size_tests =
             Payload.plantnet ~media:(Some plantnet_media_arnica);
             Payload.wikidata ~search:(Some search_p846_arnica)
               ~entity:(Some entity_arnica);
-            Payload.wikipedia ~summary:(Some summary_fr_arnica);
+            Payload.wikipedia ~summary:(Some summary_fr_arnica) ~uses:None;
           ] );
   ]
 
@@ -610,15 +745,27 @@ let builder_tests =
         Alcotest.(check Testable.yojson)
           "both absent" (`Assoc [])
           (Payload.wikidata ~search:None ~entity:None) );
-    ( "wikipedia: one member when given, Assoc [] when None",
+    ( "wikipedia: member order is summary then uses, Assoc [] when both None",
       `Quick,
       fun () ->
         Alcotest.(check (list string))
-          "summary given" ["summary"]
-          (keys_of (Payload.wikipedia ~summary:(Some small)));
+          "both given" ["summary"; "uses"]
+          (keys_of (Payload.wikipedia ~summary:(Some small) ~uses:(Some small)));
+        Alcotest.(check (list string))
+          "only uses given" ["uses"]
+          (keys_of (Payload.wikipedia ~summary:None ~uses:(Some small)));
         Alcotest.(check Testable.yojson)
-          "summary absent" (`Assoc [])
-          (Payload.wikipedia ~summary:None) );
+          "both absent" (`Assoc [])
+          (Payload.wikipedia ~summary:None ~uses:None) );
+    ( "plantuse: one member when given, Assoc [] when None",
+      `Quick,
+      fun () ->
+        Alcotest.(check (list string))
+          "page given" ["page"]
+          (keys_of (Payload.plantuse ~page:(Some small)));
+        Alcotest.(check Testable.yojson)
+          "page absent" (`Assoc [])
+          (Payload.plantuse ~page:None) );
     ( "tela: member order is names, taxon, baseflor, whichever given",
       `Quick,
       fun () ->
@@ -666,7 +813,7 @@ let get_tests =
       fun () ->
         (* Wikipedia_summary is identity-pruned (small), so the stored member
            is exactly [small], not reshaped by the builder. *)
-        let payload = Payload.wikipedia ~summary:(Some small) in
+        let payload = Payload.wikipedia ~summary:(Some small) ~uses:None in
         Alcotest.(check (option Testable.yojson))
           "summary present" (Some small)
           (Payload.get Payload.Wikipedia_summary payload) );

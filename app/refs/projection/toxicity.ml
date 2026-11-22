@@ -27,11 +27,6 @@ let toxic s =
 
 let blank c = c = ' ' || c = '\n'
 
-(* A dot after a lone capital is an author's initial ("Digitalis purpurea
-   L. est"), not the end of a sentence. *)
-let initial s i =
-  i >= 1 && s.[i - 1] >= 'A' && s.[i - 1] <= 'Z' && (i = 1 || blank s.[i - 2])
-
 let sentences s =
   let n = String.length s in
   let rec skip i =
@@ -46,7 +41,9 @@ let sentences s =
           | '\n' -> Some i
           | '.' | '!' | '?' -> (
               match
-                i + 1 < n && blank s.[i + 1] && not (s.[i] = '.' && initial s i)
+                i + 1 < n
+                && blank s.[i + 1]
+                && not (s.[i] = '.' && Wiki_text.initial s i)
               with
               | true -> Some (i + 1)
               | false -> None)

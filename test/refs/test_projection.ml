@@ -57,6 +57,8 @@ type species = {
   search_p846 : Yojson.Safe.t;
   entity : Yojson.Safe.t;
   summary_fr : Yojson.Safe.t;
+  uses : Yojson.Safe.t;  (** The wikipedia row's stored [uses] member *)
+  plantuse_page : Yojson.Safe.t;  (** The plantuse row's [page] member *)
 }
 
 let digitalis =
@@ -69,6 +71,10 @@ let digitalis =
     search_p846 = Check.json "wikidata_search_p846_5414995.json";
     entity = Check.json "wikidata_entity_Q157555.json";
     summary_fr = Check.json "wikipedia_summary_fr_Digitalis_purpurea.json";
+    (* fr has no uses section: the stored uses member is the en
+       extract. *)
+    uses = Check.json "wikipedia_extract_en_Digitalis_purpurea.json";
+    plantuse_page = Check.json "plantuse_page_digitalis_purpurea.json";
   }
 
 let arnica =
@@ -81,6 +87,13 @@ let arnica =
     search_p846 = Check.json "wikidata_search_p846_5405976.json";
     entity = Check.json "wikidata_entity_Q207848.json";
     summary_fr = Check.json "wikipedia_summary_fr_Arnica_montana.json";
+    (* fr has a uses section: the stored uses member is
+       the fr extract. *)
+    uses = Check.json "wikipedia_extract_fr_Arnica_des_montagnes.json";
+    (* Arnica's plantuse page exists but has no box nor prose: a row is
+       still stored (a page was found), the projected Pl@ntUse part is
+       None. *)
+    plantuse_page = Check.json "plantuse_page_arnica_montana.json";
   }
 
 let gbif_payload s =
@@ -94,7 +107,10 @@ let plantnet_payload s = Payload.plantnet ~media:(Some s.plantnet_media)
 let wikidata_payload s =
   Payload.wikidata ~search:(Some s.search_p846) ~entity:(Some s.entity)
 
-let wikipedia_payload s = Payload.wikipedia ~summary:(Some s.summary_fr)
+let wikipedia_payload s =
+  Payload.wikipedia ~summary:(Some s.summary_fr) ~uses:(Some s.uses)
+
+let plantuse_payload s = Payload.plantuse ~page:(Some s.plantuse_page)
 
 let rows_of s =
   [
@@ -105,6 +121,8 @@ let rows_of s =
       (wikidata_payload s);
     reference_row ~source:Source.Wikipedia ~fetched_at:t_other
       (wikipedia_payload s);
+    reference_row ~source:Source.Plantuse ~fetched_at:t_other
+      (plantuse_payload s);
   ]
 
 let project ?(plant_refs = []) references =
@@ -314,6 +332,8 @@ let digitalis_tests =
                link Source.Tela "https://www.tela-botanica.org/bdtfx-nn-22437";
                link Source.Inat "https://www.inaturalist.org/taxa/53983";
                link Source.Eppo "https://gd.eppo.int/taxon/DIKPU";
+               (* Plantuse is last, its page was found. *)
+               link Source.Plantuse (Source_url.plantuse "Digitalis purpurea");
              ])
           (links_json proj.links) );
     ( "fetched_at is the gbif row's, problems is []",
@@ -447,6 +467,9 @@ let arnica_tests =
                link Source.Tela "https://www.tela-botanica.org/bdtfx-nn-6648";
                link Source.Inat "https://www.inaturalist.org/taxa/56229";
                link Source.Eppo "https://gd.eppo.int/taxon/ARXMO";
+               (* A page was found: the link shows even when it has no
+                  uses box and no prose. *)
+               link Source.Plantuse (Source_url.plantuse "Arnica montana");
              ])
           (links_json proj.links) );
     ( "fetched_at is the gbif row's, problems is []",
@@ -760,7 +783,8 @@ let toxicity_en_summary () =
         reference_row ~source:Source.Wikipedia ~fetched_at:t_other
           (Payload.wikipedia
              ~summary:
-               (Some (Check.json "wikipedia_summary_en_Digitalis_purpurea.json")));
+               (Some (Check.json "wikipedia_summary_en_Digitalis_purpurea.json"))
+             ~uses:None);
       ]
   in
   match proj.toxicity with
@@ -779,7 +803,8 @@ let toxicity_disambiguation_is_none () =
       [
         reference_row ~source:Source.Wikipedia ~fetched_at:t_other
           (Payload.wikipedia
-             ~summary:(Some (Check.json "wikipedia_summary_fr_Lis.json")));
+             ~summary:(Some (Check.json "wikipedia_summary_fr_Lis.json"))
+             ~uses:None);
       ]
   in
   Alcotest.(check bool) "toxicity is None" true (Option.is_none proj.toxicity);
@@ -801,7 +826,7 @@ let toxicity_description_only_match () =
     project
       [
         reference_row ~source:Source.Wikipedia ~fetched_at:t_other
-          (Payload.wikipedia ~summary:(Some summary));
+          (Payload.wikipedia ~summary:(Some summary) ~uses:None);
       ]
   in
   match proj.toxicity with
@@ -1123,12 +1148,14 @@ let every_part_broken () =
         reference_row ~source:Source.Wikidata ~fetched_at:t_other
           (Payload.wikidata ~search:oops ~entity:oops);
         reference_row ~source:Source.Wikipedia ~fetched_at:t_other
-          (Payload.wikipedia ~summary:oops);
+          (Payload.wikipedia ~summary:oops ~uses:oops);
         reference_row ~source:Source.Tela ~fetched_at:t_other
           (Payload.tela ~names:oops ~taxon:oops ~baseflor:oops);
         reference_row ~source:Source.Taxref ~fetched_at:t_other
           (Payload.taxref ~name:oops ~status:oops ~red_list:oops
              ~protections:oops);
+        reference_row ~source:Source.Plantuse ~fetched_at:t_other
+          (Payload.plantuse ~page:oops);
       ]
   in
   Alcotest.(check (list string))
@@ -1209,6 +1236,7 @@ let summary_payload ?(kind = "standard") ?description ?page extract =
                        `Assoc [("desktop", `Assoc [("page", `String p)])] ))
                    page;
                ])))
+    ~uses:None
 
 let malformed_ids_give_no_link () =
   let species = `Assoc [("key", `Int 1); ("scientificName", `String "X y")] in
@@ -1280,6 +1308,7 @@ let stored_urls_are_checked () =
          link Source.Inat "https://www.inaturalist.org/taxa/53983";
          link Source.Eppo "https://gd.eppo.int/taxon/XYZ";
          link Source.Wikidata "https://www.wikidata.org/wiki/Q157555";
+         link Source.Plantuse (Source_url.plantuse "Digitalis purpurea");
        ])
     (links_json (project ~plant_refs (rows_of digitalis)).links)
 
@@ -1666,5 +1695,179 @@ let regional_tests =
       protection_overseas_dropped;
   ]
 
+(* ---------- « Utilisations » ---------- *)
+
+let uses_digitalis () =
+  let proj = project (rows_of digitalis) in
+  (match proj.plantuse_uses with
+  | Some {value; sources} ->
+      Alcotest.(check (list string)) "chips" ["médicinal"] value.summary;
+      Alcotest.(check bool) "no line" true (Option.is_none value.text);
+      Alcotest.(check string)
+        "url" "https://plantuse.plantnet.org/fr/Digitalis_purpurea" value.url;
+      check_sources "plantuse sources" [Source.Plantuse] sources
+  | None -> Alcotest.fail "plantuse_uses is None");
+  match proj.wikipedia_uses with
+  | Some {value; sources} ->
+      Alcotest.(check string) "section" "Medicinal use" value.section;
+      Alcotest.(check string) "lang" "en" value.lang;
+      check_sources "wikipedia sources" [Source.Wikipedia] sources
+  | None -> Alcotest.fail "wikipedia_uses is None"
+
+let uses_arnica () =
+  let proj = project (rows_of arnica) in
+  Alcotest.(check bool)
+    "plantuse_uses is None (page without box nor prose)" true
+    (Option.is_none proj.plantuse_uses);
+  match proj.wikipedia_uses with
+  | Some {value; _} ->
+      Alcotest.(check string) "section" "Phytothérapie" value.section;
+      Alcotest.(check string) "lang" "fr" value.lang
+  | None -> Alcotest.fail "wikipedia_uses is None"
+
+let uses_neither () =
+  let neither =
+    {
+      digitalis with
+      uses = Check.json "wikipedia_extract_fr_Digitalis_purpurea.json";
+      plantuse_page = Check.json "plantuse_page_fallopia_japonica.json";
+    }
+  in
+  let proj = project (rows_of neither) in
+  Alcotest.(check bool)
+    "plantuse_uses None" true
+    (Option.is_none proj.plantuse_uses);
+  Alcotest.(check bool)
+    "wikipedia_uses None" true
+    (Option.is_none proj.wikipedia_uses);
+  Alcotest.(check (list string)) "problems" [] (problem_strings proj.problems)
+
+let uses_before_plantuse () =
+  let rows =
+    List.filter_map
+      (fun (r : Reference.t) ->
+        match r.source with
+        | Source.Plantuse -> None
+        | Source.Wikipedia ->
+            Some
+              {
+                r with
+                payload =
+                  Payload.wikipedia ~summary:(Some digitalis.summary_fr)
+                    ~uses:None;
+              }
+        | _ -> Some r)
+      (rows_of digitalis)
+  in
+  let proj = project rows in
+  Alcotest.(check bool)
+    "plantuse_uses None" true
+    (Option.is_none proj.plantuse_uses);
+  Alcotest.(check bool)
+    "wikipedia_uses None" true
+    (Option.is_none proj.wikipedia_uses);
+  Alcotest.(check (list string)) "problems" [] (problem_strings proj.problems)
+
+let uses_member_not_an_object () =
+  let rows =
+    List.map
+      (fun (r : Reference.t) ->
+        match r.source with
+        | Source.Wikipedia ->
+            {
+              r with
+              payload =
+                Payload.wikipedia ~summary:(Some digitalis.summary_fr)
+                  ~uses:(Some (`String "x"));
+            }
+        | _ -> r)
+      (rows_of digitalis)
+  in
+  let proj = project rows in
+  let reference = project (rows_of digitalis) in
+  Alcotest.(check bool)
+    "wikipedia_uses None" true
+    (Option.is_none proj.wikipedia_uses);
+  Alcotest.(check (option string))
+    "toxicity (from the summary) intact"
+    (Option.map (fun (c : _ Projection.cited) -> c.value) reference.toxicity)
+    (Option.map (fun (c : _ Projection.cited) -> c.value) proj.toxicity);
+  match proj.problems with
+  | [{part = Payload.Wikipedia_uses; _}] -> ()
+  | ps ->
+      Alcotest.failf "expected one Wikipedia_uses problem, got [%s]"
+        (String.concat "; " (problem_strings ps))
+
+(* Digitalis's rows with the GBIF species renamed and another recorded
+   Pl@ntUse answer. *)
+let with_name_and_page ~scientific ~canonical page_file =
+  let species_body =
+    match digitalis.species_body with
+    | `Assoc fields ->
+        `Assoc
+          (("scientificName", `String scientific)
+          :: ("canonicalName", `String canonical)
+          :: List.filter
+               (fun (k, _) -> k <> "scientificName" && k <> "canonicalName")
+               fields)
+    | other -> other
+  in
+  {digitalis with species_body; plantuse_page = Check.json page_file}
+
+let plantuse_title proj =
+  Option.map
+    (fun (c : Projection.Uses.plantuse Projection.cited) -> c.value.title)
+    proj.Projection.plantuse_uses
+
+let uses_redirect () =
+  let proj =
+    project
+      (rows_of
+         (with_name_and_page ~scientific:"Polygonum cuspidatum Siebold & Zucc."
+            ~canonical:"Polygonum cuspidatum"
+            "plantuse_page_polygonum_cuspidatum.json"))
+  in
+  Alcotest.(check (option string))
+    "the redirect's target" (Some "Reynoutria japonica") (plantuse_title proj)
+
+let uses_subspecies () =
+  let proj =
+    project
+      (rows_of
+         (with_name_and_page ~scientific:"Digitalis purpurea subsp. purpurea"
+            ~canonical:"Digitalis purpurea purpurea"
+            "plantuse_page_digitalis_purpurea_subsp_purpurea.json"))
+  in
+  Alcotest.(check (option string))
+    "the binomial's page" (Some "Digitalis purpurea") (plantuse_title proj)
+
+let uses_no_taxon () =
+  let rows =
+    List.filter
+      (fun (r : Reference.t) -> r.source <> Source.Gbif)
+      (rows_of digitalis)
+  in
+  Alcotest.(check (option string))
+    "no name, no Pl@ntUse page" None
+    (plantuse_title (project rows))
+
+let uses_tests =
+  [
+    case "a redirected name: the Pl@ntUse page it leads to" uses_redirect;
+    case "a subspecies without its own page: the binomial's" uses_subspecies;
+    case "no GBIF species: no Pl@ntUse part" uses_no_taxon;
+    case "Digitalis: Pl@ntUse « médicinal » and the en « Medicinal use »"
+      uses_digitalis;
+    case "Arnica: no Pl@ntUse part, the fr « Phytothérapie » paragraph"
+      uses_arnica;
+    case "neither source has uses data: both None, no problem" uses_neither;
+    case "a plant fetched before Pl@ntUse was a source: both None, no problem"
+      uses_before_plantuse;
+    case "a uses member that is not an object: one problem, summary intact"
+      uses_member_not_an_object;
+  ]
+
 let suite =
-  ("projection", digitalis_tests @ arnica_tests @ rules_tests @ regional_tests)
+  ( "projection",
+    digitalis_tests @ arnica_tests @ rules_tests @ regional_tests @ uses_tests
+  )

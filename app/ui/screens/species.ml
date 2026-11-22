@@ -474,6 +474,70 @@ let chip_list ?(chip_cls = "species__ref-chip") = function
 
 let names_others_id = "species-names-others"
 
+(* The open state of one long text of 4f, held by the screen so that it
+   survives the rebuild of the rows on each reload. *)
+type toggle = {opened : bool React.signal; set : bool -> unit}
+
+type long_texts = {
+  habitat : toggle;
+  toxicity : toggle;
+  plantuse : toggle;
+  wikipedia : toggle;
+}
+
+let toggle () =
+  let opened, set = React.S.create ~eq:Bool.equal false in
+  {opened; set = (fun o -> set o)}
+
+let long_texts () =
+  {
+    habitat = toggle ();
+    toxicity = toggle ();
+    plantuse = toggle ();
+    wikipedia = toggle ();
+  }
+
+let long (t : toggle) text =
+  let w = W.Expandable_text.v ~opened:t.opened ~set_opened:t.set text in
+  (w.el, w.bindings)
+
+let credit_anchor ~url text =
+  El.a
+    ~at:
+      [
+        cls "species__ref-sources";
+        cls "species__uses-credit";
+        At.href (Jstr.v url);
+        At.v (Jstr.v "target") (Jstr.v "_blank");
+        At.v (Jstr.v "rel") (Jstr.v "noopener noreferrer");
+      ]
+    [El.txt' text]
+
+(* « Utilisations »: Pl@ntUse first, then Wikipedia, each with its credit. *)
+let uses_row long_texts ~plantuse ~wikipedia =
+  let plantuse =
+    Option.fold ~none:([], [])
+      ~some:(fun (p : Ref_block.plantuse_uses) ->
+        let line = Option.map (long long_texts.plantuse) p.line in
+        ( chip_list p.chips
+          @ Option.fold ~none:[] ~some:(fun (el, _) -> [el]) line
+          @ [credit_anchor ~url:p.url p.credit],
+          Option.fold ~none:[] ~some:snd line ))
+      plantuse
+  and wikipedia =
+    Option.fold ~none:([], [])
+      ~some:(fun (w : Ref_block.wikipedia_uses) ->
+        let el, bindings = long long_texts.wikipedia w.paragraph in
+        ([el; credit_anchor ~url:w.url w.credit], bindings))
+      wikipedia
+  in
+  let part = function
+    | [], _ -> []
+    | els, _ -> [El.div ~at:[cls "species__uses-part"] els]
+  in
+  ( ref_row Ref_text.uses_label (part plantuse @ part wikipedia) "",
+    snd plantuse @ snd wikipedia )
+
 (* « Noms »: the French names, the other languages behind « Autres langues »;
    without French names, the others are shown directly. *)
 let names_row ~opened ~set_opened ~french ~others sources =
@@ -532,7 +596,7 @@ let organ_block id ~photos ~credits ~sources =
       ],
     List.concat_map snd tiles )
 
-let row_el ~opened ~set_opened id = function
+let row_el ~opened ~set_opened ~long_texts id = function
   | Ref_block.Names {french; others; sources} ->
       names_row ~opened ~set_opened ~french ~others sources
   | Organ_photos {photos; credits; sources} ->
@@ -559,13 +623,18 @@ let row_el ~opened ~set_opened id = function
           sources,
         [] )
   | Habitat {phrase; chips; sources} ->
+      let phrase = Option.map (long long_texts.habitat) phrase in
       ( ref_row "Habitat"
-          (List.map (fun p -> El.div [El.txt' p]) (Option.to_list phrase)
+          (Option.fold ~none:[] ~some:(fun (el, _) -> [el]) phrase
           @ chip_list ~chip_cls:"species__habitat-chip" chips)
           sources,
-        [] )
+        Option.fold ~none:[] ~some:snd phrase )
   | Toxicity {text; sources} ->
-      (ref_row "Toxicité" [El.div [El.txt' text]] sources, [])
+      let el, bindings = long long_texts.toxicity text in
+      (ref_row "Toxicité" [el] sources, bindings)
+  | Uses uses ->
+      let plantuse, wikipedia = Ref_block.uses_parts uses in
+      uses_row long_texts ~plantuse ~wikipedia
   | Links links ->
       (El.div ~at:[cls "species__ref-links"] (List.map link_anchor links), [])
 
@@ -591,10 +660,12 @@ let linked app (data : data React.signal) () =
   let rows = El.div ~at:[cls "species__ref-slot"] [] in
   let opened, set_opened = React.S.create ~eq:Bool.equal false in
   let set_opened o = set_opened o in
+  let long_texts = long_texts () in
   let rows_of ((p, shown), fetching) =
     let content =
       match (Ref_block.rows p ~organ_photos:shown, fetching) with
-      | (_ :: _ as rows), _ -> List.map (row_el ~opened ~set_opened id) rows
+      | (_ :: _ as rows), _ ->
+          List.map (row_el ~opened ~set_opened ~long_texts id) rows
       | [], true ->
           [
             ( El.p ~at:[cls "t-meta"] [El.txt' "Récupération de la référence…"],

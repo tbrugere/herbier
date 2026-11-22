@@ -17,6 +17,9 @@ type part =
   | Wikidata_search  (** ["search"] *)
   | Wikidata_entity  (** ["entity"] *)
   | Wikipedia_summary  (** ["summary"]: fr, or en when fr has no page. *)
+  | Wikipedia_uses
+      (** [Sources.Wikipedia.extract], member ["uses"]: the fr article, or the
+          en one when fr has no uses section. *)
   | Tela_names  (** [Sources.Tela.names], member ["names"]. *)
   | Tela_taxon  (** ["taxon"] *)
   | Tela_baseflor  (** ["baseflor"] *)
@@ -24,14 +27,15 @@ type part =
   | Inpn_status  (** ["status"] *)
   | Inpn_red_list  (** ["red_list"] *)
   | Inpn_protections  (** ["protections"] *)
+  | Plantuse_page  (** [Sources.Plantuse.page], member ["page"]. *)
 
 val all : part list
 (** Declaration order. *)
 
 val source : part -> Source.t
 (** [Gbif] for the four [Gbif_*], [Plantnet], [Wikidata] for both [Wikidata_*],
-    [Wikipedia], [Tela] for the three [Tela_*], [Taxref] for the four [Inpn_*].
-*)
+    [Wikipedia] for both [Wikipedia_*], [Tela] for the three [Tela_*], [Taxref]
+    for the four [Inpn_*], [Plantuse]. *)
 
 val name : part -> string
 (** The member name above. *)
@@ -59,7 +63,10 @@ val plantnet : media:Yojson.Safe.t option -> Yojson.Safe.t
 val wikidata :
   search:Yojson.Safe.t option -> entity:Yojson.Safe.t option -> Yojson.Safe.t
 
-val wikipedia : summary:Yojson.Safe.t option -> Yojson.Safe.t
+val wikipedia :
+  summary:Yojson.Safe.t option -> uses:Yojson.Safe.t option -> Yojson.Safe.t
+
+val plantuse : page:Yojson.Safe.t option -> Yojson.Safe.t
 
 val tela :
   names:Yojson.Safe.t option ->
@@ -77,7 +84,8 @@ val taxref :
 val prune : part -> Yojson.Safe.t -> Yojson.Safe.t
 (** What the builders apply to each body. Identity for [Gbif_species],
     [Gbif_occurrence_count], [Wikidata_search], [Wikipedia_summary],
-    [Tela_names] (small). Otherwise keeps only:
+    [Tela_names] (small), [Plantuse_page] (a species page is 2 to 16 KB of
+    wikitext). Otherwise keeps only:
     - [Gbif_vernacular_names]: root [results], [endOfRecords], [count]; in each
       object of [results]: [vernacularName], [language], [source], [country];
     - [Gbif_distributions]: root as above; per result: [locationId], [locality],
@@ -97,6 +105,14 @@ val prune : part -> Yojson.Safe.t -> Yojson.Safe.t
       [type_bio.libelle], [type_bio.detail] (whole), [ve_lumiere.libelle],
       [ve_humidite_edaph.libelle], [ve_reaction_sol.libelle],
       [ve_nutriments_sol.libelle];
+    - [Wikipedia_uses]: root [query] and [error] (whole); in [query]:
+      [normalized], [redirects], [pages] (whole); per page: [title], [missing],
+      [invalid], [pagelanguage], [fullurl], [extract], where a string [extract]
+      becomes its heading lines (rewritten as ["<n '='> title <n '='>"], same
+      level and title) with, under each, its body only when
+      {!Sources.Wikipedia.in_uses} holds for the section (a uses title or under
+      one; [lang] = the page's [pagelanguage], else ["fr"]); the lead is
+      dropped;
     - [Inpn_name]: root [taxrefId], [valid], [binomialName], [_links] reduced to
       [taxon] (whole);
     - [Inpn_status], [Inpn_red_list], [Inpn_protections]: root [_embedded] and

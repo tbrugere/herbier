@@ -406,6 +406,10 @@ where deleted_at is null and lat is not null and lon is not null
   and trim(coalesce(place_label, '')) = ''|};
   ]
 
+(* Migration 9: the plantuse reference source, as on the server
+   (supabase/migrations/20261121130000_reference_source_plantuse.sql). *)
+let v9 = [{|insert into reference_sources (value) values ('plantuse')|}]
+
 let migrations =
   [
     {version = 1; statements = v1};
@@ -416,6 +420,7 @@ let migrations =
     {version = 6; statements = v6};
     {version = 7; statements = v7};
     {version = 8; statements = v8};
+    {version = 9; statements = v9};
   ]
 
 let latest = match List.rev migrations with m :: _ -> m.version | [] -> 0

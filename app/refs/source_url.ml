@@ -29,3 +29,9 @@ let wikipedia ~lang title =
   ^ Url.encode (String.map (function ' ' -> '_' | c -> c) title)
 
 let eppo code = "https://gd.eppo.int/taxon/" ^ code
+let plantuse_wiki = "https://plantuse.plantnet.org/fr"
+
+let plantuse title =
+  plantuse_wiki
+  ^ "/"
+  ^ Url.encode (String.map (function ' ' -> '_' | c -> c) title)

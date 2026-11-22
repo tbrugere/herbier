@@ -13,6 +13,7 @@ let sources =
     Source.Wikipedia;
     Source.Taxref;
     Source.Tela;
+    Source.Plantuse;
   ]
 
 type row = {source : Source.t; status : Status.t; payload : Yojson.Safe.t}
@@ -80,13 +81,17 @@ let plantnet ~key =
   in
   [{source = Source.Plantnet; status; payload = Payload.plantnet ~media}]
 
-let wikipedia_row status summary =
-  {source = Source.Wikipedia; status; payload = Payload.wikipedia ~summary}
+let wikipedia_row ?uses status summary =
+  {
+    source = Source.Wikipedia;
+    status;
+    payload = Payload.wikipedia ~summary ~uses;
+  }
 
 (* fr, else en (architecture §6); a request is tried only after the
    previous one answered that the page does not exist. *)
 let rec summaries = function
-  | [] -> Step.return (wikipedia_row Status.Missing None)
+  | [] -> Step.return (Status.Missing, None)
   | request :: rest -> (
       let open Step.Syntax in
       let* response = Step.get request in
@@ -94,20 +99,47 @@ let rec summaries = function
       | Step.Absent -> summaries rest
       | Step.Body _ | Step.Failed _ -> (
           match body Wikipedia.summary_of_json response with
-          | Some summary ->
-              Step.return (wikipedia_row Status.Complete (Some summary))
-          | None -> Step.return (wikipedia_row Status.Failed None)))
+          | Some summary -> Step.return (Status.Complete, Some summary)
+          | None -> Step.return (Status.Failed, None)))
 
-let summary_requests (entity : Wikidata.Entity.t) =
+type uses = Uses of Yojson.Safe.t option | Uses_failed
+
+(* fr, else en when the fr article has no uses section. A failure drops the
+   fr candidate too, so that decide's Partial merge keeps a stored member
+   rather than a fr article without the section. *)
+let rec extracts candidate = function
+  | [] -> Step.return (Uses candidate)
+  | request :: rest -> (
+      let open Step.Syntax in
+      let* response = Step.get request in
+      match accepted Wikipedia.article_of_json response with
+      | None -> Step.return Uses_failed
+      | Some (json, Some article) when Wikipedia.has_uses article ->
+          Step.return (Uses (Some json))
+      | Some (json, (Some _ | None)) -> extracts (Some json) rest)
+
+let sitelink_requests request (entity : Wikidata.Entity.t) =
   List.filter_map
     (fun lang ->
       Option.bind
         (List.find_opt
            (fun (l : Wikidata.Entity.sitelink) -> String.equal l.lang lang)
            entity.sitelinks)
-        (fun (l : Wikidata.Entity.sitelink) ->
-          Wikipedia.summary ~lang ~title:l.title))
+        (fun (l : Wikidata.Entity.sitelink) -> request ~lang ~title:l.title))
     ["fr"; "en"]
+
+let wikipedia entity =
+  let open Step.Syntax in
+  let* status, summary =
+    summaries (sitelink_requests Wikipedia.summary entity)
+  in
+  match status with
+  | Status.Failed | Status.Partial -> Step.return (wikipedia_row status summary)
+  | Status.Complete | Status.Missing -> (
+      let+ uses = extracts None (sitelink_requests Wikipedia.extract entity) in
+      match uses with
+      | Uses uses -> wikipedia_row ?uses status summary
+      | Uses_failed -> wikipedia_row Status.Partial summary)
 
 let wikidata_row status ~search ~entity =
   {source = Source.Wikidata; status; payload = Payload.wikidata ~search ~entity}
@@ -144,7 +176,7 @@ let wiki ~key =
                 ]
           | Some (entity, None) -> no_item (Some search) (Some entity)
           | Some (json, Some decoded) ->
-              let+ wikipedia = summaries (summary_requests decoded) in
+              let+ wikipedia = wikipedia decoded in
               [
                 wikidata_row Status.Complete ~search:(Some search)
                   ~entity:(Some json);

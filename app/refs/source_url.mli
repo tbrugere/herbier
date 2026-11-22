@@ -33,3 +33,12 @@ val wikipedia : lang:string -> string -> string
 
 val eppo : string -> string
 (** ["https://gd.eppo.int/taxon/<code>"]. *)
+
+val plantuse_wiki : string
+(** ["https://plantuse.plantnet.org/fr"]: Pl@ntUse's French wiki, its pages and
+    its [api.php]. *)
+
+val plantuse : string -> string
+(** [plantuse title]: ["https://plantuse.plantnet.org/fr/" ^ encode title], the
+    spaces of [title] written ['_'] before encoding; the French Pl@ntUse wiki's
+    page, which [Link.classify] reads back as [Plantuse title]. *)

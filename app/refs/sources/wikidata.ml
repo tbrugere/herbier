@@ -46,25 +46,8 @@ let entity qid =
         String.concat "|" (List.map (fun lang -> lang ^ "wiki") wikis) );
     ]
 
-let api_error json =
-  match Json.member "error" json with
-  | None -> None
-  | Some error -> (
-      match Decode.string "code" error with
-      | Some code ->
-          Some
-            (Decode.Api_error
-               {
-                 code;
-                 info = Option.value ~default:"" (Decode.string "info" error);
-               })
-      | None ->
-          Some
-            (Decode.Unexpected
-               {path = "/error"; expected = "object with a string code"}))
-
 let search_of_json json =
-  match api_error json with
+  match Decode.api_error json with
   | Some e -> Error e
   | None -> (
       match Option.bind (Json.member "query" json) (Json.member "search") with
@@ -159,7 +142,7 @@ let sitelinks json =
     wikis
 
 let entity_of_json json =
-  match api_error json with
+  match Decode.api_error json with
   | Some e -> Error e
   | None -> (
       match Json.member "entities" json with

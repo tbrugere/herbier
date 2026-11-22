@@ -6,8 +6,10 @@ module Reference := Herbier_domain.Reference
 module Source := Reference.Source
 
 val sources : Source.t list
-(** [[Gbif; Plantnet; Wikidata; Wikipedia; Taxref; Tela]]: the sources a fetch
-    writes (the last two by {!Regional.program}, after the {!branches}). *)
+(** [[Gbif; Plantnet; Wikidata; Wikipedia; Taxref; Tela; Plantuse]]: the sources
+    a fetch writes (taxref and tela by {!Regional.program}, plantuse by
+    {!Uses_fetch.program}, after the {!branches}). A source added here makes
+    every plant fetched before it due once ({!due}): that is its backfill. *)
 
 type row = {
   source : Source.t;
@@ -50,7 +52,16 @@ val branches : gbif_key:int -> row list Step.t list
       {!Sources.Wikipedia.summary} builds), tried in order: one that succeeds →
       [Complete] [{summary}]; [Absent] → the next one; none left (or none at
       all) → [Missing] [`Assoc []]; [Failed] or a body that does not decode →
-      [Failed] (no en attempt after a fr failure). *)
+      [Failed] (no en attempt after a fr failure). Then, unless that gave
+      [Failed], the uses step: the {!Sources.Wikipedia.extract} requests of the
+      fr then the en sitelink, tried in order: a body that [article_of_json]
+      decodes to [Some a] with {!Sources.Wikipedia.has_uses} [a] → stop, member
+      [uses] = that body; decodes to [None] or without uses → that body is the
+      candidate member, the next request is tried; [Failed], [Absent] or a body
+      that does not decode → stop, "uses failed", no [uses] member (the
+      candidate dropped). No sitelink: no uses call. Status: summary [Complete]
+      or [Missing] as above when the uses step did not fail; [Partial] when it
+      failed. *)
 
 val live_row : Reference.t list -> Source.t -> Reference.t option
 (** The row of the source in the stored rows that is not soft-deleted. *)

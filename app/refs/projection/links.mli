@@ -13,5 +13,6 @@ val links :
   taxon:Sources.Gbif.Taxon.t option ->
   entity:Sources.Wikidata.Entity.t option ->
   summary:Sources.Wikipedia.t option ->
+  plantuse:Sources.Plantuse.page option ->
   t list
 (** [Projection.t]'s [links]. *)

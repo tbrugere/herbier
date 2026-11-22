@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Record the reference-source payloads of test/fixtures/ (gbif_*, wikidata_*,
-# wikipedia_*, tela_*, inpn_*) from the live APIs. Each fetch line is exactly
+# wikipedia_*, tela_*, inpn_*, plantuse_*) from the live APIs. Each fetch line is exactly
 # the file, the Request.source and the Request.url of the request description
 # it records (test/refs checks it), except the lines preceded by a
 # "# not built by a request function:" comment. A fetch_absent line records
@@ -33,7 +33,7 @@ fetch() {
   case "$source" in
     wikidata) args+=(-H "Api-User-Agent: $UA") ;;
     wikipedia) args+=(-L -H "Api-User-Agent: $UA") ;;
-    gbif | tela | taxref) ;;
+    gbif | tela | taxref | plantuse) ;;
     *) echo "unknown source $source" >&2; return 1 ;;
   esac
   curl "${args[@]}" -o "$path.tmp" "$url" || { rm -f "$path.tmp"; return 1; }
@@ -145,3 +145,18 @@ fetch inpn_protections_94959.json taxref "https://odata-inpn.mnhn.fr/taxa/protec
 fetch inpn_protections_83874.json taxref "https://odata-inpn.mnhn.fr/taxa/protections/articles?taxrefIds=83874&embed=SCOPE_LOCATION&size=100"
 fetch inpn_protections_117503.json taxref "https://odata-inpn.mnhn.fr/taxa/protections/articles?taxrefIds=117503&embed=SCOPE_LOCATION&size=100"
 fetch inpn_protections_94041.json taxref "https://odata-inpn.mnhn.fr/taxa/protections/articles?taxrefIds=94041&embed=SCOPE_LOCATION&size=100"
+
+# The « Utilisations » row: Pl@ntUse pages, Wikipedia extracts.
+fetch plantuse_page_digitalis_purpurea.json plantuse "https://plantuse.plantnet.org/fr/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&redirects=1&titles=Digitalis%20purpurea&format=json&formatversion=2&origin=%2A"
+fetch plantuse_page_arnica_montana.json plantuse "https://plantuse.plantnet.org/fr/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&redirects=1&titles=Arnica%20montana&format=json&formatversion=2&origin=%2A"
+fetch plantuse_page_fallopia_japonica.json plantuse "https://plantuse.plantnet.org/fr/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&redirects=1&titles=Fallopia%20japonica&format=json&formatversion=2&origin=%2A"
+fetch plantuse_page_urtica_dioica.json plantuse "https://plantuse.plantnet.org/fr/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&redirects=1&titles=Urtica%20dioica&format=json&formatversion=2&origin=%2A"
+fetch plantuse_page_quercus_robur.json plantuse "https://plantuse.plantnet.org/fr/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&redirects=1&titles=Quercus%20robur&format=json&formatversion=2&origin=%2A"
+fetch plantuse_page_polygonum_cuspidatum.json plantuse "https://plantuse.plantnet.org/fr/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&redirects=1&titles=Polygonum%20cuspidatum&format=json&formatversion=2&origin=%2A"
+fetch plantuse_page_digitalis_purpurea_subsp_purpurea.json plantuse "https://plantuse.plantnet.org/fr/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&redirects=1&titles=Digitalis%20purpurea%20subsp.%20purpurea%7CDigitalis%20purpurea&format=json&formatversion=2&origin=%2A"
+fetch wikipedia_extract_fr_Digitalis_purpurea.json wikipedia "https://fr.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&redirects=1&titles=Digitalis%20purpurea&format=json&formatversion=2&origin=%2A"
+fetch wikipedia_extract_en_Digitalis_purpurea.json wikipedia "https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&redirects=1&titles=Digitalis%20purpurea&format=json&formatversion=2&origin=%2A"
+fetch wikipedia_extract_fr_Arnica_des_montagnes.json wikipedia "https://fr.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&redirects=1&titles=Arnica%20des%20montagnes&format=json&formatversion=2&origin=%2A"
+fetch wikipedia_extract_en_Arnica_montana.json wikipedia "https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&redirects=1&titles=Arnica%20montana&format=json&formatversion=2&origin=%2A"
+fetch wikipedia_extract_en_Urtica_dioica.json wikipedia "https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&redirects=1&titles=Urtica%20dioica&format=json&formatversion=2&origin=%2A"
+fetch wikipedia_extract_fr_Xyzzy_foo.json wikipedia "https://fr.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&redirects=1&titles=Xyzzy%20foo&format=json&formatversion=2&origin=%2A"

@@ -2,7 +2,7 @@
 
 val source_name : Herbier_domain.Reference.Source.t -> string
 (** "GBIF", "Wikidata", "Wikipédia", "POWO", "IPNI", "INPN" (taxref), "Tela
-    Botanica", "EPPO", "iNaturalist", "Pl@ntNet". *)
+    Botanica", "EPPO", "iNaturalist", "Pl@ntNet", "Pl@ntUse". *)
 
 val names_line : Herbier_refs.Projection.vernacular -> string
 (** The names joined with [", "] (the language code is rendered apart, bold). *)
@@ -99,3 +99,14 @@ val credits : Herbier_domain.Reference.Image.t list -> string
 
 val link_label : Herbier_domain.Reference.Source.t -> string
 (** [source_name ^ " ↗"]. *)
+
+val uses_label : string
+(** ["Utilisations"]: the label of 4f's uses row. *)
+
+val plantuse_credit : string
+(** ["Pl@ntUse · CC BY-SA"]. *)
+
+val wikipedia_uses_credit : lang:string -> section:string -> string
+(** ["Wikipédia · « <section> » · CC BY-SA · extrait automatique"]; for a [lang]
+    other than ["fr"], ["Wikipédia (<lang>) · « … » · …"]. « extrait automatique
+    » marks the heuristic: the paragraph is picked by its section title. *)

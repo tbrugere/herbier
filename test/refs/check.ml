@@ -7,6 +7,7 @@ module Source = Herbier_domain.Reference.Source
 module Fixture = Herbier_test_support.Fixture
 module Testable = Herbier_test_support.Testable
 module Text = Herbier_test_support.Text
+module Json = Herbier_net.Json
 
 let error =
   Alcotest.testable
@@ -71,3 +72,46 @@ let check_fixture_exists file =
   match Fixture.exists file with
   | true -> ()
   | false -> Alcotest.failf "missing fixture test/fixtures/%s" file
+
+(* ---------- MediaWiki / TextExtracts recorded answers ---------- *)
+
+(* [query.pages[0]] of a recorded [action=query] answer (Plantuse's revisions,
+   Wikipedia's extracts), the shape [Sources.Plantuse]/[Sources.Wikipedia]
+   decode; [None] when the answer has no such path (an [error] object, an
+   empty [pages] array). *)
+let first_page json =
+  match Json.member "query" json with
+  | None -> None
+  | Some q -> (
+      match Json.member "pages" q with
+      | Some (`List (p :: _)) -> Some p
+      | _ -> None)
+
+(* The wikitext of a recorded Plantuse [page] fixture's first page
+   ([revisions.[0].slots.main.content]). *)
+let wikitext_of_fixture file =
+  match first_page (json file) with
+  | None -> Alcotest.failf "%s: no query.pages[0]" file
+  | Some p -> (
+      match Json.member "revisions" p with
+      | Some (`List (rev :: _)) -> (
+          match Json.member "slots" rev with
+          | Some slots -> (
+              match Json.member "main" slots with
+              | Some main -> (
+                  match Json.string_member "content" main with
+                  | Some s -> s
+                  | None -> Alcotest.failf "%s: no content" file)
+              | None -> Alcotest.failf "%s: no main slot" file)
+          | None -> Alcotest.failf "%s: no slots" file)
+      | _ -> Alcotest.failf "%s: no revisions[0]" file)
+
+(* The plain-text [extract] of a recorded Wikipedia TextExtracts fixture's
+   first page. *)
+let extract_of_fixture file =
+  match first_page (json file) with
+  | None -> Alcotest.failf "%s: no query.pages[0]" file
+  | Some p -> (
+      match Json.string_member "extract" p with
+      | Some s -> s
+      | None -> Alcotest.failf "%s: no extract" file)

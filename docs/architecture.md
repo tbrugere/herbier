@@ -834,6 +834,8 @@ gbif_key
   │              P3151 iNat, sitelinks fr/en/de/it
   │  └─ Wikipedia REST page/summary/{fr sitelink title} (en sitelink when
   │     fr has none or answers 404): depends on the Wikidata entity
+  │     then action API prop=extracts (TextExtracts, plain text, fr then en
+  │     sitelink; en only when fr has no uses section) → « Utilisations »
   └─ regional layer (refs/regional.ml, once the three branches settled):
        Tela  bdtfx/noms?masque={GBIF name, no author} → nn (exact nom_sci)
              bdtfx/taxons/{nn} → accepted nn, cd_nom (TaxRef id)
@@ -844,6 +846,9 @@ gbif_key
              taxa/{cd_ref}/biogeographicStatuses?locationId=TERFXFR,
              taxa/redLists/entries?taxrefId={cd_ref}&scopes=NATIONAL&scopeLocationId=TERFXFR,
              taxa/protections/articles?taxrefIds={cd_ref}&embed=SCOPE_LOCATION
+  └─ Pl@ntUse (refs/uses_fetch.ml, beside the regional layer, same input):
+       plantuse.plantnet.org/fr/api.php prop=revisions
+         titles={GBIF name, no author}|{its binomial} → page wikitext
 ```
 
 - The fetch is three concurrent branches (`refs/fanout.ml`, sans-IO programs
@@ -876,6 +881,24 @@ gbif_key
   « Indigène » as in the handoff). The global
   IUCN row reads « Liste rouge mondiale » next to it, « Liste rouge »
   as before otherwise.
+- « Utilisations » (M4.81, docs/exploratory_research/plantuse-wikipedia-uses.md)
+  has two sources. Pl@ntUse is a fifth program (`refs/uses_fetch.ml`), run
+  concurrently with the regional one on the same `Regional.input` once the
+  branches have settled: one MediaWiki call for the page of the GBIF name
+  and of its binomial, writing its own `plantuse` row (`complete` when a page
+  is found, `missing` when none, `failed` as the regional rows). Its chips
+  are the bullets of the page's « Résumé des usages » box, its line the first
+  two sentences of the French prose of its « Usages » section. Wikipedia's
+  part belongs to the wiki branch, in the `wikipedia` row (member `uses`):
+  after the summary (unless it failed), the TextExtracts of the fr article,
+  then of the en one when fr has no section whose title names uses (whole
+  words: fr usage(s), utilisation(s), emploi(s); en use(s), usage) with a
+  line of at least 40 characters; that line is the paragraph, marked
+  « extrait automatique » on 4f with its section and language. A failed uses
+  call makes the row `partial` (the stored `uses` member is kept). The row
+  disappears when neither part has data; each part carries its own credit
+  and link. Adding a source to `Fanout.sources` makes every plant fetched
+  before it due once: the reconnect pass is its backfill.
 - Statuses: `missing` = the source answered it has nothing (GBIF species 404,
   no Wikidata item, no Pl@ntNet image, no sitelink or summary 404);
   `failed` = no call of the row gave a decodable answer; `partial` = some
@@ -910,9 +933,11 @@ gbif_key
   read stored payloads unchanged: `gbif` {species, vernacular_names,
   distributions, occurrence_count}, `plantnet` {media} (the Pl@ntNet dataset's
   occurrences, fetched from GBIF but cited as Pl@ntNet, hence its own row),
-  `wikidata` {search, entity}, `wikipedia` {summary}, `tela` {names, taxon,
-  baseflor}, `taxref` {name, status, red_list, protections}. A failed call's member
-  is absent.
+  `wikidata` {search, entity}, `wikipedia` {summary, uses} (`uses`: the
+  extract pruned to its heading lines and the bodies of the matched
+  sections), `tela` {names, taxon, baseflor}, `taxref` {name, status,
+  red_list, protections}, `plantuse` {page}. A failed call's member is
+  absent.
 - The species page reads a **projection** of the reference rows into the
   handoff's `ReferenceSnapshot` fields (vernacular per language, family, life
   form, native/introduced range, FR status, protection, red list, flowering
@@ -928,10 +953,12 @@ gbif_key
   GBIF's English name when the code is unknown), sorted in French order; red
   list from the global IUCN row only (national lists are the regional layer);
   toxicity is the first sentence of the Wikipedia summary naming toxicity;
+  uses as described above (not a `ReferenceSnapshot` field);
   organ photos one per organ; links are
   the plant's `plant_refs` URLs when they are https and point at their source
   (else ignored), else URLs derived from the GBIF key, the
-  summary page and the Wikidata ids (POWO, INPN, Tela, iNat, EPPO).
+  summary page and the Wikidata ids (POWO, INPN, Tela, iNat, EPPO), and the
+  Pl@ntUse page found, last.
 - Organ photos: four thumbnails (fleur/feuille/fruit/port) picked from the
   GBIF Pl@ntNet dataset media by `title` suffix, downloaded to `refthumbs/`
   with licence and attribution kept for display. `ref_images` is a cache of

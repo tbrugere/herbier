@@ -60,6 +60,23 @@ let required_list ?(at = "") name =
   required ~at name "array" (fun json ->
       match Json.member name json with Some (`List l) -> Some l | _ -> None)
 
+let api_error json =
+  match Json.member "error" json with
+  | None -> None
+  | Some error -> (
+      match string "code" error with
+      | Some code ->
+          Some
+            (Api_error
+               {code; info = Option.value ~default:"" (string "info" error)})
+      | None ->
+          Some
+            (Unexpected
+               {path = "/error"; expected = "object with a string code"}))
+
+let flag name json =
+  match Json.member name json with Some (`Bool true) -> true | _ -> false
+
 module Syntax = struct
   let ( let* ) = Result.bind
   let ( let+ ) r f = Result.map f r

@@ -30,6 +30,8 @@ let equal_fr_red_list = France.equal_red_list
 let pp_fr_red_list = France.pp_red_list
 let months = Baseflor.months
 
+module Uses = Uses
+
 type link = Links.t = {source : Source.t; url : string}
 type problem = {part : Payload.part; error : Decode.error}
 
@@ -43,6 +45,8 @@ type t = {
   flowering_months : int list cited option;
   habitat : habitat cited option;
   toxicity : string cited option;
+  plantuse_uses : Uses.plantuse cited option;
+  wikipedia_uses : Uses.wikipedia cited option;
   organ_photos : Gbif.Image.t list cited option;
   fr_status : string cited option;
   fr_protection : protection cited option;
@@ -109,6 +113,8 @@ let project ~references ~plant_refs =
   let search = decode Wikidata_search Wikidata.search_of_json in
   let entity = decode Wikidata_entity Wikidata.entity_of_json in
   let summary = decode Wikipedia_summary Wikipedia.summary_of_json in
+  let article = decode Wikipedia_uses Wikipedia.article_of_json in
+  let plantuse_answer = decode Plantuse_page Sources.Plantuse.answer_of_json in
   let tela_names = decode Tela_names Sources.Tela.names_of_json in
   let tela_taxon = decode Tela_taxon Sources.Tela.taxon_of_json in
   let baseflor = decode Tela_baseflor Sources.Tela.baseflor_of_json in
@@ -123,6 +129,11 @@ let project ~references ~plant_refs =
   let entity_value = Option.join (ok entity) in
   let summary_value = ok summary in
   let distributions_value = ok distributions in
+  let plantuse_page =
+    Option.bind (ok plantuse_answer)
+      (Sources.Plantuse.find
+         ~name:(Option.bind taxon Gbif.Taxon.without_authorship))
+  in
   {
     fetched_at =
       List.fold_left
@@ -145,12 +156,19 @@ let project ~references ~plant_refs =
     flowering_months = Option.bind baseflor_value Baseflor.flowering;
     habitat = Option.bind baseflor_value Baseflor.habitat;
     toxicity = Option.bind summary_value Toxicity.toxicity;
+    plantuse_uses =
+      Option.map (cited [Source.Plantuse])
+        (Option.bind plantuse_page Uses.plantuse);
+    wikipedia_uses =
+      Option.map (cited [Source.Wikipedia])
+        (Option.bind (Option.join (ok article)) Uses.wikipedia);
     organ_photos = Option.bind (ok media) organ_photos;
     fr_status = Option.bind (ok inpn_status) France.status;
     fr_protection = Option.map France.protection (ok inpn_protections);
     fr_red_list = Option.bind (ok inpn_red_list) France.red_list;
     links =
-      Links.links ~plant_refs ~taxon ~entity:entity_value ~summary:summary_value;
+      Links.links ~plant_refs ~taxon ~entity:entity_value ~summary:summary_value
+        ~plantuse:plantuse_page;
     problems =
       List.filter_map Fun.id
         [
@@ -162,6 +180,7 @@ let project ~references ~plant_refs =
           problem Wikidata_search search;
           problem Wikidata_entity entity;
           problem Wikipedia_summary summary;
+          problem Wikipedia_uses article;
           problem Tela_names tela_names;
           problem Tela_taxon tela_taxon;
           problem Tela_baseflor baseflor;
@@ -169,6 +188,7 @@ let project ~references ~plant_refs =
           problem Inpn_status inpn_status;
           problem Inpn_red_list inpn_red_list;
           problem Inpn_protections inpn_protections;
+          problem Plantuse_page plantuse_answer;
         ];
   }
 

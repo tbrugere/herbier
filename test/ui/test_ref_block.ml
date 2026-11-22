@@ -3,6 +3,7 @@
    over the recorded test/fixtures/ (read, never written). *)
 
 module Ref_block = Herbier_ui_model.Ref_block
+module Ref_text = Herbier_ui_model.Ref_text
 module Ids = Herbier_domain.Ids
 module Reference = Herbier_domain.Reference
 module Source = Herbier_domain.Reference.Source
@@ -91,7 +92,7 @@ let rows_of s =
     reference_row ~source:Source.Wikidata ~fetched_at:t_other
       (Payload.wikidata ~search:(Some s.search_p846) ~entity:(Some s.entity));
     reference_row ~source:Source.Wikipedia ~fetched_at:t_other
-      (Payload.wikipedia ~summary:(Some s.summary_fr));
+      (Payload.wikipedia ~summary:(Some s.summary_fr) ~uses:None);
   ]
 
 let project_species s =
@@ -222,6 +223,23 @@ let show_row = function
       "Links "
       ^ String.concat ", "
           (List.map (fun (l : Ref_block.link) -> l.label ^ " " ^ l.url) links)
+  | Ref_block.Uses uses ->
+      let plantuse, wikipedia = Ref_block.uses_parts uses in
+      let plantuse_s =
+        match plantuse with
+        | None -> "-"
+        | Some {chips; line; credit; _} ->
+            Printf.sprintf "[%s] %s / %s" (String.concat "," chips)
+              (Option.value ~default:"-" line)
+              credit
+      in
+      let wikipedia_s =
+        match wikipedia with
+        | None -> "-"
+        | Some {paragraph; credit; _} ->
+            Printf.sprintf "%s / %s" paragraph credit
+      in
+      Printf.sprintf "Uses plantuse=(%s) wikipedia=(%s)" plantuse_s wikipedia_s
 
 let ctor_name = function
   | Ref_block.Names _ -> "Names"
@@ -234,6 +252,7 @@ let ctor_name = function
   | Ref_block.Toxicity _ -> "Toxicity"
   | Ref_block.Organ_photos _ -> "Organ_photos"
   | Ref_block.Links _ -> "Links"
+  | Ref_block.Uses _ -> "Uses"
 
 let ctors rows = List.map ctor_name rows
 
@@ -251,6 +270,7 @@ let sources_of name rows =
       | Organ_photos {sources; _} ) ->
       sources
   | Some (Links _) -> Alcotest.failf "a Links row has no sources"
+  | Some (Uses _) -> Alcotest.failf "a Uses row has no single sources line"
   | None -> Alcotest.failf "no %s row" name
 
 (* ---------- both spike species, rendered ---------- *)
@@ -636,6 +656,25 @@ let every_constructor_present_and_in_order () =
           (cited_by [Source.Tela]
              {Projection.phrase = Some "Prairies"; chips = ["mi-ombre"]});
       toxicity = Some (cited_by [Source.Wikipedia] "Toxique.");
+      plantuse_uses =
+        Some
+          (cited_by [Source.Plantuse]
+             {
+               Projection.Uses.summary = ["médicinal"];
+               text = None;
+               title = "X y";
+               url = "https://plantuse.plantnet.org/fr/X_y";
+             });
+      wikipedia_uses =
+        Some
+          (cited_by [Source.Wikipedia]
+             {
+               Projection.Uses.paragraph = "Utilisée en phytothérapie.";
+               section = "Usages";
+               lang = "fr";
+               title = "X y";
+               url = "https://fr.wikipedia.org/wiki/X_y";
+             });
       organ_photos = None;
       links =
         [
@@ -673,6 +712,7 @@ let every_constructor_present_and_in_order () =
       "Flowering";
       "Habitat";
       "Toxicity";
+      "Uses";
       "Organ_photos";
       "Links";
     ]
@@ -689,6 +729,9 @@ let every_constructor_present_and_in_order () =
       "Flowering 6,7,8 juin – août / Tela Botanica";
       "Habitat Prairies [mi-ombre] / Tela Botanica";
       "Toxicity Toxique. / Wikipédia";
+      "Uses plantuse=([médicinal] - / Pl@ntUse · CC BY-SA) wikipedia=(Utilisée \
+       en phytothérapie. / Wikipédia · « Usages » · CC BY-SA · extrait \
+       automatique)";
       "Organ_photos [flower=p] Photos : A (cc-by-sa) / Pl@ntNet";
       "Links GBIF ↗ https://www.gbif.org/species/1";
     ]
@@ -796,6 +839,116 @@ let names_sources_deduplicated_in_source_order () =
 
 (* ---------- run ---------- *)
 
+(* ---------- Uses row over the recorded fixtures ---------- *)
+
+let find_uses rows =
+  List.find_map
+    (function
+      | Ref_block.Uses uses -> Some (Ref_block.uses_parts uses) | _ -> None)
+    rows
+
+(* [rows_of s] without its Wikipedia row (its uses member is added back
+   separately, next to the summary it builds on). *)
+let without_wikipedia s =
+  List.filter
+    (fun (r : Reference.t) ->
+      not (String.equal (Source.to_string r.source) "wikipedia"))
+    (rows_of s)
+
+let wikipedia_row_with_uses s uses_file =
+  reference_row ~source:Source.Wikipedia ~fetched_at:t_other
+    (Payload.wikipedia ~summary:(Some s.summary_fr)
+       ~uses:(Some (json uses_file)))
+
+let plantuse_row page_file =
+  reference_row ~source:Source.Plantuse ~fetched_at:t_other
+    (Payload.plantuse ~page:(Some (json page_file)))
+
+let digitalis_uses_row () =
+  (* Digitalis's fr extract has no uses section; the en one does,
+     so the stored uses member is the en extract. *)
+  let rows_with_uses =
+    without_wikipedia digitalis
+    @ [
+        wikipedia_row_with_uses digitalis
+          "wikipedia_extract_en_Digitalis_purpurea.json";
+        plantuse_row "plantuse_page_digitalis_purpurea.json";
+      ]
+  in
+  let proj = Projection.project ~references:rows_with_uses ~plant_refs:[] in
+  let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
+  (* Toxicity, then Uses, then Organ_photos: the texts stay together, photos
+     close the block. *)
+  Alcotest.(check (list string))
+    "Names, Origin, Toxicity, Uses, Organ_photos, Links"
+    ["Names"; "Origin"; "Toxicity"; "Uses"; "Organ_photos"; "Links"]
+    (ctors rows);
+  match find_uses rows with
+  | None -> Alcotest.fail "no Uses row"
+  | Some (plantuse, wikipedia) -> (
+      (match plantuse with
+      | Some {chips; line; credit; url} ->
+          Alcotest.(check (list string)) "chips" ["médicinal"] chips;
+          Alcotest.(check bool) "line is None" true (Option.is_none line);
+          Alcotest.(check string) "credit" "Pl@ntUse · CC BY-SA" credit;
+          Alcotest.(check string)
+            "url" "https://plantuse.plantnet.org/fr/Digitalis_purpurea" url
+      | None -> Alcotest.fail "plantuse is None");
+      match wikipedia with
+      | Some {credit; paragraph; _} ->
+          Alcotest.(check string)
+            "credit (en: the (en) marker)"
+            "Wikipédia (en) · « Medicinal use » · CC BY-SA · extrait \
+             automatique"
+            credit;
+          Alcotest.(check bool)
+            "paragraph starts with Extracted from the leaves" true
+            (String.starts_with ~prefix:"Extracted from the leaves" paragraph)
+      | None -> Alcotest.fail "wikipedia is None")
+
+let arnica_uses_row () =
+  (* Arnica's fr extract has a uses section:
+     the stored uses member is the fr extract. Its plantuse page has no box
+     nor prose. *)
+  let rows_with_uses =
+    without_wikipedia arnica
+    @ [
+        wikipedia_row_with_uses arnica
+          "wikipedia_extract_fr_Arnica_des_montagnes.json";
+        plantuse_row "plantuse_page_arnica_montana.json";
+      ]
+  in
+  let proj = Projection.project ~references:rows_with_uses ~plant_refs:[] in
+  let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
+  match find_uses rows with
+  | None -> Alcotest.fail "no Uses row"
+  | Some (plantuse, wikipedia) -> (
+      Alcotest.(check bool)
+        "no box nor prose on the plantuse page: plantuse is None" true
+        (Option.is_none plantuse);
+      match wikipedia with
+      | Some _ -> ()
+      | None -> Alcotest.fail "wikipedia is None")
+
+let neither_has_no_uses_row () =
+  (* fr extract with no usable section (Digitalis's), no plantuse row at
+     all: neither source has uses data. *)
+  let rows_with_uses =
+    without_wikipedia digitalis
+    @ [
+        wikipedia_row_with_uses digitalis
+          "wikipedia_extract_fr_Digitalis_purpurea.json";
+      ]
+  in
+  let proj = Projection.project ~references:rows_with_uses ~plant_refs:[] in
+  let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
+  Alcotest.(check bool) "no Uses row" true (Option.is_none (find_uses rows))
+
+let source_name_plantuse () =
+  Alcotest.(check string)
+    "Pl@ntUse" "Pl@ntUse"
+    (Ref_text.source_name Source.Plantuse)
+
 let case name f = Alcotest.test_case name `Quick f
 
 let () =
@@ -867,5 +1020,22 @@ let () =
             "Digitalis fixture: Origin's lines in French, in French order; no \
              row mentions « hors-ligne »"
             digitalis_origin_in_french;
+        ] );
+      ( "Uses row",
+        [
+          case
+            "Digitalis: chip médicinal, no plantuse line, the en « Medicinal \
+             use » paragraph, placed after Toxicity before Organ_photos"
+            digitalis_uses_row;
+          case
+            "Arnica: no plantuse part (page without box nor prose), the fr « \
+             Phytothérapie » paragraph"
+            arnica_uses_row;
+          case
+            "neither source has uses data (no section, no plantuse row): no \
+             Uses row"
+            neither_has_no_uses_row;
+          case "Ref_text.source_name Plantuse = \"Pl@ntUse\""
+            source_name_plantuse;
         ] );
     ]

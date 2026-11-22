@@ -189,6 +189,7 @@ let tests =
               Eppo;
               Inat;
               Plantnet;
+              Plantuse;
             ]
         ~expected:
           [
@@ -202,6 +203,7 @@ let tests =
             "eppo";
             "inat";
             "plantnet";
+            "plantuse";
           ];
       cases "Reference.Status" ~all:Reference.Status.all
         ~to_string:Reference.Status.to_string

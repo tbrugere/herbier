@@ -220,6 +220,27 @@
 .species__ref-sources
   +base.meta(12px)
 
+// « Utilisations »: Pl@ntUse's part then Wikipedia's, each ending with its
+// credit, a link to the page it quotes.
+.species__uses-part
+  display: flex
+  flex-direction: column
+  gap: 4px
+  & + &
+    margin-top: 6px
+
+// The link's own box is --touch-min tall (no overlay), so it never takes taps
+// from the expandable paragraph just above it.
+.species__uses-credit
+  display: inline-flex
+  align-items: center
+  align-self: flex-start
+  min-height: var(--touch-min)
+  color: inherit
+  text-decoration: underline
+  text-decoration-color: var(--line-ref)
+  text-underline-offset: 2px
+
 // « Noms »: « Autres langues › » opens the en / de / it lines.
 .species__names-more
   +widgets.bare-button

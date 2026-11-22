@@ -191,4 +191,302 @@ let inline_tests =
         Alcotest.(check bool) "thumbnail" true (Option.is_none t.thumbnail) );
   ]
 
-let suite = ("wikipedia", fixture_tests @ inline_tests)
+(* ---------- extract ---------- *)
+
+let extract_tests =
+  [
+    ( "extract url matches the recording script's line",
+      `Quick,
+      fun () ->
+        List.iter
+          (fun (file, lang, title) ->
+            match Wikipedia.extract ~lang ~title with
+            | Some r -> Check.check_recorded file r
+            | None -> Alcotest.failf "%s: extract gave None" file)
+          [
+            ( "wikipedia_extract_fr_Digitalis_purpurea.json",
+              "fr",
+              "Digitalis purpurea" );
+            ( "wikipedia_extract_en_Digitalis_purpurea.json",
+              "en",
+              "Digitalis purpurea" );
+            ( "wikipedia_extract_fr_Arnica_des_montagnes.json",
+              "fr",
+              "Arnica des montagnes" );
+            ("wikipedia_extract_en_Arnica_montana.json", "en", "Arnica montana");
+            ("wikipedia_extract_en_Urtica_dioica.json", "en", "Urtica dioica");
+            ("wikipedia_extract_fr_Xyzzy_foo.json", "fr", "Xyzzy foo");
+          ] );
+    ( "extract is None for an invalid lang or a blank/./.. title",
+      `Quick,
+      fun () ->
+        Alcotest.(check bool)
+          "lang FR" true
+          (Option.is_none (Wikipedia.extract ~lang:"FR" ~title:"X"));
+        Alcotest.(check bool)
+          "blank title" true
+          (Option.is_none (Wikipedia.extract ~lang:"fr" ~title:"  ")) );
+  ]
+
+(* ---------- article_of_json ---------- *)
+
+let one_page fields =
+  `Assoc [("query", `Assoc [("pages", `List [`Assoc fields])])]
+
+let article_tests =
+  [
+    ( "a missing page is Ok None",
+      `Quick,
+      fun () ->
+        match
+          Wikipedia.article_of_json
+            (Check.json "wikipedia_extract_fr_Xyzzy_foo.json")
+        with
+        | Ok None -> ()
+        | Ok (Some _) -> Alcotest.fail "expected None"
+        | Error e ->
+            Alcotest.failf "decode failed: %s" (Decode.error_to_string e) );
+    ( "en Digitalis purpurea: lang and url",
+      `Quick,
+      fun () ->
+        match
+          Wikipedia.article_of_json
+            (Check.json "wikipedia_extract_en_Digitalis_purpurea.json")
+        with
+        | Ok (Some a) ->
+            Alcotest.(check (option string)) "lang" (Some "en") a.lang;
+            Alcotest.(check (option string))
+              "url" (Some "https://en.wikipedia.org/wiki/Digitalis_purpurea")
+              a.url
+        | Ok None -> Alcotest.fail "expected Some"
+        | Error e ->
+            Alcotest.failf "decode failed: %s" (Decode.error_to_string e) );
+    ( "a root error object is Api_error",
+      `Quick,
+      fun () ->
+        match
+          Wikipedia.article_of_json
+            (`Assoc
+               [
+                 ("error", `Assoc [("code", `String "x"); ("info", `String "y")]);
+               ])
+        with
+        | Error (Decode.Api_error {code; _}) ->
+            Alcotest.(check string) "code" "x" code
+        | Error e ->
+            Alcotest.failf "expected Api_error, got %s"
+              (Decode.error_to_string e)
+        | Ok _ -> Alcotest.fail "expected Error" );
+    ( "no query object is Unexpected at /query",
+      `Quick,
+      fun () ->
+        Check.check_unexpected_path "path" "/query"
+          (Wikipedia.article_of_json (`Assoc [])) );
+    ( "pages not an array is Unexpected at /query/pages",
+      `Quick,
+      fun () ->
+        Check.check_unexpected_path "path" "/query/pages"
+          (Wikipedia.article_of_json
+             (`Assoc [("query", `Assoc [("pages", `Assoc [])])])) );
+    ( "an empty pages array is Ok None",
+      `Quick,
+      fun () ->
+        Alcotest.(check bool)
+          "Ok None" true
+          (Wikipedia.article_of_json
+             (`Assoc [("query", `Assoc [("pages", `List [])])])
+          = Ok None) );
+    ( "an invalid page is Ok None",
+      `Quick,
+      fun () ->
+        Alcotest.(check bool)
+          "Ok None" true
+          (Wikipedia.article_of_json (one_page [("invalid", `Bool true)])
+          = Ok None) );
+    ( "a page without extract is Unexpected at its extract",
+      `Quick,
+      fun () ->
+        Check.check_unexpected_path "path" "/query/pages/0/extract"
+          (Wikipedia.article_of_json (one_page [("title", `String "T")])) );
+    ( "a page without title is Unexpected at its title",
+      `Quick,
+      fun () ->
+        Check.check_unexpected_path "path" "/query/pages/0/title"
+          (Wikipedia.article_of_json (one_page [("extract", `String "")])) );
+  ]
+
+(* ---------- uses_title ---------- *)
+
+let uses_title_cases =
+  [
+    ("fr", "Usages et propriétés", true);
+    ("fr", "Usages en médecine humaine", true);
+    ("fr", "Usages en médecine vétérinaire", true);
+    ("fr", "Autres usages", true);
+    ("fr", "Usages médicinaux", true);
+    ("fr", "Utilisation", true);
+    ("fr", "Propriétés médicinales", false);
+    ("fr", "Constituants", false);
+    ("en", "Medicinal use", true);
+    ("en", "Use in herbal medicine", true);
+    ("en", "Uses", true);
+    ("en", "Relationship to humans", false);
+    ("en", "Cultivation", false);
+    ("en", "User guide", false);
+  ]
+
+let uses_title_tests =
+  List.map
+    (fun (lang, title, expected) ->
+      ( Printf.sprintf "uses_title ~lang:%S %S = %b" lang title expected,
+        `Quick,
+        fun () ->
+          Alcotest.(check bool)
+            title expected
+            (Wikipedia.uses_title ~lang title) ))
+    uses_title_cases
+
+(* ---------- uses_line ---------- *)
+
+let uses_line_result (a : Wikipedia.article) =
+  Option.map (fun (s, l) -> (s, l)) (Wikipedia.uses_line a)
+
+let article_or_fail name file =
+  match Wikipedia.article_of_json (Check.json file) with
+  | Ok (Some a) -> a
+  | Ok None -> Alcotest.failf "%s: article_of_json gave None" name
+  | Error e ->
+      Alcotest.failf "%s: decode failed: %s" name (Decode.error_to_string e)
+
+let uses_line_tests =
+  [
+    ( "fr Digitalis purpurea: no matching section",
+      `Quick,
+      fun () ->
+        let a =
+          article_or_fail "fr digitalis"
+            "wikipedia_extract_fr_Digitalis_purpurea.json"
+        in
+        Alcotest.(check bool) "None" true (Option.is_none (uses_line_result a))
+    );
+    ( "en Digitalis purpurea: Medicinal use, line starts with Extracted from \
+       the leaves",
+      `Quick,
+      fun () ->
+        let a =
+          article_or_fail "en digitalis"
+            "wikipedia_extract_en_Digitalis_purpurea.json"
+        in
+        match uses_line_result a with
+        | Some (section, line) ->
+            Alcotest.(check string) "section" "Medicinal use" section;
+            Alcotest.(check bool)
+              "line" true
+              (String.starts_with ~prefix:"Extracted from the leaves" line)
+        | None -> Alcotest.fail "expected Some" );
+    ( "fr Arnica des montagnes: the uses heading's subsections, Phytothérapie",
+      `Quick,
+      fun () ->
+        let a =
+          article_or_fail "fr arnica"
+            "wikipedia_extract_fr_Arnica_des_montagnes.json"
+        in
+        match uses_line_result a with
+        | Some (section, line) ->
+            Alcotest.(check string) "section" "Phytothérapie" section;
+            Alcotest.(check bool)
+              "line" true
+              (String.starts_with ~prefix:"En médecine traditionnelle" line)
+        | None -> Alcotest.fail "expected Some" );
+    ( "en Urtica dioica: no matching section (Relationship to humans)",
+      `Quick,
+      fun () ->
+        let a =
+          article_or_fail "en urtica" "wikipedia_extract_en_Urtica_dioica.json"
+        in
+        Alcotest.(check bool) "None" true (Option.is_none (uses_line_result a));
+        Alcotest.(check bool) "has_uses false" false (Wikipedia.has_uses a) );
+  ]
+
+(* Literal texts: what a uses heading's subsections give. *)
+let long = String.make 45 'x'
+
+let fr text : Wikipedia.article =
+  {title = "T"; lang = Some "fr"; url = None; text}
+
+let tree_tests =
+  let check name expected text =
+    ( name,
+      `Quick,
+      fun () ->
+        Alcotest.(check (option (pair string string)))
+          "uses_line" expected
+          (Wikipedia.uses_line (fr text)) )
+  in
+  [
+    check "own body first"
+      (Some ("Usages", "own " ^ long))
+      ("== Usages ==\nown " ^ long ^ "\n=== Autres usages ===\nsub " ^ long);
+    check "empty body: a uses subsection before an earlier other one"
+      (Some ("Usages médicinaux", "med " ^ long))
+      ("== Usages ==\n=== Composition ===\nchem "
+      ^ long
+      ^ "\n=== Usages médicinaux ===\nmed "
+      ^ long);
+    check "empty body, no uses subsection: the first other one"
+      (Some ("Composition", "chem " ^ long))
+      ("== Usages ==\n=== Composition ===\nchem "
+      ^ long
+      ^ "\n=== Cuisine ===\nfood "
+      ^ long);
+    check "a history subsection comes last"
+      (Some ("Phytothérapie", "now " ^ long))
+      ("== Usages ==\n=== Historique ===\npast "
+      ^ long
+      ^ "\n=== Phytothérapie ===\nnow "
+      ^ long);
+    check "only a history subsection: it is read"
+      (Some ("Histoire", "past " ^ long))
+      ("== Usages ==\n=== Histoire ===\npast " ^ long);
+    check "the next level-2 section is not a subsection" None
+      ("== Usages ==\nshort\n== Description ==\ndesc " ^ long);
+    check "a uses section nested in another section is found"
+      (Some ("Usages", "use " ^ long))
+      ("== Plante ==\n=== Usages ===\nuse " ^ long);
+    ( "in_uses: a uses section and its subsections, not the next section",
+      `Quick,
+      fun () ->
+        let _lead, sections =
+          Herbier_refs.Wiki_text.sections
+            "== A ==\n\
+             == Usages ==\n\
+             === B ===\n\
+             ==== C ====\n\
+             == D ==\n\
+             === Emplois ==="
+        in
+        Alcotest.(check (list (pair string bool)))
+          "in_uses"
+          [
+            ("A", false);
+            ("Usages", true);
+            ("B", true);
+            ("C", true);
+            ("D", false);
+            ("Emplois", true);
+          ]
+          (List.map
+             (fun ((s : Herbier_refs.Wiki_text.section), kept) ->
+               (s.title, kept))
+             (Wikipedia.in_uses ~lang:"fr" sections)) );
+  ]
+
+let suite =
+  ( "wikipedia",
+    fixture_tests
+    @ inline_tests
+    @ extract_tests
+    @ article_tests
+    @ uses_title_tests
+    @ uses_line_tests
+    @ tree_tests )

@@ -14,6 +14,7 @@ module Request = Herbier_refs.Request
 module Wikidata = Herbier_refs.Sources.Wikidata
 module Fetch_rule = Herbier_refs.Fetch_rule
 module Regional = Herbier_refs.Regional
+module Uses_fetch = Herbier_refs.Uses_fetch
 
 (* ---------- testables ---------- *)
 
@@ -89,16 +90,23 @@ let branches3 gbif_key =
   | bs -> Alcotest.failf "expected 3 branches, got %d" (List.length bs)
 
 (* A whole fetch, as the pipeline runs it: the three branches, then the
-   regional program on their rows. *)
+   regional program and Uses_fetch on their rows. *)
 let fetch_all net =
   let gbif_b, plantnet_b, wiki_b = branches3 5414995 in
   let rows =
     Step.run net gbif_b @ Step.run net plantnet_b @ Step.run net wiki_b
   in
-  rows @ Step.run net (Regional.program (Regional.input ~previous:[] rows))
+  let input = Regional.input ~previous:[] rows in
+  rows
+  @ Step.run net (Regional.program input)
+  @ Step.run net (Uses_fetch.program input)
 
 let digitalis_net =
-  Fake_net.with_ Fake_net.digitalis_regional Fake_net.digitalis
+  Fake_net.with_
+    (Fake_net.digitalis_regional
+    @ Fake_net.plantuse_table ~titles:["Digitalis purpurea"]
+        "plantuse_page_digitalis_purpurea.json")
+    Fake_net.digitalis
 
 let has_request ~host reqs =
   List.exists

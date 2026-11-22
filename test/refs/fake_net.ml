@@ -11,6 +11,7 @@ module Wikidata = Herbier_refs.Sources.Wikidata
 module Wikipedia = Herbier_refs.Sources.Wikipedia
 module Tela = Herbier_refs.Sources.Tela
 module Inpn = Herbier_refs.Sources.Inpn
+module Plantuse = Herbier_refs.Sources.Plantuse
 module Qid = Herbier_refs.Qid
 module Fixture = Herbier_test_support.Fixture
 
@@ -52,26 +53,41 @@ let with_ (overrides : (string * Step.response) list) base (r : Request.t) :
    entity + wikipedia fr summary. *)
 let full_fetch ~gbif_key ~species ~vernacular_names ~distributions
     ~occurrence_count ~plantnet_media ~wikidata_search ~entity_qid
-    ~wikidata_entity ~summary_lang ~summary_title ~wikipedia_summary =
+    ~wikidata_entity ~summary_lang ~summary_title ~wikipedia_summary
+    ~wikipedia_extract_fr ?wikipedia_extract_en () =
   let qid = some "entity_qid" (Qid.of_string entity_qid) in
   fixtures
-    [
-      (url (Gbif.species ~key:gbif_key), species);
-      (url (Gbif.vernacular_names ~key:gbif_key), vernacular_names);
-      (url (Gbif.distributions ~key:gbif_key), distributions);
-      (url (Gbif.occurrence_count ~key:gbif_key), occurrence_count);
-      (url (Gbif.plantnet_media ~key:gbif_key), plantnet_media);
-      ( url
-          (some "search"
-             (Wikidata.search ~property:Wikidata.Property.Gbif_key
-                ~value:(string_of_int gbif_key))),
-        wikidata_search );
-      (url (Wikidata.entity qid), wikidata_entity);
-      ( url
-          (some "summary"
-             (Wikipedia.summary ~lang:summary_lang ~title:summary_title)),
-        wikipedia_summary );
-    ]
+    ([
+       (url (Gbif.species ~key:gbif_key), species);
+       (url (Gbif.vernacular_names ~key:gbif_key), vernacular_names);
+       (url (Gbif.distributions ~key:gbif_key), distributions);
+       (url (Gbif.occurrence_count ~key:gbif_key), occurrence_count);
+       (url (Gbif.plantnet_media ~key:gbif_key), plantnet_media);
+       ( url
+           (some "search"
+              (Wikidata.search ~property:Wikidata.Property.Gbif_key
+                 ~value:(string_of_int gbif_key))),
+         wikidata_search );
+       (url (Wikidata.entity qid), wikidata_entity);
+       ( url
+           (some "summary"
+              (Wikipedia.summary ~lang:summary_lang ~title:summary_title)),
+         wikipedia_summary );
+       ( url
+           (some "extract fr"
+              (Wikipedia.extract ~lang:summary_lang ~title:summary_title)),
+         wikipedia_extract_fr );
+     ]
+    @
+    match wikipedia_extract_en with
+    | None -> []
+    | Some file ->
+        [
+          ( url
+              (some "extract en"
+                 (Wikipedia.extract ~lang:"en" ~title:summary_title)),
+            file );
+        ])
 
 (* Digitalis purpurea (gbif_key 5414995), every call Complete. *)
 let digitalis =
@@ -84,6 +100,9 @@ let digitalis =
     ~wikidata_entity:"wikidata_entity_Q157555.json" ~summary_lang:"fr"
     ~summary_title:"Digitalis purpurea"
     ~wikipedia_summary:"wikipedia_summary_fr_Digitalis_purpurea.json"
+    ~wikipedia_extract_fr:"wikipedia_extract_fr_Digitalis_purpurea.json"
+      (* fr has no uses section: the branch also tries en. *)
+    ~wikipedia_extract_en:"wikipedia_extract_en_Digitalis_purpurea.json" ()
 
 (* Arnica montana (gbif_key 5405976): its frwiki sitelink title is "Arnica
    des montagnes", not the scientific name. *)
@@ -97,6 +116,8 @@ let arnica =
     ~wikidata_entity:"wikidata_entity_Q207848.json" ~summary_lang:"fr"
     ~summary_title:"Arnica des montagnes"
     ~wikipedia_summary:"wikipedia_summary_fr_Arnica_des_montagnes.json"
+    ~wikipedia_extract_fr:"wikipedia_extract_fr_Arnica_des_montagnes.json" ()
+(* fr has a uses section: the branch stops there, no en extract call. *)
 
 (* The regional layer's URL->fixture overrides for one taxon: Tela's
    name bridge (by scientific [name]), its taxon call (by [taxon_nn], the
@@ -129,6 +150,12 @@ let digitalis_regional =
     ~inpn_name:"inpn_name_94959.json" ~status:"inpn_status_94959.json"
     ~red_list:"inpn_red_list_94959.json"
     ~protections:"inpn_protections_94959.json"
+
+(* The URL->fixture entry of a [Plantuse.page] request for [titles],
+   for [Uses_fetch.program] tests (the plantuse row, run beside Regional,
+   not part of [Fanout.branches]). *)
+let plantuse_table ~titles file =
+  [(url (some "plantuse page" (Plantuse.page ~titles)), body_of_fixture file)]
 
 (* [without path json]: [json] with the member at [path] (object keys from
    the root) removed, to build a variant of a recorded body in a test

@@ -46,4 +46,5 @@ let () =
       ("wgsrpd_fr", Wgsrpd_fr_tests.wgsrpd_fr);
       ("ref_photos", Ref_photos_tests.ref_photos);
       ("geocode_pass", Geocode_pass_tests.geocode_pass);
+      ("long_text", Long_text_tests.long_text);
     ]

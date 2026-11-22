@@ -38,7 +38,7 @@ let removable (r : Plant_ref.t) =
   match r.source with
   | Source.Gbif -> false
   | Source.Wikidata | Wikipedia | Powo | Ipni | Taxref | Tela | Eppo | Inat
-  | Plantnet ->
+  | Plantnet | Plantuse ->
       true
 
 let label (r : Plant_ref.t) =

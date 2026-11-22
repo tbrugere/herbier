@@ -9,6 +9,7 @@ type part =
   | Wikidata_search
   | Wikidata_entity
   | Wikipedia_summary
+  | Wikipedia_uses
   | Tela_names
   | Tela_taxon
   | Tela_baseflor
@@ -16,6 +17,7 @@ type part =
   | Inpn_status
   | Inpn_red_list
   | Inpn_protections
+  | Plantuse_page
 
 let all =
   [
@@ -27,6 +29,7 @@ let all =
     Wikidata_search;
     Wikidata_entity;
     Wikipedia_summary;
+    Wikipedia_uses;
     Tela_names;
     Tela_taxon;
     Tela_baseflor;
@@ -34,6 +37,7 @@ let all =
     Inpn_status;
     Inpn_red_list;
     Inpn_protections;
+    Plantuse_page;
   ]
 
 let source = function
@@ -42,9 +46,10 @@ let source = function
       Source.Gbif
   | Plantnet_media -> Source.Plantnet
   | Wikidata_search | Wikidata_entity -> Source.Wikidata
-  | Wikipedia_summary -> Source.Wikipedia
+  | Wikipedia_summary | Wikipedia_uses -> Source.Wikipedia
   | Tela_names | Tela_taxon | Tela_baseflor -> Source.Tela
   | Inpn_name | Inpn_status | Inpn_red_list | Inpn_protections -> Source.Taxref
+  | Plantuse_page -> Source.Plantuse
 
 let name = function
   | Gbif_species -> "species"
@@ -55,6 +60,7 @@ let name = function
   | Wikidata_search -> "search"
   | Wikidata_entity -> "entity"
   | Wikipedia_summary -> "summary"
+  | Wikipedia_uses -> "uses"
   | Tela_names -> "names"
   | Tela_taxon -> "taxon"
   | Tela_baseflor -> "baseflor"
@@ -62,6 +68,7 @@ let name = function
   | Inpn_status -> "status"
   | Inpn_red_list -> "red_list"
   | Inpn_protections -> "protections"
+  | Plantuse_page -> "page"
 
 let parts s = List.filter (fun p -> source p = s) all
 
@@ -156,11 +163,38 @@ let protection_article json =
         (keep ["scopeLocation"] embedded))
     (keep ["name"; "scope"; "type"; "category"; "_embedded"] json)
 
+(* The headings, and the bodies of the sections Wikipedia.uses_line may
+   read: a whole article is tens of kilobytes. *)
+let uses_sections ~lang text =
+  let _lead, sections = Wiki_text.sections text in
+  String.concat "\n"
+    (List.concat_map
+       (fun ((s : Wiki_text.section), kept) ->
+         let marks = String.make s.level '=' in
+         let heading = marks ^ " " ^ s.title ^ " " ^ marks in
+         match kept with true -> [heading; s.body] | false -> [heading])
+       (Sources.Wikipedia.in_uses ~lang sections))
+
+let extract_page page =
+  let lang = Option.value ~default:"fr" (Decode.string "pagelanguage" page) in
+  map_member "extract"
+    (function
+      | `String text -> `String (uses_sections ~lang text) | json -> json)
+    (keep
+       ["title"; "missing"; "invalid"; "pagelanguage"; "fullurl"; "extract"]
+       page)
+
 let prune part body =
   match part with
   | Gbif_species | Gbif_occurrence_count | Wikidata_search | Wikipedia_summary
-  | Tela_names ->
+  | Tela_names | Plantuse_page ->
       body
+  | Wikipedia_uses ->
+      map_member "query"
+        (fun query ->
+          map_member "pages" (map_list extract_page)
+            (keep ["normalized"; "redirects"; "pages"] query))
+        (keep ["query"; "error"] body)
   | Tela_taxon -> keep tela_taxon_fields body
   | Tela_baseflor -> keep baseflor_fields body
   | Inpn_name ->
@@ -224,7 +258,10 @@ let plantnet ~media = build [(Plantnet_media, media)]
 let wikidata ~search ~entity =
   build [(Wikidata_search, search); (Wikidata_entity, entity)]
 
-let wikipedia ~summary = build [(Wikipedia_summary, summary)]
+let wikipedia ~summary ~uses =
+  build [(Wikipedia_summary, summary); (Wikipedia_uses, uses)]
+
+let plantuse ~page = build [(Plantuse_page, page)]
 
 let tela ~names ~taxon ~baseflor =
   build [(Tela_names, names); (Tela_taxon, taxon); (Tela_baseflor, baseflor)]

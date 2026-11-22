@@ -8,6 +8,29 @@ module Reference := Herbier_domain.Reference
 type link = {label : string; url : string}
 (** One anchor of the links row: [label = Ref_text.link_label source]. *)
 
+type plantuse_uses = {
+  chips : string list;  (** Pl@ntUse's summary bullets, as written. *)
+  line : string option;
+      (** The first two sentences of its « Usages » section. *)
+  url : string;  (** The Pl@ntUse page. *)
+  credit : string;  (** [Ref_text.plantuse_credit] *)
+}
+
+type wikipedia_uses = {
+  paragraph : string;
+  url : string;  (** The article. *)
+  credit : string;  (** [Ref_text.wikipedia_uses_credit] *)
+}
+
+(** « Utilisations »: Pl@ntUse's part, Wikipedia's, or both; never neither. *)
+type uses =
+  | Plantuse_only of plantuse_uses
+  | Wikipedia_only of wikipedia_uses
+  | Both of plantuse_uses * wikipedia_uses
+
+val uses_parts : uses -> plantuse_uses option * wikipedia_uses option
+(** The two parts, at least one [Some]. *)
+
 type row =
   | Names of {
       french : string list;
@@ -41,6 +64,9 @@ type row =
       (** [text] = [Ref_text.months_text months]. *)
   | Habitat of {phrase : string option; chips : string list; sources : string}
   | Toxicity of {text : string; sources : string}
+  | Uses of uses
+      (** « Utilisations »: each part carries its own credit, so the row has no
+          [sources]. *)
   | Organ_photos of {
       photos : (Reference.Organ.t * string) list;  (** organ, thumb path *)
       credits : string;  (** [Ref_text.credits] of the shown rows *)
@@ -62,6 +88,11 @@ val rows :
     - [Flowering]: [flowering_months = Some _];
     - [Habitat]: [habitat = Some _];
     - [Toxicity]: [toxicity = Some _];
+    - [Uses]: [plantuse_uses] or [wikipedia_uses] is [Some]; [plantuse] is
+      [Some] when the projection's Pl@ntUse part has a chip or a line, its
+      [chips] the summary, its [line] the text; [wikipedia] carries the
+      paragraph, the article URL and
+      [Ref_text.wikipedia_uses_credit ~lang ~section];
     - [Organ_photos]: [organ_photos <> []] (the argument:
       [Herbier_refs.Organ_photos.shown]);
     - [Links]: [links <> []], [label = Ref_text.link_label source].

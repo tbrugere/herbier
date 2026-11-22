@@ -7,6 +7,10 @@ let () =
       Test_wikipedia.suite;
       Test_tela.suite;
       Test_inpn.suite;
+      Test_wiki_text.suite;
+      Test_plantuse.suite;
+      Test_uses_fetch.suite;
+      Test_uses.suite;
       Test_payload.suite;
       Test_projection.suite;
       Test_organ_photos.suite;
