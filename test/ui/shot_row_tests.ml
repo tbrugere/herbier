@@ -29,7 +29,7 @@ let begin_capture_on_empty () =
     "one Pending slot" [Shot_row.Pending t] (Shot_row.slots row);
   Alcotest.(check int) "one pending" 1 (Shot_row.pending row);
   Alcotest.(check bool)
-    "a placeholder alone does not enable Enregistrer" false
+    "a placeholder alone enables Enregistrer (M8.88)" true
     (Shot_row.can_save row)
 
 let fill_the_single_pending_slot () =
@@ -53,7 +53,7 @@ let fill_keeps_tap_order_not_settle_order () =
     [Shot_row.Pending t1; Shot_row.Ready 2]
     (Shot_row.slots row);
   Alcotest.(check bool)
-    "can_save is false while t1 is still pending" false (Shot_row.can_save row);
+    "can_save is true while t1 is still pending" true (Shot_row.can_save row);
   let row = Shot_row.fill t1 1 row in
   Alcotest.(check (list int))
     "ready is in tap order (1 then 2), not settle order" [1; 2]
@@ -148,14 +148,18 @@ let a_late_capture_never_fills_a_newer_tap () =
     [Shot_row.Ready 2; Shot_row.Pending tc]
     (Shot_row.slots (Shot_row.fill tb 2 row))
 
-let dropping_a_stuck_placeholder_enables_save_again () =
+let dropping_the_only_placeholder_disables_save () =
   let row = Shot_row.append [1] (Shot_row.empty : int Shot_row.t) in
   let row, t = Shot_row.begin_capture row in
   Alcotest.(check bool)
-    "a pending capture blocks Enregistrer" false (Shot_row.can_save row);
+    "a pending capture does not block Enregistrer" true (Shot_row.can_save row);
   let row = Shot_row.drop t row in
   Alcotest.(check bool)
-    "its ✕ (a drop) enables it again" true (Shot_row.can_save row);
+    "after its ✕ the ready photo keeps it enabled" true (Shot_row.can_save row);
+  let alone, t = Shot_row.begin_capture (Shot_row.empty : int Shot_row.t) in
+  Alcotest.(check bool)
+    "the ✕ of the only placeholder disables it" false
+    (Shot_row.can_save (Shot_row.drop t alone));
   Alcotest.(check int_slots_t)
     "the ready photo is kept" [Shot_row.Ready 1] (Shot_row.slots row)
 
@@ -167,8 +171,7 @@ let append_after_a_pending_tap () =
     [Shot_row.Pending t; Shot_row.Ready 1; Shot_row.Ready 2]
     (Shot_row.slots row);
   Alcotest.(check bool)
-    "can_save is false until the pending slot fills" false
-    (Shot_row.can_save row);
+    "can_save is true with the pending slot" true (Shot_row.can_save row);
   let row = Shot_row.fill t 3 row in
   Alcotest.(check bool)
     "can_save is true once filled" true (Shot_row.can_save row)
@@ -203,6 +206,57 @@ let ready_skips_pending_slots_and_keeps_order () =
   Alcotest.(check (list int))
     "ready lists only the Ready shots, in order" [1; 2] (Shot_row.ready row)
 
+let fate_t = Alcotest.testable Shot_row.pp_fate Shot_row.equal_fate
+
+let captures_started_before_save_are_attached () =
+  let row = Shot_row.append [1] (Shot_row.empty : int Shot_row.t) in
+  let row, t1 = Shot_row.begin_capture row in
+  let row, t2 = Shot_row.begin_capture row in
+  Alcotest.(check fate_t)
+    "before the save, a capture fills the row" Shot_row.Fill
+    (Shot_row.fate t1 row);
+  let row, handed = Shot_row.hand_over row in
+  Alcotest.(check (list ticket_t))
+    "both pending captures are handed, in tap order" [t1; t2] handed;
+  Alcotest.(check fate_t)
+    "the first is attached" Shot_row.Attach (Shot_row.fate t1 row);
+  Alcotest.(check fate_t)
+    "the second is attached" Shot_row.Attach (Shot_row.fate t2 row);
+  Alcotest.(check (list int))
+    "the ready photo is still what the save writes now" [1] (Shot_row.ready row);
+  Alcotest.(check int) "two attaching" 2 (Shot_row.attaching row);
+  (* The second settles first: attached, then dropped from the row. *)
+  let row = Shot_row.drop t2 row in
+  Alcotest.(check int) "one attaching" 1 (Shot_row.attaching row);
+  Alcotest.(check fate_t)
+    "the first is still attached" Shot_row.Attach (Shot_row.fate t1 row);
+  let row = Shot_row.drop t1 row in
+  Alcotest.(check int) "none attaching" 0 (Shot_row.attaching row);
+  Alcotest.(check fate_t)
+    "a settled ticket is discarded" Shot_row.Discard (Shot_row.fate t1 row)
+
+let hand_over_hands_each_capture_once () =
+  let row, t1 = Shot_row.begin_capture (Shot_row.empty : int Shot_row.t) in
+  let row, first = Shot_row.hand_over row in
+  Alcotest.(check (list ticket_t)) "first round: t1" [t1] first;
+  (* A failed write: 4d stays, a new shot, a second Enregistrer. *)
+  let row, t2 = Shot_row.begin_capture row in
+  Alcotest.(check fate_t)
+    "a capture after the save fills the row" Shot_row.Fill
+    (Shot_row.fate t2 row);
+  let row, second = Shot_row.hand_over row in
+  Alcotest.(check (list ticket_t)) "second round: t2 only" [t2] second;
+  let _, third = Shot_row.hand_over row in
+  Alcotest.(check (list ticket_t)) "nothing left to hand" [] third
+
+let a_handed_placeholder_given_up_is_discarded () =
+  let row, t = Shot_row.begin_capture (Shot_row.empty : int Shot_row.t) in
+  let row, _ = Shot_row.hand_over row in
+  let row = Shot_row.drop t row in
+  Alcotest.(check fate_t)
+    "its ✕: the late shot is discarded" Shot_row.Discard (Shot_row.fate t row);
+  Alcotest.(check int) "not attaching" 0 (Shot_row.attaching row)
+
 let shot_row =
   [
     Alcotest.test_case "empty: no slots, nothing ready or pending, can't save"
@@ -212,9 +266,8 @@ let shot_row =
       begin_capture_on_empty;
     Alcotest.test_case "fill the single pending slot: Ready, can_save" `Quick
       fill_the_single_pending_slot;
-    Alcotest.test_case
-      "fill keeps tap order, not settle order; can_save only once all are ready"
-      `Quick fill_keeps_tap_order_not_settle_order;
+    Alcotest.test_case "fill keeps tap order, not settle order" `Quick
+      fill_keeps_tap_order_not_settle_order;
     Alcotest.test_case "drop removes only that placeholder" `Quick
       drop_removes_only_that_placeholder;
     Alcotest.test_case
@@ -232,8 +285,8 @@ let shot_row =
     Alcotest.test_case "a late capture never fills a newer tap's placeholder"
       `Quick a_late_capture_never_fills_a_newer_tap;
     Alcotest.test_case
-      "dropping a stuck placeholder (its ✕) enables Enregistrer again" `Quick
-      dropping_a_stuck_placeholder_enables_save_again;
+      "a placeholder enables Enregistrer; the ✕ of the only one disables it"
+      `Quick dropping_the_only_placeholder_disables_save;
     Alcotest.test_case
       "append after a pending tap: gallery picks go after the placeholder"
       `Quick append_after_a_pending_tap;
@@ -245,4 +298,11 @@ let shot_row =
       remove_several_ready_slots;
     Alcotest.test_case "ready skips pending slots and keeps order" `Quick
       ready_skips_pending_slots_and_keeps_order;
+    Alcotest.test_case
+      "captures started before Enregistrer are attached to its observation"
+      `Quick captures_started_before_save_are_attached;
+    Alcotest.test_case "hand_over hands each capture once" `Quick
+      hand_over_hands_each_capture_once;
+    Alcotest.test_case "a handed placeholder given up (its ✕) is discarded"
+      `Quick a_handed_placeholder_given_up_is_discarded;
   ]

@@ -71,6 +71,16 @@ val place_sources : t -> Herbier_geo.Place_name.sources React.signal
 (** The 4m « Noms de lieux » switches; [eq] = [Place_name.equal_sources].
     Written through [App.set_place_source]. *)
 
+val incoming : t -> Herbier_ui_model.Incoming_photos.t React.signal
+(** The captures 4d's Enregistrer handed to an observation before they were
+    written (M8.88): 4h shows a loading tile per photo still on its way. *)
+
+val change_incoming :
+  t ->
+  (Herbier_ui_model.Incoming_photos.t -> Herbier_ui_model.Incoming_photos.t) ->
+  unit
+(** Applies the change to {!incoming} in its own update step. *)
+
 val set_filters : t -> ?step:React.step -> filters -> unit
 (** [step] groups this change with other setters in one update step (style guide
     9.3); without it the setter runs its own step. *)

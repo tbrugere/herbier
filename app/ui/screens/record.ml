@@ -2,6 +2,7 @@ module Fr_text = Herbier_ui_model.Fr_text
 module Gps = Herbier_ui_model.Gps
 module Record_plan = Herbier_ui_model.Record_plan
 module Shot_row = Herbier_ui_model.Shot_row
+module Incoming_photos = Herbier_ui_model.Incoming_photos
 module List_patch = Herbier_ui_model.List_patch
 open Brr
 module Db = Herbier_store_io.Db
@@ -119,6 +120,42 @@ let v app =
     update (Shot_row.remove (fun (_, u) -> Jstr.equal u url));
     Object_url.revoke url
   in
+  let settle_incoming ~written (o : Observation.t) =
+    State.change_incoming state (Incoming_photos.settle ~written o.id)
+  in
+  let attach_failed () =
+    ignore
+      (W.Toast.show ~ms:Herbier_ui_model.Observation_plan.toast_ms
+         Record_plan.attach_failed
+        : Rb.binding)
+  in
+  (* A capture Enregistrer handed to its observation (M8.88): written to it
+     when it settles, even after 4d is gone; a failure leaves the observation
+     with its other photos, or none, and says so. No object URL is made. *)
+  let attach r =
+    match !stored with
+    | None -> ()
+    | Some {observation = o; identify = _} -> (
+        match r with
+        | Error e ->
+            log "shutter" (Capture.error_to_string e);
+            settle_incoming ~written:false o;
+            attach_failed ()
+        | Ok s ->
+            Fut.await (App.save_photos app ~observation:o [s]) (fun failed ->
+                match failed with
+                | [] -> settle_incoming ~written:true o
+                | _ :: _ ->
+                    settle_incoming ~written:false o;
+                    attach_failed ()))
+  in
+  (* Closing the camera fails the captures in flight: after the release it
+     waits for the handed ones. *)
+  let close_when_attached () =
+    match (!released, Shot_row.attaching (React.S.value row)) with
+    | true, 0 -> stop_camera ()
+    | true, _ | false, _ -> ()
+  in
   (* The placeholder is in the row before the capture starts; a capture that
      settles after the screen is gone, or for a slot no longer pending, makes
      no object URL. *)
@@ -126,23 +163,28 @@ let v app =
     let next, ticket = Shot_row.begin_capture (React.S.value row) in
     update (Fun.const next);
     Fut.await (Capture.shutter v) (fun r ->
-        let pending =
-          (not !released) && Shot_row.is_pending ticket (React.S.value row)
-        in
-        match (r, pending) with
-        | Ok s, true -> update (Shot_row.fill ticket (with_url s))
-        | Ok _, false -> ()
-        | Error e, true ->
+        match (Shot_row.fate ticket (React.S.value row), !released) with
+        | Attach, (true | false) ->
             update (Shot_row.drop ticket);
-            log "shutter" (Capture.error_to_string e)
-        | Error e, false -> log "shutter" (Capture.error_to_string e))
+            attach r;
+            close_when_attached ()
+        | Fill, false -> (
+            match r with
+            | Ok s -> update (Shot_row.fill ticket (with_url s))
+            | Error e ->
+                update (Shot_row.drop ticket);
+                log "shutter" (Capture.error_to_string e))
+        | Fill, true | Discard, (true | false) -> (
+            match r with
+            | Ok _ -> ()
+            | Error e -> log "shutter" (Capture.error_to_string e)))
   in
   let thumb_x label =
     button ~label ["record__thumb-x"]
       [El.span ~at:[cls "record__thumb-disc"] [W.Icon.el ~size:16 W.Icon.Close]]
   in
-  (* A placeholder's ✕ gives up on its capture: one that never settles would
-     otherwise keep Enregistrer disabled. *)
+  (* A placeholder's ✕ gives up on its capture (one that never settles); a
+     handed one is no longer awaited by 4h. *)
   let thumb : shot Shot_row.slot -> El.t * Rb.binding list = function
     | Pending ticket ->
         let x = thumb_x Record_plan.cancel_pending_label in
@@ -162,7 +204,17 @@ let v app =
             ]
         in
         let click, b = Rb.click x in
-        (el, [b; Rb.act click (fun () -> update (Shot_row.drop ticket))])
+        let give_up () =
+          let handed =
+            Shot_row.(equal_fate Attach (fate ticket (React.S.value row)))
+          in
+          update (Shot_row.drop ticket);
+          match (handed, !stored) with
+          | true, Some {observation = o; identify = _} ->
+              settle_incoming ~written:false o
+          | true, None | false, (Some _ | None) -> ()
+        in
+        (el, [b; Rb.act click give_up])
     | Ready (_, url) ->
         let x = thumb_x "Retirer la photo" in
         let el =
@@ -268,9 +320,19 @@ let v app =
     set_saving false;
     set_save_error (Some message)
   in
+  (* Captures still pending once the observation is stored become its own
+     ([attach] in [shoot]); 4h shows them loading. *)
+  let hand_over (o : Observation.t) =
+    let next, tickets = Shot_row.hand_over (React.S.value row) in
+    update (Fun.const next);
+    List.iter
+      (fun _ -> State.change_incoming state (Incoming_photos.add o.id))
+      tickets
+  in
   (* Shots added while saving (a gallery pick resolving late) are saved on the
      next round. *)
   let rec save_shots ({observation = o; identify} as round) =
+    hand_over o;
     let shots = List.map fst (items ()) in
     Fut.await (App.save_photos app ~observation:o shots) (fun failed ->
         let saved (s, _) = List.memq s shots && not (List.memq s failed) in
@@ -294,8 +356,12 @@ let v app =
     let at, position =
       Record_plan.when_where ~now ~fix
         (List.map
-           (fun ((s : Capture.shot), _) -> (s.exif.taken_at, s.exif.position))
-           (items ()))
+           (function
+             (* a shutter's: no EXIF, it is now and here *)
+             | Shot_row.Pending _ -> (None, None)
+             | Ready ((s : Capture.shot), _) ->
+                 (s.exif.taken_at, s.exif.position))
+           (Shot_row.slots (React.S.value row)))
     in
     (* Read now, not at opening: the one-time load may not be in yet. *)
     let* plants = Db.all db Plants.list in
@@ -419,7 +485,7 @@ let v app =
           b_save;
           Rb.on_release (fun () ->
               released := true;
-              stop_camera ();
+              close_when_attached ();
               List.iter (fun (_, u) -> Object_url.revoke u) (items ()));
           Rb.rlist thumb_list thumb thumbs;
           Rb.rlist suggestion_list suggestion suggestions;

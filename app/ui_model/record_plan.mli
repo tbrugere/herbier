@@ -83,3 +83,7 @@ val pending_label : string
 
 val cancel_pending_label : string
 (** ["Annuler la photo en cours"]: the aria-label of a placeholder's ✕. *)
+
+val attach_failed : string
+(** ["La photo n'a pas pu être enregistrée."]: the toast when a capture
+    Enregistrer handed to its observation fails, or its write does (M8.88). *)

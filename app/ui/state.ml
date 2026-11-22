@@ -48,6 +48,7 @@ type t = {
   account : account cell;
   map_view : map_view cell;
   place_sources : Herbier_geo.Place_name.sources cell;
+  incoming : Herbier_ui_model.Incoming_photos.t cell;
 }
 
 let create ~network ~account ~place_sources =
@@ -57,6 +58,9 @@ let create ~network ~account ~place_sources =
     account = cell ~eq:equal_account account;
     map_view = cell ~eq:equal_map_view no_map_view;
     place_sources = cell ~eq:Herbier_geo.Place_name.equal_sources place_sources;
+    incoming =
+      cell ~eq:Herbier_ui_model.Incoming_photos.equal
+        Herbier_ui_model.Incoming_photos.empty;
   }
 
 let filters t = t.filters.signal
@@ -64,6 +68,8 @@ let network t = t.network.signal
 let account t = t.account.signal
 let map_view t = t.map_view.signal
 let place_sources t = t.place_sources.signal
+let incoming t = t.incoming.signal
+let change_incoming t f = t.incoming.set (f (React.S.value t.incoming.signal))
 let set_filters t ?step v = t.filters.set ?step v
 let set_network t ?step v = t.network.set ?step v
 let set_account t ?step v = t.account.set ?step v

@@ -6,14 +6,15 @@ let pp_ticket = Format.pp_print_int
 type 'shot slot = Pending of ticket | Ready of 'shot [@@deriving eq]
 
 (* [next] is the ticket the next tap gets: it only grows, so a ticket filled
-   or dropped is never handed out again. *)
-type 'shot t = {next : ticket; slots : 'shot slot list}
+   or dropped is never handed out again. [handed]: the pending tickets an
+   Enregistrer gave to its observation. *)
+type 'shot t = {next : ticket; slots : 'shot slot list; handed : ticket list}
 
-let empty = {next = 0; slots = []}
+let empty = {next = 0; slots = []; handed = []}
 let slots t = t.slots
 
 let begin_capture t =
-  ({next = t.next + 1; slots = t.slots @ [Pending t.next]}, t.next)
+  ({t with next = t.next + 1; slots = t.slots @ [Pending t.next]}, t.next)
 
 let is ticket = function Pending p -> equal_ticket p ticket | Ready _ -> false
 
@@ -27,7 +28,11 @@ let fill ticket shot t =
   }
 
 let drop ticket t =
-  {t with slots = List.filter (fun s -> not (is ticket s)) t.slots}
+  {
+    slots = List.filter (fun s -> not (is ticket s)) t.slots;
+    handed = List.filter (Fun.negate (equal_ticket ticket)) t.handed;
+    next = t.next;
+  }
 
 let is_pending ticket t = List.exists (is ticket) t.slots
 
@@ -51,6 +56,25 @@ let pending t =
     (fun n s -> match is_pending_slot s with true -> n + 1 | false -> n)
     0 t.slots
 
-let can_save t =
-  List.exists (Fun.negate is_pending_slot) t.slots
-  && not (List.exists is_pending_slot t.slots)
+let can_save t = not (List.is_empty t.slots)
+let is_handed t ticket = List.exists (equal_ticket ticket) t.handed
+
+let hand_over t =
+  let fresh =
+    List.filter_map
+      (function
+        | Pending p when not (is_handed t p) -> Some p
+        | Pending _ | Ready _ -> None)
+      t.slots
+  in
+  ({t with handed = t.handed @ fresh}, fresh)
+
+type fate = Fill | Attach | Discard [@@deriving eq, show {with_path = false}]
+
+let fate ticket t =
+  match (is_pending ticket t, is_handed t ticket) with
+  | false, (true | false) -> Discard
+  | true, false -> Fill
+  | true, true -> Attach
+
+let attaching t = List.length (List.filter (fun p -> is_pending p t) t.handed)

@@ -1,7 +1,10 @@
 (** 4d's thumbnail row, pure: one slot per photo in the order the user added
     them. A shutter tap appends a [Pending] slot at once (the striped
     placeholder); its capture then fills it in place, or drops it. Gallery picks
-    append [Ready] slots. Polymorphic in the shot so it stays native. *)
+    append [Ready] slots. Enregistrer may come while captures are pending: it
+    hands them to the saved observation ({!hand_over}), and each one, when it
+    settles, is attached to that observation rather than filled in the row
+    ({!fate}). Polymorphic in the shot so it stays native. *)
 
 type ticket
 (** A pending capture's handle: unique within the row that gave it (a counter in
@@ -32,7 +35,7 @@ val fill : ticket -> 'shot -> 'shot t -> 'shot t
 
 val drop : ticket -> 'shot t -> 'shot t
 (** Removes the pending slot of [ticket] (a failed capture, or the ✕ of its
-    placeholder); unknown ticket → unchanged. Never raises. *)
+    placeholder), handed or not; unknown ticket → unchanged. Never raises. *)
 
 val is_pending : ticket -> 'shot t -> bool
 (** Whether [ticket]'s slot is still pending in this row: [false] once it was
@@ -50,8 +53,31 @@ val ready : 'shot t -> 'shot list
     observation is dated by (the first one). *)
 
 val pending : 'shot t -> int
-(** How many captures are still pending (for the tests; {!can_save} reads the
-    same). *)
+(** How many captures are still pending (for the tests). *)
 
 val can_save : 'shot t -> bool
-(** Enregistrer's gate: at least one [Ready] slot and no [Pending] one. *)
+(** Enregistrer's gate: at least one slot, [Ready] or [Pending] (a shutter tap
+    enables it at once, M8.88). *)
+
+(** {1 Captures handed to the observation} *)
+
+val hand_over : 'shot t -> 'shot t * ticket list
+(** What Enregistrer does with the captures still pending once its observation
+    is stored: they become the observation's, and the tickets not handed before
+    are returned, in tap order. Their slots stay (the placeholders keep showing
+    while 4d is on screen). *)
+
+type fate =
+  | Fill  (** pending, not handed: {!fill} the row *)
+  | Attach  (** pending and handed: save it to the observation, {!drop} it *)
+  | Discard  (** no longer pending (its ✕, or already settled): drop the shot *)
+
+val equal_fate : fate -> fate -> bool
+val pp_fate : Format.formatter -> fate -> unit
+
+val fate : ticket -> 'shot t -> fate
+(** Where a capture that just settled goes. *)
+
+val attaching : 'shot t -> int
+(** How many handed captures are still pending: 4d keeps its camera running
+    until it is [0] (closing it would fail them). *)

@@ -7,6 +7,7 @@ module Record_plan = Herbier_ui_model.Record_plan
 module To_identify = Herbier_ui_model.To_identify
 module Choice = Herbier_ui_model.Identify.Choice
 module Delete_plan = Herbier_ui_model.Delete_plan
+module Incoming_photos = Herbier_ui_model.Incoming_photos
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
@@ -41,6 +42,10 @@ let load db id =
       in
       let+ photos = Db.all db (Photos.of_observation id) in
       Some {observation = o; plant; photos}
+
+(* A tile of 4h's mosaic: a stored photo, or one 4d's Enregistrer handed over
+   that is still being written (M8.88). *)
+type tile = Shown of Photo.t | Arriving
 
 let day_time t = Fr_date.day_time ~tz_offset_s:(Zone.offset_s t) t
 
@@ -161,6 +166,12 @@ let sent_organs (photos : Identify.photo list) =
 let render app arrival (data : data React.signal) =
   let get () = React.S.value data in
   let id = (get ()).observation.id in
+  (* The photos 4d's Enregistrer handed over before they were written
+     (M8.88): a loading tile each until they land. *)
+  let incoming = State.incoming (App.state app) in
+  let arriving =
+    React.S.map ~eq:Int.equal (Incoming_photos.on_way id) incoming
+  in
   let problem_text, problem = React.S.create ~eq:String.equal "" in
   let problem_el = El.p ~at:[cls "t-meta"; cls "observation__problem"] [] in
   (* style: [current] is the observation as this screen last wrote or read
@@ -247,7 +258,7 @@ let render app arrival (data : data React.signal) =
                         (Fr_text.plural (List.length failed)
                            "photo non enregistrée" "photos non enregistrées")))
   in
-  let mosaic (photos : Herbier_domain.Photo.t list) =
+  let mosaic ((photos : Herbier_domain.Photo.t list), arriving) =
     let add =
       Html.button ~label:"Ajouter des photos" ["observation__add"]
         [W.Icon.el W.Icon.Add]
@@ -257,15 +268,34 @@ let render app arrival (data : data React.signal) =
       Rb.attr add "aria-busy"
         (React.S.map (function true -> Some "true" | false -> None) adding)
     in
-    (* Each tile with the listener that opens it in the viewer. *)
-    let tile ~cls (ph : Herbier_domain.Photo.t) =
-      let t = W.Photo_grid.tile ~cls ph in
-      ( t,
-        Rb.listen t Ev.click (fun _ ->
-            Route.go (Route.Modal (Route.Viewer ph.id))) )
+    (* Each tile with the listener that opens it in the viewer; a photo on its
+       way is a striped tile, as 4d's placeholder. *)
+    let tile ~cls = function
+      | Shown (ph : Herbier_domain.Photo.t) ->
+          let t = W.Photo_grid.tile ~cls ph in
+          ( t,
+            [
+              Rb.listen t Ev.click (fun _ ->
+                  Route.go (Route.Modal (Route.Viewer ph.id)));
+            ] )
+      | Arriving ->
+          ( El.div
+              ~at:
+                [
+                  Html.cls "photo-tile";
+                  Html.cls cls;
+                  Html.cls "observation__arriving";
+                  At.v (Jstr.v "role") (Jstr.v "img");
+                  At.v (Jstr.v "aria-label") (Jstr.v Record_plan.pending_label);
+                ]
+              [],
+            [] )
     in
     let el, tiles =
-      match photos with
+      match
+        List.map (fun p -> Shown p) photos
+        @ List.init arriving (fun _ -> Arriving)
+      with
       | [] ->
           ( El.div
               ~at:[cls "observation__mosaic"; cls "observation__mosaic--empty"]
@@ -297,7 +327,7 @@ let render app arrival (data : data React.signal) =
                   ~at:[cls "observation__column"]
                   (List.map fst more @ [add]);
               ],
-            b_large :: List.map snd more )
+            b_large @ List.concat_map snd more )
     in
     (el, b_add :: busy :: Rb.act add_click add_photos :: tiles)
   in
@@ -541,27 +571,60 @@ let render app arrival (data : data React.signal) =
      when the layer was due but could no longer open there. *)
   let arrival_bindings host =
     let first = get () in
-    let due =
-      Observation_plan.opens_layer arrival first.observation
-        (React.S.value gate) ~photos:(React.S.value n_sent)
-    in
-    (* style: the toast's binding once shown, read and written from future
-       callbacks and the release only. *)
-    let toast = ref None in
+    (* style: the toast's binding once shown, and whether the arrival was
+       handled, read and written from future callbacks, an event and the
+       release only. *)
+    let toast = ref None and handled = ref false in
     let show () =
       match Identify.released launcher with
       | true -> ()
       | false -> (
+          let due =
+            Observation_plan.opens_layer arrival (get ()).observation
+              (React.S.value gate) ~photos:(React.S.value n_sent)
+          in
           let layer = due && open_layer host in
           match Observation_plan.toast arrival ~layer first.plant with
           | None -> ()
           | Some t ->
               toast := Some (W.Toast.show ~ms:Observation_plan.toast_ms t))
     in
-    (match arrival with
-    | Observation_plan.Opened -> ()
-    | Recorded _ -> Fut.await (Fut.return ()) show);
-    [Rb.on_release (fun () -> Option.iter (fun b -> Rb.release [b]) !toast)]
+    let handle () =
+      match !handled with
+      | true -> ()
+      | false ->
+          handled := true;
+          Fut.await (Fut.return ()) show
+    in
+    (* With identification due and only photos still on their way (M8.88),
+       the arrival waits for the first to show here (written, then reloaded),
+       or for all of them to have failed. *)
+    let landed =
+      React.S.l2 ~eq:Bool.equal
+        (fun sent i ->
+          sent > 0 || Incoming_photos.(Int.equal (on_way id i + written id i) 0))
+        n_sent incoming
+    in
+    let wait =
+      match arrival with
+      | Observation_plan.Opened -> []
+      | Recorded {identify = false} ->
+          handle ();
+          []
+      | Recorded {identify = true} -> (
+          match React.S.value landed with
+          | true ->
+              handle ();
+              []
+          | false ->
+              [
+                Rb.on (React.S.changes landed) (function
+                  | true -> handle ()
+                  | false -> ());
+              ])
+    in
+    Rb.on_release (fun () -> Option.iter (fun b -> Rb.release [b]) !toast)
+    :: wait
   in
   let drive_el = El.div ~at:[cls "observation__drive-slot"] [] in
   let el =
@@ -597,7 +660,10 @@ let render app arrival (data : data React.signal) =
           b_current;
           b_back;
           Rb.view mosaic_el mosaic
-            (React.S.map ~eq:( == ) (fun d -> d.photos) data);
+            (React.S.l2
+               ~eq:(fun (a, n) (b, m) -> a == b && Int.equal n m)
+               (fun d n -> (d.photos, n))
+               data arriving);
           b_title;
           b_date;
           Rb.act back_click Route.back;
