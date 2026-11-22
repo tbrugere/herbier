@@ -25,6 +25,7 @@ module Candidate = Herbier_refs.Resolve.Candidate
 module Photo = Herbier_domain.Photo
 module Photos = Herbier_store.Photos
 module Choice = Herbier_ui_model.Identify.Choice
+module Cover = Herbier_ui_model.Cover
 module RList = ReactiveData.RList
 module W = Widgets
 
@@ -48,6 +49,8 @@ type data = {
   plants : Plant.t list;  (** live, for the reference rows' actions *)
   photos : Photo.t list;
       (** the observation's, for 6i's « Identifier »; [[]] in 5c *)
+  covers : Plant.t -> Photo.t option;
+      (** each plant's cover, as 4a's cards, for the collection rows *)
 }
 
 let load db mode id =
@@ -63,32 +66,76 @@ let load db mode id =
       in
       let* unidentified = Db.all db Observations.unidentified in
       let* plants = Db.all db Plants.list in
-      let+ photos =
+      let* photos =
         match mode with
         | Identify_obs -> Db.all db (Photos.of_observation id)
         | Change_obs -> Fut.ok []
       in
-      Some {observation = o; current; unidentified; plants; photos}
+      (* Covers are decoration: a failed read leaves the rows without them. *)
+      let+ covers =
+        Fut.map
+          (fun r ->
+            Ok
+              (match r with
+              | Ok (observations, all_photos) ->
+                  let by_plant = Cover.by_plant observations all_photos in
+                  fun (p : Plant.t) ->
+                    Cover.choose p.cover_photo_id (by_plant p.id)
+              | Error e ->
+                  log_error "covers" e;
+                  fun (_ : Plant.t) -> None))
+          (let* observations = Db.all db Observations.list in
+           let+ all_photos = Db.all db Photos.live in
+           (observations, all_photos))
+      in
+      Some {observation = o; current; unidentified; plants; photos; covers}
 
-let observation_card (o : Observation.t) =
-  W.Card.panel
-    (List.concat
-       [
+(* 4k's card: the observation's photos (96 px, each opening the viewer, as
+   4h's mosaic does), then its date, place and note. *)
+let observation_card (o : Observation.t) (photos : Photo.t list) =
+  let n = List.length photos in
+  let tiles =
+    List.mapi
+      (fun i (ph : Photo.t) ->
+        let b =
+          Html.button
+            ~label:(W.Photo_grid.label ~i ~n ph)
+            ["resolve__photo"]
+            [W.Photo_grid.tile ph]
+        in
+        ( b,
+          Rb.listen b Ev.click (fun _ ->
+              Route.go (Route.Modal (Route.Viewer ph.id))) ))
+      photos
+  in
+  let strip =
+    match tiles with
+    | [] -> []
+    | _ -> [El.div ~at:[cls "resolve__photos"] (List.map fst tiles)]
+  in
+  ( W.Card.panel
+      (List.concat
          [
-           El.p
-             ~at:[cls "resolve__obs-date"]
-             [El.txt' (Fr_date.day_time ~tz_offset_s:(Zone.offset_s o.at) o.at)];
-         ];
-         Option.to_list
-           (Option.map
-              (fun p -> El.p ~at:[cls "t-meta"] [El.txt' p])
-              (Journal_day.place [o]));
-         Option.to_list
-           (Option.map
-              (fun n ->
-                El.p ~at:[cls "resolve__note"] [El.txt' ("« " ^ n ^ " »")])
-              o.note);
-       ])
+           strip;
+           [
+             El.p
+               ~at:[cls "resolve__obs-date"]
+               [
+                 El.txt'
+                   (Fr_date.day_time ~tz_offset_s:(Zone.offset_s o.at) o.at);
+               ];
+           ];
+           Option.to_list
+             (Option.map
+                (fun p -> El.p ~at:[cls "t-meta"] [El.txt' p])
+                (Journal_day.place [o]));
+           Option.to_list
+             (Option.map
+                (fun n ->
+                  El.p ~at:[cls "resolve__note"] [El.txt' ("« " ^ n ^ " »")])
+                o.note);
+         ]),
+    List.map snd tiles )
 
 type orphan = Keep_plant | Delete_plant
 
@@ -228,18 +275,9 @@ let render app mode (d : data) =
   let problem_el, problem, problem_bindings = problem_line () in
   let while_here, left_binding = leaving () in
   let position = To_identify.position o d.unidentified in
-  let go_next () =
-    match position with
-    | Some {next = Some n; _} ->
-        Route.replace (Route.Modal (Route.Identify n.id))
-    | Some {next = None; _} | None -> Route.back ()
-  in
-  let finish () =
-    while_here (fun () ->
-        match mode with
-        | Change_obs -> Route.back ()
-        | Identify_obs -> go_next ())
-  in
+  (* Back to where 4k was opened from, 4h since an « À identifier »
+     observation opens there (feedback, 2026-11-22): it shows the plant. *)
+  let finish () = while_here Route.back in
   (* The plant the observation leaves, with the dialog asked when it has no
      observation left. *)
   let left = Option.map (fun p -> (p, orphan_dialog p)) d.current in
@@ -440,10 +478,9 @@ let render app mode (d : data) =
     ]
     @ identify.bindings
   in
-  let next = W.Button.text "Suivante ›" in
   let title, right =
     match mode with
-    | Identify_obs -> (
+    | Identify_obs ->
         let label =
           match position with
           | Some p -> Printf.sprintf "À identifier · %d / %d" p.index p.total
@@ -454,9 +491,7 @@ let render app mode (d : data) =
               ~at:[cls "t-section-label"; cls "resolve__ochre"]
               [El.txt' label];
           ],
-          match position with
-          | Some {next = Some _; _} -> next.el
-          | Some {next = None; _} | None -> El.span [] ))
+          El.span [] )
     | Change_obs ->
         ( [
             El.span ~at:[cls "t-section-label"] [El.txt' "Changer d'espèce"];
@@ -467,28 +502,29 @@ let render app mode (d : data) =
           El.span [] )
   in
   let header, header_bindings = header ~title ~right in
-  let top =
+  let top, top_bindings =
     match mode with
-    | Identify_obs -> observation_card o
+    | Identify_obs -> observation_card o d.photos
     | Change_obs ->
-        W.Card.panel
-          [
-            El.p
-              [
-                El.txt' "Actuellement ";
-                El.strong
-                  [
-                    El.txt'
-                      (match (o.plant_id, d.current) with
-                      | Some _, Some p -> p.display_name
-                      | Some _, None -> "Plante supprimée"
-                      | None, _ -> "À identifier");
-                  ];
-              ];
-            El.p
-              ~at:[cls "t-meta"]
-              [El.txt' "Les photos et la note suivent l'observation."];
-          ]
+        ( W.Card.panel
+            [
+              El.p
+                [
+                  El.txt' "Actuellement ";
+                  El.strong
+                    [
+                      El.txt'
+                        (match (o.plant_id, d.current) with
+                        | Some _, Some p -> p.display_name
+                        | Some _, None -> "Plante supprimée"
+                        | None, _ -> "À identifier");
+                    ];
+                ];
+              El.p
+                ~at:[cls "t-meta"]
+                [El.txt' "Les photos et la note suivent l'observation."];
+            ],
+          [] )
   in
   let search =
     W.Text_field.v ~icon:W.Icon.Search
@@ -498,8 +534,13 @@ let render app mode (d : data) =
     match d.current with Some c -> Plant_id.equal c.id p.id | None -> false
   in
   let row (p : Plant.t) =
+    let thumb =
+      match d.covers p with
+      | Some ph -> W.List_row.Preview ph.preview_path
+      | None -> W.List_row.Placeholder
+    in
     let r =
-      W.List_row.v ~thumb:W.List_row.Placeholder ~title:p.display_name
+      W.List_row.v ~thumb ~title:p.display_name
         ~meta:(Option.value p.scientific_name ~default:"nom libre")
         ()
     in
@@ -569,7 +610,6 @@ let render app mode (d : data) =
     List.concat
       [
         [
-          Rb.act next.click go_next;
           Rb.act free.click free_name;
           Rb.text free_hint
             (React.S.map
@@ -593,10 +633,10 @@ let render app mode (d : data) =
         | Identify_obs -> identify_bindings el
         | Change_obs -> []);
         header_bindings;
+        top_bindings;
         problem_bindings;
         collection_bindings;
         reference.bindings;
-        next.bindings;
         search.bindings;
         free.bindings;
         paste.bindings;

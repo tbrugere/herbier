@@ -46,8 +46,8 @@ val identify_line : Identify_settings.gate -> photos:int -> string option
     names the missing key). *)
 
 val by_name_label : string
-(** ["Chercher un nom"]: 4h's action row for an « À identifier » observation
-    (opens 4k). *)
+(** ["Par le nom"]: 4h's button under « Identifier avec Pl@ntNet » for an « À
+    identifier » observation (opens 4k). *)
 
 val map_label : string
 (** ["Corriger la position sur la carte"]: the mini-map tap's aria-label (it

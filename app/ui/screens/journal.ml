@@ -3,11 +3,15 @@ module Fr_date = Herbier_ui_model.Fr_date
 module Fr_text = Herbier_ui_model.Fr_text
 module Journal_day = Herbier_ui_model.Journal_day
 module Journal_filter = Herbier_ui_model.Journal_filter
+module Map_sheet = Herbier_ui_model.Map_sheet
 open Brr
 module Db = Herbier_store_io.Db
 module Plants = Herbier_store.Plants
 module Tags = Herbier_store.Tags
 module Observations = Herbier_store.Observations
+module Photos = Herbier_store.Photos
+module Photo = Herbier_domain.Photo
+module Observation_id = Herbier_domain.Ids.Observation_id
 module Observation = Herbier_domain.Observation
 module Plant = Herbier_domain.Plant
 module Tag = Herbier_domain.Tag
@@ -27,10 +31,19 @@ type data = {
   names : (Plant_id.t * string) list;
   tags : Tag.t list;
   links : Tag.Plant_tag.t list;
+  photos : Observation_id.t -> Photo.t list;
+      (** each observation's, in the map sheet's order *)
 }
 
-let row (del : List_delete.t) names (o : Observation.t) =
+(* The row's thumbnail is the observation's first photo, as in the map
+   sheet's rows (4b). *)
+let row (del : List_delete.t) names photos (o : Observation.t) =
   let time = Fr_date.time ~tz_offset_s:(offset o) o.at in
+  let thumb =
+    match photos o.id with
+    | (p : Photo.t) :: _ -> W.List_row.Preview p.preview_path
+    | [] -> W.List_row.Placeholder
+  in
   let r =
     match o.plant_id with
     | Some id ->
@@ -38,24 +51,18 @@ let row (del : List_delete.t) names (o : Observation.t) =
         let meta =
           match o.note with Some _ -> time ^ " · note" | None -> time
         in
-        W.List_row.v ~long_press:true ~thumb:W.List_row.Placeholder ~title ~meta
-          ()
+        W.List_row.v ~long_press:true ~thumb ~title ~meta ()
     | None ->
         let meta =
           match o.note with
           | Some n -> Printf.sprintf "%s · « %s »" time n
           | None -> time
         in
-        W.List_row.v ~long_press:true ~thumb:W.List_row.Placeholder
-          ~tone:W.List_row.To_identify ~title:"À identifier" ~meta ()
-  in
-  let target =
-    match o.plant_id with
-    | Some _ -> Route.Observation o.id
-    | None -> Route.Identify o.id
+        W.List_row.v ~long_press:true ~thumb ~tone:W.List_row.To_identify
+          ~title:"À identifier" ~meta ()
   in
   ( r.el,
-    Rb.act r.click (fun () -> Route.go (Route.Modal target))
+    Rb.act r.click (fun () -> Route.go (Route.Modal (Route.Observation o.id)))
     :: Rb.act r.long (fun () -> del.observation ~from:r.el o.id)
     :: r.bindings )
 
@@ -93,9 +100,9 @@ let day_place state (d : Observation.t Journal_day.t) =
   let place, bindings = day_place_name state d in
   (with_detail d place, bindings)
 
-let day state del ~this_year names (d : Observation.t Journal_day.t) =
+let day state del ~this_year names photos (d : Observation.t Journal_day.t) =
   let place, place_bindings = day_place state d in
-  let rows = List.map (row del names) d.items in
+  let rows = List.map (row del names photos) d.items in
   let el =
     El.section
       ~at:[cls "journal__day"]
@@ -121,7 +128,16 @@ let v app =
   let filters = State.filters state in
   (* style: the loaded data, read and written only outside update steps
      ([Rb.act] handlers, future callbacks). *)
-  let data = ref {observations = []; names = []; tags = []; links = []} in
+  let data =
+    ref
+      {
+        observations = [];
+        names = [];
+        tags = [];
+        links = [];
+        photos = (fun _ -> []);
+      }
+  in
   let render () =
     let f = React.S.value filters and d = !data in
     let tagged = Collection_filter.tagged d.links f.tags in
@@ -140,16 +156,29 @@ let v app =
   in
   let load () =
     let open Fut.Result_syntax in
+    (* Thumbnails are decoration: a failed photo read leaves the rows without
+       them, not the journal empty (as the map). *)
+    let photos =
+      Fut.map
+        (function
+          | Ok l -> l
+          | Error e ->
+              log_error e;
+              [])
+        (Db.all db Photos.live)
+    in
     let fut =
       let* observations = Db.all db Observations.list in
       let* plants = Db.all db Plants.list in
       let* tags = Db.all db Tags.list in
-      let+ links = Db.all db Tags.links in
+      let* links = Db.all db Tags.links in
+      let+ photos = Fut.map Result.ok photos in
       {
         observations;
         names = List.map (fun (p : Plant.t) -> (p.id, p.display_name)) plants;
         tags;
         links;
+        photos = Map_sheet.photos_by_observation photos;
       }
     in
     Fut.await fut (function
@@ -188,6 +217,7 @@ let v app =
       ]
   in
   let names () = !data.names in
+  let photos () = !data.photos in
   let this_year () = Zone.this_year () in
   {
     Screen.el;
@@ -197,7 +227,8 @@ let v app =
         Rb.text counter_el counter;
         Rb.rlist chips_el (Filter_chips.el state) chips;
         Rb.rlist list_el
-          (fun d -> day state del ~this_year:(this_year ()) (names ()) d)
+          (fun d ->
+            day state del ~this_year:(this_year ()) (names ()) (photos ()) d)
           days;
         Rb.text empty empty_text;
         Rb.class_ empty "is-hidden" (React.S.map (String.equal "") empty_text);

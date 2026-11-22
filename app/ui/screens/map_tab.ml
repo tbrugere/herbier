@@ -89,19 +89,19 @@ let row ~this_year data (o : Observation.t) =
     Map_sheet.row_meta ~this_year ~date:(Zone.date o.at)
       ~photos:(List.length photos)
   in
-  let r, target =
+  let r =
     match o.plant_id with
     | Some id ->
-        ( W.List_row.v ~thumb
-            ~title:(Journal_day.plant_name data.names id)
-            ~meta (),
-          Route.Observation o.id )
+        W.List_row.v ~thumb
+          ~title:(Journal_day.plant_name data.names id)
+          ~meta ()
     | None ->
-        ( W.List_row.v ~thumb ~tone:W.List_row.To_identify ~title:"À identifier"
-            ~meta (),
-          Route.Identify o.id )
+        W.List_row.v ~thumb ~tone:W.List_row.To_identify ~title:"À identifier"
+          ~meta ()
   in
-  (r.el, Rb.act r.click (fun () -> Route.go (Route.Modal target)) :: r.bindings)
+  ( r.el,
+    Rb.act r.click (fun () -> Route.go (Route.Modal (Route.Observation o.id)))
+    :: r.bindings )
 
 let rows (data, selected) =
   match selected with

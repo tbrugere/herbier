@@ -394,14 +394,10 @@ let render app arrival (data : data React.signal) =
          (fun d -> Option.value d.observation.note ~default:"")
          data)
   in
+  (* For a named observation only: an « À identifier » one has « Par le
+     nom » in its identify block. *)
   let change_el, change_click, b_change =
-    action
-      (React.S.map
-         (fun d ->
-           match d.observation.plant_id with
-           | Some _ -> "Changer d'espèce"
-           | None -> Observation_plan.by_name_label)
-         data)
+    action (React.S.const "Changer d'espèce")
   in
   let journal_el, journal_click, b_journal =
     action (React.S.const "Voir dans le journal")
@@ -443,8 +439,15 @@ let render app arrival (data : data React.signal) =
   El.prepend_children identify.el [W.Identify_glyph.el ~size:22 ()];
   El.set_class (Jstr.v "observation__identify") true identify.el;
   let identify_line = El.p ~at:[cls "observation__identify-line"] [] in
+  let by_name =
+    W.Button.v ~kind:W.Button.Secondary Observation_plan.by_name_label
+  in
+  (* At the bottom, over the action rows: what is left to do on an « À
+     identifier » observation (feedback, 2026-11-22). *)
   let identify_block =
-    El.div ~at:[cls "observation__identify-block"] [identify.el; identify_line]
+    El.div
+      ~at:[cls "observation__identify-block"]
+      [identify.el; identify_line; by_name.el]
   in
   let resolving, set_resolving = React.S.create ~eq:Bool.equal false in
   let launcher = Identify.launcher ~button:identify.el ~problem in
@@ -548,6 +551,9 @@ let render app arrival (data : data React.signal) =
       Identify.release launcher;
       Rb.on_release (fun () -> left := true);
       Rb.class_ identify_block "is-hidden" (React.S.map not identify_shown);
+      Rb.class_ change_el "is-hidden" identify_shown;
+      Rb.act by_name.click (fun () ->
+          Route.go (Route.Modal (Route.Identify (get ()).observation.id)));
       Rb.disabled identify.el
         (React.S.l2 ~eq:Bool.equal
            (fun g photos -> not (To_identify.identify_enabled g ~photos))
@@ -564,6 +570,7 @@ let render app arrival (data : data React.signal) =
         (React.S.map Option.is_none identify_text);
     ]
     @ identify.bindings
+    @ by_name.bindings
   in
   (* On arrival from Noter: the layer, opened from a future callback (never
      inside the render, which may run in an update step: [Identify.open_]
@@ -634,7 +641,6 @@ let render app arrival (data : data React.signal) =
         header;
         problem_el;
         mosaic_el;
-        identify_block;
         drive_el;
         date_card;
         El.div
@@ -647,6 +653,7 @@ let render app arrival (data : data React.signal) =
                match mini_map with Some m -> [m.el; line] | None -> [line]);
           ];
         card "Note de cette rencontre" [note.el];
+        identify_block;
         El.div
           ~at:[cls "observation__actions"]
           [change_el; journal_el; delete_el];

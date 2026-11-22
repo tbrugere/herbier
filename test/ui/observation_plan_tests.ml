@@ -204,7 +204,7 @@ let caller_and_labels_tests () =
        (Caller.action Caller.Observation ~owned:false)
        Caller.Create);
   Alcotest.(check string)
-    "by_name_label" "Chercher un nom" Observation_plan.by_name_label;
+    "by_name_label" "Par le nom" Observation_plan.by_name_label;
   Alcotest.(check string)
     "map_label" "Corriger la position sur la carte" Observation_plan.map_label
 

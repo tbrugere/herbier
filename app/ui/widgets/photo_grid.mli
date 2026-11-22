@@ -10,6 +10,10 @@ type t = {el : Brr.El.t; tap : Photo.t React.event; bindings : Rb.binding list}
 val tile : ?cls:string -> Photo.t -> Brr.El.t
 (** One preview with its badges, not interactive (4h mosaic). *)
 
+val label : i:int -> n:int -> Photo.t -> string
+(** The accessible name of photo [i] (from 0) of [n]: its position and what its
+    badges show. *)
+
 val v : Photo.t list -> t
 (** The grid; [tap] fires with the tapped tile's photo. Each tile is a button
     labelled with its position and what its badges show. *)

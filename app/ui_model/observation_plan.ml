@@ -31,7 +31,7 @@ let opens_layer arrival o gate ~photos =
       identifiable o && To_identify.identify_enabled gate ~photos
   | Recorded {identify = false} | Opened -> false
 
-let by_name_label = "Chercher un nom"
+let by_name_label = "Par le nom"
 let map_label = "Corriger la position sur la carte"
 
 type write =

@@ -21,6 +21,18 @@
 .resolve__subtitle
   +base.ui(13px, 600)
 
+// 4k's card: the observation's photos, 96 px, in a row that scrolls.
+.resolve__photos
+  display: flex
+  gap: 8px
+  overflow-x: auto
+  margin-bottom: 10px
+
+.resolve__photo
+  +widgets.bare-button
+  flex: none
+  width: 96px
+
 .resolve__obs-date
   +base.ui(16px, 700)
 
