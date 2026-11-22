@@ -103,10 +103,17 @@ val link_label : Herbier_domain.Reference.Source.t -> string
 val uses_label : string
 (** ["Utilisations"]: the label of 4f's uses row. *)
 
-val plantuse_credit : string
-(** ["Pl@ntUse · CC BY-SA"]. *)
+val sources_label : string
+(** ["Sources"]: the title of 4f's footer (M8.86). *)
 
-val wikipedia_uses_credit : lang:string -> section:string -> string
-(** ["Wikipédia · « <section> » · CC BY-SA · extrait automatique"]; for a [lang]
-    other than ["fr"], ["Wikipédia (<lang>) · « … » · …"]. « extrait automatique
-    » marks the heuristic: the paragraph is picked by its section title. *)
+val quoted_licence : string
+(** ["CC BY-SA"]: the licence of the texts 4f quotes from Wikipedia and
+    Pl@ntUse. *)
+
+val auto_extract : string
+(** ["extrait automatique"]: marks the Wikipedia « Utilisations » paragraph,
+    picked by its section title (a heuristic). *)
+
+val wikipedia_section : lang:string -> section:string -> string
+(** ["Wikipédia · « <section> »"]; for a [lang] other than ["fr"],
+    ["Wikipédia (<lang>) · « <section> »"]. *)

@@ -896,8 +896,10 @@ gbif_key
   line of at least 40 characters; that line is the paragraph, marked
   « extrait automatique » on 4f with its section and language. A failed uses
   call makes the row `partial` (the stored `uses` member is kept). The row
-  disappears when neither part has data; each part carries its own credit
-  and link. Adding a source to `Fanout.sources` makes every plant fetched
+  disappears when neither part has data. Each part carried its own credit
+  link until M8.86; since then Pl@ntUse and the Wikipedia extract (« Wikipédia
+  (en) · « section » », the link to the section, « extrait automatique ») are
+  lines of 4f's « Sources » footer. Adding a source to `Fanout.sources` makes every plant fetched
   before it due once: the reconnect pass is its backfill.
 - Statuses: `missing` = the source answered it has nothing (GBIF species 404,
   no Wikidata item, no Pl@ntNet image, no sitelink or summary 404);
@@ -927,7 +929,14 @@ gbif_key
 - Each source writes its own `reference` row (source, payload, status), so a
   failing source never blanks the others and every row in the UI cites its
   source (handoff 4f: "Une ligne sans donnée disparaît. Toute donnée cite sa
-  source."). The payload (`refs/payload.ml`) is an object with one member per
+  source."). Since M8.86 (feedback, 2026-11-22) the citation is no longer
+  printed under each row: 4f ends with one « Sources » footer
+  (`Ref_block.footer`) listing each source of the rows shown once, in
+  `Projection.link_order`, with the page it comes from and its licence where
+  one is required (Wikipedia and Pl@ntUse CC BY-SA, Pl@ntNet the photos' own
+  licences), then the links of the sources no row cites (the former links
+  row); the model's citations (`cited.sources`, each row's `sources`) are
+  unchanged. The payload (`refs/payload.ml`) is an object with one member per
   call, holding that call's body as returned, pruned to the fields the
   decoders read (≈ 100 KB per plant instead of ≈ 700 KB), so the decoders
   read stored payloads unchanged: `gbif` {species, vernacular_names,

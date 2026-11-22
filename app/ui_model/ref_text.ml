@@ -196,10 +196,12 @@ let credits (images : Herbier_domain.Reference.Image.t list) =
 
 let link_label source = source_name source ^ " ↗"
 let uses_label = "Utilisations"
-let plantuse_credit = "Pl@ntUse · CC BY-SA"
+let sources_label = "Sources"
+let quoted_licence = "CC BY-SA"
+let auto_extract = "extrait automatique"
 
-let wikipedia_uses_credit ~lang ~section =
+let wikipedia_section ~lang ~section =
   let name =
     match lang with "fr" -> "Wikipédia" | lang -> "Wikipédia (" ^ lang ^ ")"
   in
-  name ^ " · « " ^ section ^ " » · CC BY-SA · extrait automatique"
+  name ^ " · « " ^ section ^ " »"

@@ -219,25 +219,20 @@ let show_row = function
         (String.concat ","
            (List.map (fun (o, p) -> Organ.to_string o ^ "=" ^ p) photos))
         credits sources
-  | Ref_block.Links links ->
-      "Links "
-      ^ String.concat ", "
-          (List.map (fun (l : Ref_block.link) -> l.label ^ " " ^ l.url) links)
   | Ref_block.Uses uses ->
       let plantuse, wikipedia = Ref_block.uses_parts uses in
       let plantuse_s =
         match plantuse with
         | None -> "-"
-        | Some {chips; line; credit; _} ->
+        | Some {chips; line; url} ->
             Printf.sprintf "[%s] %s / %s" (String.concat "," chips)
               (Option.value ~default:"-" line)
-              credit
+              url
       in
       let wikipedia_s =
         match wikipedia with
         | None -> "-"
-        | Some {paragraph; credit; _} ->
-            Printf.sprintf "%s / %s" paragraph credit
+        | Some {paragraph; url} -> Printf.sprintf "%s / %s" paragraph url
       in
       Printf.sprintf "Uses plantuse=(%s) wikipedia=(%s)" plantuse_s wikipedia_s
 
@@ -251,7 +246,6 @@ let ctor_name = function
   | Ref_block.Habitat _ -> "Habitat"
   | Ref_block.Toxicity _ -> "Toxicity"
   | Ref_block.Organ_photos _ -> "Organ_photos"
-  | Ref_block.Links _ -> "Links"
   | Ref_block.Uses _ -> "Uses"
 
 let ctors rows = List.map ctor_name rows
@@ -269,7 +263,6 @@ let sources_of name rows =
       | Toxicity {sources; _}
       | Organ_photos {sources; _} ) ->
       sources
-  | Some (Links _) -> Alcotest.failf "a Links row has no sources"
   | Some (Uses _) -> Alcotest.failf "a Uses row has no single sources line"
   | None -> Alcotest.failf "no %s row" name
 
@@ -281,9 +274,9 @@ let digitalis_renders () =
   Alcotest.(check int) "3 organ photos (no fruit)" 3 (List.length photos);
   let rows = Ref_block.rows proj ~organ_photos:photos in
   Alcotest.(check (list string))
-    "Names, Origin, Toxicity, Organ_photos, Links; no Life_form, Red_list, \
-     Flowering, Habitat"
-    ["Names"; "Origin"; "Toxicity"; "Organ_photos"; "Links"]
+    "Names, Origin, Toxicity, Organ_photos; no Life_form, Red_list, Flowering, \
+     Habitat"
+    ["Names"; "Origin"; "Toxicity"; "Organ_photos"]
     (ctors rows);
   (match
      List.find_opt
@@ -322,16 +315,16 @@ let digitalis_renders () =
       ("Origin", "GBIF");
       ("Toxicity", "Wikipédia");
     ];
-  match List.rev rows with
-  | Ref_block.Links links :: _ ->
+  match Ref_block.footer proj ~organ_photos:photos with
+  | Some {sources; _} ->
       Alcotest.(check bool)
-        "the links row holds « GBIF ↗ » to the species page" true
+        "the footer's GBIF line links to the species page" true
         (List.exists
-           (fun (l : Ref_block.link) ->
-             l.label = "GBIF ↗"
-             && l.url = "https://www.gbif.org/species/5414995")
-           links)
-  | _ -> Alcotest.fail "the last row is not Links"
+           (fun (s : Ref_block.source) ->
+             s.name = "GBIF"
+             && s.url = Some "https://www.gbif.org/species/5414995")
+           sources)
+  | None -> Alcotest.fail "no footer"
 
 let arnica_renders () =
   let proj = project_species arnica in
@@ -339,8 +332,8 @@ let arnica_renders () =
   Alcotest.(check int) "4 organ photos" 4 (List.length photos);
   let rows = Ref_block.rows proj ~organ_photos:photos in
   Alcotest.(check (list string))
-    "Names, Origin, Red_list, Organ_photos, Links; no Toxicity"
-    ["Names"; "Origin"; "Red_list"; "Organ_photos"; "Links"]
+    "Names, Origin, Red_list, Organ_photos; no Toxicity"
+    ["Names"; "Origin"; "Red_list"; "Organ_photos"]
     (ctors rows);
   (match
      List.find_opt (function Ref_block.Red_list _ -> true | _ -> false) rows
@@ -385,7 +378,7 @@ let digitalis_offline_before_any_download () =
   let rows = Ref_block.rows proj ~organ_photos:[] in
   Alcotest.(check (list string))
     "no Organ_photos row; the other rows are unchanged"
-    ["Names"; "Origin"; "Toxicity"; "Links"]
+    ["Names"; "Origin"; "Toxicity"]
     (ctors rows)
 
 (* ---------- the regional layer adds En_france, Life_form, Flowering,
@@ -396,7 +389,7 @@ let digitalis_full_renders () =
   let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
   Alcotest.(check (list string))
     "Names, Life_form, Origin, En_france, Flowering, Habitat, Toxicity, \
-     Organ_photos, Links (no Red_list: no global IUCN row)"
+     Organ_photos (no Red_list: no global IUCN row)"
     [
       "Names";
       "Life_form";
@@ -406,7 +399,6 @@ let digitalis_full_renders () =
       "Habitat";
       "Toxicity";
       "Organ_photos";
-      "Links";
     ]
     (ctors rows);
   List.iter
@@ -451,7 +443,7 @@ let arnica_full_renders () =
   let rows = Ref_block.rows proj ~organ_photos:(fake_organ_photos proj) in
   Alcotest.(check (list string))
     "Names, Life_form, Origin, En_france, Red_list, Flowering, Habitat, \
-     Organ_photos, Links (no Toxicity)"
+     Organ_photos (no Toxicity)"
     [
       "Names";
       "Life_form";
@@ -461,7 +453,6 @@ let arnica_full_renders () =
       "Flowering";
       "Habitat";
       "Organ_photos";
-      "Links";
     ]
     (ctors rows);
   (match
@@ -505,14 +496,14 @@ let arnica_full_renders () =
 let projection_without_regional_rows_renders_as_before () =
   Alcotest.(check (list string))
     "Digitalis, four rows only"
-    ["Names"; "Origin"; "Toxicity"; "Organ_photos"; "Links"]
+    ["Names"; "Origin"; "Toxicity"; "Organ_photos"]
     (ctors
        (Ref_block.rows
           (project_species digitalis)
           ~organ_photos:(fake_organ_photos (project_species digitalis))));
   Alcotest.(check (list string))
     "Arnica, four rows only"
-    ["Names"; "Origin"; "Red_list"; "Organ_photos"; "Links"]
+    ["Names"; "Origin"; "Red_list"; "Organ_photos"]
     (ctors
        (Ref_block.rows (project_species arnica)
           ~organ_photos:(fake_organ_photos (project_species arnica))))
@@ -714,7 +705,6 @@ let every_constructor_present_and_in_order () =
       "Toxicity";
       "Uses";
       "Organ_photos";
-      "Links";
     ]
     (ctors (Ref_block.rows t ~organ_photos:fake_photos));
   Alcotest.(check (list string))
@@ -729,11 +719,10 @@ let every_constructor_present_and_in_order () =
       "Flowering 6,7,8 juin – août / Tela Botanica";
       "Habitat Prairies [mi-ombre] / Tela Botanica";
       "Toxicity Toxique. / Wikipédia";
-      "Uses plantuse=([médicinal] - / Pl@ntUse · CC BY-SA) wikipedia=(Utilisée \
-       en phytothérapie. / Wikipédia · « Usages » · CC BY-SA · extrait \
-       automatique)";
+      "Uses plantuse=([médicinal] - / https://plantuse.plantnet.org/fr/X_y) \
+       wikipedia=(Utilisée en phytothérapie. / \
+       https://fr.wikipedia.org/wiki/X_y)";
       "Organ_photos [flower=p] Photos : A (cc-by-sa) / Pl@ntNet";
-      "Links GBIF ↗ https://www.gbif.org/species/1";
     ]
     (List.map show_row (Ref_block.rows t ~organ_photos:fake_photos))
 
@@ -880,27 +869,34 @@ let digitalis_uses_row () =
   (* Toxicity, then Uses, then Organ_photos: the texts stay together, photos
      close the block. *)
   Alcotest.(check (list string))
-    "Names, Origin, Toxicity, Uses, Organ_photos, Links"
-    ["Names"; "Origin"; "Toxicity"; "Uses"; "Organ_photos"; "Links"]
+    "Names, Origin, Toxicity, Uses, Organ_photos"
+    ["Names"; "Origin"; "Toxicity"; "Uses"; "Organ_photos"]
     (ctors rows);
   match find_uses rows with
   | None -> Alcotest.fail "no Uses row"
   | Some (plantuse, wikipedia) -> (
       (match plantuse with
-      | Some {chips; line; credit; url} ->
+      | Some {chips; line; url} ->
           Alcotest.(check (list string)) "chips" ["médicinal"] chips;
           Alcotest.(check bool) "line is None" true (Option.is_none line);
-          Alcotest.(check string) "credit" "Pl@ntUse · CC BY-SA" credit;
           Alcotest.(check string)
             "url" "https://plantuse.plantnet.org/fr/Digitalis_purpurea" url
       | None -> Alcotest.fail "plantuse is None");
       match wikipedia with
-      | Some {credit; paragraph; _} ->
-          Alcotest.(check string)
-            "credit (en: the (en) marker)"
-            "Wikipédia (en) · « Medicinal use » · CC BY-SA · extrait \
-             automatique"
-            credit;
+      | Some {paragraph; _} ->
+          (match
+             Ref_block.footer proj ~organ_photos:(fake_organ_photos proj)
+           with
+          | Some {sources; _} ->
+              Alcotest.(check bool)
+                "the footer's extract line (en: the (en) marker)" true
+                (List.exists
+                   (fun (l : Ref_block.source) ->
+                     l.name = "Wikipédia (en) · « Medicinal use »"
+                     && l.licence = Some "CC BY-SA"
+                     && l.note = Some "extrait automatique")
+                   sources)
+          | None -> Alcotest.fail "no footer");
           Alcotest.(check bool)
             "paragraph starts with Extracted from the leaves" true
             (String.starts_with ~prefix:"Extracted from the leaves" paragraph)
@@ -949,6 +945,186 @@ let source_name_plantuse () =
     "Pl@ntUse" "Pl@ntUse"
     (Ref_text.source_name Source.Plantuse)
 
+(* ---------- the « Sources » footer (M8.86) ---------- *)
+
+let link source url : Projection.link = {source; url}
+
+let show_source (l : Ref_block.source) =
+  String.concat " | "
+    [
+      l.name;
+      Option.value ~default:"-" l.url;
+      Option.value ~default:"-" l.licence;
+      Option.value ~default:"-" l.note;
+    ]
+
+let footer_sources t ~photos =
+  match Ref_block.footer t ~organ_photos:photos with
+  | Some f -> List.map show_source f.sources
+  | None -> Alcotest.fail "no footer"
+
+let footer_links t ~photos =
+  match Ref_block.footer t ~organ_photos:photos with
+  | Some f -> List.map (fun (l : Ref_block.link) -> l.label) f.links
+  | None -> Alcotest.fail "no footer"
+
+let footer_dedup_and_order () =
+  let t =
+    {
+      empty_t with
+      vernacular =
+        Some
+          (cited_by
+             [Source.Gbif; Source.Wikidata]
+             [{Projection.lang = Projection.Lang.Fr; names = ["Digitale"]}]);
+      life_form = Some (cited_by [Source.Tela] "Herbacée");
+      flowering_months = Some (cited_by [Source.Tela] [6]);
+      habitat =
+        Some
+          (cited_by [Source.Tela] {Projection.phrase = Some "Bois"; chips = []});
+      origin =
+        Some
+          (cited_by [Source.Gbif]
+             {Projection.native = [area None "France"]; introduced = []});
+      toxicity = Some (cited_by [Source.Wikipedia] "Toxique.");
+      links =
+        [
+          link Source.Gbif "https://www.gbif.org/species/1";
+          link Source.Wikipedia "https://fr.wikipedia.org/wiki/X_y";
+          link Source.Powo "https://powo.science.kew.org/taxon/1";
+          link Source.Tela "https://www.tela-botanica.org/bdtfx-nn-1";
+        ];
+    }
+  in
+  Alcotest.(check (list string))
+    "each source once, in Projection.link_order, with its link and licence"
+    [
+      "GBIF | https://www.gbif.org/species/1 | - | -";
+      "Wikipédia | https://fr.wikipedia.org/wiki/X_y | CC BY-SA | -";
+      "Tela Botanica | https://www.tela-botanica.org/bdtfx-nn-1 | - | -";
+      "Wikidata | - | - | -";
+    ]
+    (footer_sources t ~photos:[]);
+  Alcotest.(check (list string))
+    "the links of sources no row cites stay, as links" ["POWO ↗"]
+    (footer_links t ~photos:[])
+
+let footer_only_shown_rows () =
+  let t =
+    {
+      empty_t with
+      life_form = Some (cited_by [Source.Tela] "Herbacée");
+      (* No row: « NOT_EVALUATED » and a lone « Non protégée ». *)
+      red_list = Some (cited_by [Source.Eppo] "NOT_EVALUATED");
+      fr_protection = Some (cited_by [Source.Taxref] Projection.Not_protected);
+    }
+  in
+  Alcotest.(check (list string))
+    "only the sources of the rows shown"
+    ["Tela Botanica | - | - | -"]
+    (footer_sources t ~photos:[])
+
+let photo organ licence : Reference.Image.t * string =
+  ( {
+      Reference.Image.plant_id = plant;
+      source = Source.Plantnet;
+      organ;
+      remote_url = "https://bs.plantnet.org/image/o/" ^ Organ.to_string organ;
+      licence;
+      attribution = "A";
+      thumb_path = Some "p";
+    },
+    "p" )
+
+let footer_licences () =
+  let t =
+    {
+      empty_t with
+      toxicity = Some (cited_by [Source.Wikipedia] "Toxique.");
+      plantuse_uses =
+        Some
+          (cited_by [Source.Plantuse]
+             {
+               Projection.Uses.summary = ["médicinal"];
+               text = None;
+               title = "X y";
+               url = "https://plantuse.plantnet.org/fr/X_y";
+             });
+      wikipedia_uses =
+        Some
+          (cited_by [Source.Wikipedia]
+             {
+               Projection.Uses.paragraph = "Utilisée en phytothérapie.";
+               section = "Usages et vertus";
+               lang = "fr";
+               title = "X y";
+               url = "https://fr.wikipedia.org/wiki/X_y";
+             });
+      links = [link Source.Wikipedia "https://fr.wikipedia.org/wiki/X_y"];
+    }
+  in
+  let photos =
+    [
+      photo Organ.Flower "cc-by-sa";
+      photo Organ.Leaf "cc-by";
+      photo Organ.Fruit "cc-by-sa";
+      photo Organ.Habit " ";
+    ]
+  in
+  Alcotest.(check (list string))
+    "Pl@ntNet: the photos' distinct licences; Wikipedia's extract after the \
+     article, its section in the link, « extrait automatique »; Pl@ntUse's \
+     page"
+    [
+      "Pl@ntNet | - | CC BY-SA, CC BY | -";
+      "Wikipédia | https://fr.wikipedia.org/wiki/X_y | CC BY-SA | -";
+      "Wikipédia · « Usages et vertus » | \
+       https://fr.wikipedia.org/wiki/X_y#Usages_et_vertus | CC BY-SA | extrait \
+       automatique";
+      "Pl@ntUse | https://plantuse.plantnet.org/fr/X_y | CC BY-SA | -";
+    ]
+    (footer_sources t ~photos);
+  Alcotest.(check (list string))
+    "no link left: every link's source has a line" [] (footer_links t ~photos)
+
+let footer_extract_en () =
+  let t =
+    {
+      empty_t with
+      wikipedia_uses =
+        Some
+          (cited_by [Source.Wikipedia]
+             {
+               Projection.Uses.paragraph = "Used.";
+               section = "Uses";
+               lang = "en";
+               title = "X y";
+               url = "https://en.wikipedia.org/wiki/X_y";
+             });
+    }
+  in
+  Alcotest.(check (list string))
+    "the extract alone, (en) marked, no plain Wikipédia line"
+    [
+      "Wikipédia (en) · « Uses » | https://en.wikipedia.org/wiki/X_y#Uses | CC \
+       BY-SA | extrait automatique";
+    ]
+    (footer_sources t ~photos:[])
+
+let footer_none_or_links_only () =
+  Alcotest.(check bool)
+    "nothing: no footer" true
+    (Option.is_none (Ref_block.footer empty_t ~organ_photos:[]));
+  let t =
+    {empty_t with links = [link Source.Gbif "https://www.gbif.org/species/1"]}
+  in
+  Alcotest.(check (list string))
+    "links alone: no line" []
+    (footer_sources t ~photos:[]);
+  Alcotest.(check (list string))
+    "links alone: kept" ["GBIF ↗"]
+    (footer_links t ~photos:[])
+
 let case name f = Alcotest.test_case name `Quick f
 
 let () =
@@ -956,12 +1132,10 @@ let () =
     [
       ( "both spike species render over the fixtures",
         [
-          case
-            "Digitalis: Names, Origin, Toxicity, Organ_photos (3 tiles), Links"
+          case "Digitalis: Names, Origin, Toxicity, Organ_photos (3 tiles)"
             digitalis_renders;
           case
-            "Arnica: Names, Origin, Red_list (LC chip), Organ_photos (4 \
-             tiles), Links"
+            "Arnica: Names, Origin, Red_list (LC chip), Organ_photos (4 tiles)"
             arnica_renders;
           case "offline before any download: no Organ_photos row, others kept"
             digitalis_offline_before_any_download;
@@ -1037,5 +1211,15 @@ let () =
             neither_has_no_uses_row;
           case "Ref_text.source_name Plantuse = \"Pl@ntUse\""
             source_name_plantuse;
+        ] );
+      ( "the « Sources » footer",
+        [
+          case "dedup, order, links and the remaining links"
+            footer_dedup_and_order;
+          case "only the sources of the rows shown" footer_only_shown_rows;
+          case "licences, the Wikipedia extract, Pl@ntUse's page"
+            footer_licences;
+          case "an English extract alone" footer_extract_en;
+          case "empty: None; links alone: links only" footer_none_or_links_only;
         ] );
     ]

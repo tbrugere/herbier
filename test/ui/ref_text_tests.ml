@@ -173,6 +173,14 @@ let ref_text =
         Alcotest.(check string)
           "Pl@ntNet" "Pl@ntNet ↗"
           (Ref_text.link_label Source.Plantnet));
+    Alcotest.test_case "wikipedia_section: fr bare, other languages marked"
+      `Quick (fun () ->
+        Alcotest.(check string)
+          "fr" "Wikipédia · « Usages »"
+          (Ref_text.wikipedia_section ~lang:"fr" ~section:"Usages");
+        Alcotest.(check string)
+          "en" "Wikipédia (en) · « Uses »"
+          (Ref_text.wikipedia_section ~lang:"en" ~section:"Uses"));
     Alcotest.test_case "area_name: a known code, an unknown one, no code" `Quick
       (fun () ->
         Alcotest.(check string)

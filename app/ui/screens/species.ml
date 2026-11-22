@@ -414,18 +414,13 @@ let project (d : data) =
   let wanted = Projection.organ_photos_wanted p in
   (p, Organ_photos.shown ~wanted ~stored:d.ref_images)
 
-let ref_row key ?(key_cls = []) value sources =
+(* No source line under the value: the « Sources » footer lists them (M8.86). *)
+let ref_row key ?(key_cls = []) value =
   El.div
     ~at:[cls "species__ref-row"]
     [
       El.div ~at:(List.map cls ("species__ref-key" :: key_cls)) [El.txt' key];
-      El.div
-        ~at:[cls "species__ref-value"]
-        (value
-        @
-        match sources with
-        | "" -> []
-        | s -> [El.div ~at:[cls "species__ref-sources"] [El.txt' s]]);
+      El.div ~at:[cls "species__ref-value"] value;
     ]
 
 let origin_side label = function
@@ -501,46 +496,33 @@ let long (t : toggle) text =
   let w = W.Expandable_text.v ~opened:t.opened ~set_opened:t.set text in
   (w.el, w.bindings)
 
-let credit_anchor ~url text =
-  El.a
-    ~at:
-      [
-        cls "species__ref-sources";
-        cls "species__uses-credit";
-        At.href (Jstr.v url);
-        At.v (Jstr.v "target") (Jstr.v "_blank");
-        At.v (Jstr.v "rel") (Jstr.v "noopener noreferrer");
-      ]
-    [El.txt' text]
-
-(* « Utilisations »: Pl@ntUse first, then Wikipedia, each with its credit. *)
+(* « Utilisations »: Pl@ntUse first, then Wikipedia. *)
 let uses_row long_texts ~plantuse ~wikipedia =
   let plantuse =
     Option.fold ~none:([], [])
       ~some:(fun (p : Ref_block.plantuse_uses) ->
         let line = Option.map (long long_texts.plantuse) p.line in
         ( chip_list p.chips
-          @ Option.fold ~none:[] ~some:(fun (el, _) -> [el]) line
-          @ [credit_anchor ~url:p.url p.credit],
+          @ Option.fold ~none:[] ~some:(fun (el, _) -> [el]) line,
           Option.fold ~none:[] ~some:snd line ))
       plantuse
   and wikipedia =
     Option.fold ~none:([], [])
       ~some:(fun (w : Ref_block.wikipedia_uses) ->
         let el, bindings = long long_texts.wikipedia w.paragraph in
-        ([el; credit_anchor ~url:w.url w.credit], bindings))
+        ([el], bindings))
       wikipedia
   in
   let part = function
     | [], _ -> []
     | els, _ -> [El.div ~at:[cls "species__uses-part"] els]
   in
-  ( ref_row Ref_text.uses_label (part plantuse @ part wikipedia) "",
+  ( ref_row Ref_text.uses_label (part plantuse @ part wikipedia),
     snd plantuse @ snd wikipedia )
 
 (* « Noms »: the French names, the other languages behind « Autres langues »;
    without French names, the others are shown directly. *)
-let names_row ~opened ~set_opened ~french ~others sources =
+let names_row ~opened ~set_opened ~french ~others ~family =
   let line (v : Projection.vernacular) =
     El.div
       [
@@ -548,10 +530,17 @@ let names_row ~opened ~set_opened ~french ~others sources =
         El.txt' (" " ^ Ref_text.names_line v);
       ]
   in
+  (* The family, under the names (it was the head of their source line). *)
+  let family =
+    List.map
+      (fun f -> El.div ~at:[cls "species__ref-family"] [El.txt' f])
+      (Option.to_list family)
+  in
   match (french, others) with
-  | [], _ -> (ref_row "Noms" (List.map line others) sources, [])
+  | [], _ -> (ref_row "Noms" (List.map line others @ family), [])
   | _ :: _, [] ->
-      (ref_row "Noms" [El.div [El.txt' (String.concat ", " french)]] sources, [])
+      ( ref_row "Noms" (El.div [El.txt' (String.concat ", " french)] :: family),
+        [] )
   | _ :: _, _ :: _ ->
       let more =
         button
@@ -571,8 +560,7 @@ let names_row ~opened ~set_opened ~french ~others sources =
       in
       let click, b_click = Rb.click more in
       ( ref_row "Noms"
-          [El.div [El.txt' (String.concat ", " french)]; more; list]
-          sources,
+          ([El.div [El.txt' (String.concat ", " french)]; more; list] @ family),
         [
           b_click;
           Rb.act click (fun () -> set_opened (not (React.S.value opened)));
@@ -582,61 +570,91 @@ let names_row ~opened ~set_opened ~french ~others sources =
         ] )
 
 (* Full width, its caption above the grid (handoff 4f): not a key/value
-   row. *)
-let organ_block id ~photos ~credits ~sources =
+   row. The photos' credits are in the viewer (5e), Pl@ntNet in the footer. *)
+let organ_block id ~photos =
   let tiles = List.map (organ_tile id) photos in
   ( El.div
       ~at:[cls "species__organ-block"]
       [
-        El.div
-          ~at:[cls "species__organ-caption"]
-          [El.txt' ("Photos par organe · " ^ sources)];
+        El.div ~at:[cls "species__organ-caption"] [El.txt' "Photos par organe"];
         El.div ~at:[cls "species__organs"] (List.map fst tiles);
-        El.div ~at:[cls "species__ref-sources"] [El.txt' credits];
       ],
     List.concat_map snd tiles )
 
 let row_el ~opened ~set_opened ~long_texts id = function
-  | Ref_block.Names {french; others; sources} ->
-      names_row ~opened ~set_opened ~french ~others sources
-  | Organ_photos {photos; credits; sources} ->
-      organ_block id ~photos ~credits ~sources
-  | Life_form {text; sources} ->
-      (ref_row "Type" [El.div [El.txt' text]] sources, [])
-  | Origin {native; introduced; sources} ->
+  | Ref_block.Names {french; others; family; _} ->
+      names_row ~opened ~set_opened ~french ~others ~family
+  | Organ_photos {photos; _} -> organ_block id ~photos
+  | Life_form {text; _} -> (ref_row "Type" [El.div [El.txt' text]], [])
+  | Origin {native; introduced; _} ->
       ( ref_row "Origine"
           (origin_side "Indigène :" native
-          @ origin_side "Introduite :" introduced)
-          sources,
+          @ origin_side "Introduite :" introduced),
         [] )
-  | En_france {chips; places; sources} ->
+  | En_france {chips; places; _} ->
       ( ref_row "En France"
           (chip_list chips
-          @ List.map (fun p -> El.div [El.txt' p]) (Option.to_list places))
-          sources,
+          @ List.map (fun p -> El.div [El.txt' p]) (Option.to_list places)),
         [] )
-  | Red_list {label; chip; sources} ->
-      (ref_row label (chip_list [chip]) sources, [])
-  | Flowering {months; text; sources} ->
-      ( ref_row "Floraison"
-          [W.Month_grid.v months; El.div [El.txt' text]]
-          sources,
-        [] )
-  | Habitat {phrase; chips; sources} ->
+  | Red_list {label; chip; _} -> (ref_row label (chip_list [chip]), [])
+  | Flowering {months; text; _} ->
+      (ref_row "Floraison" [W.Month_grid.v months; El.div [El.txt' text]], [])
+  | Habitat {phrase; chips; _} ->
       let phrase = Option.map (long long_texts.habitat) phrase in
       ( ref_row "Habitat"
           (Option.fold ~none:[] ~some:(fun (el, _) -> [el]) phrase
-          @ chip_list ~chip_cls:"species__habitat-chip" chips)
-          sources,
+          @ chip_list ~chip_cls:"species__habitat-chip" chips),
         Option.fold ~none:[] ~some:snd phrase )
-  | Toxicity {text; sources} ->
+  | Toxicity {text; _} ->
       let el, bindings = long long_texts.toxicity text in
-      (ref_row "Toxicité" [el] sources, bindings)
+      (ref_row "Toxicité" [el], bindings)
   | Uses uses ->
       let plantuse, wikipedia = Ref_block.uses_parts uses in
       uses_row long_texts ~plantuse ~wikipedia
-  | Links links ->
-      (El.div ~at:[cls "species__ref-links"] (List.map link_anchor links), [])
+
+(* « Sources » closes the block (M8.86): one line per source of the rows
+   shown, its name linked to the page the data comes from, then its licence
+   and note; then the links of the sources no row cites. *)
+let source_line (s : Ref_block.source) =
+  let name =
+    match s.url with
+    | None -> El.span ~at:[cls "species__source-name"] [El.txt' s.name]
+    | Some url ->
+        El.a
+          ~at:
+            [
+              cls "species__source-name";
+              At.href (Jstr.v url);
+              At.v (Jstr.v "target") (Jstr.v "_blank");
+              At.v (Jstr.v "rel") (Jstr.v "noopener noreferrer");
+            ]
+          [El.txt' s.name]
+  in
+  let meta =
+    List.map
+      (fun m -> El.span ~at:[cls "species__source-meta"] [El.txt' (" · " ^ m)])
+      (List.filter_map Fun.id [s.licence; s.note])
+  in
+  El.li ~at:[cls "species__source"] (name :: meta)
+
+let footer_el (f : Ref_block.footer) =
+  let lines =
+    match f.sources with
+    | [] -> []
+    | sources ->
+        [
+          El.h3
+            ~at:[cls "species__sources-title"]
+            [El.txt' Ref_text.sources_label];
+          El.ul ~at:[cls "species__sources-list"] (List.map source_line sources);
+        ]
+  and links =
+    match f.links with
+    | [] -> []
+    | links ->
+        [El.div ~at:[cls "species__ref-links"] (List.map link_anchor links)]
+  in
+  El.div ~at:[cls "species__sources"] (lines @ links)
 
 (* 4f *)
 let linked app (data : data React.signal) () =
@@ -662,16 +680,21 @@ let linked app (data : data React.signal) () =
   let set_opened o = set_opened o in
   let long_texts = long_texts () in
   let rows_of ((p, shown), fetching) =
+    let footer =
+      Option.to_list
+        (Option.map footer_el (Ref_block.footer p ~organ_photos:shown))
+    in
     let content =
-      match (Ref_block.rows p ~organ_photos:shown, fetching) with
-      | (_ :: _ as rows), _ ->
+      match (Ref_block.rows p ~organ_photos:shown, footer, fetching) with
+      | (_ :: _ as rows), _, _ ->
           List.map (row_el ~opened ~set_opened ~long_texts id) rows
-      | [], true ->
+      | [], _ :: _, _ -> []
+      | [], [], true ->
           [
             ( El.p ~at:[cls "t-meta"] [El.txt' "Récupération de la référence…"],
               [] );
           ]
-      | [], false ->
+      | [], [], false ->
           [
             ( El.p
                 ~at:[cls "t-meta"]
@@ -679,7 +702,9 @@ let linked app (data : data React.signal) () =
               [] );
           ]
     in
-    ( El.div ~at:[cls "species__ref-rows"] (List.map fst content),
+    ( El.div
+        ~at:[cls "species__ref-body"]
+        (El.div ~at:[cls "species__ref-rows"] (List.map fst content) :: footer),
       List.concat_map snd content )
   in
   ( El.section
