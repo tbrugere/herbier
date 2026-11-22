@@ -4,17 +4,14 @@ module Observation_id = Herbier_domain.Ids.Observation_id
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Places = Herbier_domain.Places
 
-let collapsed_height = 64.
 let below_chips = 36.
 
 let snaps ~available ~top =
   let px x = match Float.is_nan x with true -> 0. | false -> x in
   let available = px available and top = px top in
-  let mid =
-    Float.max (collapsed_height +. 1.) (Float.min 360. (available *. 0.5))
-  in
+  let mid = Float.max 1. (Float.min 360. (available *. 0.5)) in
   let high = Float.max (mid +. 1.) (available -. top -. below_chips) in
-  [collapsed_height; mid; high]
+  [0.; mid; high]
 
 let title (cluster : Places.cluster) =
   Option.value (Journal_day.place cluster.members) ~default:"Lieu"
@@ -40,14 +37,6 @@ let summary shown =
           observations;
           Fr_text.plural (List.length plants) "plante" "plantes";
         ]
-
-let collapsed ~places ~observations =
-  match places with
-  | 0 -> "Aucune observation sur la carte"
-  | _ ->
-      Fr_text.plural places "lieu" "lieux"
-      ^ " · "
-      ^ Fr_text.plural observations "observation" "observations"
 
 type notice =
   | Loading

@@ -1,15 +1,17 @@
-(** 4b's sheet: texts, snap points, photo lookup. Pure (no store, no Brr),
-    tested natively in [test/ui/]. *)
+(** 4b's sheet, shown only for a selected place, and the map's status pill:
+    texts, snap points, photo lookup. Pure (no store, no Brr), tested natively
+    in [test/ui/]. *)
 
 module Observation := Herbier_domain.Observation
 module Photo := Herbier_domain.Photo
 module Observation_id := Herbier_domain.Ids.Observation_id
 
 val snaps : available:float -> top:float -> float list
-(** Visible heights for {!Widgets.Sheet}: [[64.; mid; high]] with
+(** Visible heights for {!Widgets.Sheet}: [[0.; mid; high]], where [0.] is the
+    closed sheet (no place selected), [mid] the one a selection opens,
     [mid = Float.min 360. (available *. 0.5)] and
     [high = Float.max (mid +. 1.) (available -. top -. 36.)], then made strictly
-    ascending: [mid] is raised to [65.] when below it. [available] is the
+    ascending: [mid] is raised to [1.] when below it. [available] is the
     screen's height above the tab bar and [top] the height the floating search
     and chips take from its top (safe-area inset included), both in px, so the
     fully raised sheet stops 36 px below the chips. Always three strictly
@@ -27,12 +29,7 @@ val summary : Observation.t list -> string
     [plant_id]s), French plural rules of {!Fr_text.plural}; the plants part is
     left out when no member has a plant: ["rayon 500 m · 1 observation"]. *)
 
-val collapsed : places:int -> observations:int -> string
-(** ["3 lieux · 13 observations"], ["1 lieu · 1 observation"];
-    ["Aucune observation sur la carte"] when [places = 0]. *)
-
-(** A message the sheet shows in place of its counts, or under a place's
-    summary. *)
+(** A message the map's status pill shows, under the search and the chips. *)
 type notice =
   | Loading  (** before the first data *)
   | Read_failed

@@ -2,6 +2,7 @@
 
 module Map_filter = Herbier_ui_model.Map_filter
 module Map_sheet = Herbier_ui_model.Map_sheet
+module Snap = Herbier_ui_model.Snap
 module Plant_id = Herbier_domain.Ids.Plant_id
 module Ids = Herbier_domain.Ids
 module Places = Herbier_domain.Places
@@ -158,17 +159,35 @@ let map_sheet_snaps () =
     (fun (name, available, top, expected) ->
       Alcotest.check float_list name expected (Map_sheet.snaps ~available ~top))
     [
-      ("available 800, top 104", 800., 104., [64.; 360.; 660.]);
-      ("available 500, top 104", 500., 104., [64.; 250.; 360.]);
+      ("available 800, top 104", 800., 104., [0.; 360.; 660.]);
+      ("available 500, top 104", 500., 104., [0.; 250.; 360.]);
       (* A taller top (safe-area inset) lowers only the highest point. *)
-      ("available 800, top 152", 800., 152., [64.; 360.; 612.]);
-      ("top nan is 0", 800., Float.nan, [64.; 360.; 764.]);
-      ("high = mid + 1, mid not raised", 200., 104., [64.; 100.; 101.]);
-      ("available 100: mid raised to 65", 100., 104., [64.; 65.; 66.]);
-      ("available 0", 0., 104., [64.; 65.; 66.]);
-      ("available negative", -50., 104., [64.; 65.; 66.]);
-      ("available nan", Float.nan, 104., [64.; 65.; 66.]);
+      ("available 800, top 152", 800., 152., [0.; 360.; 612.]);
+      ("top nan is 0", 800., Float.nan, [0.; 360.; 764.]);
+      ("high = mid + 1, mid not raised", 200., 104., [0.; 100.; 101.]);
+      ("available 100: high = mid + 1", 100., 104., [0.; 50.; 51.]);
+      ("available 1: mid raised to 1", 1., 104., [0.; 1.; 2.]);
+      ("available 0", 0., 104., [0.; 1.; 2.]);
+      ("available negative", -50., 104., [0.; 1.; 2.]);
+      ("available nan", Float.nan, 104., [0.; 1.; 2.]);
     ]
+
+(* Whatever the screen measures, the sheet can close (0.) and the points are
+   valid for the widget. *)
+let map_sheet_snaps_valid () =
+  List.iter
+    (fun available ->
+      List.iter
+        (fun top ->
+          let snaps = Map_sheet.snaps ~available ~top in
+          let name = Printf.sprintf "available %g, top %g" available top in
+          Alcotest.(check (float 0.))
+            (name ^ ": closed first") 0. (List.hd snaps);
+          Alcotest.(check int)
+            (name ^ ": three points") 3
+            (Array.length (Snap.of_list snaps)))
+        [Float.nan; -10.; 0.; 104.; 900.])
+    [Float.nan; Float.neg_infinity; -50.; 0.; 0.5; 1.; 2.; 100.; 800.; 2000.]
 
 let map_sheet_summary () =
   let str = Alcotest.string in
@@ -196,15 +215,6 @@ let map_sheet_summary () =
   Alcotest.check str "two observations of the same plant: 1 plante"
     "rayon 500 m · 2 observations · 1 plante"
     (Map_sheet.summary [obs ~plant:p1 (); obs ~plant:p1 ()])
-
-let map_sheet_collapsed () =
-  let str = Alcotest.string in
-  Alcotest.check str "3 places, 13 observations" "3 lieux · 13 observations"
-    (Map_sheet.collapsed ~places:3 ~observations:13);
-  Alcotest.check str "1 place, 1 observation" "1 lieu · 1 observation"
-    (Map_sheet.collapsed ~places:1 ~observations:1);
-  Alcotest.check str "no places" "Aucune observation sur la carte"
-    (Map_sheet.collapsed ~places:0 ~observations:0)
 
 let map_sheet_title () =
   let str = Alcotest.string in
@@ -340,10 +350,11 @@ let map_sheet_notices () =
 let map_sheet =
   [
     Alcotest.test_case "snaps: exact heights" `Quick map_sheet_snaps;
+    Alcotest.test_case "snaps: closed first, valid for the widget" `Quick
+      map_sheet_snaps_valid;
     Alcotest.test_case "notice, broken and position texts" `Quick
       map_sheet_notices;
     Alcotest.test_case "summary" `Quick map_sheet_summary;
-    Alcotest.test_case "collapsed" `Quick map_sheet_collapsed;
     Alcotest.test_case "title" `Quick map_sheet_title;
     Alcotest.test_case "rename_value" `Quick map_sheet_rename_value;
     Alcotest.test_case "detail" `Quick map_sheet_detail;

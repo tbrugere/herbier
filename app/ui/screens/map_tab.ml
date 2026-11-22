@@ -39,34 +39,34 @@ type data = {
 let no_data =
   {observations = []; names = []; tags = []; links = []; photos = (fun _ -> [])}
 
-(* What the sheet shows: rebuilt after each data, filter, search or selection
-   change. *)
+(* What the screen shows: rebuilt after each data, filter, search or
+   selection change. The sheet shows only while a place is selected. *)
 type view = {
   data : data;
   places : Features.place list;
   selected : Features.place option;
   notice : Map_sheet.notice option;
-      (** replaces the collapsed line, or shows under a place's summary, until
-          the next selection, filter or data change *)
+      (** in the status pill, until the next selection, filter or data change *)
   broken : Map_sheet.broken option;  (** why there is no map: for good *)
 }
 
-(* The sheet's first line. [Renaming] holds the texts the field opened with:
-   two [Renaming] are equal, so the open field, its draft and its focus
-   survive every view change until it closes. *)
+(* The sheet's first line ([Nothing] before any selection). [Renaming] holds
+   the texts the field opened with: two [Renaming] are equal, so the open
+   field, its draft and its focus survive every view change until it
+   closes. *)
 type head =
-  | Line of string
+  | Nothing
   | Title of {title : string; detail : string option}
   | Renaming of {value : string; placeholder : string}
 
 let head_equal a b =
   match (a, b) with
-  | Line a, Line b -> String.equal a b
+  | Nothing, Nothing -> true
   | Title a, Title b ->
       String.equal a.title b.title
       && Option.equal String.equal a.detail b.detail
   | Renaming _, Renaming _ -> true
-  | (Line _ | Title _ | Renaming _), _ -> false
+  | (Nothing | Title _ | Renaming _), _ -> false
 
 (* The floating search: [seq] numbers the latest query, a reply to an older
    one is dropped; [frame_on_reply]: Enter was pressed while it ran. *)
@@ -158,14 +158,7 @@ let load db =
 
 let head (v, renaming) =
   match (v.selected, renaming) with
-  | None, _ ->
-      Line
-        (match (v.broken, v.notice) with
-        | Some b, _ -> Map_sheet.broken_text b
-        | None, Some n -> Map_sheet.notice_text n
-        | None, None ->
-            Map_sheet.collapsed ~places:(List.length v.places)
-              ~observations:(List.length (shown_members v.places)))
+  | None, _ -> Nothing
   | Some p, false ->
       Title
         {title = Map_sheet.title p.cluster; detail = Map_sheet.detail p.cluster}
@@ -179,15 +172,20 @@ let head (v, renaming) =
 let summary v =
   Option.map (fun (p : Features.place) -> Map_sheet.summary p.shown) v.selected
 
-(* Under a place's summary: what went wrong last (with no place, the
-   collapsed line says it). *)
+(* Under a place's summary: its rename failed. *)
 let message (v, rename_failed) =
-  match (v.selected, rename_failed, v.broken, v.notice) with
-  | None, _, _, _ -> None
-  | Some _, true, _, _ -> Some "Enregistrement impossible. Réessayez."
-  | Some _, false, Some b, _ -> Some (Map_sheet.broken_text b)
-  | Some _, false, None, Some n -> Some (Map_sheet.notice_text n)
-  | Some _, false, None, None -> None
+  match (v.selected, rename_failed) with
+  | Some _, true -> Some "Enregistrement impossible. Réessayez."
+  | Some _, false | None, _ -> None
+
+(* The floating pill under the search and the chips, selected place or not:
+   why there is no map, else the last notice; [""] when there is nothing to
+   say. *)
+let status v =
+  match (v.broken, v.notice) with
+  | Some b, _ -> Map_sheet.broken_text b
+  | None, Some n -> Map_sheet.notice_text n
+  | None, None -> ""
 
 let optional_p class_name = function
   | None -> (El.txt' "", [])
@@ -211,6 +209,13 @@ let v app =
           | Error (Theme.Missing_tokens missing) ->
               Some (Map_sheet.Missing_tokens missing));
       }
+  in
+  (* The sheet's content: the selected place's view, kept while the sheet
+     slides away after a deselection. *)
+  let shown =
+    React.S.fmap ~eq:( == )
+      (fun v -> match v.selected with Some _ -> Some v | None -> None)
+      (React.S.value view) view
   in
   let renaming, set_renaming = React.S.create false in
   let rename_failed, set_rename_failed = React.S.create false in
@@ -245,7 +250,7 @@ let v app =
   in
   let body = El.div ~at:[cls "map-tab__body"] [] in
   (* Snap points before layout; [measure] replaces them before the first
-     frame. *)
+     frame. Index 0 is the closed sheet, 1 the one a selection opens. *)
   let sheet =
     W.Sheet.v
       ~snaps:
@@ -343,6 +348,22 @@ let v app =
         | Some _ | None -> stop_renaming ());
         recompute ~selected:(Some p.key) (React.S.value view).data;
         sheet.snap_to 1
+  in
+  (* Android back closes the sheet first: an overlay while a place is
+     selected. *)
+  let back = ref None in
+  let sync_back has_place =
+    match (has_place, !back) with
+    | true, None ->
+        back :=
+          Some
+            (Overlay.push ~surface:Light ~close:(fun () ->
+                 back := None;
+                 select None))
+    | false, Some o ->
+        back := None;
+        Overlay.remove o
+    | true, Some _ | false, None -> ()
   in
   let frame () =
     let places = (React.S.value view).places in
@@ -508,7 +529,7 @@ let v app =
             | true, Ok _ -> stop_renaming ())
   in
   let head_view = function
-    | Line line -> (El.p ~at:[cls "map-tab__line"] [El.txt' line], [])
+    | Nothing -> (El.txt' "", [])
     | Title {title; detail} ->
         let button = Html.button ["map-tab__rename"] [El.txt' "Renommer"] in
         let click, b = Rb.click button in
@@ -550,21 +571,28 @@ let v app =
   in
   let locate_click, locate_binding = Rb.click locate_button in
   let chips_el = El.div ~at:[cls "chip-row"; cls "map-tab__chips"] [] in
-  let top =
+  let controls =
     El.div
-      ~at:[cls "map-tab__top"]
+      ~at:[cls "map-tab__controls"]
       [El.div ~at:[cls "map-tab__search"] [search.el; locate_button]; chips_el]
   in
+  (* Always in the document, empty when there is nothing to say: a live
+     region that appears with its text is not reliably announced. *)
+  let status_el =
+    El.p ~at:[cls "map-tab__status"; At.v (Jstr.v "role") (Jstr.v "status")] []
+  in
+  let top = El.div ~at:[cls "map-tab__top"] [controls; status_el] in
   let el = El.div ~at:[cls "map-tab"] [container; top; sheet.el] in
   (* The sheet's room is measured, not assumed: the tab bar below and the
-     controls above both grow with the safe-area insets. A screen not laid
-     out (released) measures 0 and keeps its snap points. *)
+     controls above both grow with the safe-area insets. The status pill is
+     left out: it comes and goes, the snap points stay. A screen not laid out
+     (released) measures 0 and keeps its snap points. *)
   let measure () =
     let available = El.bound_h el in
     match available > 0. with
     | false -> ()
     | true ->
-        let top = El.bound_y top +. El.bound_h top -. El.bound_y el in
+        let top = El.bound_y controls +. El.bound_h controls -. El.bound_y el in
         sheet.set_snaps (Map_sheet.snaps ~available ~top)
   in
   ignore (G.request_animation_frame (fun _ -> measure ()));
@@ -580,22 +608,41 @@ let v app =
         [
           [
             Rb.on_release (fun () -> Ev.unlisten resize);
+            Rb.on_release (fun () -> Option.iter Overlay.remove !back);
             release_map;
             Rb.act loaded on_loaded;
             Rb.rlist chips_el (Filter_chips.el state) chips;
             Rb.view head_el head_view
-              (React.S.l2 ~eq:head_equal (fun v r -> head (v, r)) view renaming);
+              (React.S.l2 ~eq:head_equal
+                 (fun v r -> head (v, r))
+                 shown renaming);
             Rb.view summary_el
               (optional_p "map-tab__summary")
-              (React.S.map ~eq:(Option.equal String.equal) summary view);
+              (React.S.map ~eq:(Option.equal String.equal) summary shown);
             Rb.view message_el
               (optional_p "map-tab__message")
               (React.S.l2
                  ~eq:(Option.equal String.equal)
                  (fun v f -> message (v, f))
-                 view rename_failed);
+                 shown rename_failed);
             Rb.view body rows
-              (React.S.map ~eq:same_rows (fun v -> (v.data, v.selected)) view);
+              (React.S.map ~eq:same_rows (fun v -> (v.data, v.selected)) shown);
+            Rb.text status_el (React.S.map ~eq:String.equal status view);
+            Rb.class_ sheet.el "map-tab__sheet--closed"
+              (React.S.map ~eq:Bool.equal
+                 (fun v -> Option.is_none v.selected)
+                 view);
+            Rb.act
+              (React.S.changes
+                 (React.S.map ~eq:Bool.equal
+                    (fun v -> Option.is_some v.selected)
+                    view))
+              sync_back;
+            (* Dragged down to the closed point: the place is let go. *)
+            Rb.act sheet.settled (fun i ->
+                match (i, (React.S.value view).selected) with
+                | 0, Some _ -> select None
+                | _, (Some _ | None) -> ());
             Rb.act (React.S.changes filters) (fun _ ->
                 recompute (React.S.value view).data);
             Rb.act (React.S.changes search.value) run_search;
