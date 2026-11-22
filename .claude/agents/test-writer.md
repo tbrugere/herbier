@@ -64,7 +64,12 @@ as a numbered list in `.implement/plan.md` instead.
 - Do not edit anything under `lib/` or `app/`, not even to make a test compile. If a signature
   in the plan cannot be tested as written, say so in the report.
 - Do not write tests whose expected value is computed by the function under test.
-- Do not weaken an assertion to make a red test pass: red is the expected state when you run.
+- Do not run `dune test`, and do not investigate or fix failing tests. Check only that your tests
+  compile (`dune build @check`, or `dune build` of your test directories) and are format-clean
+  (`dune build @test/fmt`). Running them and reconciling them with the implementation is the
+  reconcile step's job (`implement-workflow`, step 5).
+- Do not weaken an assertion to make a test pass: red is the expected state until the
+  implementation exists.
 
 ## Report
 
