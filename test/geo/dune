@@ -12,6 +12,6 @@
   alcotest
   ptime)
  (deps
-  %{project_root}/web/map/positron.json
+  %{project_root}/web/map/liberty.json
   (glob_files %{project_root}/test/fixtures/*.json)
   %{project_root}/scripts/record-geo-fixtures.sh))

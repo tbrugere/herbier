@@ -1,6 +1,5 @@
-(** Dev-only page for spike 3 (architecture §10): the positron map over the
-    app's [herbier] database. Seed it with [#dev/seed] first. Reached with
-    [#dev/map].
+(** Dev-only page for spike 3 (architecture §10): the liberty map over the app's
+    [herbier] database. Seed it with [#dev/seed] first. Reached with [#dev/map].
 
     A status line
     [observations: <total> · placées: <placeable> · rendues: <rendered>],

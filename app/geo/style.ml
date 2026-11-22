@@ -9,7 +9,7 @@ type colours = {
   origin : string;
 }
 
-let path = "map/positron.json"
+let path = "map/liberty.json"
 let observations_source = "herbier-observations"
 let accuracy_source = "herbier-accuracy"
 let points_layer = "herbier-points"

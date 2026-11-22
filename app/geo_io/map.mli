@@ -1,4 +1,4 @@
-(** A MapLibre map over the facade (architecture §8): the pinned positron style
+(** A MapLibre map over the facade (architecture §8): the pinned liberty style
     with Herbier's overlays ({!Style}), the observations as points, the accuracy
     circle. *)
 

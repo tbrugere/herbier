@@ -333,8 +333,9 @@ blocked: nothing.
   ~100-line JS facade; bundled by esbuild into `vendor.js`, its worker copied
   to dist and set with `setWorkerUrl`. Leaflet has opam bindings but 2.0 is alpha and raster is
   worse offline.
-- **Online tiles**: OpenFreeMap `positron` style (no key, no stated limits),
-  with the design's CSS desaturation if wanted. Keyless fallbacks: VersaTiles,
+- **Online tiles**: OpenFreeMap `liberty` style (no key, no stated limits;
+  pinned in `web/map/liberty.json`; colourful base chosen by the user on
+  2026-11-22, replacing `positron`). Keyless fallbacks: VersaTiles,
   IGN Plan IGN vector (France). Keyed fallbacks: Protomaps hosted (1M
   req/month), Stadia, Thunderforest.
 - **Offline**: one Protomaps **PMTiles extract of the user's region** stored

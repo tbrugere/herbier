@@ -57,7 +57,7 @@ jobs:
           grep -q 'shell__screen' app.js
           grep -q '\.shell' app.css
           grep -q 'app.js' index.html
-          test -f vendor.css && test -s maplibre-gl-worker.js && test -f map/positron.json
+          test -f vendor.css && test -s maplibre-gl-worker.js && test -f map/liberty.json
           grep -q 'maplibregl-map' vendor.css
           grep -q 'vendor.css' index.html
       # The app's JS in the release profile (what release.sh ships as

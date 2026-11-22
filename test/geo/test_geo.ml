@@ -1,4 +1,4 @@
-(* Native checks of app/geo/features.ml and app/geo/style.ml. [web/map/positron.json] doubles as the shipped
+(* Native checks of app/geo/features.ml and app/geo/style.ml. [web/map/liberty.json] doubles as the shipped
    style and the fixture of the with_overlays tests, read relative to the
    test's working directory ([_build/default/test/geo]). *)
 
@@ -1003,10 +1003,10 @@ let places_literal_keys () =
 
 (* ---------- Style.with_overlays ---------- *)
 
-let positron_text =
-  In_channel.with_open_bin "../../web/map/positron.json" In_channel.input_all
+let liberty_text =
+  In_channel.with_open_bin "../../web/map/liberty.json" In_channel.input_all
 
-let positron = Yojson.Safe.from_string positron_text
+let liberty = Yojson.Safe.from_string liberty_text
 
 let colours : Style.colours =
   {
@@ -1025,28 +1025,28 @@ let with_overlays_ok base =
   | Ok result -> result
   | Error e -> Alcotest.failf "with_overlays: %s" (Style.error_to_string e)
 
-let positron_fixture_sanity () =
+let liberty_fixture_sanity () =
   let open Yojson.Safe.Util in
   Alcotest.(check int)
     "style version is 8" 8
-    (positron |> member "version" |> to_int);
+    (liberty |> member "version" |> to_int);
   Alcotest.(check bool)
     "sources contains openmaptiles" true
-    (positron |> member "sources" |> to_assoc |> List.mem_assoc "openmaptiles");
+    (liberty |> member "sources" |> to_assoc |> List.mem_assoc "openmaptiles");
   Alcotest.(check bool)
     "layers is non-empty" true
-    (positron |> member "layers" |> to_list <> []);
+    (liberty |> member "layers" |> to_list <> []);
   Alcotest.(check bool)
     "has glyphs" true
-    (positron |> member "glyphs" |> to_string_option <> None);
+    (liberty |> member "glyphs" |> to_string_option <> None);
   Alcotest.(check bool)
     "has sprite" true
-    (positron |> member "sprite" |> to_string_option <> None)
+    (liberty |> member "sprite" |> to_string_option <> None)
 
 let layers_appended_after_the_base () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   let open Yojson.Safe.Util in
-  let base_layers = positron |> member "layers" |> to_list in
+  let base_layers = liberty |> member "layers" |> to_list in
   let layers = result |> member "layers" |> to_list in
   let n = List.length base_layers in
   Alcotest.(check int) "12 layers appended" (n + 12) (List.length layers);
@@ -1098,9 +1098,9 @@ let strip_field key (j : Yojson.Safe.t) =
   | other -> other
 
 let sources_appended_after_the_base () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   let open Yojson.Safe.Util in
-  let base_sources = positron |> member "sources" |> to_assoc in
+  let base_sources = liberty |> member "sources" |> to_assoc in
   let sources = result |> member "sources" |> to_assoc in
   let n = List.length base_sources in
   Alcotest.(check (list (pair string Testable.yojson)))
@@ -1136,7 +1136,7 @@ let sources_appended_after_the_base () =
     ]
 
 let places_source_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   let source = source_by_id result Style.places_source in
   (match number_field source "clusterMaxZoom" with
   | Some v -> Alcotest.(check (float 1e-9)) "clusterMaxZoom is 14" 14. v
@@ -1178,7 +1178,7 @@ let places_source_and_layer_share_the_literal () =
      layers are separate namespaces)"
     Style.places_source Style.places_layer;
   (* The shared id is not a Duplicate_id. *)
-  ignore (with_overlays_ok positron)
+  ignore (with_overlays_ok liberty)
 
 let origin_source_and_layer_share_the_literal () =
   Alcotest.(check string)
@@ -1186,10 +1186,10 @@ let origin_source_and_layer_share_the_literal () =
      layers are separate namespaces)"
     Style.origin_source Style.origin_layer;
   (* The shared id is not a Duplicate_id. *)
-  ignore (with_overlays_ok positron)
+  ignore (with_overlays_ok liberty)
 
 let other_top_level_keys_unchanged () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   let open Yojson.Safe.Util in
   let others j =
     List.filter
@@ -1199,11 +1199,11 @@ let other_top_level_keys_unchanged () =
   Alcotest.(check (list string))
     "the base has version, glyphs and sprite among its other keys" []
     (List.filter
-       (fun k -> not (List.mem_assoc k (others positron)))
+       (fun k -> not (List.mem_assoc k (others liberty)))
        ["version"; "glyphs"; "sprite"]);
   Alcotest.(check (list (pair string Testable.yojson)))
     "every top-level key other than sources and layers is unchanged, in order"
-    (others positron) (others result)
+    (others liberty) (others result)
 
 let layer_by_id result id =
   let open Yojson.Safe.Util in
@@ -1213,7 +1213,7 @@ let layer_by_id result id =
   |> List.find (fun l -> String.equal (l |> member "id" |> to_string) id)
 
 let colours_applied_to_the_overlay_layers () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   let open Yojson.Safe.Util in
   let points = layer_by_id result Style.points_layer in
   let points_paint = points |> member "paint" in
@@ -1288,7 +1288,7 @@ let origin_paint =
     ]
 
 let overlay_paints_are_exact () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   let open Yojson.Safe.Util in
   let paint id = layer_by_id result id |> member "paint" in
   Alcotest.(check Testable.yojson)
@@ -1344,7 +1344,7 @@ let identified_case =
     ]
 
 let groups_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   check_layer_shape ~msg:"groups_layer" ~zoom_field:"maxzoom"
     ~zoom_value:Style.detail_zoom
     (`Assoc
@@ -1365,7 +1365,7 @@ let groups_layer_shape () =
     (layer_by_id result Style.groups_layer)
 
 let groups_count_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   check_layer_shape ~msg:"groups_count_layer" ~zoom_field:"maxzoom"
     ~zoom_value:Style.detail_zoom
     (`Assoc
@@ -1390,7 +1390,7 @@ let groups_count_layer_shape () =
     (layer_by_id result Style.groups_count_layer)
 
 let places_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   check_layer_shape ~msg:"places_layer" ~zoom_field:"maxzoom"
     ~zoom_value:Style.detail_zoom
     (`Assoc
@@ -1412,7 +1412,7 @@ let places_layer_shape () =
     (layer_by_id result Style.places_layer)
 
 let members_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   check_layer_shape ~msg:"members_layer" ~zoom_field:"minzoom"
     ~zoom_value:Style.detail_zoom
     (`Assoc
@@ -1440,7 +1440,7 @@ let members_layer_shape () =
     (layer_by_id result Style.members_layer)
 
 let selection_halo_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   check_layer_shape ~msg:"selection_halo_layer" ~zoom_field:"maxzoom"
     ~zoom_value:Style.detail_zoom
     (`Assoc
@@ -1467,7 +1467,7 @@ let selection_halo_layer_shape () =
     (layer_by_id result Style.selection_halo_layer)
 
 let selection_place_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   check_layer_shape ~msg:"selection_place_layer" ~zoom_field:"maxzoom"
     ~zoom_value:Style.detail_zoom
     (`Assoc
@@ -1494,7 +1494,7 @@ let selection_place_layer_shape () =
     (layer_by_id result Style.selection_place_layer)
 
 let selection_members_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   check_layer_shape ~msg:"selection_members_layer" ~zoom_field:"minzoom"
     ~zoom_value:Style.detail_zoom
     (`Assoc
@@ -1521,7 +1521,7 @@ let selection_members_layer_shape () =
     (layer_by_id result Style.selection_members_layer)
 
 let focus_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   Alcotest.(check Testable.yojson)
     "focus_layer: a circle layer on focus_source, paint only, no \
      minzoom/maxzoom/filter"
@@ -1535,7 +1535,7 @@ let focus_layer_shape () =
     (layer_by_id result Style.focus_layer)
 
 let origin_layer_shape () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   Alcotest.(check Testable.yojson)
     "origin_layer: a circle layer on origin_source, paint only, no \
      minzoom/maxzoom/filter (shown at every zoom)"
@@ -1550,7 +1550,7 @@ let origin_layer_shape () =
 
 let base_text_fonts () =
   let open Yojson.Safe.Util in
-  positron
+  liberty
   |> member "layers"
   |> to_list
   |> List.concat_map (fun l ->
@@ -1564,7 +1564,7 @@ let base_text_fonts () =
       | _ -> [])
 
 let new_text_fonts_exist_on_the_server () =
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   let open Yojson.Safe.Util in
   let fonts =
     match
@@ -1579,13 +1579,13 @@ let new_text_fonts_exist_on_the_server () =
   List.iter
     (fun f ->
       Alcotest.(check bool)
-        (Printf.sprintf "%S is used by some positron layer's own text-font" f)
+        (Printf.sprintf "%S is used by some liberty layer's own text-font" f)
         true (List.mem f available))
     fonts
 
 let detail_zoom_consistency () =
   Alcotest.(check (float 0.)) "Style.detail_zoom is 15." 15. Style.detail_zoom;
-  let result = with_overlays_ok positron in
+  let result = with_overlays_ok liberty in
   List.iter
     (fun id ->
       match number_field (layer_by_id result id) "maxzoom" with
@@ -1695,7 +1695,7 @@ let with_overlays_duplicate_ids () =
       Style.origin_source;
       Style.focus_source;
     ];
-  let once = with_overlays_ok positron in
+  let once = with_overlays_ok liberty in
   match Style.with_overlays colours once with
   | Error (Style.Duplicate_id _) -> ()
   | Error (Style.Not_a_style key) ->
@@ -1705,7 +1705,7 @@ let with_overlays_duplicate_ids () =
       Alcotest.fail "re-applying with_overlays to its own output should fail"
 
 let literal_ids () =
-  Alcotest.(check string) "Style.path" "map/positron.json" Style.path;
+  Alcotest.(check string) "Style.path" "map/liberty.json" Style.path;
   Alcotest.(check string)
     "Style.observations_source" "herbier-observations" Style.observations_source;
   Alcotest.(check string)
@@ -1908,9 +1908,9 @@ let tests =
     ( "Features' place-related keys are the wire literals",
       `Quick,
       places_literal_keys );
-    ( "the recorded positron.json has the expected shape",
+    ( "the recorded liberty.json has the expected shape",
       `Quick,
-      positron_fixture_sanity );
+      liberty_fixture_sanity );
     ( "Style.with_overlays appends 12 layers after the base",
       `Quick,
       layers_appended_after_the_base );
@@ -1963,7 +1963,7 @@ let tests =
     ( "Style.with_overlays: origin_layer's shape is exact (5b's origin ghost)",
       `Quick,
       origin_layer_shape );
-    ( "the new layers' text-font stacks exist among positron's own layers",
+    ( "the new layers' text-font stacks exist among liberty's own layers",
       `Quick,
       new_text_fonts_exist_on_the_server );
     ( "Style.detail_zoom is 15 and matches the layers' min/maxzoom and the \

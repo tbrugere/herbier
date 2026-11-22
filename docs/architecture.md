@@ -1087,7 +1087,21 @@ the classifier must accept both a bare URL and text containing one.
   GeoJSON source with `cluster: true` whose MapLibre clustering only merges
   places that overlap on screen; from zoom 15 it shows the observations
   themselves (4b, `Geo.Style.detail_zoom`).
-- Styles: OpenFreeMap `positron` online; offline, the same style with the
+- Styles: OpenFreeMap `liberty` online (the user's choice of 2026-11-22,
+  M8.87; `positron` before), pinned as `web/map/liberty.json` and re-recorded
+  with curl (`test/fixtures/README.md`). It needs only keyless
+  `tiles.openfreemap.org` URLs, all served with `Access-Control-Allow-Origin:
+  *`: the `planet` TileJSON and its tiles, the `ne2_shaded` raster, the
+  `ofm_f384/ofm` sprite and the Noto Sans Regular/Bold/Italic glyphs (the
+  overlay's cluster count uses Noto Sans Bold, one of them). Attribution is
+  the TileJSON's (OpenFreeMap, © OpenMapTiles, OpenStreetMap), shown by
+  MapLibre's attribution control. The `--map-*` tokens were kept: measured
+  over liberty's fills (forest, grass, park, water, yellow roads, buildings),
+  the ink point stays at 9:1 or more, the selected moss at 3.2:1 or more and
+  the cluster count is paper on ink whatever the base; the ochre « À
+  identifier » point drops to about 2:1 on water and grass, but its 3 px
+  paper ring and its hue keep it apart, and the selection halo is carried by
+  its moss border as before. Offline, the same style with the
   tile source swapped to `pmtiles://` pointing at `tiles/<region>.pmtiles`
   (Protomaps `@protomaps/basemaps` flavour `white`). Switch is automatic on
   connectivity change.

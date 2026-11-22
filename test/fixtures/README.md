@@ -270,9 +270,9 @@ with:
 - `capacitor_filesystem_readdir_missing.json`:
   `Capacitor.Plugins.Filesystem.readdir({path:'nope',directory:'DATA'}).catch(e => JSON.stringify({code: e.code, message: e.message}))`.
 
-`web/map/positron.json` (not in this directory: it is also the style the app
+`web/map/liberty.json` (not in this directory: it is also the style the app
 ships) is a recorded payload, read by `test/geo` as the fixture of its
 `Style.with_overlays` tests; never hand-edited. It is re-recorded on demand
-with `curl -sS https://tiles.openfreemap.org/styles/positron | python3 -m
-json.tool > web/map/positron.json` (the server sends it minified; `json.tool`
+with `curl -sS https://tiles.openfreemap.org/styles/liberty | python3 -m
+json.tool > web/map/liberty.json` (the server sends it minified; `json.tool`
 only indents it, keeping key order).

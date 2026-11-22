@@ -1,4 +1,4 @@
-(** The map style: the pinned OpenFreeMap positron ([web/map/positron.json],
+(** The map style: the pinned OpenFreeMap liberty ([web/map/liberty.json],
     served at {!path}) plus Herbier's overlay sources and layers. Pure. *)
 
 type colours = {
@@ -15,7 +15,7 @@ type colours = {
     re-exports this type); MapLibre accepts them as they are. *)
 
 val path : string
-(** ["map/positron.json"], relative to [index.html]. *)
+(** ["map/liberty.json"], relative to [index.html]. *)
 
 (** {1 Dev page only}
 

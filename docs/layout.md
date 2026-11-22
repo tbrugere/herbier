@@ -598,7 +598,7 @@ app/
                           a dropped-frame meter; spike_check.ml (#dev/spike): 4 rounds of 50 enter/leave cycles of 4a,
                           binding count, stale-update check against a live control, heap per round; capture_check.ml
                           (#dev/capture): viewfinder, shutter and gallery → preview file; map_check.ml (#dev/map):
-                          the positron map over the herbier db (spike 3, online half); geocode_check.ml
+                          the liberty map over the herbier db (spike 3, online half); geocode_check.ml
                           (#dev/geocode): Place_name.resolve of five points with both sources on and request
                           start times, Photon search, and « Noms de lieux »: the switches, the loaded packs,
                           the request count, observations saved through App (« Observation à Belfort » for
@@ -782,7 +782,7 @@ web/
                           map facade as globalThis.herbier.map
     map.js                the ~100-line MapLibre facade (architecture §8), imported by vendor.js
   map/
-    positron.json         pinned OpenFreeMap style (offline.json with a pmtiles:// source: v2)
+    liberty.json          pinned OpenFreeMap style (offline.json with a pmtiles:// source: v2)
   runner/
     keepalive.js          the keep-alive job (architecture §4), run by @capacitor/background-runner in its own
                           JS engine (src: runner/keepalive.js in capacitor.config.ts); a plain script copied
@@ -977,7 +977,7 @@ test/
                 upload_queue: the queue's decisions; health: the weekly check's decisions and
                 program over a fake transport)
   geo/          native, alcotest: herbier_geo (features, style over the
-                recorded web/map/positron.json; geocode, place_name and communes over
+                recorded web/map/liberty.json; geocode, place_name and communes over
                 fixtures/{photon,geoplateforme}_*.json, the WFS ones geoplateforme_wfs_*.json)
   identify/     native, alcotest (M9): herbier_identify (the rendered request, the answers and
                 errors decoded over fixtures/plantnet_*.json, organs, the proposal rules;
